@@ -8,16 +8,32 @@ from doppel_memory.models import ChatMessage, MemoryScope
 
 async def test_materials_collect_sections() -> None:
     client = DoppelClient(backend="memory")
-    scope = MemoryScope(user_id="u1", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="c1")
+    scope = MemoryScope(
+        user_id="u1",
+        agent_id="qq-bot",
+        platform="qq",
+        chat_type="private",
+        chat_id="c1",
+    )
 
     await client.ingest(
-        scope, ChatMessage.of("owner", "下周搬家城东", "2026-08-26T09:00:00+08:00", event_id="e1")
+        scope,
+        ChatMessage.of(
+            "owner", "下周搬家城东", "2026-08-26T09:00:00+08:00", event_id="e1"
+        ),
     )
     await client.ingest(
-        scope, ChatMessage.of("contact", "需要帮忙说一声", "2026-08-26T09:01:00+08:00", event_id="e2")
+        scope,
+        ChatMessage.of(
+            "contact", "需要帮忙说一声", "2026-08-26T09:01:00+08:00", event_id="e2"
+        ),
     )
-    await client.write_background(scope, "km 是产品经理，负责项目A，搬家时也会来帮忙", tags=["工作"])
-    await client.write_relation(scope, counterpart="km", relationship="前同事", address="小刘")
+    await client.write_background(
+        scope, "km 是产品经理，负责项目A，搬家时也会来帮忙", tags=["工作"]
+    )
+    await client.write_relation(
+        scope, counterpart="km", relationship="前同事", address="小刘"
+    )
 
     bundle = await client.materials(scope, query="搬家")
     # 命中事件记忆线索（子串匹配，内存后端无语义检索）
@@ -38,7 +54,13 @@ async def test_materials_collect_sections() -> None:
 
 async def test_materials_with_explicit_scopes_overrides_policy() -> None:
     client = DoppelClient(backend="memory")
-    conversation = MemoryScope(user_id="u1", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="c1")
+    conversation = MemoryScope(
+        user_id="u1",
+        agent_id="qq-bot",
+        platform="qq",
+        chat_type="private",
+        chat_id="c1",
+    )
     user_scope = conversation.user_scope()
     await client.write_background(user_scope, "号主住在城东", tags=["生活"])
 
@@ -49,19 +71,32 @@ async def test_materials_with_explicit_scopes_overrides_policy() -> None:
     bundle_default = await client.materials(conversation, query="")
     assert bundle_default.scope.group_id == conversation.group_id
 
+    # 显式空列表不会被默认 policy 偷偷替换。
+    import pytest
+
+    from doppel_memory.models import MemoryIsolationError
+
+    with pytest.raises(MemoryIsolationError):
+        await client.materials(conversation, query="", scopes=[])
+
 
 async def test_persona_preset_and_custom_renderer() -> None:
-    from doppel_memory.persona import PromptRenderer
-
     client = DoppelClient(backend="memory")
-    scope = MemoryScope(user_id="u1", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="c1")
+    scope = MemoryScope(
+        user_id="u1",
+        agent_id="qq-bot",
+        platform="qq",
+        chat_type="private",
+        chat_id="c1",
+    )
     await client.ingest(
-        scope, ChatMessage.of("owner", "下周搬家", "2026-08-26T09:00:00+08:00", event_id="e1")
+        scope,
+        ChatMessage.of("owner", "下周搬家", "2026-08-26T09:00:00+08:00", event_id="e1"),
     )
 
     class JsonRenderer:
         def render(self, bundle) -> str:
-            return '{"events": %d}' % len(bundle.events)
+            return f'{{"events": {len(bundle.events)}}}'
 
     bundle = await client.persona_materials(scope, query="搬家")
     assert bundle.render(JsonRenderer()) == '{"events": 1}'

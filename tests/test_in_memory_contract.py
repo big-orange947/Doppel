@@ -1,10 +1,12 @@
-"""InMemoryStore 契约测试（InMemory 后端必须通过全部契约断言）。"""
+"""InMemoryStore runs the shared conformance suite."""
 
-from __future__ import annotations
+import pytest
 
 from doppel_memory.in_memory_store import InMemoryStore
 from tests.store_contract import MemoryStoreContract
 
 
 class TestInMemoryStoreContract(MemoryStoreContract):
-    store_factory = InMemoryStore
+    @pytest.fixture()
+    def store(self) -> InMemoryStore:
+        return InMemoryStore()

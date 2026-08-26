@@ -13,8 +13,11 @@ from doppel_memory.models import (
     MemoryRecord,
     MemoryScope,
     MemoryState,
+    MemoryStateConflictError,
     RecallResult,
     StoreCapabilities,
+    WriteResult,
+    WriteStatus,
 )
 from doppel_memory.persona import (
     DefaultPromptRenderer,
@@ -26,7 +29,7 @@ from doppel_memory.retriever import Retriever
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "Actor",
@@ -43,6 +46,7 @@ __all__ = [
     "MemoryRecord",
     "MemoryScope",
     "MemoryState",
+    "MemoryStateConflictError",
     "MemoryStore",
     "OwnerPersonaPolicy",
     "PersonaMaterialsBuilder",
@@ -50,5 +54,7 @@ __all__ = [
     "Retriever",
     "SQLiteStore",
     "StoreCapabilities",
+    "WriteResult",
+    "WriteStatus",
     "__version__",
 ]

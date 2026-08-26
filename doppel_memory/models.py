@@ -1,80 +1,86 @@
-"""Doppel 核心数据模型：scope 隔离、归一化消息、开放式记忆类型。
-
-设计原则（v0.2 修订）：
-- 一切记忆以 ``MemoryScope`` 为第一隔离键；写入/检索必须携带 scope。
-- ``actor`` 区分说话人（owner/contact/agent/system），开发者可扩展。
-- 记忆类型开放式：内置常量是标准协议，自定义类型可透传与过滤。
-- 所有记忆可溯源（provenance）：原消息 → 事件 → 提取器 → 记录。
-"""
+"""Doppel public data models and backend-neutral protocol values."""
 
 from __future__ import annotations
 
-import re
+import hashlib
+import json
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Never, Self
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        raise ValueError("timestamps must include a timezone")
+    return value.astimezone(UTC)
 
 
 class ActorType(str, Enum):
-    """消息/记忆的说话人类型（开发者可扩展为自定义字符串，见 ``ActorOf``）。"""
+    """Built-in IM speaker roles."""
 
-    OWNER = "owner"  # 号主本人（风格样本的唯一来源）
-    CONTACT = "contact"  # 联系人/对方
-    AGENT = "agent"  # 机器人代理代发
-    SYSTEM = "system"  # 系统事件
+    OWNER = "owner"
+    CONTACT = "contact"
+    AGENT = "agent"
+    SYSTEM = "system"
 
     @classmethod
     def normalize(cls, raw: str | ActorType | None) -> ActorType:
-        if isinstance(raw, cls):
-            return raw
-        value = str(raw or "").strip().upper()
-        mapping = {
-            "OWNER": cls.OWNER,
-            "HUMAN_SELF": cls.OWNER,
-            "CONTACT": cls.CONTACT,
-            "PEER": cls.CONTACT,
-            "AGENT": cls.AGENT,
-            "SYSTEM": cls.SYSTEM,
-            "INTERNAL": cls.SYSTEM,
-        }
-        return mapping.get(value, cls.SYSTEM)
+        normalized = Actor.normalize(raw)
+        try:
+            return cls(normalized)
+        except ValueError:
+            return cls.SYSTEM
 
 
 class Actor(str):
-    """说话人字符串：内置类型 + 开发者自定义透传（如 ``"moderator"``）。"""
+    """Open actor identifier with aliases for the built-in roles."""
 
     OWNER = ActorType.OWNER.value
     CONTACT = ActorType.CONTACT.value
     AGENT = ActorType.AGENT.value
     SYSTEM = ActorType.SYSTEM.value
 
+    @classmethod
+    def normalize(cls, raw: str | ActorType | None) -> str:
+        value = (
+            str(raw.value if isinstance(raw, ActorType) else raw or "").strip().lower()
+        )
+        aliases = {
+            "human_self": cls.OWNER,
+            "peer": cls.CONTACT,
+            "internal": cls.SYSTEM,
+        }
+        return aliases.get(value, value or cls.SYSTEM)
+
 
 class FactAuthority(str, Enum):
-    """记忆/事件的事实权威：决定能否作为现实证据与风格样本。"""
+    """How strongly a memory may be treated as factual evidence."""
 
-    HUMAN_SELF = "human_self"  # 号主本人陈述：高权威 + 风格样本
-    PEER_STATEMENT = "peer_statement"  # 联系人陈述：低权威（需交叉确认）
-    AGENT_OUTPUT = "agent_output"  # 代理代发：不作为证据、不作为风格样本
-    DERIVED_SUMMARY = "derived_summary"  # 派生摘要：仅衔接
+    HUMAN_SELF = "human_self"
+    PEER_STATEMENT = "peer_statement"
+    AGENT_OUTPUT = "agent_output"
+    DERIVED_SUMMARY = "derived_summary"
 
     @classmethod
     def of(cls, actor: str | ActorType) -> FactAuthority:
-        normalized = ActorType.normalize(actor)
-        if normalized is ActorType.OWNER:
+        normalized = Actor.normalize(actor)
+        if normalized == Actor.OWNER:
             return cls.HUMAN_SELF
-        if normalized is ActorType.CONTACT:
+        if normalized == Actor.CONTACT:
             return cls.PEER_STATEMENT
-        if normalized is ActorType.AGENT:
+        if normalized == Actor.AGENT:
             return cls.AGENT_OUTPUT
         return cls.DERIVED_SUMMARY
 
 
 class MemoryKind:
-    """开放式记忆类型：内置常量是标准协议，自定义类型可透传与过滤。
-
-    例如：``MemoryKind("my_project.custom_kind")``。
-    """
+    """Open memory kind namespace; custom kinds are normalized strings."""
 
     EVENT = "event"
     BACKGROUND = "background"
@@ -82,85 +88,167 @@ class MemoryKind:
     STYLE = "style"
     FACT = "fact"
 
-    _BUILTIN = {EVENT, BACKGROUND, RELATION, STYLE, FACT}
-
     @classmethod
     def normalize(cls, raw: str | None) -> str:
         value = str(raw or "").strip().lower()
-        if not value:
-            return cls.EVENT
-        return value if len(value) <= 64 else value[:64]
+        return (value or cls.EVENT)[:64]
 
 
 class MemoryState(str, Enum):
-    """记忆生命周期状态（是否人工确认由开发者决定）。"""
-
-    CANDIDATE = "candidate"  # 自动提取，未确认
-    CONFIRMED = "confirmed"  # 已确认（入高可信）
-    REJECTED = "rejected"  # 已拒绝
-    SUPERSEDED = "superseded"  # 被新事实取代
-    EXPIRED = "expired"  # 过期
+    CANDIDATE = "candidate"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"
+    EXPIRED = "expired"
 
 
-def _normalize_group_token(value: str | None) -> str:
-    """规范化为 Graphiti 允许的 group_id（字母数字/短横线/下划线）。"""
-    return re.sub(r"[^a-zA-Z0-9_-]", "_", str(value or "").strip())
+ACTIVE_MEMORY_STATES = frozenset({MemoryState.CANDIDATE, MemoryState.CONFIRMED})
+
+
+class WriteStatus(str, Enum):
+    CREATED = "created"
+    UPDATED = "updated"
+    DUPLICATE = "duplicate"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
+class _FrozenDimensions(dict[str, str]):
+    """Serializable dict that keeps a frozen scope's identity stable."""
+
+    @staticmethod
+    def _immutable(*args: Any, **kwargs: Any) -> Never:
+        raise TypeError("MemoryScope.extra_dimensions is immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    clear = _immutable
+    pop = _immutable
+    popitem = _immutable
+    setdefault = _immutable
+    update = _immutable
+
+    def __copy__(self) -> _FrozenDimensions:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> _FrozenDimensions:
+        return self
 
 
 class MemoryScope(BaseModel):
-    """记忆隔离键。
+    """Exact, immutable memory namespace.
 
-    强类型字段：user_id（owner）+ agent_id + platform + chat_type + chat_id。
-    扩展维度：``extra_dimensions``（thread/topic/counterpart 等），透传与过滤可用，
-    不进入 group_id（避免既有命名空间被破坏）。
-
-    - 会话级：五元组齐全（事件/风格/关系）。
-    - 用户级：只有 user_id + agent_id（背景事实、全局偏好）。
-    - 联系人级：platform + chat_type=private + chat_id=对方（counterpart scope）。
+    Stores always perform exact matching. Hierarchical expansion belongs to a
+    ``ScopePolicy``. Every custom dimension participates in ``scope_key``.
     """
 
+    model_config = ConfigDict(populate_by_name=True, frozen=True)
+
     user_id: str
-    agent_id: str = ""
+    agent_id: str
     platform: str = ""
     chat_type: str = ""
     chat_id: str = ""
-    extra_dimensions: dict[str, str] = Field(default_factory=dict, alias="extraDimensions")
+    extra_dimensions: dict[str, str] = Field(
+        default_factory=dict, serialization_alias="extraDimensions"
+    )
 
-    model_config = {"populate_by_name": True}
-
-    @field_validator("user_id", "agent_id", "platform", "chat_type", "chat_id")
+    @model_validator(mode="before")
     @classmethod
-    def _strip(cls, value: str) -> str:
+    def _accept_v02_alias(cls, value: Any) -> Any:
+        if (
+            isinstance(value, dict)
+            and "extraDimensions" in value
+            and "extra_dimensions" not in value
+        ):
+            value = dict(value)
+            value["extra_dimensions"] = value.pop("extraDimensions")
+        return value
+
+    @field_validator(
+        "user_id", "agent_id", "platform", "chat_type", "chat_id", mode="before"
+    )
+    @classmethod
+    def _strip(cls, value: Any) -> str:
         return str(value or "").strip()
+
+    @field_validator("extra_dimensions", mode="before")
+    @classmethod
+    def _normalize_dimensions(cls, value: Any) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for raw_key, raw_value in dict(value or {}).items():
+            key = str(raw_key or "").strip()
+            item = str(raw_value or "").strip()
+            if not key or not item:
+                raise ValueError("extra dimension keys and values must be non-empty")
+            normalized[key] = item
+        return normalized
+
+    @field_validator("extra_dimensions")
+    @classmethod
+    def _freeze_dimensions(cls, value: dict[str, str]) -> dict[str, str]:
+        return _FrozenDimensions(value)
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> Self:
+        if not self.user_id:
+            raise ValueError("user_id is required")
+        if not self.agent_id:
+            raise ValueError("agent_id is required")
+        if self.chat_type and not self.platform:
+            raise ValueError("chat_type requires platform")
+        if self.chat_id and not (self.platform and self.chat_type):
+            raise ValueError("chat_id requires platform and chat_type")
+        return self
+
+    def _canonical_payload(self) -> dict[str, Any]:
+        return {
+            "agent_id": self.agent_id,
+            "chat_id": self.chat_id,
+            "chat_type": self.chat_type,
+            "extra_dimensions": dict(sorted(self.extra_dimensions.items())),
+            "platform": self.platform,
+            "user_id": self.user_id,
+        }
+
+    @property
+    def scope_key(self) -> str:
+        payload = json.dumps(
+            self._canonical_payload(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return "dpl_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @property
     def group_id(self) -> str:
-        """图谱命名空间：基于强类型字段的会话级 scope（extra 不参与）。"""
-        parts = [self.user_id, self.agent_id, self.platform, self.chat_type, self.chat_id]
-        return _normalize_group_token(":".join(part for part in parts if part))
+        """Compatibility alias for graph-oriented backends."""
+
+        return self.scope_key
 
     @property
     def is_user_scope(self) -> bool:
-        return not (self.platform or self.chat_type or self.chat_id)
+        return not (
+            self.platform or self.chat_type or self.chat_id or self.extra_dimensions
+        )
 
     def user_scope(self) -> MemoryScope:
         return MemoryScope(user_id=self.user_id, agent_id=self.agent_id)
 
     def conversation(self) -> MemoryScope:
-        """会话级 scope（self 即会话时返回自身）。"""
         return self
 
     def counterpart(self) -> MemoryScope:
-        """联系人级 scope：私聊对方，或从 chat_id 推导。"""
-        if self.chat_type == "private" and self.chat_id:
-            return MemoryScope(
-                user_id=self.user_id,
-                agent_id=self.agent_id,
-                platform=self.platform,
-                chat_type="contact",
-                chat_id=self.chat_id,
-            )
-        return self.with_chat(self.platform, "contact", self.chat_id) if self.chat_id else self
+        if not self.chat_id:
+            return self
+        return MemoryScope(
+            user_id=self.user_id,
+            agent_id=self.agent_id,
+            platform=self.platform,
+            chat_type="contact",
+            chat_id=self.chat_id,
+        )
 
     def with_chat(self, platform: str, chat_type: str, chat_id: str) -> MemoryScope:
         return MemoryScope(
@@ -172,57 +260,85 @@ class MemoryScope(BaseModel):
         )
 
     def with_dimension(self, key: str, value: str) -> MemoryScope:
-        dims = dict(self.extra_dimensions)
-        dims[key] = value
+        dimensions = dict(self.extra_dimensions)
+        dimensions[key] = value
         return MemoryScope(
             user_id=self.user_id,
             agent_id=self.agent_id,
             platform=self.platform,
             chat_type=self.chat_type,
             chat_id=self.chat_id,
-            extra_dimensions=dims,
+            extra_dimensions=dimensions,
         )
 
     def matches(self, other: MemoryScope) -> bool:
-        """scope 归属判断：other 的所有非空强类型字段必须与 self 一致。"""
-        if self.user_id != other.user_id or self.agent_id != other.agent_id:
-            return False
-        for attr in ("platform", "chat_type", "chat_id"):
-            mine = getattr(self, attr)
-            theirs = getattr(other, attr)
-            if theirs and mine != theirs:
-                return False
-        return True
+        """Exact identity comparison retained for compatibility."""
+
+        return self.scope_key == other.scope_key
 
     def describe(self) -> str:
-        return self.group_id or f"{self.user_id}:{self.agent_id}"
+        base = "/".join(
+            part
+            for part in (
+                self.user_id,
+                self.agent_id,
+                self.platform,
+                self.chat_type,
+                self.chat_id,
+            )
+            if part
+        )
+        if not self.extra_dimensions:
+            return base
+        suffix = ",".join(
+            f"{key}={value}" for key, value in sorted(self.extra_dimensions.items())
+        )
+        return f"{base}#{suffix}"
 
 
 class ChatMessage(BaseModel):
-    """归一化聊天消息（IM 标准化：说话人/标识/时间/消息关系/附件元数据）。"""
+    """Normalized IM event. Custom actors are preserved."""
 
-    actor: ActorType = ActorType.SYSTEM
+    actor: str = Actor.SYSTEM
     text: str = ""
-    at: str = Field(default="", description="ISO-8601 时间（with timezone）")
-    event_id: str = Field(default="", description="统一事件 ID（幂等键之一）")
-    message_id: str = Field(default="", description="平台消息 ID（幂等键之一）")
-    message_type: str = Field(default="message", description="message/image/file/reply...")
-    reply_to_id: str = Field(default="", description="被回复的消息 ID（IM 回复关系）")
-    quoted_message_id: str = Field(default="", description="引用的消息 ID")
-    attachments: list[dict[str, Any]] = Field(default_factory=list, description="附件元数据")
-    raw: dict[str, Any] = Field(default_factory=dict, description="平台原始字段（不入图谱正文）")
+    at: datetime = Field(default_factory=utc_now)
+    event_id: str = ""
+    message_id: str = ""
+    message_type: str = "message"
+    reply_to_id: str = ""
+    quoted_message_id: str = ""
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
+    raw: dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("text")
+    @field_validator("actor", mode="before")
     @classmethod
-    def _strip_text(cls, value: str) -> str:
+    def _normalize_actor(cls, value: Any) -> str:
+        return Actor.normalize(value)
+
+    @field_validator(
+        "text",
+        "event_id",
+        "message_id",
+        "message_type",
+        "reply_to_id",
+        "quoted_message_id",
+        mode="before",
+    )
+    @classmethod
+    def _strip_text_fields(cls, value: Any) -> str:
         return str(value or "").strip()
+
+    @field_validator("at")
+    @classmethod
+    def _normalize_time(cls, value: datetime) -> datetime:
+        return _utc(value)
 
     @classmethod
     def of(
         cls,
         actor: str | ActorType,
         text: str,
-        at: str,
+        at: str | datetime,
         *,
         event_id: str = "",
         message_id: str = "",
@@ -231,10 +347,11 @@ class ChatMessage(BaseModel):
         quoted_message_id: str = "",
         attachments: list[dict[str, Any]] | None = None,
     ) -> ChatMessage:
+        parsed_at = datetime.fromisoformat(at) if isinstance(at, str) else at
         return cls(
-            actor=ActorType.normalize(actor),
+            actor=actor,
             text=text,
-            at=at,
+            at=parsed_at,
             event_id=event_id,
             message_id=message_id,
             message_type=message_type,
@@ -245,32 +362,31 @@ class ChatMessage(BaseModel):
 
     @property
     def identity_key(self) -> str:
-        """幂等键：message_id 优先，其次 event_id。"""
-        return str(self.message_id or self.event_id or "").strip()
+        return self.message_id or self.event_id
 
     @property
     def fact_authority(self) -> FactAuthority:
         return FactAuthority.of(self.actor)
 
     def episode_line(self) -> str:
-        authority = self.fact_authority.value
-        meta = []
+        metadata = [
+            f"actor={self.actor}",
+            f"authority={self.fact_authority.value}",
+            f"at={self.at.isoformat()}",
+        ]
         if self.message_type != "message":
-            meta.append(f"type={self.message_type}")
+            metadata.append(f"type={self.message_type}")
         if self.reply_to_id:
-            meta.append(f"reply={self.reply_to_id}")
+            metadata.append(f"reply={self.reply_to_id}")
         if self.quoted_message_id:
-            meta.append(f"quote={self.quoted_message_id}")
-        meta_part = f" {' '.join(meta)}" if meta else ""
-        return (
-            f"[actor={self.actor.value} authority={authority} at={self.at}{meta_part}] {self.text}"
-            + (f" [attachments={len(self.attachments)}]" if self.attachments else "")
+            metadata.append(f"quote={self.quoted_message_id}")
+        body = f"[{' '.join(metadata)}] {self.text}"
+        return body + (
+            f" [attachments={len(self.attachments)}]" if self.attachments else ""
         )
 
 
 class MemoryRecord(BaseModel):
-    """统一记忆记录：所有后端写入返回的结构（带生命周期与溯源）。"""
-
     memory_id: str = ""
     kind: str = MemoryKind.EVENT
     scope: MemoryScope
@@ -280,49 +396,81 @@ class MemoryRecord(BaseModel):
     state: MemoryState = MemoryState.CONFIRMED
     tags: list[str] = Field(default_factory=list)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
-    source_event_id: str = Field(default="")
-    source_message_id: str = Field(default="")
-    extractor: str = Field(default="", description="产生该记忆的提取器/写入器")
-    created_at: str = Field(default="")
-    updated_at: str = Field(default="")
+    idempotency_key: str = ""
+    source_event_id: str = ""
+    source_message_id: str = ""
+    extractor: str = ""
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    version: int = Field(default=1, ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _normalize_kind(cls, value: Any) -> str:
+        return MemoryKind.normalize(value)
+
+    @field_validator("actor", mode="before")
+    @classmethod
+    def _normalize_optional_actor(cls, value: Any) -> str:
+        return Actor.normalize(value) if value else ""
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def _normalize_record_time(cls, value: datetime) -> datetime:
+        return _utc(value)
+
+
+class WriteResult(BaseModel):
+    status: WriteStatus
+    record: MemoryRecord | None = None
+    error_code: str | None = None
+    message: str | None = None
+
+    @property
+    def memory_id(self) -> str:
+        return self.record.memory_id if self.record else ""
+
+    @property
+    def accepted(self) -> bool:
+        return self.status in {WriteStatus.CREATED, WriteStatus.UPDATED}
 
 
 class MemoryFilter(BaseModel):
-    """检索过滤条件（全部可选，None 表示不限）。"""
-
     kinds: set[str] | None = None
     actors: set[str] | None = None
     authorities: set[FactAuthority] | None = None
     exclude_authorities: set[FactAuthority] | None = None
     exclude_actors: set[str] | None = None
     states: set[MemoryState] | None = None
+    include_inactive: bool = False
     tags: set[str] | None = None
     importance_min: float | None = Field(default=None, ge=0.0, le=1.0)
-    time_from: str | None = Field(default=None, description="ISO-8601 起（含）")
-    time_to: str | None = Field(default=None, description="ISO-8601 止（含）")
+    time_from: datetime | None = None
+    time_to: datetime | None = None
+
+    @field_validator("time_from", "time_to")
+    @classmethod
+    def _normalize_filter_time(cls, value: datetime | None) -> datetime | None:
+        return _utc(value) if value is not None else None
 
 
 class RecallResult(BaseModel):
-    """一次检索召回的记忆片段（低权威，仅供上下文线索，带完整 provenance）。"""
-
     fact: str
     kind: str = MemoryKind.EVENT
     scope: MemoryScope | None = None
-    memory_id: str = Field(default="")
-    # ---- provenance（可回溯到原始消息/事件/提取器） ----
-    actor: str = Field(default="")
+    memory_id: str = ""
+    actor: str = ""
     authority: FactAuthority = FactAuthority.DERIVED_SUMMARY
-    source_event_id: str = Field(default="")
-    source_message_id: str = Field(default="")
-    source_episode: str = Field(default="")
-    extractor: str = Field(default="", description="提取器/写入器标识")
-    extracted_at: str = Field(default="")
-    raw_text: str = Field(default="", description="原始消息文本（可溯源）")
-    derived_chain: list[str] = Field(default_factory=list, description="派生链路")
-    # ---- 时间与相关性 ----
-    valid_at: str = Field(default="")
-    similarity: float = Field(default=0.0)
+    source_event_id: str = ""
+    source_message_id: str = ""
+    source_episode: str = ""
+    extractor: str = ""
+    extracted_at: datetime | None = None
+    raw_text: str = ""
+    derived_chain: list[str] = Field(default_factory=list)
+    valid_at: datetime | None = None
+    similarity: float = 0.0
     state: MemoryState = MemoryState.CONFIRMED
 
     def to_line(self) -> str:
@@ -330,9 +478,8 @@ class RecallResult(BaseModel):
 
 
 class StoreCapabilities(BaseModel):
-    """后端能力声明：不支持的操作应明确报错，而不是假装成功。"""
-
     semantic_search: bool = False
+    substring_search: bool = False
     full_text_search: bool = False
     temporal_search: bool = False
     graph_relations: bool = False
@@ -344,9 +491,14 @@ class StoreCapabilities(BaseModel):
     def require(self, capability: str) -> None:
         if not getattr(self, capability, False):
             raise NotImplementedError(
-                f"backed does not support capability: {capability} (capabilities={self.model_dump()})"
+                f"backend does not support capability: {capability} "
+                f"(capabilities={self.model_dump()})"
             )
 
 
 class MemoryIsolationError(ValueError):
-    """检索/写入缺少或越权 scope 时抛出，防止记忆串台。"""
+    """A scoped operation was attempted without an explicit valid scope."""
+
+
+class MemoryStateConflictError(RuntimeError):
+    """A lifecycle transition lost an optimistic concurrency race."""

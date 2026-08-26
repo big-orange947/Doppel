@@ -1,43 +1,38 @@
-"""InMemoryStore：零依赖内存后端（测试与示例用，非持久化）。
-
-能力声明：无语义检索（仅子串匹配）、无持久化；开发/示例场景够用。
-"""
+"""Deterministic in-memory reference backend."""
 
 from __future__ import annotations
 
-import hashlib
-from datetime import datetime, timezone
+import json
 from typing import Any
+from uuid import uuid4
 
 from doppel_memory.models import (
+    ACTIVE_MEMORY_STATES,
+    Actor,
     ChatMessage,
-    FactAuthority,
     MemoryFilter,
     MemoryIsolationError,
-    MemoryKind,
     MemoryRecord,
     MemoryScope,
     MemoryState,
+    MemoryStateConflictError,
     RecallResult,
     StoreCapabilities,
+    WriteResult,
+    WriteStatus,
+    utc_now,
 )
 from doppel_memory.store import MemoryStore
 
 
 class InMemoryStore(MemoryStore):
     def __init__(self) -> None:
-        self._records: list[MemoryRecord] = []
-        self._owner_samples: dict[str, list[ChatMessage]] = {}
-        self._seen_keys: dict[str, set[str]] = {}
+        self._records: dict[str, MemoryRecord] = {}
+        self._idempotency: dict[tuple[str, str], str] = {}
         self._capabilities = StoreCapabilities(
-            semantic_search=False,
-            full_text_search=True,
+            substring_search=True,
             temporal_search=True,
-            graph_relations=False,
-            metadata_filter=True,
             hard_delete=True,
-            transactions=False,
-            reranking=False,
         )
 
     @property
@@ -48,95 +43,38 @@ class InMemoryStore(MemoryStore):
     def is_enabled(self) -> bool:
         return True
 
-    # ---------------------------------------------------------------- 写入
+    async def put(
+        self, record: MemoryRecord, *, idempotency_key: str | None = None
+    ) -> WriteResult:
+        key = str(idempotency_key or record.idempotency_key or "").strip()
+        index_key = (record.scope.scope_key, key)
+        if key and index_key in self._idempotency:
+            existing = self._records.get(self._idempotency[index_key])
+            return WriteResult(
+                status=WriteStatus.DUPLICATE,
+                record=existing.model_copy(deep=True) if existing else None,
+            )
 
-    async def write_event(self, scope: MemoryScope, message: ChatMessage) -> MemoryRecord:
-        record = self._upsert_event(scope, message)
-        return record if record else MemoryRecord(memory_id="", scope=scope)
-
-    def _upsert_event(self, scope: MemoryScope, message: ChatMessage) -> MemoryRecord | None:
-        key = message.identity_key
-        seen = self._seen_keys.setdefault(scope.group_id, set())
-        if key and key in seen:
-            return None
-        if key:
-            seen.add(key)
-        record = MemoryRecord(
-            memory_id=self._new_id("evt"),
-            kind=MemoryKind.EVENT,
-            scope=scope,
-            content=message.text,
-            actor=message.actor.value,
-            authority=message.fact_authority,
-            source_event_id=message.event_id,
-            source_message_id=message.message_id,
-            extractor="ingestor",
-            created_at=message.at or _now(),
-            updated_at=message.at or _now(),
-            metadata={"message_type": message.message_type, "reply_to_id": message.reply_to_id},
-        )
-        self._records.append(record)
-        if message.actor.value == "owner" and message.text:
-            samples = self._owner_samples.setdefault(scope.group_id, [])
-            samples.append(message)
-            if len(samples) > 50:
-                del samples[0]
-        return record
-
-    async def write_background(
-        self,
-        scope: MemoryScope,
-        content: str,
-        tags: list[str] | None = None,
-        *,
-        importance: float = 0.5,
-        source: str = "manual",
-    ) -> MemoryRecord:
-        record = MemoryRecord(
-            memory_id=self._new_id("bg"),
-            kind=MemoryKind.BACKGROUND,
-            scope=scope,
-            content=content,
-            state=MemoryState.CONFIRMED,
-            tags=list(tags or []),
-            importance=importance,
-            extractor=source,
-            created_at=_now(),
-            updated_at=_now(),
-        )
-        self._records.append(record)
-        return record
-
-    async def write_relation(
-        self,
-        scope: MemoryScope,
-        *,
-        counterpart: str,
-        relationship: str = "",
-        address: str = "",
-        communication_preference: str = "",
-        attributes: dict[str, Any] | None = None,
-    ) -> MemoryRecord:
-        record = MemoryRecord(
-            memory_id=self._new_id("rel"),
-            kind=MemoryKind.RELATION,
-            scope=scope,
-            content=f"relationship={relationship} address={address}",
-            state=MemoryState.CONFIRMED,
-            created_at=_now(),
-            updated_at=_now(),
-            metadata={
-                "counterpart": counterpart,
-                "relationship": relationship,
-                "address": address,
-                "communication_preference": communication_preference,
-                **(attributes or {}),
+        memory_id = record.memory_id or f"mem-{uuid4().hex}"
+        if memory_id in self._records:
+            return WriteResult(
+                status=WriteStatus.FAILED,
+                error_code="memory_id_conflict",
+                message=f"memory_id already exists: {memory_id}",
+            )
+        stored = record.model_copy(
+            update={
+                "memory_id": memory_id,
+                "idempotency_key": key,
             },
+            deep=True,
         )
-        self._records.append(record)
-        return record
-
-    # ---------------------------------------------------------------- 检索
+        self._records[memory_id] = stored
+        if key:
+            self._idempotency[index_key] = memory_id
+        return WriteResult(
+            status=WriteStatus.CREATED, record=stored.model_copy(deep=True)
+        )
 
     async def search(
         self,
@@ -147,111 +85,157 @@ class InMemoryStore(MemoryStore):
         limit: int = 10,
     ) -> list[RecallResult]:
         if not scopes:
-            raise MemoryIsolationError(
-                "search requires explicit scopes; Doppel refuses unscoped search "
-                "to prevent memory leaking across users/sessions."
-            )
+            raise MemoryIsolationError("search requires at least one exact scope")
+        if limit <= 0:
+            return []
+        allowed = {scope.scope_key for scope in scopes}
         filter_obj = filters or MemoryFilter()
+        query_text = str(query or "").strip()
+        records = sorted(
+            self._records.values(), key=lambda item: item.created_at, reverse=True
+        )
         results: list[RecallResult] = []
-        for record in self._records:
-            if not any(scope.matches(record.scope) for scope in scopes):
+        for record in records:
+            if record.scope.scope_key not in allowed:
                 continue
-            if not self._matches(record, filter_obj):
+            if not _matches(record, filter_obj):
                 continue
-            query_text = str(query or "").strip()
-            if query_text and not self._contains(record, query_text):
+            if query_text and not _contains(record, query_text):
                 continue
-            results.append(self._to_recall(record))
-        return results[:limit]
+            results.append(_to_recall(record))
+            if len(results) >= limit:
+                break
+        return results
 
     async def list_recent_owner_messages(
         self, scope: MemoryScope, *, limit: int = 5
     ) -> list[ChatMessage]:
-        samples = []
-        for record in reversed(self._records):
-            if record.scope.group_id != scope.group_id:
-                continue
-            if record.kind == MemoryKind.EVENT and record.actor == "owner":
-                samples.append(
-                    ChatMessage(actor="owner", text=record.content, at=record.created_at)
-                )
-            if len(samples) >= limit:
-                break
+        if limit <= 0:
+            return []
+        records = sorted(
+            self._records.values(), key=lambda item: item.created_at, reverse=True
+        )
+        samples = [
+            ChatMessage(
+                actor=Actor.OWNER,
+                text=record.content,
+                at=record.created_at,
+                event_id=record.source_event_id,
+                message_id=record.source_message_id,
+                message_type=str(record.metadata.get("message_type", "message")),
+                reply_to_id=str(record.metadata.get("reply_to_id", "")),
+                quoted_message_id=str(record.metadata.get("quoted_message_id", "")),
+                attachments=list(record.metadata.get("attachments", [])),
+            )
+            for record in records
+            if record.scope.scope_key == scope.scope_key
+            and record.kind == "event"
+            and record.actor == Actor.OWNER
+            and record.state in ACTIVE_MEMORY_STATES
+        ][:limit]
         return list(reversed(samples))
 
-    # ---------------------------------------------------------------- 管理
+    async def get(self, scope: MemoryScope, memory_id: str) -> MemoryRecord | None:
+        record = self._records.get(memory_id)
+        if record is None or record.scope.scope_key != scope.scope_key:
+            return None
+        return record.model_copy(deep=True)
 
-    async def forget(self, memory_id: str, *, hard: bool = False) -> bool:
-        target = next((r for r in self._records if r.memory_id == memory_id), None)
-        if target is None:
+    async def transition(
+        self,
+        scope: MemoryScope,
+        memory_id: str,
+        to_state: MemoryState,
+        *,
+        expected_state: MemoryState | None = None,
+    ) -> MemoryRecord:
+        record = self._records.get(memory_id)
+        if record is None or record.scope.scope_key != scope.scope_key:
+            raise KeyError(memory_id)
+        if expected_state is not None and record.state != expected_state:
+            raise MemoryStateConflictError(
+                f"expected {expected_state.value}, found {record.state.value}"
+            )
+        updated = record.model_copy(
+            update={
+                "state": to_state,
+                "updated_at": utc_now(),
+                "version": record.version + 1,
+            },
+            deep=True,
+        )
+        self._records[memory_id] = updated
+        return updated.model_copy(deep=True)
+
+    async def forget(
+        self, scope: MemoryScope, memory_id: str, *, hard: bool = False
+    ) -> bool:
+        record = self._records.get(memory_id)
+        if record is None or record.scope.scope_key != scope.scope_key:
             return False
-        if hard:
-            self._records.remove(target)
-        else:
-            target.state = MemoryState.EXPIRED
-            target.updated_at = _now()
+        if not hard:
+            await self.transition(scope, memory_id, MemoryState.EXPIRED)
+            return True
+        del self._records[memory_id]
+        if record.idempotency_key:
+            self._idempotency.pop((scope.scope_key, record.idempotency_key), None)
         return True
 
     async def health(self) -> dict[str, Any]:
         return {"enabled": True, "ok": True, "records": len(self._records)}
 
-    # ---------------------------------------------------------------- helpers
 
-    @staticmethod
-    def _contains(record: MemoryRecord, query: str) -> bool:
-        if query in record.content:
-            return True
-        import json
-
-        return query in json.dumps(record.metadata, ensure_ascii=False)
-
-    @staticmethod
-    def _matches(record: MemoryRecord, f: MemoryFilter) -> bool:
-        if f.kinds is not None and record.kind not in f.kinds:
-            return False
-        if f.actors is not None and record.actor not in f.actors:
-            return False
-        if f.exclude_actors is not None and record.actor in f.exclude_actors:
-            return False
-        if f.authorities is not None and record.authority not in f.authorities:
-            return False
-        if f.exclude_authorities is not None and record.authority in f.exclude_authorities:
-            return False
-        if f.states is not None and record.state not in f.states:
-            return False
-        if f.tags is not None and not f.tags.issubset(set(record.tags)):
-            return False
-        if f.importance_min is not None and record.importance < f.importance_min:
-            return False
-        if f.time_from and record.created_at and record.created_at < f.time_from:
-            return False
-        if f.time_to and record.created_at and record.created_at > f.time_to:
-            return False
-        return True
-
-    @staticmethod
-    def _to_recall(record: MemoryRecord) -> RecallResult:
-        return RecallResult(
-            fact=record.content,
-            kind=record.kind,
-            scope=record.scope,
-            memory_id=record.memory_id,
-            actor=record.actor,
-            authority=record.authority,
-            source_event_id=record.source_event_id,
-            source_message_id=record.source_message_id,
-            extractor=record.extractor,
-            extracted_at=record.updated_at,
-            raw_text=record.content,
-            valid_at=record.created_at,
-            state=record.state,
-        )
-
-    @staticmethod
-    def _new_id(prefix: str) -> str:
-        digest = hashlib.sha256(f"{prefix}:{datetime.now(timezone.utc).isoformat()}".encode()).hexdigest()[:12]
-        return f"{prefix}-{digest}"
+def _contains(record: MemoryRecord, query: str) -> bool:
+    return query in record.content or query in json.dumps(
+        record.metadata, ensure_ascii=False
+    )
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _matches(record: MemoryRecord, filters: MemoryFilter) -> bool:
+    if filters.states is not None:
+        if record.state not in filters.states:
+            return False
+    elif not filters.include_inactive and record.state not in ACTIVE_MEMORY_STATES:
+        return False
+    if filters.kinds is not None and record.kind not in filters.kinds:
+        return False
+    if filters.actors is not None and record.actor not in filters.actors:
+        return False
+    if filters.exclude_actors is not None and record.actor in filters.exclude_actors:
+        return False
+    if filters.authorities is not None and record.authority not in filters.authorities:
+        return False
+    if (
+        filters.exclude_authorities is not None
+        and record.authority in filters.exclude_authorities
+    ):
+        return False
+    if filters.tags is not None and not filters.tags.issubset(record.tags):
+        return False
+    if (
+        filters.importance_min is not None
+        and record.importance < filters.importance_min
+    ):
+        return False
+    if filters.time_from is not None and record.created_at < filters.time_from:
+        return False
+    return not (filters.time_to is not None and record.created_at > filters.time_to)
+
+
+def _to_recall(record: MemoryRecord) -> RecallResult:
+    return RecallResult(
+        fact=record.content,
+        kind=record.kind,
+        scope=record.scope,
+        memory_id=record.memory_id,
+        actor=record.actor,
+        authority=record.authority,
+        source_event_id=record.source_event_id,
+        source_message_id=record.source_message_id,
+        extractor=record.extractor,
+        extracted_at=record.updated_at,
+        raw_text=record.content,
+        derived_chain=list(record.metadata.get("derived_chain", [])),
+        valid_at=record.created_at,
+        state=record.state,
+    )

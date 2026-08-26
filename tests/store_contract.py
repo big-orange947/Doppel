@@ -1,163 +1,228 @@
-"""后端契约测试：任意 MemoryStore 实现跑同一套断言。
-
-社区作者实现自己的 store 时只需：
-```python
-class MyStoreContract(MemoryStoreContract):
-    store_factory = MyStore
-```
-即可验证 scope 隔离/幂等/删除/filter/provenance/时间查询。
-"""
+"""Reusable conformance suite for every stable MemoryStore backend."""
 
 from __future__ import annotations
 
 import pytest
 
 from doppel_memory.models import (
+    Actor,
     ChatMessage,
     FactAuthority,
     MemoryFilter,
+    MemoryIsolationError,
     MemoryKind,
+    MemoryRecord,
     MemoryScope,
     MemoryState,
+    MemoryStateConflictError,
+    WriteStatus,
 )
-from doppel_memory.store import MemoryStore
 
-SCOPE_A = MemoryScope(user_id="u1", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="10001")
-SCOPE_B = MemoryScope(user_id="u1", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="20002")
-SCOPE_Y = MemoryScope(user_id="u2", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="30003")
-
-MSG_A = ChatMessage.of("owner", "我下周搬家城东", "2026-08-26T10:00:00+08:00", event_id="e-a1")
-MSG_B = ChatMessage.of("contact", "周二吃饭吗", "2026-08-26T10:01:00+08:00", event_id="e-b1")
-MSG_Y = ChatMessage.of("owner", "我下周搬家城东", "2026-08-26T10:02:00+08:00", event_id="e-y1")
+SCOPE_A = MemoryScope(
+    user_id="u1", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="10001"
+)
+SCOPE_B = MemoryScope(
+    user_id="u1", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="20002"
+)
+SCOPE_Y = MemoryScope(
+    user_id="u2", agent_id="qq-bot", platform="qq", chat_type="private", chat_id="30003"
+)
+MSG_A = ChatMessage.of(
+    "owner", "我下周搬家城东", "2026-08-26T10:00:00+08:00", event_id="e-a1"
+)
+MSG_B = ChatMessage.of(
+    "contact", "周二吃饭吗", "2026-08-26T10:01:00+08:00", event_id="e-b1"
+)
+MSG_Y = ChatMessage.of(
+    "owner", "我下周搬家城东", "2026-08-26T10:02:00+08:00", event_id="e-y1"
+)
 
 
 class MemoryStoreContract:
-    """后端契约：子类定义 store_factory，继承并重命名测试类即可。"""
+    """Subclasses only provide a ``store`` fixture; all assertions are shared."""
 
-    store_factory: type[MemoryStore] | None = None
-
-    @pytest.fixture()
-    def store(self) -> MemoryStore:
-        assert self.store_factory is not None, "store_factory must be defined"
-        return self.store_factory()
-
-    # ------------------------------------------------------------ scope 隔离
-
-    async def test_recall_never_crosses_users_sessions(self, store) -> None:
+    async def test_recall_never_crosses_exact_scopes(self, store) -> None:
         await store.write_event(SCOPE_A, MSG_A)
         await store.write_event(SCOPE_B, MSG_B)
         await store.write_event(SCOPE_Y, MSG_Y)
-
-        hits_a = await store.search("搬家", [SCOPE_A])
-        assert len(hits_a) == 1 and hits_a[0].source_event_id == "e-a1"
-        hits_b = await store.search("搬家", [SCOPE_B])
-        assert hits_b == []
-        hits_y = await store.search("搬家", [SCOPE_Y])
-        assert len(hits_y) == 1 and hits_y[0].source_event_id == "e-y1"
+        assert [
+            hit.source_event_id for hit in await store.search("搬家", [SCOPE_A])
+        ] == ["e-a1"]
+        assert await store.search("搬家", [SCOPE_B]) == []
+        assert [
+            hit.source_event_id for hit in await store.search("搬家", [SCOPE_Y])
+        ] == ["e-y1"]
 
     async def test_search_without_scope_rejected(self, store) -> None:
-        from doppel_memory.models import MemoryIsolationError
-
         with pytest.raises(MemoryIsolationError):
             await store.search("搬家", [])
 
-    # ------------------------------------------------------------ 幂等
+    async def test_scope_hierarchy_is_explicit(self, store) -> None:
+        user_scope = SCOPE_A.user_scope()
+        await store.write_background(user_scope, "全局背景")
+        assert await store.search("全局背景", [SCOPE_A]) == []
+        assert len(await store.search("全局背景", [user_scope])) == 1
+        assert len(await store.search("全局背景", [SCOPE_A, user_scope])) == 1
 
-    async def test_write_event_idempotent(self, store) -> None:
+    async def test_extra_dimensions_are_isolated(self, store) -> None:
+        thread_a = SCOPE_A.with_dimension("thread_id", "a")
+        thread_b = SCOPE_A.with_dimension("thread_id", "b")
+        await store.write_event(
+            thread_a,
+            ChatMessage.of(
+                "owner", "thread-a", "2026-08-26T10:00:00Z", event_id="thread-a"
+            ),
+        )
+        assert len(await store.search("thread-a", [thread_a])) == 1
+        assert await store.search("thread-a", [thread_b]) == []
+
+    async def test_write_event_idempotent_per_scope(self, store) -> None:
         first = await store.write_event(SCOPE_A, MSG_A)
-        assert first.memory_id
         second = await store.write_event(SCOPE_A, MSG_A)
-        assert second.memory_id == ""
-        hits = await store.search("搬家", [SCOPE_A])
-        assert len(hits) == 1
+        same_id_other_scope = await store.write_event(SCOPE_B, MSG_A)
+        assert first.status is WriteStatus.CREATED
+        assert second.status is WriteStatus.DUPLICATE
+        assert second.memory_id == first.memory_id
+        assert same_id_other_scope.status is WriteStatus.CREATED
+        assert len(await store.search("搬家", [SCOPE_A])) == 1
+        assert len(await store.search("搬家", [SCOPE_B])) == 1
 
-    # ------------------------------------------------------------ filters
+    async def test_generic_put_supports_custom_kind(self, store) -> None:
+        result = await store.put(
+            MemoryRecord(
+                scope=SCOPE_A,
+                kind="example.preference",
+                content="喜欢短回复",
+                actor="moderator",
+                state=MemoryState.CANDIDATE,
+            ),
+            idempotency_key="preference:short",
+        )
+        assert result.status is WriteStatus.CREATED
+        (hit,) = await store.search(
+            "短回复", [SCOPE_A], filters=MemoryFilter(kinds={"example.preference"})
+        )
+        assert hit.actor == "moderator"
+        assert hit.state is MemoryState.CANDIDATE
 
-    async def test_filter_by_kind_and_actor(self, store) -> None:
-        await store.write_event(SCOPE_A, MSG_A)  # owner
-        await store.write_event(SCOPE_A, MSG_B)  # contact
+    async def test_returned_record_does_not_alias_backend_state(self, store) -> None:
+        result = await store.write_event(SCOPE_A, MSG_A)
+        assert result.record is not None
+        result.record.content = "caller mutation"
+        stored = await store.get(SCOPE_A, result.memory_id)
+        assert stored is not None and stored.content == MSG_A.text
+
+    async def test_filters_and_provenance(self, store) -> None:
+        await store.write_event(SCOPE_A, MSG_A)
+        await store.write_event(SCOPE_A, MSG_B)
         await store.write_background(SCOPE_A, "km 是产品经理", tags=["工作"])
-
-        hits = await store.search(
-            "",
-            [SCOPE_A],
-            filters=MemoryFilter(actors={"contact"}),
+        contacts = await store.search(
+            "", [SCOPE_A], filters=MemoryFilter(actors={Actor.CONTACT})
         )
-        assert len(hits) == 1 and hits[0].actor == "contact"
-
-        hits = await store.search(
-            "",
-            [SCOPE_A],
-            filters=MemoryFilter(kinds={MemoryKind.BACKGROUND}),
+        assert len(contacts) == 1 and contacts[0].actor == Actor.CONTACT
+        backgrounds = await store.search(
+            "", [SCOPE_A], filters=MemoryFilter(kinds={MemoryKind.BACKGROUND})
         )
-        assert len(hits) == 1 and hits[0].kind == MemoryKind.BACKGROUND
+        assert len(backgrounds) == 1
+        (event,) = await store.search("搬家", [SCOPE_A])
+        assert event.source_event_id == "e-a1"
+        assert event.actor == Actor.OWNER
+        assert event.authority is FactAuthority.HUMAN_SELF
+        assert event.raw_text == MSG_A.text
+        assert event.scope == SCOPE_A
 
     async def test_filter_exclude_agent_authority(self, store) -> None:
-        await store.write_event(SCOPE_A, MSG_A)  # owner -> human_self
+        await store.write_event(SCOPE_A, MSG_A)
         await store.write_event(
             SCOPE_A,
-            ChatMessage.of("agent", "收到你的消息了", "2026-08-26T10:03:00+08:00", event_id="e-a2"),
+            ChatMessage.of(
+                "agent", "收到你的消息了", "2026-08-26T10:03:00+08:00", event_id="e-a2"
+            ),
         )
         hits = await store.search(
             "",
             [SCOPE_A],
             filters=MemoryFilter(exclude_authorities={FactAuthority.AGENT_OUTPUT}),
         )
-        assert all(item.authority != FactAuthority.AGENT_OUTPUT for item in hits)
+        assert all(hit.authority is not FactAuthority.AGENT_OUTPUT for hit in hits)
 
-    # ------------------------------------------------------------ provenance
-
-    async def test_provenance_fields(self, store) -> None:
-        await store.write_event(SCOPE_A, MSG_A)
-        (hit,) = await store.search("搬家", [SCOPE_A])
-        assert hit.source_event_id == "e-a1"
-        assert hit.actor == "owner"
-        assert hit.authority == FactAuthority.HUMAN_SELF
-        assert hit.raw_text == "我下周搬家城东"
-
-    # ------------------------------------------------------------ owner samples
-
-    async def test_owner_style_samples_only_owner(self, store) -> None:
-        await store.write_event(SCOPE_A, MSG_A)
+    async def test_owner_style_samples_only_active_owner(self, store) -> None:
+        owner = await store.write_event(SCOPE_A, MSG_A)
         await store.write_event(SCOPE_A, MSG_B)
-        samples = await store.list_recent_owner_messages(SCOPE_A)
-        assert [s.text for s in samples] == ["我下周搬家城东"]
+        assert [
+            message.text for message in await store.list_recent_owner_messages(SCOPE_A)
+        ] == [MSG_A.text]
+        await store.forget(SCOPE_A, owner.memory_id)
+        assert await store.list_recent_owner_messages(SCOPE_A) == []
 
-    # ------------------------------------------------------------ 时间过滤
-
-    async def test_temporal_filter(self, store) -> None:
+    async def test_temporal_filter_normalizes_timezones(self, store) -> None:
         await store.write_event(
             SCOPE_A,
-            ChatMessage.of("owner", "下周搬家", "2026-08-26T09:00:00+08:00", event_id="e-t1"),
+            ChatMessage.of(
+                "owner", "较早", "2026-08-26T23:30:00+08:00", event_id="e-t1"
+            ),
         )
         await store.write_event(
             SCOPE_A,
-            ChatMessage.of("owner", "下周吃饭", "2026-08-27T09:00:00+08:00", event_id="e-t2"),
+            ChatMessage.of("owner", "较晚", "2026-08-26T16:00:00Z", event_id="e-t2"),
         )
         hits = await store.search(
-            "",
-            [SCOPE_A],
-            filters=MemoryFilter(time_from="2026-08-27T00:00:00+08:00"),
+            "", [SCOPE_A], filters=MemoryFilter(time_from="2026-08-26T15:45:00Z")
         )
-        assert len(hits) == 1 and hits[0].source_event_id == "e-t2"
+        assert [hit.source_event_id for hit in hits] == ["e-t2"]
 
-    # ------------------------------------------------------------ 删除
-
-    async def test_forget_soft_and_hard(self, store) -> None:
-        record = await store.write_event(SCOPE_A, MSG_A)
-        assert await store.forget(record.memory_id, hard=False)
+    async def test_soft_forget_hides_and_hard_delete_removes(self, store) -> None:
+        result = await store.write_event(SCOPE_A, MSG_A)
+        assert await store.forget(SCOPE_A, result.memory_id, hard=False)
+        assert await store.search("搬家", [SCOPE_A]) == []
+        inactive = await store.search(
+            "搬家", [SCOPE_A], filters=MemoryFilter(include_inactive=True)
+        )
+        assert len(inactive) == 1 and inactive[0].state is MemoryState.EXPIRED
         if store.capabilities.hard_delete:
-            assert await store.forget(record.memory_id, hard=True)
-        elif record.memory_id:
-            with pytest.raises(NotImplementedError):
-                await store.forget(record.memory_id, hard=True)
+            assert await store.forget(SCOPE_A, result.memory_id, hard=True)
+            assert await store.get(SCOPE_A, result.memory_id) is None
 
-    # ------------------------------------------------------------ 背景/关系
+    async def test_get_and_delete_are_scope_guarded(self, store) -> None:
+        result = await store.write_event(SCOPE_A, MSG_A)
+        assert await store.get(SCOPE_B, result.memory_id) is None
+        assert not await store.forget(SCOPE_B, result.memory_id, hard=True)
+        assert await store.get(SCOPE_A, result.memory_id) is not None
+
+    async def test_state_transition_uses_optimistic_guard(self, store) -> None:
+        result = await store.put(
+            MemoryRecord(
+                scope=SCOPE_A,
+                kind=MemoryKind.FACT,
+                content="候选事实",
+                state=MemoryState.CANDIDATE,
+            )
+        )
+        confirmed = await store.transition(
+            SCOPE_A,
+            result.memory_id,
+            MemoryState.CONFIRMED,
+            expected_state=MemoryState.CANDIDATE,
+        )
+        assert confirmed.state is MemoryState.CONFIRMED
+        assert confirmed.version == 2
+        with pytest.raises(MemoryStateConflictError):
+            await store.transition(
+                SCOPE_A,
+                result.memory_id,
+                MemoryState.REJECTED,
+                expected_state=MemoryState.CANDIDATE,
+            )
 
     async def test_write_background_and_relation(self, store) -> None:
-        await store.write_background(SCOPE_A, "km 是产品经理，负责项目A", tags=["工作", "关系"])
-        await store.write_relation(SCOPE_A, counterpart="km", relationship="前同事", address="小刘")
-        hits = await store.search("产品经理", [SCOPE_A])
-        assert len(hits) == 1 and hits[0].kind == MemoryKind.BACKGROUND
-        rel = await store.search("", [SCOPE_A], filters=MemoryFilter(kinds={MemoryKind.RELATION}))
-        assert len(rel) == 1
+        await store.write_background(
+            SCOPE_A, "km 是产品经理，负责项目A", tags=["工作", "关系"]
+        )
+        await store.write_relation(
+            SCOPE_A, counterpart="km", relationship="前同事", address="小刘"
+        )
+        assert len(await store.search("产品经理", [SCOPE_A])) == 1
+        relations = await store.search(
+            "", [SCOPE_A], filters=MemoryFilter(kinds={MemoryKind.RELATION})
+        )
+        assert len(relations) == 1

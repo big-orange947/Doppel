@@ -9,15 +9,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from doppel_memory.models import MemoryScope, RecallResult
 from doppel_memory.retriever import Retriever
 
 
 class PromptRenderer(Protocol):
-    def render(self, bundle: MaterialBundle) -> str:
-        ...
+    def render(self, bundle: MaterialBundle) -> str: ...
 
 
 @dataclass
@@ -31,7 +30,7 @@ class MaterialBundle:
     relations: list[RecallResult] = field(default_factory=list)
     style_samples: list[str] = field(default_factory=list)
     style_summary: str = field(default="")
-    provenance: list[dict] = field(default_factory=list)
+    provenance: list[dict[str, Any]] = field(default_factory=list)
 
     def render(self, renderer: PromptRenderer | None = None) -> str:
         renderer = renderer or DefaultPromptRenderer()
@@ -67,8 +66,7 @@ class ScopePolicy(Protocol):
 
     def resolve_scopes(
         self, scope: MemoryScope, query: str = ""
-    ) -> list[MemoryScope]:
-        ...
+    ) -> list[MemoryScope]: ...
 
 
 class OwnerPersonaPolicy:
@@ -101,10 +99,12 @@ class PersonaMaterialsBuilder:
         style_sample_limit: int = 5,
         policy: ScopePolicy | None = None,
     ) -> MaterialBundle:
-        search_scopes = scopes or (policy or OwnerPersonaPolicy()).resolve_scopes(scope, query)
-        results = await self._retriever.recall(
-            query, search_scopes, limit=memory_limit
+        search_scopes = (
+            scopes
+            if scopes is not None
+            else (policy or OwnerPersonaPolicy()).resolve_scopes(scope, query)
         )
+        results = await self._retriever.recall(query, search_scopes, limit=memory_limit)
         events: list[RecallResult] = []
         background: list[RecallResult] = []
         relations: list[RecallResult] = []
@@ -123,12 +123,18 @@ class PersonaMaterialsBuilder:
         provenance = [
             {
                 "memory_id": item.memory_id,
+                "scope_key": item.scope.scope_key if item.scope else "",
                 "kind": item.kind,
                 "actor": item.actor,
                 "authority": item.authority.value if item.authority else "",
+                "state": item.state.value,
                 "source_event_id": item.source_event_id,
                 "source_message_id": item.source_message_id,
+                "source_episode": item.source_episode,
                 "extractor": item.extractor,
+                "extracted_at": item.extracted_at.isoformat()
+                if item.extracted_at
+                else "",
             }
             for item in results
         ]
