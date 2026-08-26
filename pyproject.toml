@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "doppel-memory"
+version = "0.1.0"
+description = "A persona memory framework for AI chat agents: remembers conversation events per session, learns the owner's speaking style, and keeps memories strictly isolated across users and sessions. Drop-in memory layer so bots chat like their owners."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Doppel Contributors" }]
+keywords = ["agent-memory", "llm-memory", "persona", "chat-agent", "memory-framework", "graphiti", "neo4j"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "pydantic>=2.8.0",
+    "graphiti-core>=0.29.0",
+    "neo4j>=5.20.0",
+    "fastembed>=0.8.0,<0.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+]
+
+[project.urls]
+Homepage = "https://github.com/big-orange947/Doppel"
+Repository = "https://github.com/big-orange947/Doppel"
+
+[tool.hatch.build.targets.wheel]
+packages = ["doppel_memory"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
