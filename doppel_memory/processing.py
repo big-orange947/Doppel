@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 from doppel_memory.models import (
     ChatMessage,
     FactAuthority,
+    MemoryIsolationError,
     MemoryKind,
     MemoryRecord,
     MemoryScope,
@@ -115,11 +116,9 @@ class ProcessingError(BaseModel):
     processor: str = ""
 
 
-class ProcessingResult(BaseModel):
-    """One pipeline run; proposal and write-result lists have matching indices."""
+class ProposalBatchResult(BaseModel):
+    """One proposal write batch; proposal and result lists have matching indices."""
 
-    scope: MemoryScope
-    message: ChatMessage
     proposals: list[MemoryProposal] = Field(default_factory=list)
     write_results: list[WriteResult] = Field(default_factory=list)
     errors: list[ProcessingError] = Field(default_factory=list)
@@ -131,6 +130,13 @@ class ProcessingResult(BaseModel):
     @property
     def failed_count(self) -> int:
         return sum(result.status is WriteStatus.FAILED for result in self.write_results)
+
+
+class ProcessingResult(ProposalBatchResult):
+    """One online processor run."""
+
+    scope: MemoryScope
+    message: ChatMessage
 
 
 @runtime_checkable
@@ -154,6 +160,13 @@ class ProposalPolicy(Protocol):
     ) -> MemoryProposal | None: ...
 
 
+@runtime_checkable
+class ProposalEvaluator(Protocol):
+    """A source-bound policy used by the common proposal writer."""
+
+    async def evaluate(self, proposal: MemoryProposal) -> MemoryProposal | None: ...
+
+
 class PassThroughProposalPolicy:
     """Default policy: retain the processor's proposed state and contents."""
 
@@ -170,7 +183,7 @@ class ProcessorHooks:
         pass
 
     async def after_proposal(
-        self, proposal: MemoryProposal, message: ChatMessage
+        self, proposal: MemoryProposal, message: ChatMessage | None
     ) -> None:
         pass
 
@@ -232,78 +245,79 @@ class EventProcessor:
         ]
 
 
-class MemoryPipeline:
-    """Coordinates processors, one policy, exact-scope guards, hooks, and Store.put."""
+class PassThroughProposalEvaluator:
+    async def evaluate(self, proposal: MemoryProposal) -> MemoryProposal:
+        return proposal
 
-    def __init__(
-        self,
-        store: MemoryStore,
-        processors: Sequence[MemoryProcessor],
-        *,
-        policy: ProposalPolicy | None = None,
-        hooks: ProcessorHooks | None = None,
-    ) -> None:
+
+class _MessagePolicyEvaluator:
+    def __init__(self, policy: ProposalPolicy, message: ChatMessage) -> None:
+        self._policy = policy
+        self._message = message
+
+    async def evaluate(self, proposal: MemoryProposal) -> MemoryProposal | None:
+        return await self._policy.evaluate(proposal, self._message)
+
+
+class ProposalWriter:
+    """Validate, authorize, deduplicate, and persist a proposal batch."""
+
+    def __init__(self, store: MemoryStore) -> None:
         self._store = store
-        self._processors = tuple(processors)
-        self._policy = policy or PassThroughProposalPolicy()
-        self._hooks = hooks or ProcessorHooks()
 
-    async def run(
+    async def write_batch(
         self,
-        scope: MemoryScope,
-        message: ChatMessage,
+        proposals: Sequence[MemoryProposal],
         *,
-        allowed_scopes: Sequence[MemoryScope] | None = None,
-    ) -> ProcessingResult:
-        result = ProcessingResult(scope=scope, message=message)
-        allowed_keys = {scope.scope_key}
-        allowed_keys.update(item.scope_key for item in allowed_scopes or ())
+        allowed_scopes: Sequence[MemoryScope],
+        evaluator: ProposalEvaluator | None = None,
+        hooks: ProcessorHooks | None = None,
+        message: ChatMessage | None = None,
+    ) -> ProposalBatchResult:
+        if not allowed_scopes:
+            raise MemoryIsolationError("proposal writing requires allowed_scopes")
+        result = ProposalBatchResult()
+        allowed_keys = {scope.scope_key for scope in allowed_scopes}
         seen_keys: set[tuple[str, str]] = set()
+        bound_evaluator = evaluator or PassThroughProposalEvaluator()
+        bound_hooks = hooks or ProcessorHooks()
 
-        try:
-            await self._hooks.before_process(scope, message)
-        except Exception as exc:  # noqa: BLE001 - extension boundary
-            await self._add_error(result, "before_process", exc)
-            return result
-
-        for processor in self._processors:
-            processor_name = str(getattr(processor, "name", "") or "")
+        for raw_proposal in proposals:
+            processor_name = str(getattr(raw_proposal, "processor", "") or "")
             try:
-                proposed = list(await processor.process(scope, message))
-            except Exception as exc:  # noqa: BLE001 - extension boundary
-                await self._add_error(result, "process", exc, processor=processor_name)
+                proposal = _validated_proposal(raw_proposal)
+                processor_name = proposal.processor
+            except Exception as exc:  # noqa: BLE001 - plugin boundary
+                await _append_error(
+                    result, bound_hooks, "validate", exc, processor=processor_name
+                )
                 continue
 
-            for raw_proposal in proposed:
-                try:
-                    proposal = _validated_proposal(raw_proposal)
-                except Exception as exc:  # noqa: BLE001 - plugin boundary
-                    await self._add_error(
-                        result, "validate", exc, processor=processor_name
-                    )
-                    continue
-                await self._handle_proposal(
-                    result,
-                    proposal,
-                    message,
-                    processor_name=processor_name,
-                    allowed_keys=allowed_keys,
-                    seen_keys=seen_keys,
-                )
+            await self._write_one(
+                result,
+                proposal,
+                evaluator=bound_evaluator,
+                hooks=bound_hooks,
+                message=message,
+                allowed_keys=allowed_keys,
+                seen_keys=seen_keys,
+            )
         return result
 
-    async def _handle_proposal(
+    async def _write_one(
         self,
-        result: ProcessingResult,
+        result: ProposalBatchResult,
         proposal: MemoryProposal,
-        message: ChatMessage,
         *,
-        processor_name: str,
+        evaluator: ProposalEvaluator,
+        hooks: ProcessorHooks,
+        message: ChatMessage | None,
         allowed_keys: set[str],
         seen_keys: set[tuple[str, str]],
     ) -> None:
+        processor_name = proposal.processor
         try:
-            await self._hooks.after_proposal(proposal, message)
+            await hooks.after_proposal(proposal, message)
         except Exception as exc:  # noqa: BLE001 - extension boundary
             result.proposals.append(proposal)
             result.write_results.append(
@@ -313,8 +327,9 @@ class MemoryPipeline:
                     message=str(exc),
                 )
             )
-            await self._add_error(
+            await _append_error(
                 result,
+                hooks,
                 "after_proposal",
                 exc,
                 processor=processor_name,
@@ -323,10 +338,10 @@ class MemoryPipeline:
             return
 
         try:
-            evaluated = await self._policy.evaluate(proposal, message)
+            evaluated = await evaluator.evaluate(proposal)
             if evaluated is not None:
                 evaluated = _validated_proposal(evaluated)
-        except Exception as exc:  # noqa: BLE001 - extension boundary
+        except Exception as exc:  # noqa: BLE001 - policy boundary
             result.proposals.append(proposal)
             result.write_results.append(
                 WriteResult(
@@ -335,8 +350,13 @@ class MemoryPipeline:
                     message=str(exc),
                 )
             )
-            await self._add_error(
-                result, "evaluate", exc, processor=processor_name, proposal=proposal
+            await _append_error(
+                result,
+                hooks,
+                "evaluate",
+                exc,
+                processor=processor_name,
+                proposal=proposal,
             )
             return
 
@@ -354,9 +374,7 @@ class MemoryPipeline:
         proposal = evaluated
         result.proposals.append(proposal)
         if proposal.scope.scope_key not in allowed_keys:
-            error = ValueError(
-                "proposal target scope is not in this run's allowed_scopes"
-            )
+            error = ValueError("proposal target scope is not in allowed_scopes")
             result.write_results.append(
                 WriteResult(
                     status=WriteStatus.FAILED,
@@ -364,8 +382,13 @@ class MemoryPipeline:
                     message=str(error),
                 )
             )
-            await self._add_error(
-                result, "validate", error, processor=processor_name, proposal=proposal
+            await _append_error(
+                result,
+                hooks,
+                "validate",
+                error,
+                processor=processor_name,
+                proposal=proposal,
             )
             return
 
@@ -375,7 +398,7 @@ class MemoryPipeline:
                 WriteResult(
                     status=WriteStatus.SKIPPED,
                     error_code="duplicate_proposal",
-                    message="duplicate idempotency key in one pipeline run",
+                    message="duplicate idempotency key in one proposal batch",
                 )
             )
             return
@@ -384,7 +407,7 @@ class MemoryPipeline:
 
         try:
             record = proposal.to_record()
-        except Exception as exc:  # noqa: BLE001 - proposal conversion boundary
+        except Exception as exc:  # noqa: BLE001 - conversion boundary
             result.write_results.append(
                 WriteResult(
                     status=WriteStatus.FAILED,
@@ -392,13 +415,18 @@ class MemoryPipeline:
                     message=str(exc),
                 )
             )
-            await self._add_error(
-                result, "validate", exc, processor=processor_name, proposal=proposal
+            await _append_error(
+                result,
+                hooks,
+                "validate",
+                exc,
+                processor=processor_name,
+                proposal=proposal,
             )
             return
 
         try:
-            await self._hooks.before_write(proposal, record)
+            await hooks.before_write(proposal, record)
         except Exception as exc:  # noqa: BLE001 - extension boundary
             result.write_results.append(
                 WriteResult(
@@ -407,8 +435,13 @@ class MemoryPipeline:
                     message=str(exc),
                 )
             )
-            await self._add_error(
-                result, "before_write", exc, processor=processor_name, proposal=proposal
+            await _append_error(
+                result,
+                hooks,
+                "before_write",
+                exc,
+                processor=processor_name,
+                proposal=proposal,
             )
             return
 
@@ -424,49 +457,87 @@ class MemoryPipeline:
                     message=str(exc),
                 )
             )
-            await self._add_error(
-                result, "write", exc, processor=processor_name, proposal=proposal
+            await _append_error(
+                result,
+                hooks,
+                "write",
+                exc,
+                processor=processor_name,
+                proposal=proposal,
             )
             return
 
         result.write_results.append(write_result)
         try:
-            await self._hooks.after_write(proposal, write_result)
+            await hooks.after_write(proposal, write_result)
         except Exception as exc:  # noqa: BLE001 - extension boundary
-            await self._add_error(
-                result, "after_write", exc, processor=processor_name, proposal=proposal
+            await _append_error(
+                result,
+                hooks,
+                "after_write",
+                exc,
+                processor=processor_name,
+                proposal=proposal,
             )
 
-    async def _add_error(
+
+class MemoryPipeline:
+    """Coordinates processors, one policy, exact-scope guards, hooks, and Store.put."""
+
+    def __init__(
         self,
-        result: ProcessingResult,
-        stage: str,
-        error: Exception,
+        store: MemoryStore,
+        processors: Sequence[MemoryProcessor],
         *,
-        processor: str = "",
-        proposal: MemoryProposal | None = None,
+        policy: ProposalPolicy | None = None,
+        hooks: ProcessorHooks | None = None,
     ) -> None:
-        result.errors.append(
-            ProcessingError(
-                stage=stage,
-                error_type=type(error).__name__,
-                message=str(error),
-                processor=processor,
-            )
-        )
+        self._writer = ProposalWriter(store)
+        self._processors = tuple(processors)
+        self._policy = policy or PassThroughProposalPolicy()
+        self._hooks = hooks or ProcessorHooks()
+
+    async def run(
+        self,
+        scope: MemoryScope,
+        message: ChatMessage,
+        *,
+        allowed_scopes: Sequence[MemoryScope] | None = None,
+    ) -> ProcessingResult:
+        result = ProcessingResult(scope=scope, message=message)
+
         try:
-            await self._hooks.on_error(
-                stage, error, processor=processor, proposal=proposal
-            )
-        except Exception as hook_error:  # noqa: BLE001 - terminal hook boundary
-            result.errors.append(
-                ProcessingError(
-                    stage="on_error",
-                    error_type=type(hook_error).__name__,
-                    message=str(hook_error),
-                    processor=processor,
+            await self._hooks.before_process(scope, message)
+        except Exception as exc:  # noqa: BLE001 - extension boundary
+            await _append_error(result, self._hooks, "before_process", exc)
+            return result
+
+        proposals: list[MemoryProposal] = []
+        for processor in self._processors:
+            processor_name = str(getattr(processor, "name", "") or "")
+            try:
+                proposals.extend(await processor.process(scope, message))
+            except Exception as exc:  # noqa: BLE001 - extension boundary
+                await _append_error(
+                    result,
+                    self._hooks,
+                    "process",
+                    exc,
+                    processor=processor_name,
                 )
-            )
+                continue
+
+        batch = await self._writer.write_batch(
+            proposals,
+            allowed_scopes=[scope, *(allowed_scopes or ())],
+            evaluator=_MessagePolicyEvaluator(self._policy, message),
+            hooks=self._hooks,
+            message=message,
+        )
+        result.proposals = batch.proposals
+        result.write_results = batch.write_results
+        result.errors.extend(batch.errors)
+        return result
 
 
 def _validated_proposal(value: Any) -> MemoryProposal:
@@ -475,3 +546,33 @@ def _validated_proposal(value: Any) -> MemoryProposal:
     if isinstance(value, MemoryProposal):
         value = value.model_dump(warnings=False)
     return MemoryProposal.model_validate(value)
+
+
+async def _append_error(
+    result: ProposalBatchResult,
+    hooks: ProcessorHooks,
+    stage: str,
+    error: Exception,
+    *,
+    processor: str = "",
+    proposal: MemoryProposal | None = None,
+) -> None:
+    result.errors.append(
+        ProcessingError(
+            stage=stage,
+            error_type=type(error).__name__,
+            message=str(error),
+            processor=processor,
+        )
+    )
+    try:
+        await hooks.on_error(stage, error, processor=processor, proposal=proposal)
+    except Exception as hook_error:  # noqa: BLE001 - terminal hook boundary
+        result.errors.append(
+            ProcessingError(
+                stage="on_error",
+                error_type=type(hook_error).__name__,
+                message=str(hook_error),
+                processor=processor,
+            )
+        )

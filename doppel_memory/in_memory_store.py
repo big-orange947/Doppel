@@ -6,12 +6,14 @@ import json
 from typing import Any
 from uuid import uuid4
 
+from doppel_memory._cursor import decode_cursor, encode_cursor
 from doppel_memory.models import (
     ACTIVE_MEMORY_STATES,
     Actor,
     ChatMessage,
     MemoryFilter,
     MemoryIsolationError,
+    MemoryPage,
     MemoryRecord,
     MemoryScope,
     MemoryState,
@@ -33,6 +35,7 @@ class InMemoryStore(MemoryStore):
             substring_search=True,
             temporal_search=True,
             hard_delete=True,
+            pagination=True,
         )
 
     @property
@@ -138,6 +141,42 @@ class InMemoryStore(MemoryStore):
             and record.state in ACTIVE_MEMORY_STATES
         ][:limit]
         return list(reversed(samples))
+
+    async def scan(
+        self,
+        scope: MemoryScope,
+        *,
+        filters: MemoryFilter | None = None,
+        cursor: str = "",
+        limit: int = 100,
+    ) -> MemoryPage:
+        if limit <= 0:
+            return MemoryPage()
+        filter_obj = filters or MemoryFilter()
+        after = decode_cursor(cursor) if cursor else None
+        records = sorted(
+            (
+                record
+                for record in self._records.values()
+                if record.scope.scope_key == scope.scope_key
+                and _matches(record, filter_obj)
+                and (after is None or (record.created_at, record.memory_id) > after)
+            ),
+            key=lambda item: (item.created_at, item.memory_id),
+        )
+        page = records[: limit + 1]
+        has_more = len(page) > limit
+        selected = page[:limit]
+        next_cursor = (
+            encode_cursor(selected[-1].created_at, selected[-1].memory_id)
+            if has_more and selected
+            else ""
+        )
+        return MemoryPage(
+            records=[record.model_copy(deep=True) for record in selected],
+            next_cursor=next_cursor,
+            has_more=has_more,
+        )
 
     async def get(self, scope: MemoryScope, memory_id: str) -> MemoryRecord | None:
         record = self._records.get(memory_id)

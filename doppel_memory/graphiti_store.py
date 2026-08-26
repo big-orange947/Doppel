@@ -26,6 +26,7 @@ from doppel_memory.models import (
     MemoryFilter,
     MemoryIsolationError,
     MemoryKind,
+    MemoryPage,
     MemoryRecord,
     MemoryScope,
     MemoryState,
@@ -234,6 +235,18 @@ class GraphitiMemoryStore(MemoryStore):
     ) -> list[ChatMessage]:
         samples = self._owner_samples.get(scope.scope_key)
         return list(samples)[-limit:] if samples and limit > 0 else []
+
+    async def scan(
+        self,
+        scope: MemoryScope,
+        *,
+        filters: MemoryFilter | None = None,
+        cursor: str = "",
+        limit: int = 100,
+    ) -> MemoryPage:
+        raise NotImplementedError(
+            "experimental Graphiti backend does not support paginated scans"
+        )
 
     async def get(self, scope: MemoryScope, memory_id: str) -> MemoryRecord | None:
         raise NotImplementedError("experimental Graphiti backend does not support get")

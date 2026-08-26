@@ -30,7 +30,7 @@ Doppel 负责：
 - 标准化 IM 消息和开放式 actor；
 - 无碰撞、可扩展的 exact scope namespace；
 - 通用记忆写入、幂等、状态转换和删除；
-- 可插拔 MemoryProcessor、MemoryProposal、状态策略和有限 hooks；
+- 可插拔 MemoryProcessor、周期 BatchTask、MemoryProposal、状态策略和有限 hooks；
 - 按 kind、actor、authority、state、tag、重要性和时间过滤；
 - 可追溯的检索结果和结构化材料；
 - 可替换后端及明确的能力声明。
@@ -252,8 +252,71 @@ result = await memory.process(
 `before_write`、`after_write`、`on_error` 是全部生命周期 hooks；框架不建立无限扩张的
 中间件体系。
 
-不传 `processors` 时，`client.process()` 使用确定性的 `EventProcessor`；显式传入空列表则
-是 no-op。已有 `client.ingest()` 保持兼容，仍然是写入单条原始事件的最短路径。
+`client.process()` 不传 `processors` 时是 no-op，不会把所有输入悄悄变成长时事件记忆。
+需要保存原始事件时使用 `client.ingest()`，或者显式传入确定性的 `EventProcessor()`。
+
+### 周期聚合任务
+
+需要“累计多次戳一戳后形成关系记忆”或 StyleMiner 这类历史统计时，使用独立的
+`MemoryBatchTask`，不向在线 `MemoryProcessor` 注入 Store：
+
+```python
+from doppel_memory import (
+    BatchCheckpoint,
+    BatchProposalPlan,
+    HistoryWindow,
+    MemoryKind,
+    MemoryProposal,
+)
+
+class InteractionPatternTask:
+    name = "interaction-pattern"
+    version = "1"
+
+    async def propose(self, context):
+        page = await context.history.read(
+            cursor=context.checkpoint.cursor,
+            time_from=context.window.start,
+            time_to=context.window.end,
+        )
+        nudges = [m for m in page.messages if m.message_type == "nudge"]
+        proposals = []
+        if len(nudges) >= 3:
+            proposals.append(
+                MemoryProposal(
+                    scope=context.scope,
+                    kind=MemoryKind.RELATION,
+                    content="双方有频繁的轻互动",
+                    processor=self.name,
+                    processor_version=self.version,
+                    idempotency_key=(
+                        f"interaction:{context.window.start.isoformat()}"
+                    ),
+                )
+            )
+        return BatchProposalPlan(
+            proposals=proposals,
+            next_checkpoint=BatchCheckpoint(cursor=page.next_cursor),
+        )
+
+result = await memory.run_batch_task(
+    InteractionPatternTask(),
+    scope,
+    HistoryWindow(start=window_start, end=window_end),
+    checkpoint=last_checkpoint,
+)
+if result.committable_checkpoint is not None:
+    await my_checkpoint_store.save(result.committable_checkpoint)
+```
+
+任务只拿到 exact-scope 的只读 `ScopedHistoryReader` 和 `ScopedMemoryReader`，返回 proposal，
+最终写入仍统一经过 policy、scope 白名单、幂等、hooks 和 Store。调度频率、分布式锁、重试与
+checkpoint 持久化由 Agent runtime 决定；Doppel 只运行一次任务，并且仅在本次没有错误时
+返回 `committable_checkpoint`。
+
+默认 `StoreHistoryReader` 从支持稳定分页的 Store 读取 `event`。如果表情包、戳一戳等瞬时
+事件不应成为长期记忆，可以实现 `ScopedHistoryReader`，直接读取应用自己的聊天事件日志；
+它们只作为统计输入存在，达到阈值后生成的关系/风格 proposal 才进入长期记忆。
 
 ### 高层：结构化材料
 
@@ -319,11 +382,11 @@ await memory.forget(scope, memory_id, hard=True) # 后端支持时硬删除
 
 ## 后端
 
-| 后端 | 状态 | substring | full text | semantic | temporal | graph | hard delete | transactions |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| `memory` | 稳定，测试/示例 | ✅ | — | — | ✅ | — | ✅ | — |
-| `sqlite` | 稳定，默认参考实现 | ✅ | ✅ FTS5 | — | ✅ | — | ✅ | ✅ |
-| `graphiti` | 实验性 | — | — | ✅ | ✅ | ✅ | — | — |
+| 后端 | 状态 | substring | full text | semantic | temporal | pagination | graph | hard delete | transactions |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `memory` | 稳定，测试/示例 | ✅ | — | — | ✅ | ✅ | — | ✅ | — |
+| `sqlite` | 稳定，默认参考实现 | ✅ | ✅ FTS5 | — | ✅ | ✅ | — | ✅ | ✅ |
+| `graphiti` | 实验性 | — | — | ✅ | ✅ | — | ✅ | — | — |
 
 SQLite 使用 scope 级幂等约束、UTC 时间、WAL/串行连接操作和版本化 schema migration。
 schema v3 会在 FTS5 可用时重建已有记录的 content/metadata 索引，并用 trigger 同步后续
@@ -340,6 +403,7 @@ provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError
 - [x] v0.2.1：稳定 scope、通用 Store、WriteResult、UTC 时间、生命周期、并发与迁移契约
 - [x] v0.3：MemoryProposal/MemoryProcessor 管线、状态策略和有限生命周期 hooks
 - [x] v0.4：检索器/Reranker 协议、FTS5、IM 导入格式及 reply/quote/thread 原语
+- [x] v0.4.1：周期历史聚合任务、只读 reader、稳定分页和统一 proposal writer
 - [ ] v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选 StyleMiner/StyleProfessor、benchmark
 
 详细设计见 [`docs/design.md`](docs/design.md)。

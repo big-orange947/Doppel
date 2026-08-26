@@ -10,6 +10,7 @@ from doppel_memory.models import (
     FactAuthority,
     MemoryFilter,
     MemoryKind,
+    MemoryPage,
     MemoryRecord,
     MemoryScope,
     MemoryState,
@@ -125,6 +126,17 @@ class MemoryStore(ABC):
         filters: MemoryFilter | None = None,
         limit: int = 10,
     ) -> list[RecallResult]: ...
+
+    @abstractmethod
+    async def scan(
+        self,
+        scope: MemoryScope,
+        *,
+        filters: MemoryFilter | None = None,
+        cursor: str = "",
+        limit: int = 100,
+    ) -> MemoryPage:
+        """Read a deterministic oldest-first page within one exact scope."""
 
     @abstractmethod
     async def list_recent_owner_messages(

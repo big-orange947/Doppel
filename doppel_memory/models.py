@@ -439,6 +439,14 @@ class MemoryRecord(BaseModel):
         return _utc(value)
 
 
+class MemoryPage(BaseModel):
+    """One exact-scope, oldest-first page of complete memory records."""
+
+    records: list[MemoryRecord] = Field(default_factory=list)
+    next_cursor: str = ""
+    has_more: bool = False
+
+
 class WriteResult(BaseModel):
     status: WriteStatus
     record: MemoryRecord | None = None
@@ -505,6 +513,7 @@ class StoreCapabilities(BaseModel):
     hard_delete: bool = False
     transactions: bool = False
     reranking: bool = False
+    pagination: bool = False
 
     def require(self, capability: str) -> None:
         if not getattr(self, capability, False):

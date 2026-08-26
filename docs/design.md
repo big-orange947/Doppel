@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.4.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.4.1：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -16,7 +16,7 @@ scope 和 provenance 的记忆，并向上层提供结构化检索材料。
 5. 生命周期、过滤检索和 provenance；
 6. 可组合 ScopePolicy、MaterialBundle 和 renderer；
 7. Store 能力声明与跨后端一致性测试；
-8. 只产生提议、不绑定 LLM 的 MemoryProcessor 管线。
+8. 只产生提议、不绑定 LLM 的在线 MemoryProcessor 和周期 MemoryBatchTask 管线。
 
 核心不负责回复生成、路由、发送、工具调用、平台协议、确认 UI 或统一 LLM provider。
 
@@ -76,7 +76,7 @@ Processor 应提供稳定且带领域前缀的 idempotency key。
 | 层 | 入口 | 职责 |
 |---|---|---|
 | 低层 | `store.put/get/search/transition/forget` | 完整控制和后端协议 |
-| 中层 | `client.ingest/import_batch/process/recall` | 标准 IM 流程、提议管线和结构化结果 |
+| 中层 | `client.ingest/import_batch/process/run_batch_task/recall` | 标准 IM 流程、提议管线和结构化结果 |
 | 高层 | `client.materials/persona_materials` | ScopePolicy、分组材料和可替换 renderer |
 
 专用 `write_event/background/relation` 是对通用 `put(MemoryRecord)` 的便利封装，不定义封闭
@@ -95,6 +95,7 @@ Processor 应提供稳定且带领域前缀的 idempotency key。
 - `hard_delete`
 - `transactions`
 - `reranking`
+- `pagination`
 
 不支持的管理操作应抛出 `NotImplementedError`。调用方可以使用 `capabilities.require()` 做
 前置检查。
@@ -145,7 +146,8 @@ Processor 不直接写 Store，也不决定最终确认策略。`MemoryProposal`
 - idempotency key；
 - derived chain 和 metadata。
 
-核心内置的 `EventProcessor` 只做确定性原始事件映射。事实抽取、关系抽取、LLM 调用和领域
+核心内置的 `EventProcessor` 只做确定性原始事件映射，但必须显式启用；不传 processors 的
+`client.process()` 是 no-op。事实抽取、关系抽取、LLM 调用和领域
 规则均实现同一个 `MemoryProcessor` protocol，属于开发者或 optional adapter，不进入核心
 默认决策。
 
@@ -159,6 +161,45 @@ proposal 在写 Store 前去重；跨运行幂等仍由 Store 保证。
 第一版 hooks 固定为 `before_process`、`after_proposal`、`before_write`、`after_write` 和
 `on_error`，不建立通用中间件系统。扩展错误进入 `ProcessingError`；已经成功的 Store 写入
 不会因为后置 hook 失败而被改写为失败。
+
+## v0.4.1 周期历史聚合
+
+在线 Processor 保持无状态协议：
+
+```text
+process(scope, message) -> proposals
+```
+
+需要跨消息统计的 InteractionPattern、StyleMiner 等能力属于 `MemoryBatchTask`：
+
+```text
+host scheduler / checkpoint
+          ↓
+BatchTaskContext
+  ├─ ScopedHistoryReader (read-only, exact scope, paginated)
+  └─ ScopedMemoryReader  (read-only, authorized scopes)
+          ↓
+MemoryBatchTask.propose()
+          ↓
+BatchProposalPlan(proposals, tentative checkpoint)
+          ↓
+ProposalWriter (policy / scope / dedup / hooks / Store.put)
+          ↓
+BatchRunResult(committable checkpoint only on a clean run)
+```
+
+`MemoryProcessor` 和 `MemoryBatchTask` 都不能直接写 Store。共同的 `ProposalWriter` 是唯一提案
+落库路径，执行重新校验、exact-scope 授权、单批去重、policy、hooks 和 Store 幂等写入。
+
+`MemoryStore.scan()` 只扫描一个 exact scope，按 `(created_at, memory_id)` 升序并返回 opaque
+cursor；稳定后端必须通过相同分页契约。StoreHistoryReader 用它恢复 event 为 ChatMessage。
+应用也可以提供自定义 ScopedHistoryReader，从独立事件日志读取无需长期保存的表情、动图、
+戳一戳等瞬时事件。
+
+Doppel 不内置 scheduler、分布式锁或 checkpoint 数据库。Host 为每次运行指定时间窗口与旧
+checkpoint，并且只能在 `BatchRunResult.committable_checkpoint` 非空时推进进度。任务异常、
+proposal 越权、写入失败或 hook 错误都不会释放新 checkpoint；Store 的 idempotency key 保证
+安全重试。
 
 ## v0.4 检索组合
 
@@ -192,4 +233,5 @@ provenance 保存在 `raw.doppel_import`。
 - v0.2.1：协议、SQLite 和 conformance 稳定化；
 - v0.3：MemoryProposal/Processor、状态策略、有限 hooks（已完成）；
 - v0.4：检索器/Reranker、FTS5、IM 导入格式和消息关系原语（已完成）；
+- v0.4.1：周期历史聚合、稳定分页和统一 proposal writer（已完成）；
 - v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选风格工具和 benchmark。

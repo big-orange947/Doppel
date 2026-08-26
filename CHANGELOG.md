@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.4.1
+
+Periodic history aggregation for statistical memories while keeping online processors
+stateless and store-independent.
+
+### Added
+
+- `MemoryBatchTask`, `BatchTaskContext`, `BatchProposalPlan`, and `BatchTaskRunner` for
+  host-scheduled, one-shot aggregation runs.
+- Exact-scoped read-only `ScopedHistoryReader` and `ScopedMemoryReader` protocols, with
+  Store-backed reference implementations.
+- `HistoryWindow` and host-owned `BatchCheckpoint`; a next checkpoint becomes
+  committable only when proposal processing finishes without errors.
+- `MemoryStore.scan()` and opaque `(created_at, memory_id)` cursor pagination for the
+  stable InMemory and SQLite backends.
+- Shared `ProposalWriter` used by both online and batch pipelines for validation,
+  policy, scope authorization, deduplication, hooks, and persistence.
+- `DoppelClient.run_batch_task()` convenience entry point.
+
+### Changed
+
+- `DoppelClient.process()` with no `processors` is now a no-op. Use `ingest()` to retain
+  an event, or pass `[EventProcessor()]` explicitly.
+- `ProcessorHooks.after_proposal()` receives `ChatMessage | None`; batch proposals have
+  no single source message.
+- Graphiti explicitly reports no pagination support and raises `NotImplementedError`
+  for `scan()`.
+
+### Design boundary
+
+- Doppel runs one batch invocation; scheduling, leases, retries, and checkpoint storage
+  remain responsibilities of the Agent runtime.
+- Ephemeral IM interactions do not need to become long-term memory. Applications can
+  supply a history reader backed by their event log and persist only aggregate proposals.
+
 ## 0.4.0
 
 Retrieval composition, SQLite full-text search, and portable IM history ingestion.

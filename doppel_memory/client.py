@@ -19,6 +19,16 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
+from doppel_memory.batch import (
+    BatchCheckpoint,
+    BatchProposalPolicy,
+    BatchRunResult,
+    BatchTaskRunner,
+    HistoryWindow,
+    MemoryBatchTask,
+    ScopedHistoryReader,
+    ScopedMemoryReader,
+)
 from doppel_memory.imports import IMImportBatch, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.models import (
@@ -34,7 +44,6 @@ from doppel_memory.models import (
 )
 from doppel_memory.persona import MaterialBundle, PersonaMaterialsBuilder
 from doppel_memory.processing import (
-    EventProcessor,
     MemoryPipeline,
     MemoryProcessor,
     ProcessingResult,
@@ -112,11 +121,42 @@ class DoppelClient:
 
         pipeline = MemoryPipeline(
             self._store,
-            (EventProcessor(),) if processors is None else processors,
+            processors or (),
             policy=policy,
             hooks=hooks,
         )
         return await pipeline.run(scope, message, allowed_scopes=allowed_scopes)
+
+    async def run_batch_task(
+        self,
+        task: MemoryBatchTask,
+        scope: MemoryScope,
+        window: HistoryWindow,
+        *,
+        checkpoint: BatchCheckpoint | None = None,
+        history: ScopedHistoryReader | None = None,
+        memories: ScopedMemoryReader | None = None,
+        read_scopes: Sequence[MemoryScope] | None = None,
+        allowed_scopes: Sequence[MemoryScope] | None = None,
+        policy: BatchProposalPolicy | None = None,
+        hooks: ProcessorHooks | None = None,
+        run_id: str | None = None,
+    ) -> BatchRunResult:
+        """Run one host-scheduled history aggregation task."""
+
+        return await BatchTaskRunner(self._store).run_once(
+            task,
+            scope,
+            window,
+            checkpoint=checkpoint,
+            history=history,
+            memories=memories,
+            read_scopes=read_scopes,
+            allowed_scopes=allowed_scopes,
+            policy=policy,
+            hooks=hooks,
+            run_id=run_id,
+        )
 
     async def put(
         self, record: MemoryRecord, *, idempotency_key: str | None = None

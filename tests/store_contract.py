@@ -57,6 +57,43 @@ class MemoryStoreContract:
         with pytest.raises(MemoryIsolationError):
             await store.search("搬家", [])
 
+    async def test_scan_is_exact_stable_and_paginated(self, store) -> None:
+        at = "2026-08-26T10:00:00Z"
+        for memory_id in ("page-a", "page-b", "page-c"):
+            await store.put(
+                MemoryRecord(
+                    memory_id=memory_id,
+                    scope=SCOPE_A,
+                    kind=MemoryKind.EVENT,
+                    content=memory_id,
+                    actor=Actor.OWNER,
+                    created_at=at,
+                    updated_at=at,
+                )
+            )
+        await store.put(
+            MemoryRecord(
+                memory_id="other-scope",
+                scope=SCOPE_B,
+                kind=MemoryKind.EVENT,
+                content="other-scope",
+                actor=Actor.OWNER,
+                created_at=at,
+                updated_at=at,
+            )
+        )
+
+        first = await store.scan(SCOPE_A, limit=2)
+        assert [record.memory_id for record in first.records] == ["page-a", "page-b"]
+        assert first.has_more and first.next_cursor
+        second = await store.scan(SCOPE_A, cursor=first.next_cursor, limit=2)
+        assert [record.memory_id for record in second.records] == ["page-c"]
+        assert not second.has_more and not second.next_cursor
+        assert store.capabilities.pagination
+
+        with pytest.raises(ValueError, match="invalid memory page cursor"):
+            await store.scan(SCOPE_A, cursor="not-a-cursor")
+
     async def test_scope_hierarchy_is_explicit(self, store) -> None:
         user_scope = SCOPE_A.user_scope()
         await store.write_background(user_scope, "全局背景")

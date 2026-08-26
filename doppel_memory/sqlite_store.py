@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from doppel_memory._cursor import decode_cursor, encode_cursor
 from doppel_memory.models import (
     ACTIVE_MEMORY_STATES,
     Actor,
@@ -18,6 +19,7 @@ from doppel_memory.models import (
     FactAuthority,
     MemoryFilter,
     MemoryIsolationError,
+    MemoryPage,
     MemoryRecord,
     MemoryScope,
     MemoryState,
@@ -107,6 +109,7 @@ class SQLiteStore(MemoryStore):
             temporal_search=True,
             hard_delete=True,
             transactions=True,
+            pagination=True,
         )
 
     @property
@@ -429,6 +432,94 @@ class SQLiteStore(MemoryStore):
                 )
                 for row in rows
             ]
+
+        async with self._operation_lock:
+            return await asyncio.to_thread(_run)
+
+    async def scan(
+        self,
+        scope: MemoryScope,
+        *,
+        filters: MemoryFilter | None = None,
+        cursor: str = "",
+        limit: int = 100,
+    ) -> MemoryPage:
+        """Scan one exact scope in stable oldest-first order."""
+        if limit <= 0:
+            return MemoryPage()
+        conn = await self._ensure_conn()
+        filter_obj = filters or MemoryFilter()
+
+        def _run() -> MemoryPage:
+            where = ["scope_key=?"]
+            params: list[Any] = [scope.scope_key]
+            if cursor:
+                after_time, after_id = decode_cursor(cursor)
+                after_iso = after_time.astimezone(UTC).isoformat()
+                where.append("(created_at > ? OR (created_at = ? AND id > ?))")
+                params.extend((after_iso, after_iso, after_id))
+            if filter_obj.states is not None:
+                values = [state.value for state in filter_obj.states]
+                where.append(f"state IN ({','.join('?' for _ in values)})")
+                params.extend(values)
+            elif not filter_obj.include_inactive:
+                values = [state.value for state in ACTIVE_MEMORY_STATES]
+                where.append(f"state IN ({','.join('?' for _ in values)})")
+                params.extend(values)
+            if filter_obj.kinds:
+                values = list(filter_obj.kinds)
+                where.append(f"kind IN ({','.join('?' for _ in values)})")
+                params.extend(values)
+            if filter_obj.actors:
+                values = list(filter_obj.actors)
+                where.append(f"actor IN ({','.join('?' for _ in values)})")
+                params.extend(values)
+            if filter_obj.exclude_actors:
+                values = list(filter_obj.exclude_actors)
+                where.append(f"actor NOT IN ({','.join('?' for _ in values)})")
+                params.extend(values)
+            if filter_obj.authorities:
+                values = [authority.value for authority in filter_obj.authorities]
+                where.append(f"authority IN ({','.join('?' for _ in values)})")
+                params.extend(values)
+            if filter_obj.exclude_authorities:
+                values = [
+                    authority.value for authority in filter_obj.exclude_authorities
+                ]
+                where.append(f"authority NOT IN ({','.join('?' for _ in values)})")
+                params.extend(values)
+            if filter_obj.importance_min is not None:
+                where.append("importance >= ?")
+                params.append(filter_obj.importance_min)
+            if filter_obj.time_from is not None:
+                where.append("created_at >= ?")
+                params.append(filter_obj.time_from.astimezone(UTC).isoformat())
+            if filter_obj.time_to is not None:
+                where.append("created_at <= ?")
+                params.append(filter_obj.time_to.astimezone(UTC).isoformat())
+            if filter_obj.tags:
+                for tag in filter_obj.tags:
+                    where.append("tags LIKE ? ESCAPE '\\'")
+                    params.append(
+                        f"%{_escape_like(json.dumps(tag, ensure_ascii=False))}%"
+                    )
+
+            params.append(limit + 1)
+            rows = conn.execute(
+                "SELECT * FROM memories WHERE "
+                + " AND ".join(where)
+                + " ORDER BY created_at ASC, id ASC LIMIT ?",
+                params,
+            ).fetchall()
+            has_more = len(rows) > limit
+            records = [self._row_to_record(row) for row in rows[:limit]]
+            next_cursor = ""
+            if has_more and records:
+                last = records[-1]
+                next_cursor = encode_cursor(last.created_at, last.memory_id)
+            return MemoryPage(
+                records=records, next_cursor=next_cursor, has_more=has_more
+            )
 
         async with self._operation_lock:
             return await asyncio.to_thread(_run)

@@ -1,5 +1,20 @@
 """Doppel：面向 IM Agent 的模块化记忆框架（说话人感知/会话隔离/可插拔后端）。"""
 
+from doppel_memory.batch import (
+    BatchCheckpoint,
+    BatchProposalPlan,
+    BatchProposalPolicy,
+    BatchRunResult,
+    BatchTaskContext,
+    BatchTaskRunner,
+    HistoryPage,
+    HistoryWindow,
+    MemoryBatchTask,
+    ScopedHistoryReader,
+    ScopedMemoryReader,
+    StoreHistoryReader,
+    StoreMemoryReader,
+)
 from doppel_memory.client import DoppelClient
 from doppel_memory.imports import IMImportBatch, IMImportItem, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
@@ -11,6 +26,7 @@ from doppel_memory.models import (
     MemoryFilter,
     MemoryIsolationError,
     MemoryKind,
+    MemoryPage,
     MemoryRecord,
     MemoryScope,
     MemoryState,
@@ -35,7 +51,10 @@ from doppel_memory.processing import (
     ProcessingError,
     ProcessingResult,
     ProcessorHooks,
+    ProposalBatchResult,
+    ProposalEvaluator,
     ProposalPolicy,
+    ProposalWriter,
 )
 from doppel_memory.retriever import (
     IdentityReranker,
@@ -47,25 +66,35 @@ from doppel_memory.retriever import (
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 __all__ = [
     "Actor",
     "ActorType",
+    "BatchCheckpoint",
+    "BatchProposalPlan",
+    "BatchProposalPolicy",
+    "BatchRunResult",
+    "BatchTaskContext",
+    "BatchTaskRunner",
     "ChatMessage",
     "DefaultPromptRenderer",
     "DoppelClient",
     "EventProcessor",
     "FactAuthority",
+    "HistoryPage",
+    "HistoryWindow",
     "IMImportBatch",
     "IMImportItem",
     "IdentityReranker",
     "ImportResult",
     "InMemoryStore",
     "MaterialBundle",
+    "MemoryBatchTask",
     "MemoryFilter",
     "MemoryIsolationError",
     "MemoryKind",
+    "MemoryPage",
     "MemoryPipeline",
     "MemoryProcessor",
     "MemoryProposal",
@@ -80,13 +109,20 @@ __all__ = [
     "ProcessingError",
     "ProcessingResult",
     "ProcessorHooks",
+    "ProposalBatchResult",
+    "ProposalEvaluator",
     "ProposalPolicy",
+    "ProposalWriter",
     "RecallResult",
     "Reranker",
     "RetrievalStrategy",
     "Retriever",
     "SQLiteStore",
+    "ScopedHistoryReader",
+    "ScopedMemoryReader",
     "StoreCapabilities",
+    "StoreHistoryReader",
+    "StoreMemoryReader",
     "StoreRetrievalStrategy",
     "WriteResult",
     "WriteStatus",

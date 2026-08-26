@@ -52,10 +52,19 @@ async def test_event_processor_proposes_complete_provenance() -> None:
     assert record.metadata["processor_version"] == "1"
 
 
-async def test_client_process_defaults_to_idempotent_event_processor() -> None:
+async def test_client_process_defaults_to_noop() -> None:
     client = DoppelClient(backend="memory")
-    first = await client.process(SCOPE, MESSAGE)
-    second = await client.process(SCOPE, MESSAGE)
+    result = await client.process(SCOPE, MESSAGE)
+
+    assert result.proposals == []
+    assert result.write_results == []
+    assert await client.recall("简短", [SCOPE]) == []
+
+
+async def test_event_processor_is_explicit_and_idempotent() -> None:
+    client = DoppelClient(backend="memory")
+    first = await client.process(SCOPE, MESSAGE, processors=[EventProcessor()])
+    second = await client.process(SCOPE, MESSAGE, processors=[EventProcessor()])
 
     assert first.accepted_count == 1
     assert first.write_results[0].status is WriteStatus.CREATED
