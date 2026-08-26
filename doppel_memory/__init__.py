@@ -4,10 +4,14 @@ from doppel_memory.batch import (
     BatchCheckpoint,
     BatchProposalPlan,
     BatchProposalPolicy,
+    BatchReadLimitError,
+    BatchReadLimits,
     BatchRunResult,
     BatchTaskContext,
     BatchTaskRunner,
+    GuardedHistoryReader,
     HistoryPage,
+    HistoryReaderContractError,
     HistoryWindow,
     MemoryBatchTask,
     ScopedHistoryReader,
@@ -16,6 +20,14 @@ from doppel_memory.batch import (
     StoreMemoryReader,
 )
 from doppel_memory.client import DoppelClient
+from doppel_memory.conformance import (
+    BatchTaskAuditReport,
+    ConformanceError,
+    ConformanceIssue,
+    HistoryReaderAuditReport,
+    audit_batch_task,
+    audit_history_reader,
+)
 from doppel_memory.imports import IMImportBatch, IMImportItem, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.models import (
@@ -66,7 +78,7 @@ from doppel_memory.retriever import (
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 __all__ = [
     "Actor",
@@ -74,15 +86,23 @@ __all__ = [
     "BatchCheckpoint",
     "BatchProposalPlan",
     "BatchProposalPolicy",
+    "BatchReadLimitError",
+    "BatchReadLimits",
     "BatchRunResult",
+    "BatchTaskAuditReport",
     "BatchTaskContext",
     "BatchTaskRunner",
     "ChatMessage",
+    "ConformanceError",
+    "ConformanceIssue",
     "DefaultPromptRenderer",
     "DoppelClient",
     "EventProcessor",
     "FactAuthority",
+    "GuardedHistoryReader",
     "HistoryPage",
+    "HistoryReaderAuditReport",
+    "HistoryReaderContractError",
     "HistoryWindow",
     "IMImportBatch",
     "IMImportItem",
@@ -127,4 +147,6 @@ __all__ = [
     "WriteResult",
     "WriteStatus",
     "__version__",
+    "audit_batch_task",
+    "audit_history_reader",
 ]

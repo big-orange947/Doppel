@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.4.3
+
+Finite history-read budgets, version-bound checkpoints, and dependency-free
+conformance probes for third-party batch extensions.
+
+### Added
+
+- `BatchReadLimits` and `GuardedHistoryReader`, with default per-run limits of 100
+  pages, 50,000 messages, and a 2,000-message requested page size.
+- `BatchReadLimitError` and `HistoryReaderContractError` surfaced as structured
+  `history_read` failures before proposal persistence.
+- `history_pages_read`, `history_messages_read`, and `checkpoint_schema_version`
+  diagnostics on `BatchRunResult`.
+- Task/version/schema identity fields on `BatchCheckpoint`; tasks can declare an
+  optional `checkpoint_schema_version` attribute, defaulting to 1.
+- Dependency-free `audit_history_reader()` and `audit_batch_task()` probes with
+  structured reports and `raise_for_errors()` for third-party CI suites.
+
+### Safety semantics
+
+- Readers must honor the requested limit, return a cursor for every non-empty page,
+  and advance the cursor for every non-empty page, including the final page.
+- Reader conformance audits also require oldest-first ordering and reject duplicate
+  non-empty message identities across pages.
+- Exhausting a read budget or violating the reader contract prevents checkpoint
+  release and proposal persistence.
+- Input checkpoints already bound to another task, task version, or schema are
+  rejected before task execution. Invalid output checkpoints are rejected before any
+  proposal is written.
+- Legacy unbound schema-1 checkpoints remain readable and become identity-bound when
+  the next clean checkpoint is returned.
+- Task audits execute only the proposal phase and never write the Doppel Store; they
+  cannot prove that arbitrary plugin code has no unrelated external side effects.
+
 ## 0.4.2
 
 Host-side recipes and durable incremental watermarks for periodic memory tasks.

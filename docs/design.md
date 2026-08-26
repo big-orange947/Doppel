@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.4.2：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.4.3：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -222,6 +222,31 @@ proposal 越权、写入失败或 hook 错误都不会释放新 checkpoint；Sto
 重试。它们是可复制配方，不是 Doppel 对“哪些事件值得记忆”的默认判断，也不会随 wheel 作为
 核心包 API 安装。
 
+## v0.4.3 扩展安全与 conformance
+
+`BatchTaskRunner` 在 task 与任意 `ScopedHistoryReader` 之间放置 `GuardedHistoryReader`。默认
+`BatchReadLimits` 为 100 页、50,000 条消息、单页 2,000 条，调用方可以逐任务覆盖。Guard
+重新验证第三方 `HistoryPage`，并强制以下不变量：
+
+- reader 返回条数不得超过请求 limit；
+- 非空页必须提供 durable cursor；
+- 任意非空页（包括最终页）都必须推进 cursor，`has_more=True` 还必须同时有消息；
+- 超过页数、实际消息数或单页请求预算立即终止 proposal 阶段。
+
+`BatchRunResult.history_pages_read/history_messages_read` 暴露实际消耗。预算或 reader 协议错误
+记录为 `history_read`，不提交 checkpoint；task 尚未返回 plan，因此没有 proposal 可以落库。
+
+`BatchCheckpoint` 携带 `task_name`、`task_version` 与 `schema_version`。Runner 对旧 schema 1、
+identity 为空的 checkpoint 自动绑定；已绑定 identity、task version 或 schema 不匹配时要求 host
+迁移或重置。任务通过可选 `checkpoint_schema_version` 声明状态结构版本，默认 1。任务输出的
+checkpoint 在 proposal 写入前验证并绑定，错误输出不会产生部分写入。
+
+`audit_history_reader()` 与 `audit_batch_task()` 是不依赖 pytest 的 conformance probes。前者在
+静止 fixture 上遍历分页，检查 oldest-first 顺序、跨页非空 identity 去重并验证最终 exhausted
+read；后者只运行 task 的 proposal 阶段，验证读取预算、checkpoint 和 proposal scope，不调用
+ProposalWriter。Report 提供结构化 issues、`ok` 和 `raise_for_errors()`，方便第三方后端在自己的
+CI 中使用。
+
 ## v0.4 检索组合
 
 Store 的 `search()` 仍是后端合同，不承担所有召回算法。`RetrievalStrategy.search()` 负责产生
@@ -256,4 +281,5 @@ provenance 保存在 `raw.doppel_import`。
 - v0.4：检索器/Reranker、FTS5、IM 导入格式和消息关系原语（已完成）；
 - v0.4.1：周期历史聚合、稳定分页和统一 proposal writer（已完成）；
 - v0.4.2：持久 watermark、host-side event/checkpoint 配方和恢复测试（已完成）；
+- v0.4.3：读取预算、checkpoint schema 绑定和扩展 conformance probe（已完成）；
 - v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选风格工具和 benchmark。

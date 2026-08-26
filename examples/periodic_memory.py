@@ -28,6 +28,7 @@ class InteractionPatternTask:
 
     name = "example.interaction-pattern"
     version = "1"
+    checkpoint_schema_version = 1
 
     def __init__(
         self,

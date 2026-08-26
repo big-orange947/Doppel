@@ -22,6 +22,7 @@ from typing import Any
 from doppel_memory.batch import (
     BatchCheckpoint,
     BatchProposalPolicy,
+    BatchReadLimits,
     BatchRunResult,
     BatchTaskRunner,
     HistoryWindow,
@@ -140,6 +141,7 @@ class DoppelClient:
         allowed_scopes: Sequence[MemoryScope] | None = None,
         policy: BatchProposalPolicy | None = None,
         hooks: ProcessorHooks | None = None,
+        read_limits: BatchReadLimits | None = None,
         run_id: str | None = None,
     ) -> BatchRunResult:
         """Run one host-scheduled history aggregation task."""
@@ -155,6 +157,7 @@ class DoppelClient:
             allowed_scopes=allowed_scopes,
             policy=policy,
             hooks=hooks,
+            read_limits=read_limits,
             run_id=run_id,
         )
 

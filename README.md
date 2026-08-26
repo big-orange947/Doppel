@@ -340,6 +340,58 @@ checkpoint 的 host key 应包含 task name、version 以及影响历史选择�
 python examples/periodic_memory.py
 ```
 
+Runner 会用 `GuardedHistoryReader` 包装默认或第三方 reader。默认单次运行最多读取 100 页、
+50,000 条消息，单页请求最多 2,000 条；可按任务显式收紧或放宽：
+
+```python
+from doppel_memory import BatchReadLimits
+
+result = await memory.run_batch_task(
+    task,
+    scope,
+    window,
+    read_limits=BatchReadLimits(
+        max_pages=20,
+        max_messages=5_000,
+        max_page_size=500,
+    ),
+)
+
+result.history_pages_read
+result.history_messages_read
+```
+
+非空页必须返回并推进 cursor（包括最终页），reader 必须遵守请求的 limit，`has_more=True`
+时必须有消息。违反协议或耗尽预算会形成 `history_read` 错误，不释放 checkpoint，也不会写入
+proposal。
+
+checkpoint 会绑定 task name/version/schema。任务改变 checkpoint metadata 结构时声明新版本：
+
+```python
+class MyTask:
+    name = "my-task"
+    version = "2"
+    checkpoint_schema_version = 2
+```
+
+不匹配的输入 checkpoint 会要求 host 迁移或重置；任务返回错误 schema 的 checkpoint 时，
+proposal 会在落库前被拦截。旧版未绑定 identity 的 schema 1 checkpoint 仍可兼容读取。
+
+第三方 adapter 可以在测试或诊断脚本中运行无 pytest 的 conformance probe：
+
+```python
+from doppel_memory import audit_batch_task, audit_history_reader
+
+reader_report = await audit_history_reader(reader, page_size=2)
+reader_report.raise_for_errors()
+
+task_report = await audit_batch_task(task, context)
+task_report.raise_for_errors()
+```
+
+reader audit 会检查多页推进和最终 exhausted read；应针对不会并发写入的测试 fixture 执行。
+task audit 只运行纯 proposal 阶段，不写 Doppel Store，并检查 checkpoint 与 proposal scope。
+
 ### 高层：结构化材料
 
 ```python
@@ -427,6 +479,7 @@ provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError
 - [x] v0.4：检索器/Reranker 协议、FTS5、IM 导入格式及 reply/quote/thread 原语
 - [x] v0.4.1：周期历史聚合任务、只读 reader、稳定分页和统一 proposal writer
 - [x] v0.4.2：持久 watermark、外部事件日志/checkpoint 配方和恢复边界测试
+- [x] v0.4.3：读取预算、checkpoint schema 绑定和第三方扩展 conformance probe
 - [ ] v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选 StyleMiner/StyleProfessor、benchmark
 
 详细设计见 [`docs/design.md`](docs/design.md)。

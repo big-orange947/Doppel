@@ -122,6 +122,8 @@ async def test_batch_task_writes_via_common_writer_and_returns_checkpoint() -> N
     assert result.run_id == "run-1"
     assert result.accepted_count == 1
     assert result.write_results[0].status is WriteStatus.CREATED
+    assert result.history_pages_read == 1
+    assert result.history_messages_read == 2
     assert result.committable_checkpoint is not None
     assert result.committable_checkpoint.metadata["window_end"].endswith("+00:00")
     (stored,) = await store.search("2 次", [SCOPE])
@@ -136,6 +138,8 @@ async def test_batch_task_writes_via_common_writer_and_returns_checkpoint() -> N
     )
     assert retry.proposals == []
     assert retry.write_results == []
+    assert retry.history_pages_read == 1
+    assert retry.history_messages_read == 0
     assert retry.committable_checkpoint is not None
     assert retry.committable_checkpoint.cursor == result.committable_checkpoint.cursor
 
