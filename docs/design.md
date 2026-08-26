@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.4.3：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.4.4：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -247,6 +247,21 @@ read；后者只运行 task 的 proposal 阶段，验证读取预算、checkpoin
 ProposalWriter。Report 提供结构化 issues、`ok` 和 `raise_for_errors()`，方便第三方后端在自己的
 CI 中使用。
 
+## v0.4.4 公共 API 冻结
+
+根包 `doppel_memory.__all__` 是推荐的导入入口，并由版本化的 `docs/public-api.json` 明确分为
+stable 和 provisional 两层。兼容性快照同时覆盖根导出、序列化模型字段顺序、扩展协议签名、
+关键默认值、枚举值和 `MemoryStore` 抽象方法集合，避免重构时无意改变第三方实现合同。
+
+stable 层是已收敛的核心数据模型、Store、在线 Processor、检索和材料构建协议；provisional 层
+主要是新加入的批处理、只读 reader、proposal writer 和 conformance API。provisional 不是私有
+API：补丁版本同样不能静默破坏它，但在下一个 minor 版本仍可随迁移说明调整。Graphiti adapter
+继续保持 module-only experimental，不通过根包导出。
+
+协议演进优先增加有默认实现的可选方法、可选 keyword 参数和 capability gate。给
+`MemoryStore` 新增抽象方法、删除或重命名模型字段、收窄字段类型、增加必填参数、删除枚举值，
+都视为破坏性变更。详细政策及 manifest 更新流程见 `docs/api-stability.md`。
+
 ## v0.4 检索组合
 
 Store 的 `search()` 仍是后端合同，不承担所有召回算法。`RetrievalStrategy.search()` 负责产生
@@ -282,4 +297,5 @@ provenance 保存在 `raw.doppel_import`。
 - v0.4.1：周期历史聚合、稳定分页和统一 proposal writer（已完成）；
 - v0.4.2：持久 watermark、host-side event/checkpoint 配方和恢复测试（已完成）；
 - v0.4.3：读取预算、checkpoint schema 绑定和扩展 conformance probe（已完成）；
+- v0.4.4：公共 API 清单、稳定性分级和兼容性快照（已完成）；
 - v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选风格工具和 benchmark。

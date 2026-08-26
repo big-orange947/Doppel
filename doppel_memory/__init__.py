@@ -53,6 +53,8 @@ from doppel_memory.persona import (
     MaterialBundle,
     OwnerPersonaPolicy,
     PersonaMaterialsBuilder,
+    PromptRenderer,
+    ScopePolicy,
 )
 from doppel_memory.processing import (
     EventProcessor,
@@ -78,7 +80,7 @@ from doppel_memory.retriever import (
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 __all__ = [
     "Actor",
@@ -129,6 +131,7 @@ __all__ = [
     "ProcessingError",
     "ProcessingResult",
     "ProcessorHooks",
+    "PromptRenderer",
     "ProposalBatchResult",
     "ProposalEvaluator",
     "ProposalPolicy",
@@ -138,6 +141,7 @@ __all__ = [
     "RetrievalStrategy",
     "Retriever",
     "SQLiteStore",
+    "ScopePolicy",
     "ScopedHistoryReader",
     "ScopedMemoryReader",
     "StoreCapabilities",

@@ -480,10 +480,22 @@ provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError
 - [x] v0.4.1：周期历史聚合任务、只读 reader、稳定分页和统一 proposal writer
 - [x] v0.4.2：持久 watermark、外部事件日志/checkpoint 配方和恢复边界测试
 - [x] v0.4.3：读取预算、checkpoint schema 绑定和第三方扩展 conformance probe
+- [x] v0.4.4：公共 API 清单、稳定性分级和兼容性快照
 - [ ] v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选 StyleMiner/StyleProfessor、benchmark
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。
+
+## API 稳定性
+
+应用和第三方扩展应优先从包根导入，例如 `from doppel_memory import MemoryStore`。
+根包的公开名称记录在版本化的 [`docs/public-api.json`](docs/public-api.json) 中，并由测试锁定；
+其中 `stable` 是 v0.4 系列承诺保持兼容的核心表面，`provisional` 是仍在收敛、但不会在补丁版本中
+静默破坏的批处理和 conformance 扩展表面。
+
+未列入清单的子模块对象不是冻结 API。Graphiti 目前仍是 module-only experimental；配方目录下的
+host adapter 也不是安装包合同。完整的兼容、弃用和扩展协议规则见
+[`docs/api-stability.md`](docs/api-stability.md)。
 
 ## License
 

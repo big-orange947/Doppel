@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.4
+
+Public API freeze for the v0.4 line, with an explicit compatibility contract for
+applications, custom stores, processors, readers, and batch tasks.
+
+### Added
+
+- A versioned `docs/public-api.json` manifest separating stable root exports from the
+  still-provisional batch and conformance surface.
+- Compatibility snapshots for root exports, Pydantic wire-model fields, extension
+  protocol signatures, critical defaults, enum values, and the `MemoryStore` abstract
+  method set.
+- `docs/api-stability.md`, documenting import boundaries, compatibility rules,
+  deprecation windows, and the review process for future API changes.
+
+### Changed
+
+- `PromptRenderer` and `ScopePolicy` are now exported from `doppel_memory`, matching
+  their use in public `MaterialBundle.render()` and `DoppelClient.materials()` APIs.
+- The batch-task, read-only reader, proposal-writer, and conformance APIs are explicitly
+  provisional. They remain patch-compatible but may evolve in a future minor release
+  with migration notes.
+
+### Compatibility
+
+- This release does not change runtime memory, retrieval, persistence, or checkpoint
+  semantics.
+- Stable root imports are protected for the remainder of the v0.4 line. Experimental
+  Graphiti and example host adapters remain outside that contract.
+
 ## 0.4.3
 
 Finite history-read budgets, version-bound checkpoints, and dependency-free
