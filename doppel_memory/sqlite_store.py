@@ -513,8 +513,8 @@ class SQLiteStore(MemoryStore):
             ).fetchall()
             has_more = len(rows) > limit
             records = [self._row_to_record(row) for row in rows[:limit]]
-            next_cursor = ""
-            if has_more and records:
+            next_cursor = cursor
+            if records:
                 last = records[-1]
                 next_cursor = encode_cursor(last.created_at, last.memory_id)
             return MemoryPage(

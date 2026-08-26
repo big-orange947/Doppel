@@ -66,7 +66,7 @@ from doppel_memory.retriever import (
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 __all__ = [
     "Actor",

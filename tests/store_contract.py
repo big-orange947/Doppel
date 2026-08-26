@@ -88,11 +88,47 @@ class MemoryStoreContract:
         assert first.has_more and first.next_cursor
         second = await store.scan(SCOPE_A, cursor=first.next_cursor, limit=2)
         assert [record.memory_id for record in second.records] == ["page-c"]
-        assert not second.has_more and not second.next_cursor
+        assert not second.has_more and second.next_cursor
+        exhausted = await store.scan(SCOPE_A, cursor=second.next_cursor, limit=2)
+        assert exhausted.records == []
+        assert not exhausted.has_more
+        assert exhausted.next_cursor == second.next_cursor
         assert store.capabilities.pagination
 
         with pytest.raises(ValueError, match="invalid memory page cursor"):
             await store.scan(SCOPE_A, cursor="not-a-cursor")
+
+    async def test_scan_cursor_is_a_forward_only_watermark(self, store) -> None:
+        for memory_id, at in (
+            ("watermark-a", "2026-08-26T01:00:00Z"),
+            ("watermark-b", "2026-08-26T02:00:00Z"),
+        ):
+            await store.put(
+                MemoryRecord(
+                    memory_id=memory_id,
+                    scope=SCOPE_A,
+                    content=memory_id,
+                    created_at=at,
+                    updated_at=at,
+                )
+            )
+        initial = await store.scan(SCOPE_A)
+
+        for memory_id, at in (
+            ("watermark-late", "2026-08-26T01:30:00Z"),
+            ("watermark-next", "2026-08-26T03:00:00Z"),
+        ):
+            await store.put(
+                MemoryRecord(
+                    memory_id=memory_id,
+                    scope=SCOPE_A,
+                    content=memory_id,
+                    created_at=at,
+                    updated_at=at,
+                )
+            )
+        delta = await store.scan(SCOPE_A, cursor=initial.next_cursor)
+        assert [record.memory_id for record in delta.records] == ["watermark-next"]
 
     async def test_scope_hierarchy_is_explicit(self, store) -> None:
         user_scope = SCOPE_A.user_scope()

@@ -76,8 +76,9 @@ class InteractionPatternTask:
         nudges = [
             message for message in page.messages if message.message_type == "nudge"
         ]
-        return BatchProposalPlan(
-            proposals=[
+        proposals = []
+        if nudges:
+            proposals = [
                 MemoryProposal(
                     scope=context.scope,
                     kind=MemoryKind.RELATION,
@@ -86,7 +87,9 @@ class InteractionPatternTask:
                     processor_version=self.version,
                     idempotency_key=f"{self.name}:{context.window.start.isoformat()}",
                 )
-            ],
+            ]
+        return BatchProposalPlan(
+            proposals=proposals,
             next_checkpoint=BatchCheckpoint(
                 cursor=page.next_cursor,
                 metadata={"window_end": context.window.end.isoformat()},
@@ -125,10 +128,16 @@ async def test_batch_task_writes_via_common_writer_and_returns_checkpoint() -> N
     assert stored.extractor == "interaction-pattern"
 
     retry = await BatchTaskRunner(store).run_once(
-        InteractionPatternTask(), SCOPE, WINDOW, run_id="run-2"
+        InteractionPatternTask(),
+        SCOPE,
+        WINDOW,
+        checkpoint=result.committable_checkpoint,
+        run_id="run-2",
     )
-    assert retry.write_results[0].status is WriteStatus.DUPLICATE
+    assert retry.proposals == []
+    assert retry.write_results == []
     assert retry.committable_checkpoint is not None
+    assert retry.committable_checkpoint.cursor == result.committable_checkpoint.cursor
 
 
 class EscapingTask(InteractionPatternTask):

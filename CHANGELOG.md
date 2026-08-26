@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.2
+
+Host-side recipes and durable incremental watermarks for periodic memory tasks.
+
+### Added
+
+- A runnable `examples/periodic_memory.py` recipe that aggregates transient interaction
+  events without persisting each raw event as long-term memory.
+- Reference external SQLite event log, exact-scope read-only history reader, and
+  `(task_key, scope_key)` checkpoint store in `examples/batch_runtime.py`.
+- Cross-backend tests for final-page cursor persistence, exhausted reads, forward-only
+  watermark behavior, external reader scope isolation, multi-page recovery, and empty
+  incremental reruns.
+
+### Changed
+
+- Stable Store scans now return `next_cursor` for every non-empty page, including the
+  final page. An exhausted read preserves its input cursor. `has_more` exclusively
+  indicates whether the current run should fetch another page.
+
+### Semantics
+
+- Cursors are forward-only watermarks, not snapshots. Events inserted later with an
+  ordering key before the committed cursor require a host-defined delay, overlap
+  window, or source watermark strategy.
+- A checkpoint must not be reused after changing the task's history filters.
+- The example policies and SQLite host adapters remain recipes rather than core
+  defaults or installed package API.
+
 ## 0.4.1
 
 Periodic history aggregation for statistical memories while keeping online processors

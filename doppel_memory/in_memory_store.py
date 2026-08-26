@@ -167,11 +167,9 @@ class InMemoryStore(MemoryStore):
         page = records[: limit + 1]
         has_more = len(page) > limit
         selected = page[:limit]
-        next_cursor = (
-            encode_cursor(selected[-1].created_at, selected[-1].memory_id)
-            if has_more and selected
-            else ""
-        )
+        next_cursor = cursor
+        if selected:
+            next_cursor = encode_cursor(selected[-1].created_at, selected[-1].memory_id)
         return MemoryPage(
             records=[record.model_copy(deep=True) for record in selected],
             next_cursor=next_cursor,

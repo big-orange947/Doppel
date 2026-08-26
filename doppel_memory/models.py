@@ -440,7 +440,7 @@ class MemoryRecord(BaseModel):
 
 
 class MemoryPage(BaseModel):
-    """One exact-scope, oldest-first page of complete memory records."""
+    """One exact-scope page; ``next_cursor`` is the durable read watermark."""
 
     records: list[MemoryRecord] = Field(default_factory=list)
     next_cursor: str = ""

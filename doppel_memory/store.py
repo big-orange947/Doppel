@@ -135,7 +135,7 @@ class MemoryStore(ABC):
         cursor: str = "",
         limit: int = 100,
     ) -> MemoryPage:
-        """Read a deterministic oldest-first page within one exact scope."""
+        """Read oldest-first; return a resumable cursor even on the final page."""
         raise NotImplementedError("backend does not support paginated scans")
 
     @abstractmethod

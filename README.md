@@ -274,12 +274,20 @@ class InteractionPatternTask:
     version = "1"
 
     async def propose(self, context):
-        page = await context.history.read(
-            cursor=context.checkpoint.cursor,
-            time_from=context.window.start,
-            time_to=context.window.end,
-        )
-        nudges = [m for m in page.messages if m.message_type == "nudge"]
+        cursor = context.checkpoint.cursor
+        nudges = []
+        while True:
+            page = await context.history.read(
+                cursor=cursor,
+                time_from=context.window.start,
+                time_to=context.window.end,
+            )
+            nudges.extend(
+                m for m in page.messages if m.message_type == "nudge"
+            )
+            cursor = page.next_cursor
+            if not page.has_more:
+                break
         proposals = []
         if len(nudges) >= 3:
             proposals.append(
@@ -296,7 +304,7 @@ class InteractionPatternTask:
             )
         return BatchProposalPlan(
             proposals=proposals,
-            next_checkpoint=BatchCheckpoint(cursor=page.next_cursor),
+            next_checkpoint=BatchCheckpoint(cursor=cursor),
         )
 
 result = await memory.run_batch_task(
@@ -317,6 +325,20 @@ checkpoint 持久化由 Agent runtime 决定；Doppel 只运行一次任务，�
 默认 `StoreHistoryReader` 从支持稳定分页的 Store 读取 `event`。如果表情包、戳一戳等瞬时
 事件不应成为长期记忆，可以实现 `ScopedHistoryReader`，直接读取应用自己的聊天事件日志；
 它们只作为统计输入存在，达到阈值后生成的关系/风格 proposal 才进入长期记忆。
+
+`next_cursor` 是本页最后已读位置形成的持久 watermark，即使 `has_more=False` 仍然返回；
+`has_more` 只控制当前运行是否继续翻页。watermark 是前向的：晚到且排序位置早于 cursor 的
+事件不会自动重现，生产调度应使用处理延迟、回看窗口或源端高水位线处理迟到数据。任务切换
+filters 时也不应复用旧 cursor。
+checkpoint 的 host key 应包含 task name、version 以及影响历史选择的配置摘要；修改事件类型、
+阈值或过滤规则时应使用新 key，而不是继续推进旧 watermark。
+
+完整可运行配方把外部 SQLite 事件日志、exact-scope reader、host-owned checkpoint 表和互动
+聚合任务组合在一起，原始戳一戳不会进入 Doppel Store：
+
+```bash
+python examples/periodic_memory.py
+```
 
 ### 高层：结构化材料
 
@@ -404,6 +426,7 @@ provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError
 - [x] v0.3：MemoryProposal/MemoryProcessor 管线、状态策略和有限生命周期 hooks
 - [x] v0.4：检索器/Reranker 协议、FTS5、IM 导入格式及 reply/quote/thread 原语
 - [x] v0.4.1：周期历史聚合任务、只读 reader、稳定分页和统一 proposal writer
+- [x] v0.4.2：持久 watermark、外部事件日志/checkpoint 配方和恢复边界测试
 - [ ] v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选 StyleMiner/StyleProfessor、benchmark
 
 详细设计见 [`docs/design.md`](docs/design.md)。

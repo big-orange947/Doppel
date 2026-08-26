@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.4.1：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.4.2：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -197,10 +197,30 @@ cursor；稳定后端必须通过相同分页契约。StoreHistoryReader 用它�
 应用也可以提供自定义 ScopedHistoryReader，从独立事件日志读取无需长期保存的表情、动图、
 戳一戳等瞬时事件。
 
+cursor 是“本页最后已读记录”的持久 watermark，最终非空页也必须返回 cursor；`has_more`
+只表示当前是否需要继续翻页。读取到空增量时返回输入 cursor，从而避免 host 把已有 checkpoint
+清空。watermark 只向前移动，不提供 snapshot 或迟到事件检测：排序位置早于 cursor 的晚到事件
+不会被后续扫描看到。生产 host 必须按源数据特征选择处理延迟、回看窗口或源端 high watermark，
+并保持同一 checkpoint 前后的过滤条件一致。
+Host checkpoint key 应绑定 task name、version 和影响历史选择的配置摘要；task 语义或 filters
+变化时必须换 key，不能把旧 watermark 解释成新任务的处理进度。
+
 Doppel 不内置 scheduler、分布式锁或 checkpoint 数据库。Host 为每次运行指定时间窗口与旧
 checkpoint，并且只能在 `BatchRunResult.committable_checkpoint` 非空时推进进度。任务异常、
 proposal 越权、写入失败或 hook 错误都不会释放新 checkpoint；Store 的 idempotency key 保证
 安全重试。
+
+## v0.4.2 Host 配方
+
+`examples/batch_runtime.py` 提供两个不进入核心 API 的参考 adapter：
+
+- `SQLiteEventLog`/`SQLiteEventHistoryReader`：以 exact scope 隔离瞬时 IM 事件，cursor 额外
+  绑定 scope，task 只获得只读 reader；
+- `SQLiteCheckpointStore`：按 `(task_key, scope_key)` 原子 upsert host-owned checkpoint。
+
+`examples/periodic_memory.py` 展示多页读取、互动阈值、聚合 proposal、checkpoint 提交和空增量
+重试。它们是可复制配方，不是 Doppel 对“哪些事件值得记忆”的默认判断，也不会随 wheel 作为
+核心包 API 安装。
 
 ## v0.4 检索组合
 
@@ -235,4 +255,5 @@ provenance 保存在 `raw.doppel_import`。
 - v0.3：MemoryProposal/Processor、状态策略、有限 hooks（已完成）；
 - v0.4：检索器/Reranker、FTS5、IM 导入格式和消息关系原语（已完成）；
 - v0.4.1：周期历史聚合、稳定分页和统一 proposal writer（已完成）；
+- v0.4.2：持久 watermark、host-side event/checkpoint 配方和恢复测试（已完成）；
 - v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选风格工具和 benchmark。
