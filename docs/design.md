@@ -98,7 +98,8 @@ Processor 应提供稳定且带领域前缀的 idempotency key。
 - `pagination`
 
 不支持的管理操作应抛出 `NotImplementedError`。调用方可以使用 `capabilities.require()` 做
-前置检查。
+前置检查。`scan()` 的基类实现会抛出 `NotImplementedError`，因此已有自定义 Store 不会仅因
+新增该可选能力而无法实例化；只有实现稳定游标语义的后端才能声明 `pagination=True`。
 
 ## SQLite 参考语义
 

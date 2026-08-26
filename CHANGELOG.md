@@ -27,6 +27,9 @@ stateless and store-independent.
   no single source message.
 - Graphiti explicitly reports no pagination support and raises `NotImplementedError`
   for `scan()`.
+- Existing custom Stores remain compatible without implementing `scan()`; they should
+  override it and declare `pagination=True` only when the stable cursor contract is
+  supported.
 
 ### Design boundary
 

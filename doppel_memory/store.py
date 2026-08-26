@@ -127,7 +127,6 @@ class MemoryStore(ABC):
         limit: int = 10,
     ) -> list[RecallResult]: ...
 
-    @abstractmethod
     async def scan(
         self,
         scope: MemoryScope,
@@ -137,6 +136,7 @@ class MemoryStore(ABC):
         limit: int = 100,
     ) -> MemoryPage:
         """Read a deterministic oldest-first page within one exact scope."""
+        raise NotImplementedError("backend does not support paginated scans")
 
     @abstractmethod
     async def list_recent_owner_messages(
