@@ -1,15 +1,14 @@
 """检索召回：语义 + 时间 + scope 隔离（强制 scopes 白名单）。
 
-框架不提供"无 scope 全库检索"：scopes 为空直接抛 MemoryIsolationError，
-从接口层面杜绝记忆串台。
+框架不提供"无 scope 全库检索"：scopes 为空直接抛 MemoryIsolationError。
 """
 
 from __future__ import annotations
 
 from doppel_memory.models import (
+    MemoryFilter,
     MemoryIsolationError,
     MemoryScope,
-    MemorableType,
     RecallResult,
 )
 from doppel_memory.store import MemoryStore
@@ -26,15 +25,15 @@ class Retriever:
         query: str,
         scopes: list[MemoryScope],
         *,
+        filters: MemoryFilter | None = None,
         limit: int = 10,
-        kinds: set[MemorableType] | None = None,
     ) -> list[RecallResult]:
         if not scopes:
             raise MemoryIsolationError(
                 "recall requires explicit scopes (e.g. [conversation_scope, user_scope]); "
                 "Doppel refuses unscoped search to prevent memory leaking across users/sessions."
             )
-        return await self._store.recall(query, scopes, limit=limit, kinds=kinds)
+        return await self._store.search(query, scopes, filters=filters, limit=limit)
 
     async def owner_style_samples(
         self, scope: MemoryScope, *, limit: int = 5

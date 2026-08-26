@@ -1,12 +1,16 @@
-"""Doppel 门面：接入方只和 DoppelClient 打交道。
+"""Doppel 门面（三层 API）。
+
+低层：``client.store`` 直连后端（write/search/delete，开发者完全控制）。
+中层：``ingest`` / ``ingest_messages`` / ``recall``（框架处理标准流程 + filters）。
+高层：``materials``（结构化材料 + 可替换 renderer + persona preset）。
 
 ```python
 from doppel_memory import DoppelClient, MemoryScope
 
-memory = DoppelClient(backend="graphiti", neo4j_uri=..., llm_api_key=...)
-await memory.ingest_event(scope, msg)          # ① 喂消息
-materials = await memory.inject_persona(scope) # ② 拿人格材料
-memory.write_background(scope, "km 是产品经理") # ③ 主动背景（可选）
+memory = DoppelClient(backend="sqlite")          # 零配置默认
+await memory.ingest(scope, msg)                   # ① 喂消息（自动记忆，幂等）
+bundle = await memory.materials(scope, query)     # ② 拿结构化记忆材料
+prompt_block = bundle.render()                    # ③ 拼进你自己的 prompt
 ```
 """
 
@@ -14,62 +18,132 @@ from __future__ import annotations
 
 from typing import Any
 
-from doppel_memory.graphiti_store import GraphitiMemoryStore
-from doppel_memory.ingestor import Ingestor
+from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.models import (
     ChatMessage,
+    MemoryFilter,
     MemoryScope,
-    MemorableType,
     RecallResult,
 )
-from doppel_memory.persona import PersonaInjector, PersonaMaterials
+from doppel_memory.persona import MaterialBundle, PersonaMaterialsBuilder
 from doppel_memory.retriever import Retriever
+from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
 
 class DoppelClient:
-    """记忆框架统一入口；内存材料提供商，不包含对话引擎职责。"""
+    """记忆框架统一入口；记忆材料提供商，不包含对话引擎职责。"""
 
     def __init__(
         self,
         store: MemoryStore | None = None,
         *,
-        backend: str = "graphiti",
+        backend: str = "sqlite",
         **backend_kwargs: Any,
     ) -> None:
         if store is None:
-            if backend == "graphiti":
-                store = GraphitiMemoryStore(**backend_kwargs)
+            if backend == "sqlite":
+                store = SQLiteStore(**backend_kwargs)
+            elif backend == "memory":
+                store = InMemoryStore()
+            elif backend == "graphiti":
+                store = _build_graphiti_store(**backend_kwargs)
             else:
-                raise ValueError(f"unknown backend: {backend!r} (supported: graphiti)")
+                raise ValueError(f"unknown backend: {backend!r} (supported: sqlite/memory/graphiti)")
         self._store = store
-        self._ingestor = Ingestor(store)
         self._retriever = Retriever(store)
-        self._persona = PersonaInjector(self._retriever)
+        self._materials = PersonaMaterialsBuilder(self._retriever)
+
+    @property
+    def store(self) -> MemoryStore:
+        """低层 API：直连后端（能力声明见 store.capabilities）。"""
+        return self._store
 
     @property
     def is_enabled(self) -> bool:
         return self._store.is_enabled
 
     @property
-    def store(self) -> MemoryStore:
-        return self._store
+    def capabilities(self):
+        return self._store.capabilities
 
-    # ---------------------------------------------------------------- 写入
+    # ---------------------------------------------------------------- 中层 API
 
-    async def ingest_event(self, scope: MemoryScope, message: ChatMessage) -> str:
-        """写入一条聊天事件（自动记忆，幂等）。"""
-        return await self._ingestor.ingest_event(scope, message)
+    async def ingest(self, scope: MemoryScope, message: ChatMessage) -> str:
+        """写入一条聊天事件（自动记忆，幂等；返回 memory_id，空表示去重跳过）。"""
+        record = await self._store.write_event(scope, message)
+        return record.memory_id
 
     async def ingest_messages(
         self,
         scope: MemoryScope,
         messages: list[ChatMessage],
         *,
+        batch_size: int = 8,
         progress=None,
     ) -> dict[str, Any]:
-        """批量导入历史聊天记录并自动记忆（冷启动）。"""
-        return await self._ingestor.ingest_messages(scope, messages, progress=progress)
+        """批量导入历史聊天记录并自动记忆（冷启动/历史迁移，幂等）。"""
+        accepted = 0
+        skipped = 0
+        total = len(messages)
+        for start in range(0, total, max(1, batch_size)):
+            for message in messages[start : start + max(1, batch_size)]:
+                memory_id = await self.ingest(scope, message)
+                if memory_id:
+                    accepted += 1
+                else:
+                    skipped += 1
+            if progress:
+                progress(min(start + max(1, batch_size), total), total)
+        return {"accepted": accepted, "skipped": skipped, "batchCount": (total + batch_size - 1) // max(1, batch_size)}
+
+    async def recall(
+        self,
+        query: str,
+        scopes: list[MemoryScope],
+        *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> list[RecallResult]:
+        """中层检索：scope 显式 + filters 组合。"""
+        return await self._retriever.recall(query, scopes, filters=filters, limit=limit)
+
+    # ---------------------------------------------------------------- 高层 API
+
+    async def materials(
+        self,
+        scope: MemoryScope,
+        query: str = "",
+        *,
+        scopes: list[MemoryScope] | None = None,
+        memory_limit: int = 10,
+        style_sample_limit: int = 5,
+        policy=None,
+    ) -> MaterialBundle:
+        """高层材料装配：结构化 events/background/relations/style_samples/provenance。
+
+        ``policy`` 默认 OwnerPersonaPolicy（会话级 + 联系人级 + 用户全局层）；
+        显式传 ``scopes`` 可完全接管检索范围。
+        """
+        return await self._materials.build(
+            scope,
+            query,
+            scopes=scopes,
+            memory_limit=memory_limit,
+            style_sample_limit=style_sample_limit,
+            policy=policy,
+        )
+
+    async def persona_materials(
+        self, scope: MemoryScope, query: str = ""
+    ) -> MaterialBundle:
+        """preset 快捷方式：owner_persona（与 materials 默认策略一致）。"""
+        return await self.materials(scope, query)
+
+    async def owner_style_samples(self, scope: MemoryScope, *, limit: int = 5) -> list[str]:
+        return await self._retriever.owner_style_samples(scope, limit=limit)
+
+    # ---------------------------------------------------------------- 写入
 
     async def write_background(
         self,
@@ -80,10 +154,10 @@ class DoppelClient:
         importance: float = 0.5,
         source: str = "manual",
     ) -> str:
-        """主动注入聊天以外的号主背景。"""
-        return await self._store.write_background(
+        record = await self._store.write_background(
             scope, content, tags, importance=importance, source=source
         )
+        return record.memory_id
 
     async def write_relation(
         self,
@@ -93,52 +167,22 @@ class DoppelClient:
         relationship: str = "",
         address: str = "",
         communication_preference: str = "",
+        attributes: dict[str, Any] | None = None,
     ) -> str:
-        """写入与某人的关系记忆。"""
-        return await self._store.write_relation(
+        record = await self._store.write_relation(
             scope,
             counterpart=counterpart,
             relationship=relationship,
             address=address,
             communication_preference=communication_preference,
+            attributes=attributes,
         )
-
-    # ---------------------------------------------------------------- 检索
-
-    async def recall(
-        self,
-        query: str,
-        scopes: list[MemoryScope],
-        *,
-        limit: int = 10,
-        kinds: set[MemorableType] | None = None,
-    ) -> list[RecallResult]:
-        """语义+时间+scope 隔离检索（scopes 必须显式给出）。"""
-        return await self._retriever.recall(query, scopes, limit=limit, kinds=kinds)
-
-    async def inject_persona(
-        self,
-        scope: MemoryScope,
-        query: str = "",
-        *,
-        memory_limit: int = 10,
-        style_sample_limit: int = 5,
-    ) -> PersonaMaterials:
-        """生成回复前拿"号主视角"记忆材料。"""
-        return await self._persona.inject(
-            scope,
-            query,
-            memory_limit=memory_limit,
-            style_sample_limit=style_sample_limit,
-        )
-
-    async def owner_style_samples(self, scope: MemoryScope, *, limit: int = 5) -> list[str]:
-        return await self._retriever.owner_style_samples(scope, limit=limit)
+        return record.memory_id
 
     # ---------------------------------------------------------------- 管理
 
-    async def forget(self, memory_id: str) -> bool:
-        return await self._store.forget(memory_id)
+    async def forget(self, memory_id: str, *, hard: bool = False) -> bool:
+        return await self._store.forget(memory_id, hard=hard)
 
     async def health(self) -> dict[str, Any]:
         return await self._store.health()
@@ -147,3 +191,9 @@ class DoppelClient:
         close = getattr(self._store, "close", None)
         if callable(close):
             await close()
+
+
+def _build_graphiti_store(**kwargs: Any) -> MemoryStore:
+    from doppel_memory.graphiti_store import GraphitiMemoryStore
+
+    return GraphitiMemoryStore(**kwargs)

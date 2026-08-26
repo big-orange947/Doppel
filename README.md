@@ -1,87 +1,127 @@
 ﻿# Doppel（分身）
 
-> A persona memory framework for AI chat agents — 让聊天机器人像号主本人一样说话的长期记忆框架。
+> An open-source, role-aware memory framework for IM agents.
+> 面向即时通讯代理的模块化记忆框架：说话人感知 · 会话隔离 · 可插拔后端。
 
-Doppel 是一个**专门适配机器人代理聊天**的开源记忆框架。接入后，你的聊天机器人在多用户、
-多会话并发场景下：
+Doppel 把即时通讯事件标准化为**带说话人、事实权威、作用域和来源**的记忆，通过可替换的
+存储、提取与检索组件，为上层 Agent 提供**结构化记忆材料**。Doppel 不负责生成回复，
+也不规定 Agent 如何使用这些材料。
 
-- 📌 **记得每个会话发生过什么**（事件记忆，可溯源）
-- 🎭 **学会号主本人的说话风格**（风格记忆：口吻、口头禅、长度、标点、称呼）
-- 🧩 **主动注入聊天以外的背景**（职业、关系、项目、偏好）
-- 🚧 **记忆绝不串台**（scope 五元组强隔离 + 防串台测试）
+让机器人"像号主本人一样说话"（owner 风格样本 + 人格材料注入）是 Doppel 的**典型用途之一**，
+但不是框架的全部——你可以只用事件记忆、只用关系记忆，或完全不做人格模仿。
 
-对标 Mem0 / MemoBase 的易用 API，但它们是"通用记忆层"，Doppel 专做"**代理聊天的人格复刻**"。
+## 框架边界
+
+```
+IM Platform / Agent Runtime
+          │
+          │  normalized events / memory query
+          ▼
+        Doppel
+  ingest · store · retrieve
+  scope · provenance · materials
+          │
+          ▼
+Memory Backend / Extractor / Embedder
+```
+
+**Doppel 负责**：IM 消息标准化、scope 隔离、记忆摄入与生命周期、检索与过滤、
+结构化材料生成、后端抽象与能力声明。
+
+**Doppel 不负责**：对话路由、回复生成、工具调用、消息发送、短期上下文管理、
+平台协议、确认 UI、强制 prompt 模板、"怎样才算像本人"的唯一判断。
 
 ## 为什么是 Doppel
 
 | 能力 | Mem0 | MemoBase | Zep | **Doppel** |
 | --- | --- | --- | --- | --- |
 | 自动提取对话记忆 | ✅ | ✅ | ✅ | ✅ |
-| 用户/会话隔离 | user_id | user 级 | 图隔离 | **user_id + agent_id + 会话（五元组）** |
-| 时间感知图谱 | 部分 | — | ✅（Graphiti） | ✅（Graphiti 同源） |
+| scope（用户/Agent/会话/联系人） | user_id | user 级 | 图隔离 | **五元组 + extra 维度** |
+| 时间感知图谱 | 部分 | — | ✅（Graphiti） | ✅（Graphiti 同源，extra） |
 | **区分说话人（OWNER/CONTACT/AGENT）** | ❌ | ❌ | ❌ | ✅ |
-| **学习号主本人的说话风格** | ❌ | ❌ | ❌ | ✅（StyleMiner + StyleProfessor） |
-| **人格注入（像本人发的）** | ❌ | 静态 persona | ❌ | ✅（PersonaInjector） |
-| **确认闭环（防学歪）** | ❌ | ❌ | ❌ | ✅（候选→确认→生效） |
+| **事实权威（agent 输出不算证据/风格样本）** | ❌ | ❌ | ❌ | ✅ |
+| **确认闭环（候选→生效，防学歪）** | ❌ | ❌ | ❌ | ✅ |
+| 后端能力声明（semantic/temporal/hard_delete） | 隐含 | 隐含 | 隐含 | ✅ 显式 |
+| 存储后端可替换 | ✅ | ✅ | 仅自家 | ✅ 契约测试保证 |
 
-一句话：**Mem0 的易用性 + Zep 的时间图谱 + Memobase 的用户画像 + 独有的代理人格复刻。**
-
-## 快速开始
+## 快速开始（零配置）
 
 ```bash
-pip install -e .
+pip install doppel-memory
+python examples/basic.py
 ```
+
+不需要 Neo4j、不需要 API key——默认 SQLite 后端：
 
 ```python
-from doppel_memory import DoppelClient, MemoryScope
+from doppel_memory import ChatMessage, DoppelClient, MemoryScope
 
-memory = DoppelClient(backend="graphiti", neo4j_uri="bolt://127.0.0.1:7687", ...)
+memory = DoppelClient(backend="sqlite", database="doppel.sqlite3")  # 零配置默认
 
-# ① 每来一条消息都喂进去（自动记忆，幂等）
-await memory.ingest_event(
-    scope=MemoryScope(user_id="u1", agent_id="qq-bot", platform="qq",
-                      chat_type="private", chat_id="3807050597"),
-    actor="contact",
-    text="快完成了，下午发给你",
-    at="2026-08-26T16:51:00+08:00",
-    event_id="evt-123",
-)
+scope = MemoryScope(user_id="u1", agent_id="qq-bot", platform="qq",
+                    chat_type="private", chat_id="3807050597")
 
-# ② 生成回复前拿"号主视角"记忆材料
-materials = await memory.inject_persona(scope=scope, query="昨天布置的任务")
+# ① 导入历史聊天（自动记忆，幂等）
+await memory.ingest_messages(scope, [
+    ChatMessage.of("owner", "下周搬家城东", "2026-08-26T09:00:00+08:00", event_id="e1"),
+    ChatMessage.of("contact", "需要帮忙说一声", "2026-08-26T09:01:00+08:00", event_id="e2"),
+])
 
-# ③ 拼进你自己的 prompt（怎么拼你说了算）
-prompt = f"{my_system_prompt}\n{materials.to_prompt_block()}"
+# ② 主动注入聊天以外的背景 / 关系
+await memory.write_background(scope, "km 是产品经理，负责项目A", tags=["工作"])
+await memory.write_relation(scope, counterpart="km", relationship="前同事", address="小刘")
+
+# ③ 生成回复前拿结构化记忆材料
+bundle = await memory.persona_materials(scope, query="搬家")
+bundle.events        # 事件线索
+bundle.background    # 背景
+bundle.relations     # 关系
+bundle.style_samples # 号主原话（只含 owner）
+bundle.provenance    # 溯源
+
+# ④ 渲染成 prompt 块（模板可替换，框架不替你写最终 prompt）
+prompt_block = bundle.render()
 ```
 
-## 接入三步
+## 三层 API
 
-任何 agent 框架（LangGraph、裸 asyncio、其他都行）接入 Doppel 只需要：
+```python
+# 低层：直连后端，完全控制
+await memory.store.search("搬家", [scope], filters=MemoryFilter(actors={"owner"}))
 
-1. `await memory.ingest_event(scope, msg)` —— 喂消息（每条都喂）
-2. `await memory.inject_persona(scope, query)` —— 拿记忆材料
-3. `memory.write_background(...)` —— 主动塞背景（可选）
+# 中层：标准流程 + filters 组合
+hits = await memory.recall("搬家", [scope, scope.user_scope()],
+                           filters=MemoryFilter(kinds={"event", "background"}))
 
-**框架职责边界**（详见 docs）：
+# 高层：结构化材料 + persona preset（可替换 renderer / scope policy）
+bundle = await memory.materials(scope, query="搬家")          # 默认 OwnerPersonaPolicy
+bundle = await memory.persona_materials(scope, "搬家")         # preset 快捷方式
+bundle.render(MyRenderer())                                    # 自定义渲染
+```
 
-- ✅ Doppel 负责：记忆存储/提取/检索、scope 隔离、溯源、生命周期、人格材料
-- ❌ 不碰：对话路由、回复生成、工具执行、短期上下文窗口、平台协议、最终 prompt 组装
+## 多用户隔离（绝不串台）
 
-## 核心能力
+- scope 五元组：`user_id + agent_id + platform + chat_type + chat_id`（+ extra 维度）
+- **无 scope 的检索 API 不存在**（接口层面拒绝，防误用）
+- 检索 scope 由开发者显式传入（或注册 ScopePolicy），框架不硬编码"自动加用户级"
+- 契约测试保证：同一 query 在不同 scope 结果不相交，用户 X 查不到用户 Y
 
-- **事件记忆**：会话内每条消息（带 actorType/factAuthority）→ 时间感知图谱
-- **批量导入**：`ingest_messages(messages, scope)` 一次性记忆历史聊天记录（幂等）
-- **风格记忆**：只学习 `actor=owner`（号主本人）的消息，AGENT 代发不算风格样本
-- **人格注入**：风格画像 + 号主原话 few-shot + 关系 + 背景 → 组装成"号主视角"
-- **多用户隔离**：scope 五元组（user_id + agent_id + platform + chat_type + chat_id），检索必须带 scope
+## 后端
+
+| 后端 | 安装 | semantic | temporal | graph | hard_delete |
+| --- | --- | --- | --- | --- | --- |
+| `sqlite`（默认） | `doppel-memory` | — | ✅ | — | ✅ |
+| `memory`（测试/示例） | `doppel-memory` | — | ✅ | — | ✅ |
+| `graphiti`（高级图谱） | `doppel-memory[graphiti]` | ✅ | ✅ | ✅ | 软删 |
+
+新后端实现 `MemoryStore` 接口后，跑 `tests/store_contract.py` 契约测试即可保证行为一致。
 
 ## 开发状态
 
-- [x] v0.1 框架骨架（存储抽象 / 事件摄入 / 检索 / 隔离测试）
-- [ ] StyleMiner（词频风格统计）
-- [ ] StyleProfessor（LLM 风格反思 + 确认闭环）
-- [ ] Mem0 风格 `add()` / MemoBase 风格记忆分区
-- [ ] 多后端（SQLite + 向量 / PostgreSQL）
+- [x] v0.2 核心协议 + SQLite/InMemory 后端 + 契约测试 + 三层 API + provenance + 能力声明
+- [ ] v0.3 MemoryProcessor 管线（EventProcessor/FactExtractor/RelationExtractor）+ 确认闭环状态
+- [ ] v0.4 IM 专用能力（reply/quote/thread 关系、平台导入格式、owner 风格样本 preset）
+- [ ] v0.5 StyleMiner/StyleProfessor + 时间关系/冲突事实 + PostgreSQL/pgvector
 
 ## License
 

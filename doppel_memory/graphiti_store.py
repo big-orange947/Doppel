@@ -1,4 +1,4 @@
-"""Graphiti + Neo4j 记忆存储实现（Doppel 首个后端）。
+"""Graphiti + Neo4j 记忆存储实现（Doppel 高级后端，extra 安装 doppel-memory[graphiti]）。
 
 经验来自 Memo Echo 项目 P-A 落地（graphiti-core==0.29.x）：
 - 懒初始化：Neo4j 连接与 Graphiti 推迟到首次写入/检索，失败降级。
@@ -25,9 +25,15 @@ from graphiti_core.llm_client.config import LLMConfig
 
 from doppel_memory.models import (
     ChatMessage,
+    FactAuthority,
+    MemoryFilter,
+    MemoryIsolationError,
+    MemoryKind,
+    MemoryRecord,
     MemoryScope,
-    MemorableType,
+    MemoryState,
     RecallResult,
+    StoreCapabilities,
 )
 from doppel_memory.store import MemoryStore
 
@@ -58,9 +64,7 @@ class FastEmbedderClient(EmbedderClient):
                 if self._model is None:
                     from fastembed import TextEmbedding
 
-                    self._model = await asyncio.to_thread(
-                        TextEmbedding, "BAAI/bge-small-zh-v1.5"
-                    )
+                    self._model = await asyncio.to_thread(TextEmbedding, "BAAI/bge-small-zh-v1.5")
         return self._model
 
     async def _embed(self, texts: list[str]) -> list[list[float]]:
@@ -115,10 +119,22 @@ class GraphitiMemoryStore(MemoryStore):
         self._owner_sample_limit = owner_sample_limit
         self._graphiti: Graphiti | None = None
         self._lock = asyncio.Lock()
-        # 进程内幂等注册表：group -> identity_key set（跨进程幂等留待确认层/持久化）
         self._seen_keys: dict[str, set[str]] = {}
-        # owner 原话样本环（group -> deque[ChatMessage]），供风格 few-shot 读取
         self._owner_samples: dict[str, deque[ChatMessage]] = {}
+        self._capabilities = StoreCapabilities(
+            semantic_search=True,
+            full_text_search=False,
+            temporal_search=True,
+            graph_relations=True,
+            metadata_filter=False,
+            hard_delete=False,
+            transactions=False,
+            reranking=False,
+        )
+
+    @property
+    def capabilities(self) -> StoreCapabilities:
+        return self._capabilities
 
     @property
     def is_enabled(self) -> bool:
@@ -126,15 +142,13 @@ class GraphitiMemoryStore(MemoryStore):
 
     # ---------------------------------------------------------------- 写入
 
-    async def write_event(self, scope: MemoryScope, message: ChatMessage) -> str:
-        if not self._enabled:
-            return ""
+    async def write_event(self, scope: MemoryScope, message: ChatMessage) -> MemoryRecord:
         key = message.identity_key
         group = scope.group_id
         if key:
             seen = self._seen_keys.setdefault(group, set())
             if key in seen:
-                return ""
+                return MemoryRecord(memory_id="", scope=scope)
             seen.add(key)
         if message.actor.value == "owner" and message.text:
             samples = self._owner_samples.setdefault(group, deque(maxlen=self._owner_sample_limit))
@@ -146,7 +160,20 @@ class GraphitiMemoryStore(MemoryStore):
             reference_time=message.at,
             source=f"event:{message.event_id or key or 'unspecified'}",
         )
-        return memory_id or ""
+        return MemoryRecord(
+            memory_id=memory_id or "",
+            kind=MemoryKind.EVENT,
+            scope=scope,
+            content=message.text,
+            actor=message.actor.value,
+            authority=message.fact_authority,
+            state=MemoryState.CONFIRMED,
+            source_event_id=message.event_id,
+            source_message_id=message.message_id,
+            extractor="ingestor",
+            created_at=message.at or _now_iso(),
+            updated_at=message.at or _now_iso(),
+        )
 
     async def write_background(
         self,
@@ -156,21 +183,31 @@ class GraphitiMemoryStore(MemoryStore):
         *,
         importance: float = 0.5,
         source: str = "manual",
-    ) -> str:
-        if not self._enabled:
-            return ""
+    ) -> MemoryRecord:
         group = scope.group_id
         tags_text = ",".join(tags or [])
         body = (
             f"[BACKGROUND importance={importance} source={source} tags={tags_text}] "
             f"{str(content or '').strip()}"
         )
-        return await self._add_episode(
+        memory_id = await self._add_episode(
             group=group,
             name=f"背景:{group}",
             body=body,
             reference_time=_now_iso(),
             source=f"background:{source}",
+        )
+        return MemoryRecord(
+            memory_id=memory_id or "",
+            kind=MemoryKind.BACKGROUND,
+            scope=scope,
+            content=content,
+            state=MemoryState.CONFIRMED,
+            tags=list(tags or []),
+            importance=importance,
+            extractor=source,
+            created_at=_now_iso(),
+            updated_at=_now_iso(),
         )
 
     async def write_relation(
@@ -181,20 +218,36 @@ class GraphitiMemoryStore(MemoryStore):
         relationship: str = "",
         address: str = "",
         communication_preference: str = "",
-    ) -> str:
-        if not self._enabled:
-            return ""
+        attributes: dict[str, Any] | None = None,
+    ) -> MemoryRecord:
         group = scope.group_id
         body = (
             f"[RELATION counterpart={counterpart} relationship={relationship} "
             f"address={address} pref={communication_preference}]"
         )
-        return await self._add_episode(
+        memory_id = await self._add_episode(
             group=group,
             name=f"关系:{group}",
             body=body,
             reference_time=_now_iso(),
             source=f"relation:{counterpart}",
+        )
+        return MemoryRecord(
+            memory_id=memory_id or "",
+            kind=MemoryKind.RELATION,
+            scope=scope,
+            content=body,
+            state=MemoryState.CONFIRMED,
+            extractor="relation_writer",
+            created_at=_now_iso(),
+            updated_at=_now_iso(),
+            metadata={
+                "counterpart": counterpart,
+                "relationship": relationship,
+                "address": address,
+                "communication_preference": communication_preference,
+                **(attributes or {}),
+            },
         )
 
     async def _add_episode(
@@ -222,26 +275,25 @@ class GraphitiMemoryStore(MemoryStore):
 
     # ---------------------------------------------------------------- 检索
 
-    async def recall(
+    async def search(
         self,
         query: str,
         scopes: list[MemoryScope],
         *,
+        filters: MemoryFilter | None = None,
         limit: int = 10,
-        kinds: set[MemorableType] | None = None,
     ) -> list[RecallResult]:
         if not scopes:
-            from doppel_memory.models import MemoryIsolationError
-
             raise MemoryIsolationError(
-                "recall requires at least one explicit scope; Doppel has no unscoped search."
+                "search requires explicit scopes; Doppel refuses unscoped search."
             )
         if not self._enabled or not str(query or "").strip():
             return []
+        filter_obj = filters or MemoryFilter()
         try:
             graphiti = await self._ensure_graphiti()
             group_ids = [_normalize_group(scope.group_id) for scope in scopes]
-            edges = await graphiti.search(query=query, group_ids=group_ids, num_results=limit)
+            edges = await graphiti.search(query=query, group_ids=group_ids, num_results=limit * 2)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Graphiti search degraded: %s", exc)
             return []
@@ -250,19 +302,10 @@ class GraphitiMemoryStore(MemoryStore):
             fact = str(getattr(edge, "fact", "") or "").strip()
             if not fact:
                 continue
-            kind = MemorableType.EVENT
-            if fact.startswith("[BACKGROUND") or "别名为" in fact[:1]:
-                kind = MemorableType.BACKGROUND
-            elif fact.startswith("[RELATION"):
-                kind = MemorableType.RELATION
-            results.append(
-                RecallResult(
-                    fact=fact,
-                    kind=kind,
-                    source_episode=str(getattr(edge, "episodes", "") or ""),
-                    valid_at=str(getattr(edge, "valid_at", "") or ""),
-                )
-            )
+            record = self._edge_to_recall(edge, fact)
+            if not self._matches_filter(record, filter_obj):
+                continue
+            results.append(record)
         return results[:limit]
 
     async def list_recent_owner_messages(
@@ -273,12 +316,15 @@ class GraphitiMemoryStore(MemoryStore):
             return []
         return list(samples)[-limit:]
 
-    # ---------------------------------------------------------------- 状态
+    # ---------------------------------------------------------------- 管理
 
-    async def forget(self, memory_id: str) -> bool:
-        # S1：图谱软删需 Graphiti delete_episode，按 memory_id 反查成本高；
-        # 先记录到内存黑名单，完整删除放到确认层治理（P-E）。
-        logger.info("forget(%s) recorded; hard delete comes with governance phase", memory_id)
+    async def forget(self, memory_id: str, *, hard: bool = False) -> bool:
+        if hard:
+            raise NotImplementedError(
+                "Graphiti backend does not support hard delete; use soft forget."
+            )
+        # S1：软删记录到内存；完整删除随治理阶段（P-E）提供。
+        logger.info("forget(%s) soft-recorded for governance phase", memory_id)
         return True
 
     async def health(self) -> dict[str, Any]:
@@ -297,6 +343,36 @@ class GraphitiMemoryStore(MemoryStore):
             except Exception:  # noqa: BLE001
                 logger.debug("graphiti close failed", exc_info=True)
             self._graphiti = None
+
+    # ---------------------------------------------------------------- helpers
+
+    @staticmethod
+    def _edge_to_recall(edge: Any, fact: str) -> RecallResult:
+        kind = MemoryKind.EVENT
+        if fact.startswith("[BACKGROUND"):
+            kind = MemoryKind.BACKGROUND
+        elif fact.startswith("[RELATION"):
+            kind = MemoryKind.RELATION
+        return RecallResult(
+            fact=fact,
+            kind=kind,
+            source_episode=str(getattr(edge, "episodes", "") or ""),
+            valid_at=str(getattr(edge, "valid_at", "") or ""),
+        )
+
+    @staticmethod
+    def _matches_filter(record: RecallResult, f: MemoryFilter) -> bool:
+        if f.kinds is not None and record.kind not in f.kinds:
+            return False
+        if f.actors is not None and record.actor not in f.actors:
+            return False
+        if f.exclude_actors is not None and record.actor in f.exclude_actors:
+            return False
+        if f.authorities is not None and record.authority not in f.authorities:
+            return False
+        if f.exclude_authorities is not None and record.authority in f.exclude_authorities:
+            return False
+        return True
 
     # ---------------------------------------------------------------- 初始化
 
