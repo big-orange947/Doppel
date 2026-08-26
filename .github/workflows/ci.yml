@@ -79,4 +79,4 @@ jobs:
         run: |
           wheel="$(find dist -name '*.whl' -print -quit)"
           test -n "$wheel"
-          uv run --isolated --no-project --with "$wheel" python -c "import doppel_memory; assert doppel_memory.__version__ == '0.2.1'"
+          uv run --isolated --no-project --with "$wheel" python -c "from importlib.metadata import version; import doppel_memory; assert doppel_memory.__version__ == version('doppel-memory')"

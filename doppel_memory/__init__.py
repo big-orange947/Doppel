@@ -25,11 +25,22 @@ from doppel_memory.persona import (
     OwnerPersonaPolicy,
     PersonaMaterialsBuilder,
 )
+from doppel_memory.processing import (
+    EventProcessor,
+    MemoryPipeline,
+    MemoryProcessor,
+    MemoryProposal,
+    PassThroughProposalPolicy,
+    ProcessingError,
+    ProcessingResult,
+    ProcessorHooks,
+    ProposalPolicy,
+)
 from doppel_memory.retriever import Retriever
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 __all__ = [
     "Actor",
@@ -37,19 +48,28 @@ __all__ = [
     "ChatMessage",
     "DefaultPromptRenderer",
     "DoppelClient",
+    "EventProcessor",
     "FactAuthority",
     "InMemoryStore",
     "MaterialBundle",
     "MemoryFilter",
     "MemoryIsolationError",
     "MemoryKind",
+    "MemoryPipeline",
+    "MemoryProcessor",
+    "MemoryProposal",
     "MemoryRecord",
     "MemoryScope",
     "MemoryState",
     "MemoryStateConflictError",
     "MemoryStore",
     "OwnerPersonaPolicy",
+    "PassThroughProposalPolicy",
     "PersonaMaterialsBuilder",
+    "ProcessingError",
+    "ProcessingResult",
+    "ProcessorHooks",
+    "ProposalPolicy",
     "RecallResult",
     "Retriever",
     "SQLiteStore",

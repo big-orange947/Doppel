@@ -1,7 +1,7 @@
 """Doppel 门面（三层 API）。
 
 低层：``client.store`` 直连后端（write/search/delete，开发者完全控制）。
-中层：``ingest`` / ``ingest_messages`` / ``recall``（框架处理标准流程 + filters）。
+中层：``ingest`` / ``process`` / ``recall``（标准事件与可插拔 proposal 管线）。
 高层：``materials``（结构化材料 + 可替换 renderer + persona preset）。
 
 ```python
@@ -16,6 +16,7 @@ prompt_block = bundle.render()                    # ③ 拼进你自己的 promp
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from doppel_memory.in_memory_store import InMemoryStore
@@ -31,6 +32,14 @@ from doppel_memory.models import (
     WriteStatus,
 )
 from doppel_memory.persona import MaterialBundle, PersonaMaterialsBuilder
+from doppel_memory.processing import (
+    EventProcessor,
+    MemoryPipeline,
+    MemoryProcessor,
+    ProcessingResult,
+    ProcessorHooks,
+    ProposalPolicy,
+)
 from doppel_memory.retriever import Retriever
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
@@ -79,6 +88,26 @@ class DoppelClient:
     async def ingest(self, scope: MemoryScope, message: ChatMessage) -> WriteResult:
         """写入一条聊天事件，返回可区分成功/重复/失败的结果。"""
         return await self._store.write_event(scope, message)
+
+    async def process(
+        self,
+        scope: MemoryScope,
+        message: ChatMessage,
+        *,
+        processors: Sequence[MemoryProcessor] | None = None,
+        policy: ProposalPolicy | None = None,
+        hooks: ProcessorHooks | None = None,
+        allowed_scopes: Sequence[MemoryScope] | None = None,
+    ) -> ProcessingResult:
+        """Run pluggable proposal processors and persist policy-approved results."""
+
+        pipeline = MemoryPipeline(
+            self._store,
+            (EventProcessor(),) if processors is None else processors,
+            policy=policy,
+            hooks=hooks,
+        )
+        return await pipeline.run(scope, message, allowed_scopes=allowed_scopes)
 
     async def put(
         self, record: MemoryRecord, *, idempotency_key: str | None = None
