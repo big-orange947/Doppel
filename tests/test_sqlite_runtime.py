@@ -60,7 +60,7 @@ async def test_reopen_preserves_extra_dimensions_and_state(tmp_path) -> None:
     assert record is not None
     assert record.scope.extra_dimensions == {"thread_id": "t1"}
     assert record.actor == "moderator"
-    assert (await reopened.health())["schema_version"] == 2
+    assert (await reopened.health())["schema_version"] == 3
     await reopened.close()
 
 
@@ -109,5 +109,69 @@ async def test_v02_schema_is_migrated(tmp_path) -> None:
         ),
     )
     assert duplicate.status is WriteStatus.DUPLICATE
-    assert (await store.health())["schema_version"] == 2
+    assert (await store.health())["schema_version"] == 3
+    await store.close()
+
+
+async def test_fts5_indexes_existing_and_new_records(tmp_path) -> None:
+    database = str(tmp_path / "fts.sqlite3")
+    scope = MemoryScope(user_id="u", agent_id="bot")
+    store = SQLiteStore(database)
+    await store.write_event(
+        scope,
+        ChatMessage.of(
+            "owner",
+            "project alpha deadline Friday",
+            "2026-08-26T10:00:00Z",
+            event_id="a",
+        ),
+    )
+    await store.write_event(
+        scope,
+        ChatMessage.of(
+            "owner", "project beta meeting", "2026-08-26T10:01:00Z", event_id="b"
+        ),
+    )
+    hits = await store.search("project deadline", [scope])
+    assert [item.source_event_id for item in hits] == ["a"]
+    assert hits[0].similarity > 0
+    health = await store.health()
+    assert health["schema_version"] == 3
+    assert health["full_text_search"] is True
+    await store.close()
+
+    reopened = SQLiteStore(database)
+    assert [
+        item.source_event_id for item in await reopened.search("beta meeting", [scope])
+    ] == ["b"]
+    await reopened.close()
+
+
+async def test_fts5_triggers_follow_hard_delete(tmp_path) -> None:
+    store = SQLiteStore(str(tmp_path / "fts-delete.sqlite3"))
+    scope = MemoryScope(user_id="u", agent_id="bot")
+    created = await store.write_event(
+        scope,
+        ChatMessage.of(
+            "owner", "uniquefulltexttoken", "2026-08-26T10:00:00Z", event_id="fts"
+        ),
+    )
+    assert len(await store.search("uniquefulltexttoken", [scope])) == 1
+    assert await store.forget(scope, created.memory_id, hard=True)
+    assert await store.search("uniquefulltexttoken", [scope]) == []
+    await store.close()
+
+
+async def test_fts_disabled_retains_substring_search(tmp_path) -> None:
+    store = SQLiteStore(str(tmp_path / "substring.sqlite3"), enable_fts=False)
+    scope = MemoryScope(user_id="u", agent_id="bot")
+    await store.write_event(
+        scope,
+        ChatMessage.of(
+            "owner", "abcdefgh", "2026-08-26T10:00:00Z", event_id="substring"
+        ),
+    )
+    assert len(await store.search("cde", [scope])) == 1
+    assert store.capabilities.full_text_search is False
+    assert (await store.health())["full_text_search"] is False
     await store.close()

@@ -220,9 +220,13 @@ class EventProcessor:
                 created_at=message.at,
                 metadata={
                     "message_type": message.message_type,
+                    "sender_id": message.sender_id,
                     "reply_to_id": message.reply_to_id,
                     "quoted_message_id": message.quoted_message_id,
+                    "thread_id": message.thread_id,
+                    "thread_root_id": message.thread_root_id,
                     "attachments": message.attachments,
+                    "raw": message.raw,
                 },
             )
         ]

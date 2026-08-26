@@ -155,6 +155,30 @@ class MemoryStoreContract:
         await store.forget(SCOPE_A, owner.memory_id)
         assert await store.list_recent_owner_messages(SCOPE_A) == []
 
+    async def test_owner_message_relationship_provenance_round_trip(
+        self, store
+    ) -> None:
+        message = ChatMessage.of(
+            "owner",
+            "linked message",
+            "2026-08-26T10:00:00Z",
+            message_id="linked",
+            sender_id="owner-id",
+            reply_to_id="reply-target",
+            quoted_message_id="quote-target",
+            thread_id="thread-1",
+            thread_root_id="root-1",
+            raw={"sequence": 7},
+        )
+        await store.write_event(SCOPE_A, message)
+        restored = (await store.list_recent_owner_messages(SCOPE_A))[0]
+        assert restored.sender_id == "owner-id"
+        assert restored.reply_to_id == "reply-target"
+        assert restored.quoted_message_id == "quote-target"
+        assert restored.thread_id == "thread-1"
+        assert restored.thread_root_id == "root-1"
+        assert restored.raw == {"sequence": 7}
+
     async def test_temporal_filter_normalizes_timezones(self, store) -> None:
         await store.write_event(
             SCOPE_A,

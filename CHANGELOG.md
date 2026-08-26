@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.4.0
+
+Retrieval composition, SQLite full-text search, and portable IM history ingestion.
+
+### Added
+
+- `RetrievalStrategy` and `Reranker` protocols with `StoreRetrievalStrategy` and
+  `IdentityReranker` reference implementations.
+- Candidate over-fetching, stable deduplication, and exact-scope guards both before and
+  after custom reranking.
+- SQLite FTS5 indexing for content and metadata, BM25 ordering, migration-time rebuild,
+  synchronization triggers, runtime capability reporting, and substring fallback.
+- Portable `IMImportBatch`/`IMImportItem` JSON envelopes and structured `ImportResult`.
+- `DoppelClient.import_batch()` for multi-scope, scope-level-idempotent history imports.
+- Stable fallback event identities from import source/item IDs, with batch provenance
+  retained under `raw.doppel_import`.
+- `sender_id`, `thread_id`, and `thread_root_id` message primitives; reply, quote, thread,
+  attachments, and raw source provenance now survive stable Store round trips.
+
+### Changed
+
+- SQLite schema version is now 3. Existing valid databases are migrated and their FTS
+  index is rebuilt automatically when FTS5 is available.
+- `DoppelClient` accepts `retrieval_strategy`, `reranker`, and `candidate_multiplier`.
+- Retrieval extension points cannot return unscoped results or inject results outside
+  the caller's exact scope whitelist.
+
+### Compatibility
+
+- `MemoryStore.search()` remains the backend contract and default candidate source.
+- SQLite can be constructed with `enable_fts=False`; lack of FTS5 support also degrades
+  to the existing escaped `LIKE` behavior.
+- Message `thread_id` is provenance only. Doppel never turns it into a scope dimension
+  implicitly; use `scope.with_dimension("thread_id", value)` when thread isolation is
+  desired.
+
 ## 0.3.0
 
 Pluggable proposal-processing release. Doppel still does not choose an LLM or decide

@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.3.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆协议与处理管线。
+> v0.4.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -76,7 +76,7 @@ Processor 应提供稳定且带领域前缀的 idempotency key。
 | 层 | 入口 | 职责 |
 |---|---|---|
 | 低层 | `store.put/get/search/transition/forget` | 完整控制和后端协议 |
-| 中层 | `client.ingest/ingest_messages/recall` | 标准 IM 流程和结构化结果 |
+| 中层 | `client.ingest/import_batch/process/recall` | 标准 IM 流程、提议管线和结构化结果 |
 | 高层 | `client.materials/persona_materials` | ScopePolicy、分组材料和可替换 renderer |
 
 专用 `write_event/background/relation` 是对通用 `put(MemoryRecord)` 的便利封装，不定义封闭
@@ -108,7 +108,9 @@ SQLite 是稳定参考后端：
 - 幂等唯一索引包含 `scope_key`；
 - 所有 extra dimensions 持久化；
 - schema 使用 `doppel_meta.schema_version` 迁移；
-- v0.2 schema 在打开时迁移到 v0.2.1 schema；
+- 旧 schema 在打开时迁移到 schema v3；
+- FTS5 可用时索引 content/metadata，以 external-content trigger 同步增删改；
+- FTS5 不可用、显式关闭或无命中时保留 escaped LIKE fallback；
 - 普通 search 排除 inactive states；
 - `transition` 原子检查 expected state 并递增 version。
 
@@ -158,9 +160,36 @@ proposal 在写 Store 前去重；跨运行幂等仍由 Store 保证。
 `on_error`，不建立通用中间件系统。扩展错误进入 `ProcessingError`；已经成功的 Store 写入
 不会因为后置 hook 失败而被改写为失败。
 
+## v0.4 检索组合
+
+Store 的 `search()` 仍是后端合同，不承担所有召回算法。`RetrievalStrategy.search()` 负责产生
+候选，默认 `StoreRetrievalStrategy` 转发到 Store；`Reranker.rerank()` 只重排或过滤候选。
+
+当启用 Reranker 时，Retriever 按 `limit * candidate_multiplier` 获取候选。strategy 输出后和
+reranker 输出后都执行相同的 exact-scope guard，并按 memory ID（无 ID 时按来源与内容）稳定
+去重。scope 为空或不在调用白名单的结果不能进入最终召回，即使它由自定义扩展点注入。
+
+SQLite FTS5 使用安全生成的 quoted token `AND` 查询和 BM25 排序。FTS rank 映射为单调的
+`RecallResult.similarity`，方便后续 Reranker 组合。FTS 是 Store 候选实现细节，不改变
+RetrievalStrategy/Reranker 的公共协议。
+
+## v0.4 IM 导入格式
+
+`IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
+`MemoryScope` 绑定。批次可以包含多个会话，`client.import_batch()` 逐条复用普通事件幂等
+语义，并返回保留所有底层 `WriteResult` 的 `ImportResult`。
+
+如果源消息没有 message/event ID，导入器使用 export source 和 item `source_id` 生成稳定 event
+ID；在 source ID 也缺失但 batch ID 存在时，以 batch ID 和条目序号作为回退。批次与条目
+provenance 保存在 `raw.doppel_import`。
+
+消息 provenance 包含 sender、reply target、quoted target、thread ID、thread root、附件和
+原始平台字段。thread 信息不会隐式参与 scope；需要 thread namespace 时，导入适配器必须
+显式构造带 `extra_dimensions.thread_id` 的 scope。
+
 ## 路线图
 
 - v0.2.1：协议、SQLite 和 conformance 稳定化；
 - v0.3：MemoryProposal/Processor、状态策略、有限 hooks（已完成）；
-- v0.4：检索器/Reranker、FTS5、IM 导入格式和消息关系原语；
+- v0.4：检索器/Reranker、FTS5、IM 导入格式和消息关系原语（已完成）；
 - v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选风格工具和 benchmark。

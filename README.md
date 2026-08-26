@@ -139,6 +139,71 @@ hits = await memory.recall(
 Store 只做 exact scope 匹配。需要会话级、联系人级和用户级多层召回时，由开发者显式
 传入多个 scope，或者在高层 API 注册 `ScopePolicy`。
 
+候选召回与重排是独立扩展点：
+
+```python
+class SimilarityReranker:
+    async def rerank(self, query, candidates, *, limit):
+        return sorted(
+            candidates,
+            key=lambda item: item.similarity,
+            reverse=True,
+        )[:limit]
+
+memory = DoppelClient(
+    backend="sqlite",
+    reranker=SimilarityReranker(),
+    candidate_multiplier=4,
+)
+```
+
+`RetrievalStrategy` 决定如何产生候选，默认实现转发到 `MemoryStore.search()`；`Reranker`
+只接收已经通过 scope 检查的候选。有 Reranker 时，Retriever 会按
+`limit * candidate_multiplier` 多取候选。自定义 strategy 与 reranker 的输出都会再次经过
+exact-scope 白名单和去重，不能注入未授权记忆。
+
+### IM 历史导入
+
+`IMImportBatch` 是可序列化的跨平台 envelope，每条消息携带自己的 exact scope：
+
+```python
+from doppel_memory import ChatMessage, IMImportBatch, IMImportItem
+
+batch = IMImportBatch(
+    source="qq-export",
+    batch_id="page-1",
+    items=[
+        IMImportItem(
+            scope=scope,
+            source_id="row-42",
+            message=ChatMessage.of(
+                "contact",
+                "回复上一条消息",
+                "2026-08-26T12:01:00+08:00",
+                message_id="m2",
+                sender_id="contact-1",
+                reply_to_id="m1",
+                quoted_message_id="m0",
+                thread_id="thread-7",
+                thread_root_id="m0",
+            ),
+        )
+    ],
+)
+
+result = await memory.import_batch(batch)
+result.created
+result.duplicates
+result.failed
+```
+
+导入仍使用普通事件的 scope 级幂等语义，因此同一批可安全重放。消息没有平台
+message/event ID 时，导入器使用 `source + source_id`（或 batch ID + 序号）生成稳定 fallback
+event ID；批次来源保存在 `raw.doppel_import`。`thread_id`、reply、quote 和 thread root 默认
+只是消息 provenance；框架不会根据 thread 自动改变 namespace。需要 thread 级隔离时，应在
+`IMImportItem.scope` 中显式使用
+`scope.with_dimension("thread_id", "thread-7")`。
+
 ### Processor 管线
 
 Processor 只分析标准化消息并返回 proposal，不直接接触 Store。下面的规则处理器只是示例；
@@ -254,14 +319,16 @@ await memory.forget(scope, memory_id, hard=True) # 后端支持时硬删除
 
 ## 后端
 
-| 后端 | 状态 | substring | semantic | temporal | graph | hard delete | transactions |
-|---|---|---:|---:|---:|---:|---:|---:|
-| `memory` | 稳定，测试/示例 | ✅ | — | ✅ | — | ✅ | — |
-| `sqlite` | 稳定，默认参考实现 | ✅ | — | ✅ | — | ✅ | ✅ |
-| `graphiti` | 实验性 | — | ✅ | ✅ | ✅ | — | — |
+| 后端 | 状态 | substring | full text | semantic | temporal | graph | hard delete | transactions |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `memory` | 稳定，测试/示例 | ✅ | — | — | ✅ | — | ✅ | — |
+| `sqlite` | 稳定，默认参考实现 | ✅ | ✅ FTS5 | — | ✅ | — | ✅ | ✅ |
+| `graphiti` | 实验性 | — | — | ✅ | ✅ | ✅ | — | — |
 
 SQLite 使用 scope 级幂等约束、UTC 时间、WAL/串行连接操作和版本化 schema migration。
-合法的 v0.2 scope 会在首次打开数据库时自动迁移；空 user/agent 的旧数据需要先修正。
+schema v3 会在 FTS5 可用时重建已有记录的 content/metadata 索引，并用 trigger 同步后续
+insert/update/delete。FTS5 不可用、显式 `enable_fts=False` 或全文查询无结果时，自动回退到
+escaped substring search。合法的旧 scope 会自动迁移；空 user/agent 的旧数据需要先修正。
 InMemory 与 SQLite 运行同一套 Store conformance suite。
 
 Graphiti 目前只承诺 episode 写入和语义检索；持久化幂等、完整生命周期、删除和完整
@@ -272,7 +339,7 @@ provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError
 - [x] v0.2：框架定位、SQLite/InMemory、三层 API、能力声明和 provenance
 - [x] v0.2.1：稳定 scope、通用 Store、WriteResult、UTC 时间、生命周期、并发与迁移契约
 - [x] v0.3：MemoryProposal/MemoryProcessor 管线、状态策略和有限生命周期 hooks
-- [ ] v0.4：检索器/Reranker 协议、FTS5、IM 导入格式及 reply/quote/thread 原语
+- [x] v0.4：检索器/Reranker 协议、FTS5、IM 导入格式及 reply/quote/thread 原语
 - [ ] v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选 StyleMiner/StyleProfessor、benchmark
 
 详细设计见 [`docs/design.md`](docs/design.md)。

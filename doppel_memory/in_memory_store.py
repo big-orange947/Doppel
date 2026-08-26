@@ -122,10 +122,14 @@ class InMemoryStore(MemoryStore):
                 at=record.created_at,
                 event_id=record.source_event_id,
                 message_id=record.source_message_id,
+                sender_id=str(record.metadata.get("sender_id", "")),
                 message_type=str(record.metadata.get("message_type", "message")),
                 reply_to_id=str(record.metadata.get("reply_to_id", "")),
                 quoted_message_id=str(record.metadata.get("quoted_message_id", "")),
+                thread_id=str(record.metadata.get("thread_id", "")),
+                thread_root_id=str(record.metadata.get("thread_root_id", "")),
                 attachments=list(record.metadata.get("attachments", [])),
+                raw=dict(record.metadata.get("raw", {})),
             )
             for record in records
             if record.scope.scope_key == scope.scope_key

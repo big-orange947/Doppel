@@ -173,6 +173,14 @@ class GraphitiMemoryStore(MemoryStore):
                     at=stored.created_at,
                     event_id=stored.source_event_id,
                     message_id=stored.source_message_id,
+                    sender_id=str(stored.metadata.get("sender_id", "")),
+                    message_type=str(stored.metadata.get("message_type", "message")),
+                    reply_to_id=str(stored.metadata.get("reply_to_id", "")),
+                    quoted_message_id=str(stored.metadata.get("quoted_message_id", "")),
+                    thread_id=str(stored.metadata.get("thread_id", "")),
+                    thread_root_id=str(stored.metadata.get("thread_root_id", "")),
+                    attachments=list(stored.metadata.get("attachments", [])),
+                    raw=dict(stored.metadata.get("raw", {})),
                 )
             )
         return WriteResult(status=WriteStatus.CREATED, record=stored)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
+import re
 import sqlite3
 from datetime import UTC, datetime
 from typing import Any
@@ -28,7 +30,7 @@ from doppel_memory.models import (
 )
 from doppel_memory.store import MemoryStore
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS doppel_meta (
@@ -71,15 +73,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_memories_scope_idempotency
 ON memories(scope_key, idempotency_key) WHERE idempotency_key != '';
 """
 
+_FTS_TRIGGERS = (
+    """CREATE TRIGGER IF NOT EXISTS memories_fts_insert AFTER INSERT ON memories BEGIN
+           INSERT INTO memories_fts(rowid, content, metadata_json)
+           VALUES (new.rowid, new.content, new.metadata_json);
+       END""",
+    """CREATE TRIGGER IF NOT EXISTS memories_fts_delete AFTER DELETE ON memories BEGIN
+           INSERT INTO memories_fts(memories_fts, rowid, content, metadata_json)
+           VALUES ('delete', old.rowid, old.content, old.metadata_json);
+       END""",
+    """CREATE TRIGGER IF NOT EXISTS memories_fts_update AFTER UPDATE ON memories BEGIN
+           INSERT INTO memories_fts(memories_fts, rowid, content, metadata_json)
+           VALUES ('delete', old.rowid, old.content, old.metadata_json);
+           INSERT INTO memories_fts(rowid, content, metadata_json)
+           VALUES (new.rowid, new.content, new.metadata_json);
+       END""",
+)
+
 
 class SQLiteStore(MemoryStore):
-    def __init__(self, database: str = "doppel.sqlite3") -> None:
+    def __init__(
+        self, database: str = "doppel.sqlite3", *, enable_fts: bool = True
+    ) -> None:
         self._database = database
+        self._enable_fts = enable_fts
+        self._fts_available = False
         self._conn: sqlite3.Connection | None = None
         self._init_lock = asyncio.Lock()
         self._operation_lock = asyncio.Lock()
         self._capabilities = StoreCapabilities(
             substring_search=True,
+            full_text_search=enable_fts,
             temporal_search=True,
             hard_delete=True,
             transactions=True,
@@ -110,11 +134,15 @@ class SQLiteStore(MemoryStore):
         conn.execute("PRAGMA busy_timeout=30000")
         if self._database != ":memory:":
             conn.execute("PRAGMA journal_mode=WAL")
-        self._migrate(conn)
+        self._fts_available = self._migrate(conn, enable_fts=self._enable_fts)
+        if self._capabilities.full_text_search != self._fts_available:
+            self._capabilities = self._capabilities.model_copy(
+                update={"full_text_search": self._fts_available}
+            )
         return conn
 
     @staticmethod
-    def _migrate(conn: sqlite3.Connection) -> None:
+    def _migrate(conn: sqlite3.Connection, *, enable_fts: bool) -> bool:
         conn.executescript(_SCHEMA)
         columns = {row[1] for row in conn.execute("PRAGMA table_info(memories)")}
         additions = {
@@ -163,11 +191,32 @@ class SQLiteStore(MemoryStore):
                 ),
             )
         conn.executescript(_INDEXES)
+        fts_available = SQLiteStore._setup_fts(conn) if enable_fts else False
         conn.execute(
             "INSERT OR REPLACE INTO doppel_meta(key, value) VALUES('schema_version', ?)",
             (str(SCHEMA_VERSION),),
         )
         conn.commit()
+        return fts_available
+
+    @staticmethod
+    def _setup_fts(conn: sqlite3.Connection) -> bool:
+        try:
+            conn.execute(
+                """CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+                       content,
+                       metadata_json,
+                       content='memories',
+                       content_rowid='rowid',
+                       tokenize='unicode61'
+                   )"""
+            )
+            for statement in _FTS_TRIGGERS:
+                conn.execute(statement)
+            conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
+        except sqlite3.OperationalError:
+            return False
+        return True
 
     async def put(
         self, record: MemoryRecord, *, idempotency_key: str | None = None
@@ -270,70 +319,116 @@ class SQLiteStore(MemoryStore):
         filter_obj = filters or MemoryFilter()
 
         def _run() -> list[RecallResult]:
-            scope_keys = list(dict.fromkeys(scope.scope_key for scope in scopes))
-            placeholders = ",".join("?" for _ in scope_keys)
-            where = [f"scope_key IN ({placeholders})"]
-            params: list[Any] = list(scope_keys)
             query_text = str(query or "").strip()
-            if query_text:
-                where.append(
-                    "(content LIKE ? ESCAPE '\\' OR metadata_json LIKE ? ESCAPE '\\')"
-                )
-                pattern = f"%{_escape_like(query_text)}%"
-                params.extend((pattern, pattern))
-            if filter_obj.states is not None:
-                values = [state.value for state in filter_obj.states]
-                where.append(f"state IN ({','.join('?' for _ in values)})")
-                params.extend(values)
-            elif not filter_obj.include_inactive:
-                values = [state.value for state in ACTIVE_MEMORY_STATES]
-                where.append(f"state IN ({','.join('?' for _ in values)})")
-                params.extend(values)
-            if filter_obj.kinds:
-                values = list(filter_obj.kinds)
-                where.append(f"kind IN ({','.join('?' for _ in values)})")
-                params.extend(values)
-            if filter_obj.actors:
-                values = list(filter_obj.actors)
-                where.append(f"actor IN ({','.join('?' for _ in values)})")
-                params.extend(values)
-            if filter_obj.exclude_actors:
-                values = list(filter_obj.exclude_actors)
-                where.append(f"actor NOT IN ({','.join('?' for _ in values)})")
-                params.extend(values)
-            if filter_obj.authorities:
-                values = [authority.value for authority in filter_obj.authorities]
-                where.append(f"authority IN ({','.join('?' for _ in values)})")
-                params.extend(values)
-            if filter_obj.exclude_authorities:
-                values = [
-                    authority.value for authority in filter_obj.exclude_authorities
-                ]
-                where.append(f"authority NOT IN ({','.join('?' for _ in values)})")
-                params.extend(values)
-            if filter_obj.importance_min is not None:
-                where.append("importance >= ?")
-                params.append(filter_obj.importance_min)
-            if filter_obj.time_from is not None:
-                where.append("created_at >= ?")
-                params.append(filter_obj.time_from.isoformat())
-            if filter_obj.time_to is not None:
-                where.append("created_at <= ?")
-                params.append(filter_obj.time_to.isoformat())
-            if filter_obj.tags:
-                for tag in filter_obj.tags:
-                    where.append("tags LIKE ? ESCAPE '\\'")
-                    params.append(
-                        f"%{_escape_like(json.dumps(tag, ensure_ascii=False))}%"
+            fts_query = _fts_query(query_text)
+
+            def _select(*, full_text: bool) -> list[sqlite3.Row]:
+                scope_keys = list(dict.fromkeys(scope.scope_key for scope in scopes))
+                placeholders = ",".join("?" for _ in scope_keys)
+                where = [f"m.scope_key IN ({placeholders})"]
+                params: list[Any] = list(scope_keys)
+                if query_text:
+                    if full_text:
+                        where.append("memories_fts MATCH ?")
+                        params.append(fts_query)
+                    else:
+                        where.append(
+                            "(m.content LIKE ? ESCAPE '\\' "
+                            "OR m.metadata_json LIKE ? ESCAPE '\\')"
+                        )
+                        pattern = f"%{_escape_like(query_text)}%"
+                        params.extend((pattern, pattern))
+                if filter_obj.states is not None:
+                    values = [state.value for state in filter_obj.states]
+                    where.append(f"m.state IN ({','.join('?' for _ in values)})")
+                    params.extend(values)
+                elif not filter_obj.include_inactive:
+                    values = [state.value for state in ACTIVE_MEMORY_STATES]
+                    where.append(f"m.state IN ({','.join('?' for _ in values)})")
+                    params.extend(values)
+                if filter_obj.kinds:
+                    values = list(filter_obj.kinds)
+                    where.append(f"m.kind IN ({','.join('?' for _ in values)})")
+                    params.extend(values)
+                if filter_obj.actors:
+                    values = list(filter_obj.actors)
+                    where.append(f"m.actor IN ({','.join('?' for _ in values)})")
+                    params.extend(values)
+                if filter_obj.exclude_actors:
+                    values = list(filter_obj.exclude_actors)
+                    where.append(f"m.actor NOT IN ({','.join('?' for _ in values)})")
+                    params.extend(values)
+                if filter_obj.authorities:
+                    values = [authority.value for authority in filter_obj.authorities]
+                    where.append(f"m.authority IN ({','.join('?' for _ in values)})")
+                    params.extend(values)
+                if filter_obj.exclude_authorities:
+                    values = [
+                        authority.value for authority in filter_obj.exclude_authorities
+                    ]
+                    where.append(
+                        f"m.authority NOT IN ({','.join('?' for _ in values)})"
                     )
-            params.append(limit)
-            rows = conn.execute(
-                "SELECT * FROM memories WHERE "
-                + " AND ".join(where)
-                + " ORDER BY created_at DESC LIMIT ?",
-                params,
-            ).fetchall()
-            return [self._row_to_recall(row) for row in rows]
+                    params.extend(values)
+                if filter_obj.importance_min is not None:
+                    where.append("m.importance >= ?")
+                    params.append(filter_obj.importance_min)
+                if filter_obj.time_from is not None:
+                    where.append("m.created_at >= ?")
+                    params.append(filter_obj.time_from.isoformat())
+                if filter_obj.time_to is not None:
+                    where.append("m.created_at <= ?")
+                    params.append(filter_obj.time_to.isoformat())
+                if filter_obj.tags:
+                    for tag in filter_obj.tags:
+                        where.append("m.tags LIKE ? ESCAPE '\\'")
+                        params.append(
+                            f"%{_escape_like(json.dumps(tag, ensure_ascii=False))}%"
+                        )
+
+                if full_text:
+                    select = "SELECT m.*, bm25(memories_fts) AS fts_rank"
+                    source = (
+                        " FROM memories_fts JOIN memories AS m "
+                        "ON m.rowid=memories_fts.rowid"
+                    )
+                    order = " ORDER BY fts_rank ASC, m.created_at DESC"
+                else:
+                    select = "SELECT m.*"
+                    source = " FROM memories AS m"
+                    order = " ORDER BY m.created_at DESC"
+                params.append(limit)
+                return conn.execute(
+                    select
+                    + source
+                    + " WHERE "
+                    + " AND ".join(where)
+                    + order
+                    + " LIMIT ?",
+                    params,
+                ).fetchall()
+
+            rows: list[sqlite3.Row] = []
+            used_full_text = False
+            if query_text and fts_query and self._fts_available:
+                try:
+                    rows = _select(full_text=True)
+                    used_full_text = bool(rows)
+                except sqlite3.OperationalError:
+                    rows = []
+            if not rows:
+                rows = _select(full_text=False)
+            return [
+                self._row_to_recall(
+                    row,
+                    similarity=(
+                        _fts_similarity(float(row["fts_rank"]))
+                        if used_full_text
+                        else 0.0
+                    ),
+                )
+                for row in rows
+            ]
 
         async with self._operation_lock:
             return await asyncio.to_thread(_run)
@@ -364,10 +459,14 @@ class SQLiteStore(MemoryStore):
                         at=row["created_at"],
                         event_id=row["source_event_id"],
                         message_id=row["source_message_id"],
+                        sender_id=metadata.get("sender_id", ""),
                         message_type=metadata.get("message_type", "message"),
                         reply_to_id=metadata.get("reply_to_id", ""),
                         quoted_message_id=metadata.get("quoted_message_id", ""),
+                        thread_id=metadata.get("thread_id", ""),
+                        thread_root_id=metadata.get("thread_root_id", ""),
                         attachments=metadata.get("attachments", []),
+                        raw=metadata.get("raw", {}),
                     )
                 )
             return messages
@@ -470,6 +569,7 @@ class SQLiteStore(MemoryStore):
                 "records": count,
                 "database": self._database,
                 "schema_version": int(version),
+                "full_text_search": self._fts_available,
             }
 
         async with self._operation_lock:
@@ -515,7 +615,9 @@ class SQLiteStore(MemoryStore):
         )
 
     @classmethod
-    def _row_to_recall(cls, row: sqlite3.Row) -> RecallResult:
+    def _row_to_recall(
+        cls, row: sqlite3.Row, *, similarity: float = 0.0
+    ) -> RecallResult:
         record = cls._row_to_record(row)
         return RecallResult(
             fact=record.content,
@@ -531,12 +633,24 @@ class SQLiteStore(MemoryStore):
             raw_text=record.content,
             derived_chain=list(record.metadata.get("derived_chain", [])),
             valid_at=record.created_at,
+            similarity=similarity,
             state=record.state,
         )
 
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _fts_query(value: str) -> str:
+    terms = re.findall(r"\w+", value, flags=re.UNICODE)
+    return " AND ".join(f'"{term.replace(chr(34), chr(34) * 2)}"' for term in terms)
+
+
+def _fts_similarity(rank: float) -> float:
+    """Map FTS5's lower-is-better BM25 rank monotonically into ``(0, 1)``."""
+
+    return 1.0 / (1.0 + math.exp(max(-60.0, min(60.0, rank))))
 
 
 def _normalize_legacy_time(value: str) -> str:

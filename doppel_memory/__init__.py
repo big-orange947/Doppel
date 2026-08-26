@@ -1,6 +1,7 @@
 """Doppel：面向 IM Agent 的模块化记忆框架（说话人感知/会话隔离/可插拔后端）。"""
 
 from doppel_memory.client import DoppelClient
+from doppel_memory.imports import IMImportBatch, IMImportItem, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.models import (
     Actor,
@@ -36,11 +37,17 @@ from doppel_memory.processing import (
     ProcessorHooks,
     ProposalPolicy,
 )
-from doppel_memory.retriever import Retriever
+from doppel_memory.retriever import (
+    IdentityReranker,
+    Reranker,
+    RetrievalStrategy,
+    Retriever,
+    StoreRetrievalStrategy,
+)
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "Actor",
@@ -50,6 +57,10 @@ __all__ = [
     "DoppelClient",
     "EventProcessor",
     "FactAuthority",
+    "IMImportBatch",
+    "IMImportItem",
+    "IdentityReranker",
+    "ImportResult",
     "InMemoryStore",
     "MaterialBundle",
     "MemoryFilter",
@@ -71,9 +82,12 @@ __all__ = [
     "ProcessorHooks",
     "ProposalPolicy",
     "RecallResult",
+    "Reranker",
+    "RetrievalStrategy",
     "Retriever",
     "SQLiteStore",
     "StoreCapabilities",
+    "StoreRetrievalStrategy",
     "WriteResult",
     "WriteStatus",
     "__version__",

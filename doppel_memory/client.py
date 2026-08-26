@@ -16,9 +16,10 @@ prompt_block = bundle.render()                    # ③ 拼进你自己的 promp
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
+from doppel_memory.imports import IMImportBatch, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.models import (
     ChatMessage,
@@ -40,7 +41,7 @@ from doppel_memory.processing import (
     ProcessorHooks,
     ProposalPolicy,
 )
-from doppel_memory.retriever import Retriever
+from doppel_memory.retriever import Reranker, RetrievalStrategy, Retriever
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 
@@ -53,6 +54,9 @@ class DoppelClient:
         store: MemoryStore | None = None,
         *,
         backend: str = "sqlite",
+        retrieval_strategy: RetrievalStrategy | None = None,
+        reranker: Reranker | None = None,
+        candidate_multiplier: int = 4,
         **backend_kwargs: Any,
     ) -> None:
         if store is None:
@@ -67,7 +71,12 @@ class DoppelClient:
                     f"unknown backend: {backend!r} (supported: sqlite/memory/graphiti)"
                 )
         self._store = store
-        self._retriever = Retriever(store)
+        self._retriever = Retriever(
+            store,
+            strategy=retrieval_strategy,
+            reranker=reranker,
+            candidate_multiplier=candidate_multiplier,
+        )
         self._materials = PersonaMaterialsBuilder(self._retriever)
 
     @property
@@ -148,6 +157,42 @@ class DoppelClient:
             "failed": failed,
             "batchCount": batch_count,
         }
+
+    async def import_batch(
+        self,
+        batch: IMImportBatch,
+        *,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> ImportResult:
+        """Import a portable multi-scope IM batch using normal event idempotency."""
+
+        results: list[WriteResult] = []
+        total = len(batch.items)
+        for index, item in enumerate(batch.items, start=1):
+            source_identity = item.source_id or (
+                f"{batch.batch_id}:{index}" if batch.batch_id else ""
+            )
+            import_provenance = {
+                "source": batch.source,
+                "source_version": batch.source_version,
+                "batch_id": batch.batch_id,
+                "source_id": item.source_id,
+                "item_metadata": item.metadata,
+            }
+            raw = dict(item.message.raw)
+            raw["doppel_import"] = import_provenance
+            fallback_event_id = (
+                f"import:{batch.source}:{source_identity}"
+                if source_identity and not item.message.identity_key
+                else item.message.event_id
+            )
+            message = item.message.model_copy(
+                update={"event_id": fallback_event_id, "raw": raw}, deep=True
+            )
+            results.append(await self.ingest(item.scope, message))
+            if progress is not None:
+                progress(index, total)
+        return ImportResult.summarize(results)
 
     async def recall(
         self,

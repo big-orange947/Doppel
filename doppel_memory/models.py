@@ -304,9 +304,12 @@ class ChatMessage(BaseModel):
     at: datetime = Field(default_factory=utc_now)
     event_id: str = ""
     message_id: str = ""
+    sender_id: str = ""
     message_type: str = "message"
     reply_to_id: str = ""
     quoted_message_id: str = ""
+    thread_id: str = ""
+    thread_root_id: str = ""
     attachments: list[dict[str, Any]] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
 
@@ -319,9 +322,12 @@ class ChatMessage(BaseModel):
         "text",
         "event_id",
         "message_id",
+        "sender_id",
         "message_type",
         "reply_to_id",
         "quoted_message_id",
+        "thread_id",
+        "thread_root_id",
         mode="before",
     )
     @classmethod
@@ -342,10 +348,14 @@ class ChatMessage(BaseModel):
         *,
         event_id: str = "",
         message_id: str = "",
+        sender_id: str = "",
         message_type: str = "message",
         reply_to_id: str = "",
         quoted_message_id: str = "",
+        thread_id: str = "",
+        thread_root_id: str = "",
         attachments: list[dict[str, Any]] | None = None,
+        raw: dict[str, Any] | None = None,
     ) -> ChatMessage:
         parsed_at = datetime.fromisoformat(at) if isinstance(at, str) else at
         return cls(
@@ -354,10 +364,14 @@ class ChatMessage(BaseModel):
             at=parsed_at,
             event_id=event_id,
             message_id=message_id,
+            sender_id=sender_id,
             message_type=message_type,
             reply_to_id=reply_to_id,
             quoted_message_id=quoted_message_id,
+            thread_id=thread_id,
+            thread_root_id=thread_root_id,
             attachments=attachments or [],
+            raw=raw or {},
         )
 
     @property
@@ -380,6 +394,10 @@ class ChatMessage(BaseModel):
             metadata.append(f"reply={self.reply_to_id}")
         if self.quoted_message_id:
             metadata.append(f"quote={self.quoted_message_id}")
+        if self.thread_id:
+            metadata.append(f"thread={self.thread_id}")
+        if self.thread_root_id:
+            metadata.append(f"thread_root={self.thread_root_id}")
         body = f"[{' '.join(metadata)}] {self.text}"
         return body + (
             f" [attachments={len(self.attachments)}]" if self.attachments else ""
