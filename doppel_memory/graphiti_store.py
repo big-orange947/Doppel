@@ -182,6 +182,7 @@ class GraphitiMemoryStore(MemoryStore):
                     thread_root_id=str(stored.metadata.get("thread_root_id", "")),
                     attachments=list(stored.metadata.get("attachments", [])),
                     raw=dict(stored.metadata.get("raw", {})),
+                    parts=list(stored.metadata.get("parts", [])),
                 )
             )
         return WriteResult(status=WriteStatus.CREATED, record=stored)

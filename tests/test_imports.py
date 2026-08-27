@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from doppel_memory import (
     ChatMessage,
+    ContentPart,
     DoppelClient,
     IMImportBatch,
     IMImportItem,
+    MediaRef,
     MemoryScope,
 )
 
@@ -32,6 +34,16 @@ def test_import_batch_round_trips_json_and_normalizes_time() -> None:
                     quoted_message_id="m0",
                     thread_id="thread-7",
                     thread_root_id="m0",
+                    parts=[
+                        ContentPart(
+                            type="file",
+                            media=MediaRef(
+                                media_id="file-1",
+                                filename="notes.txt",
+                                mime_type="text/plain",
+                            ),
+                        )
+                    ],
                 ),
             )
         ],
@@ -40,6 +52,8 @@ def test_import_batch_round_trips_json_and_normalizes_time() -> None:
     assert restored.exported_at.isoformat() == "2026-08-26T04:00:00+00:00"
     assert restored.items[0].scope == scope
     assert restored.items[0].message.thread_id == "thread-7"
+    assert restored.items[0].message.parts[0].media is not None
+    assert restored.items[0].message.parts[0].media.filename == "notes.txt"
     assert "reply=m1" in restored.items[0].message.episode_line()
     assert "quote=m0" in restored.items[0].message.episode_line()
     assert "thread=thread-7" in restored.items[0].message.episode_line()

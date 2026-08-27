@@ -28,13 +28,21 @@ from doppel_memory.conformance import (
     audit_batch_task,
     audit_history_reader,
 )
+from doppel_memory.content import (
+    ContentResolution,
+    ContentResolutionError,
+    ContentResolver,
+    resolve_content,
+)
 from doppel_memory.imports import IMImportBatch, IMImportItem, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.models import (
     Actor,
     ActorType,
     ChatMessage,
+    ContentPart,
     FactAuthority,
+    MediaRef,
     MemoryFilter,
     MemoryIsolationError,
     MemoryKind,
@@ -87,7 +95,7 @@ from doppel_memory.style import (
     StyleProfile,
 )
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 __all__ = [
     "Actor",
@@ -104,6 +112,10 @@ __all__ = [
     "ChatMessage",
     "ConformanceError",
     "ConformanceIssue",
+    "ContentPart",
+    "ContentResolution",
+    "ContentResolutionError",
+    "ContentResolver",
     "DefaultPromptRenderer",
     "DeterministicStyleAnalyzer",
     "DoppelClient",
@@ -120,6 +132,7 @@ __all__ = [
     "ImportResult",
     "InMemoryStore",
     "MaterialBundle",
+    "MediaRef",
     "MemoryBatchTask",
     "MemoryFilter",
     "MemoryIsolationError",
@@ -165,4 +178,5 @@ __all__ = [
     "__version__",
     "audit_batch_task",
     "audit_history_reader",
+    "resolve_content",
 ]

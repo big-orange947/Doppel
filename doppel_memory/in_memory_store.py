@@ -133,6 +133,7 @@ class InMemoryStore(MemoryStore):
                 thread_root_id=str(record.metadata.get("thread_root_id", "")),
                 attachments=list(record.metadata.get("attachments", [])),
                 raw=dict(record.metadata.get("raw", {})),
+                parts=list(record.metadata.get("parts", [])),
             )
             for record in records
             if record.scope.scope_key == scope.scope_key

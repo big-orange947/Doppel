@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.5.1：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.5.2：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -316,6 +316,44 @@ PersonaMaterialsBuilder 对 style 使用独立的空查询 + kind filter，避�
 进入 provenance。第三方模型分析器实现 async `StyleAnalyzer` 即可，模型 provider、prompt、数据
 出境和确认策略继续由接入方决定。
 
+## v0.5.2 结构化事件
+
+结构化事件把“平台消息能否表达”“媒体是否解析”“解析结果是否进入长期记忆”拆成三个独立决定：
+
+```text
+platform adapter
+    ↓ lossless representation
+ChatMessage(message_type, text, parts, raw)
+    ├─ ContentPart(type, text, media, metadata)
+    └─ MediaRef(identity/pointer/descriptive metadata)
+              ↓ optional explicit call
+        ContentResolver[]
+              ↓
+ ContentResolution(new message + derived parts + errors)
+              ↓ host decision only
+ event log / Processor / ingest / discard
+```
+
+`ContentPart.type` 与 memory kind 一样是开放 namespace。MediaRef 至少需要 `media_id` 或 `uri`，
+可以保存 MIME、文件名、大小、SHA-256、宽高、时长和平台 metadata，但不包含媒体 bytes。Doppel
+不会解析 URI、下载媒体或管理平台 token。`raw` 继续保存平台 envelope；legacy `attachments` 原样
+兼容且不自动转换，因为框架无法可靠猜测任意字典的标识、权限和过期语义。
+
+ChatMessage 在原有字段末尾增加 optional `parts`。旧代码构造的消息保持相同语义。仅当显式 text
+为空时，非空 text parts 会去重并形成兼容 text projection；显式 text 始终优先。Store event
+metadata、IMImportBatch、外部事件日志和 StoreHistoryReader 均保留 parts，因此结构化内容能跨
+InMemory/SQLite 的写入、重启和 batch history round-trip。
+
+ContentResolver 是 async whole-message 协议，返回 additional derived parts。`resolve_content()`
+按顺序运行多个 resolver，给每个 resolver 一个深副本，把 resolver identity/version 写入保留的
+`metadata.doppel_resolution`，并把失败转换为 ContentResolutionError。后续 resolver 能看到前面
+成功产生的投影；某个 resolver 失败不回滚或隐藏其他 resolver 的成功结果。
+
+Resolution 不调用 Store，不改变原消息，不改变 `message_type`，也不自动进入 Processor 或
+StyleMiner。这保证图片 OCR 后仍是 image；要将派生文本用于风格分析，host 必须显式允许 image
+类型。只构造、导入 envelope 或 resolve 都不是长期记忆决策；`ingest()` 仍是明确的事件持久化
+动作，`process()` 不传 processors 仍是 no-op。
+
 ## v0.4 检索组合
 
 Store 的 `search()` 仍是后端合同，不承担所有召回算法。`RetrievalStrategy.search()` 负责产生
@@ -354,6 +392,6 @@ provenance 保存在 `raw.doppel_import`。
 - v0.4.4：公共 API 清单、稳定性分级和兼容性快照（已完成）；
 - v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates（已完成）；
 - v0.5.1：StyleMiner、可替换 StyleAnalyzer 和材料装配闭环（已完成）；
-- v0.5.2：ContentPart/MediaRef/ContentResolver 结构化事件；
-- v0.5.x：StyleProfessor 参考实现与独立质量评测；
+- v0.5.2：ContentPart/MediaRef/ContentResolver 结构化事件（已完成）；
+- v0.5.3：StyleProfessor 参考实现与独立质量评测；
 - 后续后端：可复用 Store conformance kit、PostgreSQL/pgvector 和 Graphiti 稳定化。

@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.5.2
+
+Structured IM content representation and opt-in media resolution while keeping
+representation, resolution, and long-term memory persistence as separate decisions.
+
+### Added
+
+- `MediaRef` for lightweight media identity, URI, MIME, filename, size, SHA-256,
+  dimensions, duration, and backend-specific metadata without embedding binary data.
+- Open `ContentPart` values carrying text, a media reference, or custom metadata.
+- Optional `ChatMessage.parts`, appended to the existing wire model while preserving
+  `text`, legacy `attachments`, and `raw` compatibility.
+- Async `ContentResolver`, structured `ContentResolution`/`ContentResolutionError`, and
+  `resolve_content()` for ordered, isolated resolver composition with bound provenance.
+- Structured-content round trips through IM import envelopes, InMemory, SQLite,
+  Graphiti owner samples, and Store-backed batch history.
+- A runnable image/custom-event recipe in `examples/structured_events.py` and focused
+  validation, resolution, failure-isolation, compatibility, and Store contract tests.
+
+### Semantics
+
+- When explicit message text is empty, non-empty text parts supply a deduplicated legacy
+  text projection. Explicit text remains authoritative.
+- Resolver outputs are additional derived parts. A later resolver can observe earlier
+  successful output, but every resolver receives a deep message copy and cannot mutate
+  the caller's original message.
+- Resolver failures are structured and do not hide successful output from other
+  resolvers. Reserved `metadata.doppel_resolution` records the actual resolver name and
+  version.
+
+### Boundaries
+
+- Doppel never fetches a MediaRef URI, stores media bytes, manages platform credentials,
+  or assumes that a signed URL is durable or safe to persist.
+- `resolve_content()` returns data only: it does not call a Store, run processors, change
+  `message_type`, or opt a media type into StyleMiner.
+- Legacy attachment dictionaries remain untouched and are not guessed into MediaRef
+  values. Adapters can migrate deliberately without losing private platform fields.
+- Explicit `ingest()` remains a developer decision to persist an event; constructing or
+  resolving structured content creates no long-term memory.
+
+### Roadmap
+
+- StyleProfessor and its independent imitation-quality evaluation are the next v0.5.3
+  differentiation item. Backend/conformance expansion remains subsequent work.
+
 ## 0.5.1
 
 Owner-style mining as a first-party periodic task, closing the existing history,

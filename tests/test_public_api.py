@@ -48,7 +48,11 @@ MODEL_FIELDS = {
         "thread_root_id",
         "attachments",
         "raw",
+        "parts",
     ),
+    "ContentPart": ("type", "text", "media", "metadata"),
+    "ContentResolution": ("message", "derived_parts", "errors"),
+    "ContentResolutionError": ("resolver", "error_type", "message"),
     "IMImportBatch": (
         "format_version",
         "source",
@@ -72,6 +76,18 @@ MODEL_FIELDS = {
         "importance_min",
         "time_from",
         "time_to",
+    ),
+    "MediaRef": (
+        "media_id",
+        "uri",
+        "mime_type",
+        "filename",
+        "size_bytes",
+        "sha256",
+        "width",
+        "height",
+        "duration_ms",
+        "metadata",
     ),
     "MemoryProposal": (
         "scope",
@@ -188,6 +204,7 @@ SIGNATURES = {
         ("proposal", "POSITIONAL_OR_KEYWORD"),
         ("context", "POSITIONAL_OR_KEYWORD"),
     ),
+    "ContentResolver.resolve": (("message", "POSITIONAL_OR_KEYWORD"),),
     "DoppelClient.__init__": (
         ("store", "POSITIONAL_OR_KEYWORD"),
         ("backend", "KEYWORD_ONLY"),
@@ -284,6 +301,10 @@ SIGNATURES = {
         ("analyzer", "KEYWORD_ONLY"),
     ),
     "StyleMiner.propose": (("context", "POSITIONAL_OR_KEYWORD"),),
+    "resolve_content": (
+        ("message", "POSITIONAL_OR_KEYWORD"),
+        ("resolvers", "POSITIONAL_OR_KEYWORD"),
+    ),
 }
 
 
@@ -334,6 +355,7 @@ def test_critical_defaults_and_enum_values_are_stable() -> None:
     }
     assert doppel.StyleMinerConfig().min_messages == 20
     assert doppel.StyleMinerConfig().target_scope == "conversation"
+    assert doppel.ChatMessage().parts == []
     assert [item.value for item in doppel.MemoryState] == [
         "candidate",
         "confirmed",
@@ -365,6 +387,8 @@ def test_custom_store_abstract_surface_does_not_accidentally_expand() -> None:
 
 
 def _resolve(path: str):
+    if "." not in path:
+        return getattr(doppel, path)
     owner_name, attribute = path.split(".", maxsplit=1)
     return getattr(getattr(doppel, owner_name), attribute)
 

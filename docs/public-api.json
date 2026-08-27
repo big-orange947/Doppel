@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "release": "0.5.1",
+  "release": "0.5.2",
   "tiers": {
     "stable": [
       "Actor",
@@ -58,6 +58,10 @@
       "BatchTaskRunner",
       "ConformanceError",
       "ConformanceIssue",
+      "ContentPart",
+      "ContentResolution",
+      "ContentResolutionError",
+      "ContentResolver",
       "DeterministicStyleAnalyzer",
       "GuardedHistoryReader",
       "HistoryPage",
@@ -66,6 +70,7 @@
       "HistoryWindow",
       "MemoryBatchTask",
       "MemoryPage",
+      "MediaRef",
       "ProposalBatchResult",
       "ProposalEvaluator",
       "ProposalWriter",
@@ -78,7 +83,8 @@
       "StyleMinerConfig",
       "StyleProfile",
       "audit_batch_task",
-      "audit_history_reader"
+      "audit_history_reader",
+      "resolve_content"
     ]
   },
   "metadata": [

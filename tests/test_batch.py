@@ -8,6 +8,7 @@ from doppel_memory import (
     BatchProposalPlan,
     BatchTaskRunner,
     ChatMessage,
+    ContentPart,
     DoppelClient,
     HistoryWindow,
     InMemoryStore,
@@ -40,6 +41,12 @@ async def _seed_history(store: InMemoryStore) -> None:
             "2026-08-26T01:00:00Z",
             event_id="poke-1",
             message_type="nudge",
+            parts=[
+                ContentPart(
+                    type="interaction",
+                    metadata={"action": "nudge", "target_id": "u1"},
+                )
+            ],
         ),
     )
     await store.write_event(
@@ -109,6 +116,7 @@ async def test_store_history_reader_is_exact_paginated_and_lossless() -> None:
         "poke-2",
     ]
     assert first.messages[0].message_type == "nudge"
+    assert first.messages[0].parts[0].metadata["action"] == "nudge"
     assert first.has_more and not second.has_more
 
 

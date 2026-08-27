@@ -7,7 +7,9 @@ import pytest
 from doppel_memory.models import (
     Actor,
     ChatMessage,
+    ContentPart,
     FactAuthority,
+    MediaRef,
     MemoryFilter,
     MemoryIsolationError,
     MemoryKind,
@@ -242,6 +244,13 @@ class MemoryStoreContract:
             thread_id="thread-1",
             thread_root_id="root-1",
             raw={"sequence": 7},
+            parts=[
+                ContentPart(type="text", text="linked message"),
+                ContentPart(
+                    type="image",
+                    media=MediaRef(media_id="image-7", mime_type="image/png"),
+                ),
+            ],
         )
         await store.write_event(SCOPE_A, message)
         restored = (await store.list_recent_owner_messages(SCOPE_A))[0]
@@ -251,6 +260,7 @@ class MemoryStoreContract:
         assert restored.thread_id == "thread-1"
         assert restored.thread_root_id == "root-1"
         assert restored.raw == {"sequence": 7}
+        assert restored.parts == message.parts
 
     async def test_temporal_filter_normalizes_timezones(self, store) -> None:
         await store.write_event(

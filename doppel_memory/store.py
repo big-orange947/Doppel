@@ -65,6 +65,7 @@ class MemoryStore(ABC):
                     "thread_root_id": message.thread_root_id,
                     "attachments": message.attachments,
                     "raw": message.raw,
+                    "parts": [part.model_dump(mode="json") for part in message.parts],
                 },
             ),
             idempotency_key=idempotency_key or None,

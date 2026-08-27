@@ -296,8 +296,78 @@ class MemoryScope(BaseModel):
         return f"{base}#{suffix}"
 
 
+class MediaRef(BaseModel):
+    """A lightweight media pointer; Doppel never fetches or embeds the binary."""
+
+    media_id: str = ""
+    uri: str = ""
+    mime_type: str = ""
+    filename: str = ""
+    size_bytes: int | None = Field(default=None, ge=0)
+    sha256: str = ""
+    width: int | None = Field(default=None, ge=1)
+    height: int | None = Field(default=None, ge=1)
+    duration_ms: int | None = Field(default=None, ge=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator(
+        "media_id", "uri", "mime_type", "filename", "sha256", mode="before"
+    )
+    @classmethod
+    def _normalize_strings(cls, value: Any) -> str:
+        return str(value or "").strip()
+
+    @field_validator("mime_type", "sha256")
+    @classmethod
+    def _normalize_lowercase(cls, value: str) -> str:
+        return value.lower()
+
+    @field_validator("sha256")
+    @classmethod
+    def _validate_sha256(cls, value: str) -> str:
+        if value and (
+            len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value)
+        ):
+            raise ValueError("sha256 must contain 64 lowercase hexadecimal characters")
+        return value
+
+    @model_validator(mode="after")
+    def _require_identity(self) -> MediaRef:
+        if not self.media_id and not self.uri:
+            raise ValueError("media reference requires media_id or uri")
+        return self
+
+
+class ContentPart(BaseModel):
+    """One open, typed part of an IM event's content."""
+
+    type: str
+    text: str = ""
+    media: MediaRef | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("type", "text", mode="before")
+    @classmethod
+    def _normalize_strings(cls, value: Any) -> str:
+        return str(value or "").strip()
+
+    @field_validator("type")
+    @classmethod
+    def _normalize_type(cls, value: str) -> str:
+        if not value:
+            raise ValueError("content part type is required")
+        return value.lower()[:64]
+
+    @model_validator(mode="after")
+    def _require_content(self) -> ContentPart:
+        if not self.text and self.media is None and not self.metadata:
+            raise ValueError("content part requires text, media, or metadata")
+        return self
+
+
 class ChatMessage(BaseModel):
-    """Normalized IM event. Custom actors are preserved."""
+    """Normalized IM event with compatible text and optional structured parts."""
 
     actor: str = Actor.SYSTEM
     text: str = ""
@@ -312,6 +382,7 @@ class ChatMessage(BaseModel):
     thread_root_id: str = ""
     attachments: list[dict[str, Any]] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
+    parts: list[ContentPart] = Field(default_factory=list)
 
     @field_validator("actor", mode="before")
     @classmethod
@@ -339,6 +410,13 @@ class ChatMessage(BaseModel):
     def _normalize_time(cls, value: datetime) -> datetime:
         return _utc(value)
 
+    @model_validator(mode="after")
+    def _project_structured_text(self) -> ChatMessage:
+        if not self.text:
+            texts = list(dict.fromkeys(part.text for part in self.parts if part.text))
+            self.text = "\n".join(texts)
+        return self
+
     @classmethod
     def of(
         cls,
@@ -356,6 +434,7 @@ class ChatMessage(BaseModel):
         thread_root_id: str = "",
         attachments: list[dict[str, Any]] | None = None,
         raw: dict[str, Any] | None = None,
+        parts: list[ContentPart] | None = None,
     ) -> ChatMessage:
         parsed_at = datetime.fromisoformat(at) if isinstance(at, str) else at
         return cls(
@@ -372,6 +451,7 @@ class ChatMessage(BaseModel):
             thread_root_id=thread_root_id,
             attachments=attachments or [],
             raw=raw or {},
+            parts=parts or [],
         )
 
     @property
@@ -399,8 +479,10 @@ class ChatMessage(BaseModel):
         if self.thread_root_id:
             metadata.append(f"thread_root={self.thread_root_id}")
         body = f"[{' '.join(metadata)}] {self.text}"
-        return body + (
-            f" [attachments={len(self.attachments)}]" if self.attachments else ""
+        return (
+            body
+            + (f" [attachments={len(self.attachments)}]" if self.attachments else "")
+            + (f" [parts={len(self.parts)}]" if self.parts else "")
         )
 
 

@@ -204,6 +204,90 @@ event ID；批次来源保存在 `raw.doppel_import`。`thread_id`、reply、quo
 `IMImportItem.scope` 中显式使用
 `scope.with_dimension("thread_id", "thread-7")`。
 
+### 结构化事件与可选内容解析
+
+`ChatMessage.text` 和 `attachments` 继续兼容。新适配器可以用 `ContentPart` 和 `MediaRef` 无损表示
+图片、语音、视频、文件、贴纸或平台自定义内容，而不把二进制塞进消息模型：
+
+```python
+from doppel_memory import ChatMessage, ContentPart, MediaRef
+
+image = ChatMessage.of(
+    "owner",
+    "",
+    "2026-08-27T10:00:00Z",
+    event_id="image-1",
+    message_type="image",
+    parts=[
+        ContentPart(
+            type="image",
+            media=MediaRef(
+                media_id="platform-image-1",
+                uri="platform://media/image-1",
+                mime_type="image/png",
+                width=1280,
+                height=720,
+            ),
+        )
+    ],
+)
+```
+
+`ContentPart.type` 是开放字符串；part 可以携带 text、MediaRef 或自定义 metadata。`MediaRef` 只是
+轻量引用，支持 ID/URI、MIME、文件名、大小、SHA-256、宽高和时长；Doppel 不读取 URI、不下载
+媒体、不持有访问凭证，也不保存二进制。签名 URL 可能过期或包含敏感信息，是否持久化由适配器
+决定。
+
+平台非标准事件继续由 `message_type` 表示，并可用结构化 part 保留参数：
+
+```python
+nudge = ChatMessage.of(
+    "contact",
+    "",
+    at,
+    message_type="nudge",
+    parts=[
+        ContentPart(
+            type="interaction",
+            metadata={"action": "nudge", "target_id": "u1"},
+        )
+    ],
+)
+```
+
+OCR、语音转写、图片描述等能力实现 async `ContentResolver`。Resolver 只返回额外的派生 part：
+
+```python
+from doppel_memory import ContentPart, resolve_content
+
+class MyOCR:
+    name = "my-ocr"
+    version = "1"
+
+    async def resolve(self, message):
+        return [ContentPart(type="text", text="图片中的文字")]
+
+resolution = await resolve_content(image, [MyOCR()])
+resolution.message       # 新 ChatMessage 副本
+resolution.derived_parts # 带 resolver/version provenance
+resolution.errors        # 单个 resolver 失败不隐藏其他成功结果
+```
+
+Resolver 按顺序运行，后一个能看到前一个产生的文本，但每次收到的都是副本，不能修改原消息。
+`resolve_content()` 保留原 `message_type`，不会调用 Store、Processor 或 StyleMiner。即使图片解析出
+文字，默认 StyleMiner 仍因 `message_type="image"` 而忽略它；开发者必须显式把 `image` 加入
+`accepted_message_types` 才会用于风格分析。
+
+如果 `text` 为空而消息直接携带 text part，ChatMessage 会提供兼容的纯文本投影；显式传入的
+`text` 始终优先。旧 `attachments` 不会自动猜测或转换为 MediaRef，以免丢失平台私有字段。
+显式 `ingest()` 仍表示开发者决定保存该事件；只构造或 resolve 消息不会产生长期记忆。
+
+完整示例：
+
+```bash
+python examples/structured_events.py
+```
+
 ### Processor 管线
 
 Processor 只分析标准化消息并返回 proposal，不直接接触 Store。下面的规则处理器只是示例；
@@ -564,8 +648,8 @@ uv run python -m benchmarks.store_benchmark \
 - [x] v0.4.4：公共 API 清单、稳定性分级和兼容性快照
 - [x] v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates
 - [x] v0.5.1：StyleMiner、可替换 StyleAnalyzer 和 persona materials 闭环
-- [ ] v0.5.2：结构化事件 ContentPart/MediaRef/ContentResolver
-- [ ] v0.5.x：StyleProfessor 参考实现与独立质量评测
+- [x] v0.5.2：结构化事件 ContentPart/MediaRef/ContentResolver
+- [ ] v0.5.3：StyleProfessor 参考实现与独立质量评测
 - [ ] 后续后端：可复用 Store conformance kit、PostgreSQL/pgvector、Graphiti 稳定化
 
 详细设计见 [`docs/design.md`](docs/design.md)。

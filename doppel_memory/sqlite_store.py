@@ -558,6 +558,7 @@ class SQLiteStore(MemoryStore):
                         thread_root_id=metadata.get("thread_root_id", ""),
                         attachments=metadata.get("attachments", []),
                         raw=metadata.get("raw", {}),
+                        parts=metadata.get("parts", []),
                     )
                 )
             return messages
