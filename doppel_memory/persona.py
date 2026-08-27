@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from doppel_memory.models import MemoryScope, RecallResult
+from doppel_memory.models import MemoryFilter, MemoryKind, MemoryScope, RecallResult
 from doppel_memory.retriever import Retriever
 
 
@@ -105,6 +105,16 @@ class PersonaMaterialsBuilder:
             else (policy or OwnerPersonaPolicy()).resolve_scopes(scope, query)
         )
         results = await self._retriever.recall(query, search_scopes, limit=memory_limit)
+        style_results = [
+            item
+            for item in await self._retriever.recall(
+                "",
+                search_scopes,
+                filters=MemoryFilter(kinds={MemoryKind.STYLE}),
+                limit=1,
+            )
+            if item.kind == MemoryKind.STYLE
+        ]
         events: list[RecallResult] = []
         background: list[RecallResult] = []
         relations: list[RecallResult] = []
@@ -113,6 +123,8 @@ class PersonaMaterialsBuilder:
                 background.append(item)
             elif item.kind == "relation":
                 relations.append(item)
+            elif item.kind == MemoryKind.STYLE:
+                continue
             else:
                 events.append(item)
         style_samples: list[str] = []
@@ -120,6 +132,11 @@ class PersonaMaterialsBuilder:
             style_samples = await self._retriever.owner_style_samples(
                 scope, limit=style_sample_limit
             )
+        provenance_results = list(results)
+        known_memory_ids = {item.memory_id for item in provenance_results}
+        provenance_results.extend(
+            item for item in style_results if item.memory_id not in known_memory_ids
+        )
         provenance = [
             {
                 "memory_id": item.memory_id,
@@ -136,7 +153,7 @@ class PersonaMaterialsBuilder:
                 if item.extracted_at
                 else "",
             }
-            for item in results
+            for item in provenance_results
         ]
         return MaterialBundle(
             scope=scope,
@@ -145,5 +162,6 @@ class PersonaMaterialsBuilder:
             background=background,
             relations=relations,
             style_samples=style_samples,
+            style_summary=style_results[0].fact if style_results else "",
             provenance=provenance,
         )

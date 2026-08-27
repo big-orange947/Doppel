@@ -392,6 +392,69 @@ task_report.raise_for_errors()
 reader audit 会检查多页推进和最终 exhausted read；应针对不会并发写入的测试 fixture 执行。
 task audit 只运行纯 proposal 阶段，不写 Doppel Store，并检查 checkpoint 与 proposal scope。
 
+### StyleMiner：从历史文本形成风格材料
+
+`StyleMiner` 是基于 `MemoryBatchTask` 的可选周期工具。它只读取一个 exact scope 中号主发送的
+非空文本，生成透明的 `StyleProfile`，再通过统一 proposal writer 写入一条 `style` 记忆：
+
+```text
+external event log / StoreHistoryReader
+        ↓ owner + accepted text types only
+StyleAnalyzer
+        ↓ StyleProfile
+StyleMiner
+        ↓ MemoryProposal(kind="style")
+policy / scope authorization / idempotency / Store
+        ↓
+materials().style_summary
+```
+
+默认 `DeterministicStyleAnalyzer` 不调用 LLM，也不声称理解人格或意图。它报告消息数、平均/中位
+长度、短消息、问句、感叹、emoji、多行、句末标点比例和达到阈值的高频文本片段。每个数值都能
+从输入复算；完整 profile 保存在 style memory 的 `metadata.style_profile`，content 是可直接用于
+材料装配的摘要。
+
+高频片段虽然限制为短 n-gram、要求跨多条消息重复，但仍可能包含人名或话题片段；敏感场景可把
+`max_common_phrases=0`，或者替换 analyzer 做领域脱敏。默认实现不把完整原文复制进 profile。
+
+```python
+from doppel_memory import StyleMiner, StyleMinerConfig
+
+task = StyleMiner(
+    StyleMinerConfig(
+        min_messages=20,
+        accepted_message_types={"message", "text"},
+    )
+)
+
+result = await memory.run_batch_task(
+    task,
+    scope,
+    closed_window,
+    history=my_event_log.history(scope),
+    checkpoint=checkpoint,
+)
+```
+
+联系人消息、空文本、图片、表情、动图、戳一戳等非接受类型默认不参与分析，也不会因为运行
+StyleMiner 而成为长期记忆。接入方可以显式扩展 `accepted_message_types`，但应先把该类型解析为
+确实适合风格分析的文本。
+
+默认 profile 写回当前会话 scope；配置 `target_scope="user"` 可以形成跨会话号主材料，但调用
+`run_batch_task()` 时必须把 `scope.user_scope()` 放入 `allowed_scopes`，不会绕过 exact-scope
+授权。配置或 analyzer 改变时 `task.checkpoint_key` 会变化，host 不应继续复用旧 checkpoint。
+StyleMiner 面向已经关闭的窗口；不要在同一推进中的窗口里期待它跨多次运行累计未达阈值样本。
+
+`StyleAnalyzer` 是可替换的 async 协议，开发者可以接入自己的语言特征模型或 LLM，但 provider、
+prompt、隐私策略和最终确认政策不进入核心默认值。`materials()` 会独立取回最新 style 摘要，
+因此当前业务 query 不需要碰巧命中摘要文本；style memory 也不会混进普通 `events`。
+
+完整外部事件日志配方：
+
+```bash
+python examples/style_mining.py
+```
+
 ### 高层：结构化材料
 
 ```python
@@ -500,8 +563,10 @@ uv run python -m benchmarks.store_benchmark \
 - [x] v0.4.3：读取预算、checkpoint schema 绑定和第三方扩展 conformance probe
 - [x] v0.4.4：公共 API 清单、稳定性分级和兼容性快照
 - [x] v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates
-- [ ] v0.5.x：可复用 Store conformance kit、PostgreSQL/pgvector、Graphiti 稳定化
-- [ ] 后续 optional tools：StyleMiner/StyleProfessor 参考实现和独立质量评测
+- [x] v0.5.1：StyleMiner、可替换 StyleAnalyzer 和 persona materials 闭环
+- [ ] v0.5.2：结构化事件 ContentPart/MediaRef/ContentResolver
+- [ ] v0.5.x：StyleProfessor 参考实现与独立质量评测
+- [ ] 后续后端：可复用 Store conformance kit、PostgreSQL/pgvector、Graphiti 稳定化
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

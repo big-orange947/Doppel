@@ -149,6 +149,37 @@ MODEL_FIELDS = {
         "reranking",
         "pagination",
     ),
+    "StyleMinerConfig": (
+        "min_messages",
+        "page_size",
+        "accepted_message_types",
+        "target_scope",
+        "short_message_chars",
+        "phrase_ngram_min",
+        "phrase_ngram_max",
+        "min_phrase_messages",
+        "min_phrase_ratio",
+        "max_common_phrases",
+        "max_source_ids",
+    ),
+    "StyleProfile": (
+        "schema_version",
+        "analyzer",
+        "analyzer_version",
+        "message_count",
+        "character_count",
+        "average_message_length",
+        "median_message_length",
+        "short_message_threshold",
+        "short_message_ratio",
+        "question_ratio",
+        "exclamation_ratio",
+        "emoji_ratio",
+        "multiline_ratio",
+        "terminal_punctuation_ratio",
+        "common_phrases",
+        "summary",
+    ),
     "WriteResult": ("status", "record", "error_code", "message"),
 }
 
@@ -186,6 +217,10 @@ SIGNATURES = {
         ("hooks", "KEYWORD_ONLY"),
         ("read_limits", "KEYWORD_ONLY"),
         ("run_id", "KEYWORD_ONLY"),
+    ),
+    "DeterministicStyleAnalyzer.analyze": (
+        ("messages", "POSITIONAL_OR_KEYWORD"),
+        ("config", "KEYWORD_ONLY"),
     ),
     "MemoryBatchTask.propose": (("context", "POSITIONAL_OR_KEYWORD"),),
     "MemoryProcessor.process": (
@@ -240,6 +275,15 @@ SIGNATURES = {
         ("filters", "KEYWORD_ONLY"),
         ("limit", "KEYWORD_ONLY"),
     ),
+    "StyleAnalyzer.analyze": (
+        ("messages", "POSITIONAL_OR_KEYWORD"),
+        ("config", "KEYWORD_ONLY"),
+    ),
+    "StyleMiner.__init__": (
+        ("config", "POSITIONAL_OR_KEYWORD"),
+        ("analyzer", "KEYWORD_ONLY"),
+    ),
+    "StyleMiner.propose": (("context", "POSITIONAL_OR_KEYWORD"),),
 }
 
 
@@ -288,6 +332,8 @@ def test_critical_defaults_and_enum_values_are_stable() -> None:
         "max_messages": 50_000,
         "max_page_size": 2_000,
     }
+    assert doppel.StyleMinerConfig().min_messages == 20
+    assert doppel.StyleMinerConfig().target_scope == "conversation"
     assert [item.value for item in doppel.MemoryState] == [
         "candidate",
         "confirmed",

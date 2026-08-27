@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.5.1
+
+Owner-style mining as a first-party periodic task, closing the existing history,
+proposal, Store, and persona-material loop without binding Doppel to an LLM provider.
+
+### Added
+
+- `StyleMinerConfig`, a frozen and fingerprinted sampling/feature configuration with
+  explicit accepted message types and conversation/user target scope.
+- `StyleProfile` schema 1 with transparent message-length, punctuation, emoji,
+  multiline, and frequent-fragment aggregates plus a deterministic summary.
+- Replaceable async `StyleAnalyzer` and a language-light
+  `DeterministicStyleAnalyzer` reference implementation.
+- `StyleMiner`, a `MemoryBatchTask` that reads owner history, produces an idempotent
+  `style` proposal, retains bounded source provenance, and emits diagnostic checkpoint
+  metadata even when the minimum sample threshold is not met.
+- A runnable external-event-log recipe in `examples/style_mining.py` and focused tests
+  for filtering, pagination, retry, scope authorization, structured profile storage,
+  and persona material rendering.
+
+### Behavior
+
+- Empty text, contact/agent messages, and message types outside the configured allowlist
+  do not participate in the default analysis. Images, stickers, animations, and nudges
+  therefore remain transient unless an application explicitly resolves and accepts
+  their text.
+- Style profiles default to the source conversation scope. Writing to user scope still
+  requires explicit `allowed_scopes` authorization.
+- `PersonaMaterialsBuilder` retrieves the latest style memory independently of the
+  current query, fills `MaterialBundle.style_summary`, keeps style out of ordinary
+  events, and retains its provenance.
+
+### Boundaries
+
+- The deterministic analyzer describes observed text aggregates; it does not infer
+  personality, identity, emotion, or intent.
+- Frequent fragments can still carry repeated names or topics. Privacy-sensitive hosts
+  can set `max_common_phrases=0` or provide a redacting analyzer; full source messages
+  are not copied into the default profile.
+- StyleMiner processes one closed window. Hosts must not expect an advancing checkpoint
+  to accumulate below-threshold samples across separate runs of the same window.
+- Model-backed analyzers remain application integrations responsible for provider,
+  prompt, privacy, evaluation, and proposal-confirmation policy.
+
+### Roadmap
+
+- Structured events (`ContentPart`, `MediaRef`, and `ContentResolver`) remain the next
+  v0.5.x core item; StyleProfessor and its separate quality evaluation follow the
+  StyleMiner foundation rather than being replaced by infrastructure work.
+
 ## 0.5.0
 
 A reproducible Store benchmark foundation that keeps performance observations separate

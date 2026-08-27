@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.5.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.5.1：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -277,6 +277,45 @@ Runner 只评估框架能够负责的 Store 合同：初次写入、幂等重复
 correctness failure。embedding、LLM Processor、Reranker 和应用保留策略属于独立质量评测，不能
 混入核心 Store benchmark 后宣称为框架整体“记忆能力”。
 
+## v0.5.1 StyleMiner
+
+StyleMiner 复用 v0.4.1 的周期任务边界，不给在线 Processor 注入历史或 Store：
+
+```text
+ScopedHistoryReader(owner text)
+        ↓
+StyleAnalyzer.analyze(messages, config)
+        ↓
+StyleProfile | None
+        ↓
+StyleMiner → MemoryProposal(kind=style)
+        ↓
+ProposalWriter → Store → PersonaMaterialsBuilder
+```
+
+默认 DeterministicStyleAnalyzer 只产生可复算的描述统计，不绑定 LLM，也不把统计描述包装为人格、
+身份或心理推断。StyleProfile schema 1 包含样本/字符数、平均和中位长度、短消息、问句、感叹、
+emoji、多行、句末标点比例以及跨消息达到阈值的字符 n-gram。摘要进入 MemoryProposal.content，
+完整结构进入 `metadata.style_profile`。
+
+高频 n-gram 是可选的 observed fragment，不等于纯风格特征，可能携带重复出现的人名或话题。
+隐私敏感的接入方应设置 `max_common_phrases=0` 或提供脱敏 analyzer；默认 profile 不保存完整原文。
+
+StyleMiner 同时在 reader filter 和任务内部检查 `actor=owner`，以防第三方 reader 忽略 filter。
+只有非空且 message_type 位于显式 allowlist 的消息进入 analyzer；默认 allowlist 是 `message/text`。
+非文本事件可以留在外部 event log 中，但不会被分析或持久化。derived chain 只引用实际参与分析的
+消息，并有可配置上限，避免大窗口生成无界 metadata。
+
+Profile 默认写回来源会话 exact scope。可配置写入 user scope，但必须通过 BatchTaskRunner 的
+`allowed_scopes` 显式授权。任务 idempotency key 绑定 source/target scope、窗口、配置 fingerprint
+和 analyzer identity；host checkpoint key 同样随配置/analyzer 改变。任务以 closed window 为
+语义单位，不承诺跨多次增量运行累计尚未达到 `min_messages` 的样本。
+
+PersonaMaterialsBuilder 对 style 使用独立的空查询 + kind filter，避免当前业务 query 导致 profile
+不可见；style 摘要填入 `MaterialBundle.style_summary`，style memory 不混入普通 events，来源仍
+进入 provenance。第三方模型分析器实现 async `StyleAnalyzer` 即可，模型 provider、prompt、数据
+出境和确认策略继续由接入方决定。
+
 ## v0.4 检索组合
 
 Store 的 `search()` 仍是后端合同，不承担所有召回算法。`RetrievalStrategy.search()` 负责产生
@@ -314,5 +353,7 @@ provenance 保存在 `raw.doppel_import`。
 - v0.4.3：读取预算、checkpoint schema 绑定和扩展 conformance probe（已完成）；
 - v0.4.4：公共 API 清单、稳定性分级和兼容性快照（已完成）；
 - v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates（已完成）；
-- v0.5.x：可复用 Store conformance kit、PostgreSQL/pgvector 和 Graphiti 稳定化；
-- 后续 optional tools：风格工具参考实现及独立质量评测。
+- v0.5.1：StyleMiner、可替换 StyleAnalyzer 和材料装配闭环（已完成）；
+- v0.5.2：ContentPart/MediaRef/ContentResolver 结构化事件；
+- v0.5.x：StyleProfessor 参考实现与独立质量评测；
+- 后续后端：可复用 Store conformance kit、PostgreSQL/pgvector 和 Graphiti 稳定化。

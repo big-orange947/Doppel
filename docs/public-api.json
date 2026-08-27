@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "release": "0.5.0",
+  "release": "0.5.1",
   "tiers": {
     "stable": [
       "Actor",
@@ -58,6 +58,7 @@
       "BatchTaskRunner",
       "ConformanceError",
       "ConformanceIssue",
+      "DeterministicStyleAnalyzer",
       "GuardedHistoryReader",
       "HistoryPage",
       "HistoryReaderAuditReport",
@@ -72,6 +73,10 @@
       "ScopedMemoryReader",
       "StoreHistoryReader",
       "StoreMemoryReader",
+      "StyleAnalyzer",
+      "StyleMiner",
+      "StyleMinerConfig",
+      "StyleProfile",
       "audit_batch_task",
       "audit_history_reader"
     ]

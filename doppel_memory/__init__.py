@@ -79,8 +79,15 @@ from doppel_memory.retriever import (
 )
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
+from doppel_memory.style import (
+    DeterministicStyleAnalyzer,
+    StyleAnalyzer,
+    StyleMiner,
+    StyleMinerConfig,
+    StyleProfile,
+)
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 __all__ = [
     "Actor",
@@ -98,6 +105,7 @@ __all__ = [
     "ConformanceError",
     "ConformanceIssue",
     "DefaultPromptRenderer",
+    "DeterministicStyleAnalyzer",
     "DoppelClient",
     "EventProcessor",
     "FactAuthority",
@@ -148,6 +156,10 @@ __all__ = [
     "StoreHistoryReader",
     "StoreMemoryReader",
     "StoreRetrievalStrategy",
+    "StyleAnalyzer",
+    "StyleMiner",
+    "StyleMinerConfig",
+    "StyleProfile",
     "WriteResult",
     "WriteStatus",
     "__version__",
