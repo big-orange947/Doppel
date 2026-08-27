@@ -68,6 +68,7 @@ from doppel_memory.persona import (
     PromptRenderer,
     ScopePolicy,
 )
+from doppel_memory.postgres_store import PostgreSQLStore
 from doppel_memory.processing import (
     EventProcessor,
     MemoryPipeline,
@@ -107,7 +108,7 @@ from doppel_memory.style import (
     StyleQualityReport,
 )
 
-__version__ = "0.5.4"
+__version__ = "0.6.0"
 
 __all__ = [
     "Actor",
@@ -161,6 +162,7 @@ __all__ = [
     "OwnerPersonaPolicy",
     "PassThroughProposalPolicy",
     "PersonaMaterialsBuilder",
+    "PostgreSQLStore",
     "ProcessingError",
     "ProcessingResult",
     "ProcessorHooks",

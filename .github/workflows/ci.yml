@@ -91,6 +91,52 @@ jobs:
           --require-capability hard_delete
           --output "$RUNNER_TEMP/doppel-store-conformance.json"
 
+  postgres-store:
+    name: PostgreSQL Store integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: doppel_test
+          POSTGRES_USER: doppel
+          POSTGRES_PASSWORD: doppel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U doppel -d doppel_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DOPPEL_TEST_POSTGRES_DSN: postgresql://doppel:doppel@127.0.0.1:5432/doppel_test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --extra dev --extra postgres
+      - name: Run PostgreSQL contract and concurrency tests
+        run: >-
+          uv run pytest -q
+          tests/test_postgres_contract.py
+          tests/test_postgres_runtime.py
+          tests/test_postgres_unit.py
+      - name: Audit PostgreSQL through the installed CLI
+        run: >-
+          uv run doppel-conformance
+          --backend postgres
+          --dsn "$DOPPEL_TEST_POSTGRES_DSN"
+          --allow-mutating-audit
+          --require-capability pagination
+          --require-capability temporal_search
+          --require-capability hard_delete
+          --output "$RUNNER_TEMP/doppel-postgres-conformance.json"
+
   style-quality-smoke:
     name: Style quality smoke test
     runs-on: ubuntu-latest

@@ -44,6 +44,7 @@ from doppel_memory.models import (
     WriteStatus,
 )
 from doppel_memory.persona import MaterialBundle, PersonaMaterialsBuilder
+from doppel_memory.postgres_store import PostgreSQLStore
 from doppel_memory.processing import (
     MemoryPipeline,
     MemoryProcessor,
@@ -75,11 +76,14 @@ class DoppelClient:
                 store = SQLiteStore(**backend_kwargs)
             elif backend == "memory":
                 store = InMemoryStore()
+            elif backend in {"postgres", "postgresql"}:
+                store = PostgreSQLStore(**backend_kwargs)
             elif backend == "graphiti":
                 store = _build_graphiti_store(**backend_kwargs)
             else:
                 raise ValueError(
-                    f"unknown backend: {backend!r} (supported: sqlite/memory/graphiti)"
+                    f"unknown backend: {backend!r} "
+                    "(supported: sqlite/memory/postgres/graphiti)"
                 )
         self._store = store
         self._retriever = Retriever(

@@ -50,6 +50,12 @@ Doppel 不负责：
 pip install doppel-memory
 ```
 
+PostgreSQL 是独立可选依赖，不会增加默认安装体积：
+
+```bash
+pip install "doppel-memory[postgres]"
+```
+
 实验性 Graphiti 后端需要额外依赖：
 
 ```bash
@@ -138,6 +144,31 @@ hits = await memory.recall(
 
 Store 只做 exact scope 匹配。需要会话级、联系人级和用户级多层召回时，由开发者显式
 传入多个 scope，或者在高层 API 注册 `ScopePolicy`。
+
+需要服务端并发和多进程共享时可以直接使用 PostgreSQL 后端；连接池和迁移在第一次操作时
+懒初始化，DSN 不会出现在 health 输出中：
+
+```python
+from doppel_memory import DoppelClient, PostgreSQLStore
+
+store = PostgreSQLStore(
+    "postgresql://doppel:secret@127.0.0.1:5432/agent_memory",
+    min_pool_size=1,
+    max_pool_size=10,
+)
+memory = DoppelClient(store)
+
+# 等价的 facade 写法：
+memory = DoppelClient(
+    backend="postgres",
+    dsn="postgresql://doppel:secret@127.0.0.1:5432/agent_memory",
+)
+```
+
+后端会在已有 schema（默认 `public`）内创建和迁移 Doppel 自己的表/索引；生产角色没有
+`CREATE SCHEMA` 权限时不受影响。只有显式传入 `create_schema=True` 才会创建自定义 schema。
+当前 PostgreSQL 核心后端提供 substring/filter 检索，不宣称全文或向量检索；pgvector 会作为
+后续独立能力加入。
 
 候选召回与重排是独立扩展点：
 
@@ -513,7 +544,14 @@ Store 生命周期，auditor 不会调用 `close()`。
 ```bash
 doppel-conformance --backend memory
 doppel-conformance --backend sqlite --output store-conformance.json
+doppel-conformance --backend postgres \
+  --dsn "postgresql://doppel:secret@127.0.0.1:5432/disposable_test" \
+  --allow-mutating-audit \
+  --output postgres-conformance.json
 ```
+
+PostgreSQL 模式必须同时给出 DSN 和 `--allow-mutating-audit`。这个开关只是防误操作确认，不会
+把生产数据库变安全；目标仍必须是一次性数据库或明确隔离的测试 namespace。
 
 可以用 `StoreConformanceConfig(checks={...})` 运行子集，但正式声明兼容 Doppel 的后端应运行完整
 核心套件，并把产品承诺的可选能力列入 `required_capabilities`。Graphiti 当前仍不能通过核心
@@ -760,7 +798,9 @@ uv run python -m benchmarks.store_benchmark \
 - [x] v0.5.2：结构化事件 ContentPart/MediaRef/ContentResolver
 - [x] v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测
 - [x] v0.5.4：可复用、能力感知的 Store conformance kit 与 CLI
-- [ ] 后续后端：PostgreSQL/pgvector、Graphiti 稳定化
+- [x] v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI
+- [ ] v0.6.1：pgvector 可选语义/混合检索能力与独立质量门禁
+- [ ] 后续后端：Graphiti 核心合同稳定化或重新定位为专用语义适配器
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

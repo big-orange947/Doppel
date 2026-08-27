@@ -1024,10 +1024,18 @@ def _conformance_parser() -> Any:
     parser = argparse.ArgumentParser(
         description="Run Doppel Store conformance against a disposable built-in backend."
     )
-    parser.add_argument("--backend", choices=("memory", "sqlite"), default="memory")
+    parser.add_argument(
+        "--backend", choices=("memory", "sqlite", "postgres"), default="memory"
+    )
     parser.add_argument(
         "--database",
         help="New SQLite path; existing files are refused to protect application data.",
+    )
+    parser.add_argument("--dsn", help="PostgreSQL DSN for a disposable test database.")
+    parser.add_argument(
+        "--allow-mutating-audit",
+        action="store_true",
+        help="Required for PostgreSQL; confirms that the target is disposable.",
     )
     parser.add_argument("--output", help="Optional JSON report path.")
     parser.add_argument("--run-id", default="")
@@ -1050,7 +1058,7 @@ async def _run_conformance_cli(args: Any) -> int:
         from doppel_memory.in_memory_store import InMemoryStore
 
         store: MemoryStore = InMemoryStore()
-    else:
+    elif args.backend == "sqlite":
         from doppel_memory.sqlite_store import SQLiteStore
 
         if args.database:
@@ -1067,6 +1075,17 @@ async def _run_conformance_cli(args: Any) -> int:
             )
             database = Path(temporary_directory.name) / "audit.sqlite3"
         store = SQLiteStore(database=str(database))
+    else:
+        from doppel_memory.postgres_store import PostgreSQLStore
+
+        if not args.dsn:
+            raise ValueError("--dsn is required with --backend postgres")
+        if not args.allow_mutating_audit:
+            raise ValueError(
+                "PostgreSQL conformance mutates its target; pass "
+                "--allow-mutating-audit only for a disposable database"
+            )
+        store = PostgreSQLStore(dsn=args.dsn)
 
     try:
         report = await audit_store(
@@ -1097,8 +1116,12 @@ def _conformance_main() -> int:
 
     parser = _conformance_parser()
     args = parser.parse_args()
-    if args.backend == "memory" and args.database:
+    if args.backend != "sqlite" and args.database:
         parser.error("--database is valid only with --backend sqlite")
+    if args.backend != "postgres" and args.dsn:
+        parser.error("--dsn is valid only with --backend postgres")
+    if args.backend != "postgres" and args.allow_mutating_audit:
+        parser.error("--allow-mutating-audit is valid only with --backend postgres")
     try:
         return asyncio.run(_run_conformance_cli(args))
     except ValueError as exc:

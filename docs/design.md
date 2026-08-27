@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.5.4：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.6.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -438,6 +438,35 @@ SQLite FTS5 使用安全生成的 quoted token `AND` 查询和 BM25 排序。FTS
 `RecallResult.similarity`，方便后续 Reranker 组合。FTS 是 Store 候选实现细节，不改变
 RetrievalStrategy/Reranker 的公共协议。
 
+## v0.6.0 PostgreSQL 核心 Store
+
+`PostgreSQLStore` 是第一个面向共享服务部署的核心后端。它没有改变 `MemoryStore` 协议，而是用
+PostgreSQL 原生机制兑现相同语义：
+
+- asyncpg 连接池在第一次操作时创建，初始化锁保证一个 Store 实例只迁移一次；数据库 advisory
+  transaction lock 让多个进程同时启动时串行执行幂等 DDL；
+- `scope_key` 是所有 scoped read/write/lifecycle 操作的必备条件，拆分的 scope 字段和 JSONB extra
+  dimensions 只用于无损往返，不参与模糊层级匹配；
+- `(scope_key, idempotency_key)` partial unique index 在数据库层仲裁并发 replay；`memory_id`
+  冲突与同 scope 幂等重复返回不同的结构化结果；
+- metadata 与 extra dimensions 用 JSONB，tags 用 `text[]`，时间用 `TIMESTAMPTZ`，避免把
+  PostgreSQL 降格为字符串化 SQLite；
+- scan 按 `(created_at ASC, id ASC)` 读取，cursor 仍复用后端无关编码，是 forward-only durable
+  watermark；
+- lifecycle transition 通过带 scope 和可选 expected state 的单条 `UPDATE ... RETURNING` 完成，
+  state/version/updated_at 在同一事务内推进；
+- schema 名只接受普通 identifier 并始终引用；默认只在已有 schema 内建表，`create_schema=True`
+  才请求 schema DDL 权限。
+
+驱动是 `postgres` extra，模块顶层不会导入 asyncpg。因此默认安装和根包导入仍不依赖数据库驱动。
+当前 capability 明确限于 substring、temporal、transactions、pagination、hard delete。PostgreSQL
+全文检索和 pgvector 都不是核心 Store 自动获得的能力，必须在检索语义、降级策略和质量评测就位后
+再单独声明。
+
+CI 使用一次性 PostgreSQL service 运行公共 11 项 Store audit、并发/重开测试和安装后的 CLI。
+远程 CLI 额外要求 `--allow-mutating-audit`，但它只是显式确认：安全边界仍是 disposable database
+或测试 namespace，不能用参数开关替代数据隔离。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -466,4 +495,6 @@ provenance 保存在 `raw.doppel_import`。
 - v0.5.2：ContentPart/MediaRef/ContentResolver 结构化事件（已完成）；
 - v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测（已完成）；
 - v0.5.4：可复用、能力感知的 Store conformance kit 与安全 CLI（已完成）；
-- 后续后端：PostgreSQL/pgvector 和 Graphiti 稳定化。
+- v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI（已完成）；
+- v0.6.1：pgvector 可选语义/混合检索、embedding provider 与质量门禁；
+- 后续后端：Graphiti 通过核心合同后稳定化，或重新定位为专用语义适配器。

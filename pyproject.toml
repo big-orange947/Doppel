@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "doppel-memory"
-version = "0.5.4"
+version = "0.6.0"
 description = "An open-source, role-aware memory framework for IM agents: speaker-aware, scoped, pluggable memory with persona materials."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,8 @@ license = { text = "MIT" }
 authors = [{ name = "Doppel Contributors" }]
 keywords = [
     "agent-memory", "llm-memory", "persona", "chat-agent",
-    "memory-framework", "im-agent", "role-aware", "sqlite", "graphiti", "neo4j",
+    "memory-framework", "im-agent", "role-aware", "sqlite", "postgresql",
+    "graphiti", "neo4j",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -28,6 +29,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+postgres = [
+    "asyncpg>=0.30.0,<0.32.0",
+]
 graphiti = [
     "graphiti-core>=0.29.0,<0.30.0",
     "neo4j>=5.20.0",

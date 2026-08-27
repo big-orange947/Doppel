@@ -339,6 +339,14 @@ SIGNATURES = {
         ("filters", "KEYWORD_ONLY"),
         ("limit", "KEYWORD_ONLY"),
     ),
+    "PostgreSQLStore.__init__": (
+        ("dsn", "POSITIONAL_OR_KEYWORD"),
+        ("schema", "KEYWORD_ONLY"),
+        ("create_schema", "KEYWORD_ONLY"),
+        ("min_pool_size", "KEYWORD_ONLY"),
+        ("max_pool_size", "KEYWORD_ONLY"),
+        ("command_timeout", "KEYWORD_ONLY"),
+    ),
     "PersonaMaterialsBuilder.__init__": (
         ("retriever", "POSITIONAL_OR_KEYWORD"),
         ("store", "KEYWORD_ONLY"),

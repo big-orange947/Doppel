@@ -110,6 +110,8 @@ async def test_conformance_cli_writes_json_and_refuses_existing_sqlite(
         SimpleNamespace(
             backend="memory",
             database=None,
+            dsn=None,
+            allow_mutating_audit=False,
             output=str(output),
             run_id="cli-test",
             require_capability=[],
@@ -127,9 +129,33 @@ async def test_conformance_cli_writes_json_and_refuses_existing_sqlite(
             SimpleNamespace(
                 backend="sqlite",
                 database=str(existing),
+                dsn=None,
+                allow_mutating_audit=False,
                 output=None,
                 run_id="unsafe-cli-test",
                 require_capability=[],
             )
         )
     assert existing.read_text("utf-8") == "do-not-touch"
+
+
+async def test_conformance_cli_requires_explicit_postgres_mutation_consent() -> None:
+    base = {
+        "backend": "postgres",
+        "database": None,
+        "output": None,
+        "run_id": "postgres-safety",
+        "require_capability": [],
+    }
+    with pytest.raises(ValueError, match="--dsn is required"):
+        await _run_conformance_cli(
+            SimpleNamespace(**base, dsn=None, allow_mutating_audit=False)
+        )
+    with pytest.raises(ValueError, match="mutates its target"):
+        await _run_conformance_cli(
+            SimpleNamespace(
+                **base,
+                dsn="postgresql://application.example/production",
+                allow_mutating_audit=False,
+            )
+        )

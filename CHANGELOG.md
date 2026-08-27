@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.6.0
+
+A PostgreSQL core Store that is admitted by the same installed conformance contract as
+the InMemory and SQLite reference backends.
+
+### Added
+
+- `PostgreSQLStore` as a provisional root API and `DoppelClient(backend="postgres")`
+  facade option, backed by a lazy async connection pool.
+- The `postgres` optional dependency (`doppel-memory[postgres]`), keeping the default
+  package dependency surface limited to Pydantic.
+- PostgreSQL schema v1 with exact scope keys, JSONB scope dimensions and metadata,
+  native tag arrays, timezone-aware timestamps, stable pagination indexes, and a
+  scope-local partial unique idempotency index.
+- Capability-complete substring search, filters/provenance, structured owner samples,
+  optimistic lifecycle transitions, soft/hard deletion, and durable
+  `(created_at, memory_id)` cursors.
+- A guarded PostgreSQL mode for `doppel-conformance`; it requires both an explicit DSN
+  and `--allow-mutating-audit` so a remote database cannot be selected accidentally.
+- A real PostgreSQL CI service running the 11 public Store checks, concurrency and
+  reopen tests, facade integration, and the installed conformance CLI.
+
+### Semantics and safety
+
+- Pool creation and schema migration are lazy and concurrency-safe. Concurrent replay
+  is arbitrated by PostgreSQL, returning exactly one `created` result and the original
+  memory ID for every `duplicate` result.
+- The Store creates its two tables and indexes inside an existing schema. Creating the
+  schema itself is opt-in through `create_schema=True`, which supports restricted
+  production roles and explicit tenant provisioning.
+- Schema names accept only plain PostgreSQL identifiers and are safely quoted. Health
+  output includes the backend, schema, schema version, and server version but never the
+  DSN or credentials.
+- PostgreSQL currently advertises substring, temporal, transaction, pagination, and
+  hard-delete capabilities. Full-text and semantic/vector search remain false until
+  their retrieval semantics and evaluation gates are implemented.
+
+### Compatibility
+
+- Existing Store protocol methods and wire models are unchanged; the release is
+  additive for InMemory, SQLite, Graphiti, batch, structured content, and style APIs.
+- Importing the root package does not import `asyncpg`. The missing optional dependency
+  produces an actionable error only when a PostgreSQL operation first opens the pool.
+
+### Roadmap
+
+- Add pgvector as a separate optional retrieval capability with an embedding-provider
+  protocol, deterministic fallback behavior, and hybrid-retrieval evaluation.
+- Reassess Graphiti against the same core conformance gate instead of treating semantic
+  search alone as Store compatibility.
+
 ## 0.5.4
 
 A reusable, dependency-free Store conformance kit that makes the installed contract—
