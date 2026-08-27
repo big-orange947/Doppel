@@ -1,0 +1,9 @@
+{
+  "dataset_version": 1,
+  "generator": "doppel.synthetic.v1",
+  "seed": 947,
+  "scope_count": 4,
+  "records_per_scope": 250,
+  "query_samples": 80,
+  "page_size": 100
+}

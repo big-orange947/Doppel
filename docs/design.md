@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.4.4：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.5.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -262,6 +262,21 @@ API：补丁版本同样不能静默破坏它，但在下一个 minor 版本仍�
 `MemoryStore` 新增抽象方法、删除或重命名模型字段、收窄字段类型、增加必填参数、删除枚举值，
 都视为破坏性变更。详细政策及 manifest 更新流程见 `docs/api-stability.md`。
 
+## v0.5.0 可复现 Store benchmark
+
+`benchmarks/` 是 repository-only 工具，不随 wheel 安装，也不扩大核心运行时 API。第一版用
+版本化配置和固定 seed 生成相同的 MemoryScope、MemoryRecord、查询样本与分页负载，并把生成器
+版本和配置哈希写入结果，避免不同数据集的数字被误作横向比较。
+
+Runner 只评估框架能够负责的 Store 合同：初次写入、幂等重复写入、exact-scope 查询、过滤查询
+和稳定分页。每类操作记录总耗时、吞吐及 nearest-rank P50/P95/P99；结果同时记录 Python、平台、
+后端能力和 Doppel 版本。机器可读 envelope 由 `benchmarks/result.schema.json` 独立版本化。
+
+性能指标只用于同环境、同数据 fingerprint 下的观察和回归分析。CI 不设置延迟或吞吐阈值，只把
+缺失 expected memory、命中 forbidden memory、跨 scope 泄漏、幂等失败、分页重复或漏读视为
+correctness failure。embedding、LLM Processor、Reranker 和应用保留策略属于独立质量评测，不能
+混入核心 Store benchmark 后宣称为框架整体“记忆能力”。
+
 ## v0.4 检索组合
 
 Store 的 `search()` 仍是后端合同，不承担所有召回算法。`RetrievalStrategy.search()` 负责产生
@@ -298,4 +313,6 @@ provenance 保存在 `raw.doppel_import`。
 - v0.4.2：持久 watermark、host-side event/checkpoint 配方和恢复测试（已完成）；
 - v0.4.3：读取预算、checkpoint schema 绑定和扩展 conformance probe（已完成）；
 - v0.4.4：公共 API 清单、稳定性分级和兼容性快照（已完成）；
-- v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选风格工具和 benchmark。
+- v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates（已完成）；
+- v0.5.x：可复用 Store conformance kit、PostgreSQL/pgvector 和 Graphiti 稳定化；
+- 后续 optional tools：风格工具参考实现及独立质量评测。

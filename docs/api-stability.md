@@ -20,7 +20,7 @@ explicitly says so.
 The manifest has three classifications:
 
 - **stable**: core models and protocols whose existing behavior and callable shape stay
-  compatible within the v0.4 release line;
+  compatible within the current minor release line;
 - **provisional**: supported, documented extensions that remain patch-compatible but
   may change in a later minor release with migration notes;
 - **module-only experimental**: opt-in adapters with no compatibility promise yet.

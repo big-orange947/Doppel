@@ -471,6 +471,24 @@ InMemory 与 SQLite 运行同一套 Store conformance suite。
 Graphiti 目前只承诺 episode 写入和语义检索；持久化幂等、完整生命周期、删除和完整
 provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError`。
 
+## Benchmark
+
+仓库包含后端无关的 Store benchmark，用固定 seed 生成相同的 scope、记忆、查询和分页负载：
+
+```bash
+uv run python -m benchmarks.store_benchmark \
+  --backend sqlite \
+  --output benchmarks/results/sqlite-small.json
+```
+
+结果包含写入与幂等重放吞吐、exact-scope/过滤检索延迟、分页扫描吞吐，以及 expected recall、
+跨 scope 泄漏、重复记录和漏读检查。正确性失败会返回非零退出码；性能数值不设置 CI 阈值，
+因为共享 runner 的抖动不适合做可靠回归判断。
+
+这套基准只评估 Doppel 自己负责的 Store 合同，不把 embedding、LLM 抽取器、reranker 或应用的
+保留策略混成一个“记忆智能”分数。数据集、复现规则和结果 schema 见
+[`benchmarks/README.md`](benchmarks/README.md)。
+
 ## 开发状态
 
 - [x] v0.2：框架定位、SQLite/InMemory、三层 API、能力声明和 provenance
@@ -481,7 +499,9 @@ provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError
 - [x] v0.4.2：持久 watermark、外部事件日志/checkpoint 配方和恢复边界测试
 - [x] v0.4.3：读取预算、checkpoint schema 绑定和第三方扩展 conformance probe
 - [x] v0.4.4：公共 API 清单、稳定性分级和兼容性快照
-- [ ] v0.5：稳定 Graphiti、PostgreSQL/pgvector、可选 StyleMiner/StyleProfessor、benchmark
+- [x] v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates
+- [ ] v0.5.x：可复用 Store conformance kit、PostgreSQL/pgvector、Graphiti 稳定化
+- [ ] 后续 optional tools：StyleMiner/StyleProfessor 参考实现和独立质量评测
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。
@@ -490,7 +510,7 @@ provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError
 
 应用和第三方扩展应优先从包根导入，例如 `from doppel_memory import MemoryStore`。
 根包的公开名称记录在版本化的 [`docs/public-api.json`](docs/public-api.json) 中，并由测试锁定；
-其中 `stable` 是 v0.4 系列承诺保持兼容的核心表面，`provisional` 是仍在收敛、但不会在补丁版本中
+其中 `stable` 是当前 minor 系列承诺保持兼容的核心表面，`provisional` 是仍在收敛、但不会在补丁版本中
 静默破坏的批处理和 conformance 扩展表面。
 
 未列入清单的子模块对象不是冻结 API。Graphiti 目前仍是 module-only experimental；配方目录下的

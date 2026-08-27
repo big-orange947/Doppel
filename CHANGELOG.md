@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.0
+
+A reproducible Store benchmark foundation that keeps performance observations separate
+from protocol correctness and higher-level model quality.
+
+### Added
+
+- A deterministic `doppel.synthetic.v1` dataset generator with versioned configuration,
+  fixed seeds, stable IDs/timestamps, and an included dataset fingerprint.
+- A backend-neutral benchmark runner for initial writes, idempotent duplicates,
+  exact-scope searches, filtered searches, and stable paginated scans.
+- Nearest-rank P50/P95/P99 latency, throughput, environment, backend capability, and
+  dataset metadata in a versioned JSON result envelope.
+- Correctness gates for missing expected memories, forbidden memory hits, exact-scope
+  leakage, duplicate-write failures, scan duplication, and incomplete scans.
+- A JSON Schema for benchmark results, reproducibility guidance, InMemory/SQLite smoke
+  tests, and a correctness-only CI benchmark job.
+
+### Boundaries
+
+- Benchmark utilities are repository-only and are not installed or exported from the
+  `doppel-memory` package.
+- CI does not enforce performance thresholds because shared-runner timing is noisy.
+  Correctness failures still return a non-zero process status.
+- The Store benchmark does not score embeddings, LLM extraction, rerankers, prompts,
+  or application retention policy as if they were core Doppel behavior.
+
+### Compatibility
+
+- The v0.4.4 stable public API remains unchanged. The public API manifest now records
+  the v0.5.0 release without adding runtime exports.
+
 ## 0.4.4
 
 Public API freeze for the v0.4 line, with an explicit compatibility contract for

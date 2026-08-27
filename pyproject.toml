@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "doppel-memory"
-version = "0.4.4"
+version = "0.5.0"
 description = "An open-source, role-aware memory framework for IM agents: speaker-aware, scoped, pluggable memory with persona materials."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -58,4 +58,4 @@ target-version = "py311"
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
-include = ["doppel_memory"]
+include = ["doppel_memory", "benchmarks"]

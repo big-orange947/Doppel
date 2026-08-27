@@ -45,9 +45,29 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - run: uv sync --locked --extra dev --extra graphiti
-      - run: uv run ruff format --check doppel_memory tests examples
-      - run: uv run ruff check doppel_memory tests examples
+      - run: uv run ruff format --check doppel_memory tests examples benchmarks
+      - run: uv run ruff check doppel_memory tests examples benchmarks
       - run: uv run pyright
+
+  benchmark-smoke:
+    name: Store benchmark smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --extra dev
+      - name: Run correctness-gated SQLite benchmark
+        run: >-
+          uv run python -m benchmarks.store_benchmark
+          --backend sqlite
+          --dataset benchmarks/datasets/synthetic-small.json
+          --output "$RUNNER_TEMP/doppel-benchmark.json"
 
   graphiti-adapter:
     name: Graphiti adapter smoke test
