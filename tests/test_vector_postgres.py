@@ -135,7 +135,9 @@ async def test_paginated_backfill_indexes_existing_core_records() -> None:
     second = await index.backfill(scope, cursor=first.next_cursor, page_size=2)
     assert second.report.indexed == 1
     assert not second.has_more
-    assert len(await index.search("software bug", [scope])) == 1
+    hits = await index.search("software bug", [scope])
+    assert len(hits) == 3
+    assert hits[0].fact == "Python software notes"
     await store.close()
 
 
