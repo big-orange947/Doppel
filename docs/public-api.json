@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "release": "0.5.2",
+  "release": "0.5.3",
   "tiers": {
     "stable": [
       "Actor",
@@ -79,9 +79,17 @@
       "StoreHistoryReader",
       "StoreMemoryReader",
       "StyleAnalyzer",
+      "StyleDirective",
+      "StyleGuidance",
+      "StyleGuideCompiler",
       "StyleMiner",
       "StyleMinerConfig",
+      "StyleProfessor",
+      "StyleProfessorConfig",
       "StyleProfile",
+      "StyleQualityConfig",
+      "StyleQualityEvaluator",
+      "StyleQualityReport",
       "audit_batch_task",
       "audit_history_reader",
       "resolve_content"

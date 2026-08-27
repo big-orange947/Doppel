@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.3
+
+Deterministic, opt-in consumption of structured style profiles plus an independent
+observable-output quality evaluator and correctness-gated benchmark fixture.
+
+### Added
+
+- `StyleProfessorConfig`, `StyleDirective`, `StyleGuidance`, replaceable
+  `StyleGuideCompiler`, and the `StyleProfessor` reference implementation for auditable
+  profile-to-guidance compilation with source/config fingerprints.
+- Hard prompt budgets, directive priorities, whole-directive omission reporting,
+  sample-based confidence, and safe empty guidance below a configurable sample floor.
+- Structured `MaterialBundle.style_profile` loading when the backing Store exposes the
+  saved profile, plus opt-in guidance through `materials(style_professor=...)`; the
+  default renderer keeps v0.5.1 summary behavior when no professor is supplied.
+- `StyleQualityConfig`, `StyleQualityReport`, and `StyleQualityEvaluator` for comparing
+  held-out black-box replies with a reference profile without generator self-judgment.
+- A repository-only observable style benchmark, fixed positive/negative fixture,
+  versioned result schema, tests, CI correctness gate, and end-to-end example.
+
+### Semantics
+
+- Professor directives cover observable message length, punctuation, question,
+  exclamation, emoji, and multiline distributions. Each directive retains numeric
+  evidence, confidence, and priority.
+- Common phrases are excluded from guidance by default and never contribute to quality
+  scores. Explicit phrase opt-in remains bounded and labeled as non-factual data.
+- Empty candidate messages are ignored and reported. A quality report cannot pass below
+  its configured candidate sample floor, regardless of its aggregate feature score.
+
+### Boundaries
+
+- StyleProfessor is a pure compiler: it does not read or write a Store, call an LLM,
+  infer personality, or decide how a model adapter applies its prompt block.
+- Observable quality scores do not claim factual, semantic, identity, helpfulness, or
+  safety quality. Production evaluation still needs held-out data and human blind review.
+- The benchmark is independent of Store performance tooling and remains repository-only.
+
+### Roadmap
+
+- The v0.5 differentiation pair—structured IM content and owner-style
+  mining/consumption—is now complete. The next phase returns to reusable Store
+  conformance, PostgreSQL/pgvector, and Graphiti stabilization.
+
 ## 0.5.2
 
 Structured IM content representation and opt-in media resolution while keeping

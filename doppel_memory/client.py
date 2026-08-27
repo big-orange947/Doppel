@@ -54,6 +54,7 @@ from doppel_memory.processing import (
 from doppel_memory.retriever import Reranker, RetrievalStrategy, Retriever
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
+from doppel_memory.style import StyleGuideCompiler
 
 
 class DoppelClient:
@@ -87,7 +88,7 @@ class DoppelClient:
             reranker=reranker,
             candidate_multiplier=candidate_multiplier,
         )
-        self._materials = PersonaMaterialsBuilder(self._retriever)
+        self._materials = PersonaMaterialsBuilder(self._retriever, store=self._store)
 
     @property
     def store(self) -> MemoryStore:
@@ -259,8 +260,9 @@ class DoppelClient:
         memory_limit: int = 10,
         style_sample_limit: int = 5,
         policy=None,
+        style_professor: StyleGuideCompiler | None = None,
     ) -> MaterialBundle:
-        """高层材料装配：结构化 events/background/relations/style_samples/provenance。
+        """高层材料装配：结构化记忆、风格 profile/guidance 与 provenance。
 
         ``policy`` 默认 OwnerPersonaPolicy（会话级 + 联系人级 + 用户全局层）；
         显式传 ``scopes`` 可完全接管检索范围。
@@ -272,6 +274,7 @@ class DoppelClient:
             memory_limit=memory_limit,
             style_sample_limit=style_sample_limit,
             policy=policy,
+            style_professor=style_professor,
         )
 
     async def persona_materials(

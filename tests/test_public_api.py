@@ -178,6 +178,36 @@ MODEL_FIELDS = {
         "max_common_phrases",
         "max_source_ids",
     ),
+    "StyleDirective": (
+        "feature",
+        "instruction",
+        "evidence",
+        "confidence",
+        "priority",
+    ),
+    "StyleGuidance": (
+        "schema_version",
+        "professor",
+        "professor_version",
+        "profile_fingerprint",
+        "config_fingerprint",
+        "source_analyzer",
+        "source_analyzer_version",
+        "source_message_count",
+        "usable",
+        "directives",
+        "prompt",
+        "omitted_features",
+        "warnings",
+    ),
+    "StyleProfessorConfig": (
+        "min_reliable_messages",
+        "full_confidence_messages",
+        "max_prompt_chars",
+        "include_common_phrases",
+        "max_common_phrases",
+        "max_phrase_chars",
+    ),
     "StyleProfile": (
         "schema_version",
         "analyzer",
@@ -195,6 +225,25 @@ MODEL_FIELDS = {
         "terminal_punctuation_ratio",
         "common_phrases",
         "summary",
+    ),
+    "StyleQualityConfig": (
+        "min_candidate_messages",
+        "passing_score",
+    ),
+    "StyleQualityReport": (
+        "schema_version",
+        "evaluator",
+        "evaluator_version",
+        "reference_profile_fingerprint",
+        "config_fingerprint",
+        "candidate_input_count",
+        "candidate_message_count",
+        "sufficient_samples",
+        "feature_scores",
+        "observed",
+        "aggregate_score",
+        "passed",
+        "warnings",
     ),
     "WriteResult": ("status", "record", "error_code", "message"),
 }
@@ -220,6 +269,15 @@ SIGNATURES = {
         ("policy", "KEYWORD_ONLY"),
         ("hooks", "KEYWORD_ONLY"),
         ("allowed_scopes", "KEYWORD_ONLY"),
+    ),
+    "DoppelClient.materials": (
+        ("scope", "POSITIONAL_OR_KEYWORD"),
+        ("query", "POSITIONAL_OR_KEYWORD"),
+        ("scopes", "KEYWORD_ONLY"),
+        ("memory_limit", "KEYWORD_ONLY"),
+        ("style_sample_limit", "KEYWORD_ONLY"),
+        ("policy", "KEYWORD_ONLY"),
+        ("style_professor", "KEYWORD_ONLY"),
     ),
     "DoppelClient.run_batch_task": (
         ("task", "POSITIONAL_OR_KEYWORD"),
@@ -259,6 +317,19 @@ SIGNATURES = {
         ("scopes", "POSITIONAL_OR_KEYWORD"),
         ("filters", "KEYWORD_ONLY"),
         ("limit", "KEYWORD_ONLY"),
+    ),
+    "PersonaMaterialsBuilder.__init__": (
+        ("retriever", "POSITIONAL_OR_KEYWORD"),
+        ("store", "KEYWORD_ONLY"),
+    ),
+    "PersonaMaterialsBuilder.build": (
+        ("scope", "POSITIONAL_OR_KEYWORD"),
+        ("query", "POSITIONAL_OR_KEYWORD"),
+        ("scopes", "KEYWORD_ONLY"),
+        ("memory_limit", "KEYWORD_ONLY"),
+        ("style_sample_limit", "KEYWORD_ONLY"),
+        ("policy", "KEYWORD_ONLY"),
+        ("style_professor", "KEYWORD_ONLY"),
     ),
     "ProposalPolicy.evaluate": (
         ("proposal", "POSITIONAL_OR_KEYWORD"),
@@ -301,6 +372,14 @@ SIGNATURES = {
         ("analyzer", "KEYWORD_ONLY"),
     ),
     "StyleMiner.propose": (("context", "POSITIONAL_OR_KEYWORD"),),
+    "StyleProfessor.__init__": (("config", "POSITIONAL_OR_KEYWORD"),),
+    "StyleProfessor.compile": (("profile", "POSITIONAL_OR_KEYWORD"),),
+    "StyleGuideCompiler.compile": (("profile", "POSITIONAL_OR_KEYWORD"),),
+    "StyleQualityEvaluator.__init__": (("config", "POSITIONAL_OR_KEYWORD"),),
+    "StyleQualityEvaluator.evaluate": (
+        ("reference", "POSITIONAL_OR_KEYWORD"),
+        ("candidates", "POSITIONAL_OR_KEYWORD"),
+    ),
     "resolve_content": (
         ("message", "POSITIONAL_OR_KEYWORD"),
         ("resolvers", "POSITIONAL_OR_KEYWORD"),
@@ -355,6 +434,9 @@ def test_critical_defaults_and_enum_values_are_stable() -> None:
     }
     assert doppel.StyleMinerConfig().min_messages == 20
     assert doppel.StyleMinerConfig().target_scope == "conversation"
+    assert doppel.StyleProfessorConfig().include_common_phrases is False
+    assert doppel.StyleProfessorConfig().max_prompt_chars == 800
+    assert doppel.StyleQualityConfig().min_candidate_messages == 20
     assert doppel.ChatMessage().parts == []
     assert [item.value for item in doppel.MemoryState] == [
         "candidate",

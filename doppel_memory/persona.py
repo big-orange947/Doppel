@@ -1,6 +1,6 @@
 """Persona 材料：结构化组装 + 可替换 renderer（框架不替开发者决定最终 prompt）。
 
-- ``MaterialBundle``：结构化材料（events/background/relations/style_samples/provenance）。
+- ``MaterialBundle``：结构化材料（events/background/relations/style profile/guidance/provenance）。
 - ``render(renderer)``：默认 DefaultPromptRenderer，可替换（JSON/XML/ChatML/LangChain Document）。
 - ``persona_preset``：针对常见 IM Agent 场景的 scope 策略（owner_persona 等），
   底层仍是显式 scopes 的通用检索。
@@ -13,6 +13,8 @@ from typing import Any, Protocol
 
 from doppel_memory.models import MemoryFilter, MemoryKind, MemoryScope, RecallResult
 from doppel_memory.retriever import Retriever
+from doppel_memory.store import MemoryStore
+from doppel_memory.style import StyleGuidance, StyleGuideCompiler, StyleProfile
 
 
 class PromptRenderer(Protocol):
@@ -31,6 +33,8 @@ class MaterialBundle:
     style_samples: list[str] = field(default_factory=list)
     style_summary: str = field(default="")
     provenance: list[dict[str, Any]] = field(default_factory=list)
+    style_profile: StyleProfile | None = None
+    style_guidance: StyleGuidance | None = None
 
     def render(self, renderer: PromptRenderer | None = None) -> str:
         renderer = renderer or DefaultPromptRenderer()
@@ -48,7 +52,9 @@ class DefaultPromptRenderer:
         if bundle.background:
             lines.append("背景：")
             lines.extend(f"- {item.to_line()}" for item in bundle.background[:5])
-        if bundle.style_summary:
+        if bundle.style_guidance is not None and bundle.style_guidance.prompt:
+            lines.append(bundle.style_guidance.prompt)
+        elif bundle.style_summary:
             lines.append(f"号主风格：{bundle.style_summary}")
         if bundle.style_samples:
             lines.append("号主最近原话（学口吻不学内容）：")
@@ -84,10 +90,13 @@ class OwnerPersonaPolicy:
 
 
 class PersonaMaterialsBuilder:
-    """材料装配器：检索 → 按 kind 分组 → 附风格样本与 provenance。"""
+    """材料装配器：检索 → 分组 → 可选风格编译 → provenance。"""
 
-    def __init__(self, retriever: Retriever) -> None:
+    def __init__(
+        self, retriever: Retriever, *, store: MemoryStore | None = None
+    ) -> None:
         self._retriever = retriever
+        self._store = store
 
     async def build(
         self,
@@ -98,6 +107,7 @@ class PersonaMaterialsBuilder:
         memory_limit: int = 10,
         style_sample_limit: int = 5,
         policy: ScopePolicy | None = None,
+        style_professor: StyleGuideCompiler | None = None,
     ) -> MaterialBundle:
         search_scopes = (
             scopes
@@ -155,6 +165,25 @@ class PersonaMaterialsBuilder:
             }
             for item in provenance_results
         ]
+        style_profile: StyleProfile | None = None
+        style_guidance: StyleGuidance | None = None
+        if style_results and self._store is not None:
+            style_result = style_results[0]
+            if style_result.scope is not None and style_result.memory_id:
+                style_record = await self._store.get(
+                    style_result.scope, style_result.memory_id
+                )
+                if style_record is not None:
+                    raw_profile = style_record.metadata.get("style_profile")
+                    if raw_profile is not None:
+                        try:
+                            style_profile = StyleProfile.model_validate(raw_profile)
+                        except Exception:  # noqa: BLE001 - legacy/custom style metadata
+                            style_profile = None
+        if style_profile is not None and style_professor is not None:
+            style_guidance = StyleGuidance.model_validate(
+                style_professor.compile(style_profile)
+            )
         return MaterialBundle(
             scope=scope,
             query=query,
@@ -164,4 +193,6 @@ class PersonaMaterialsBuilder:
             style_samples=style_samples,
             style_summary=style_results[0].fact if style_results else "",
             provenance=provenance,
+            style_profile=style_profile,
+            style_guidance=style_guidance,
         )

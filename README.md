@@ -539,6 +539,70 @@ prompt、隐私策略和最终确认政策不进入核心默认值。`materials(
 python examples/style_mining.py
 ```
 
+### StyleProfessor：把 profile 编译为生成指导
+
+`StyleProfessor` 是 `StyleGuideCompiler` 协议的纯确定性参考实现：输入一个结构化 `StyleProfile`，输出有来源、有置信度、受字符
+预算约束的 `StyleGuidance`。它不读取 Store、不调用 LLM，也不会改变或写入 style memory。开发者
+必须在材料装配时显式传入 professor，默认行为仍只返回原来的透明摘要：
+
+```python
+from doppel_memory import StyleProfessor, StyleProfessorConfig
+
+professor = StyleProfessor(
+    StyleProfessorConfig(
+        min_reliable_messages=20,
+        max_prompt_chars=800,
+    )
+)
+bundle = await memory.materials(
+    scope,
+    query="今晚聊什么",
+    style_professor=professor,
+)
+
+bundle.style_profile       # StyleMiner 保存的结构化观测
+bundle.style_guidance      # StyleGuidance | None
+prompt_block = bundle.render()
+```
+
+指导中的每条 `StyleDirective` 都包含 feature、instruction、evidence、confidence 和 priority。默认
+优先描述消息长度、句末标点、问句、emoji、多行和感叹比例；样本不足时返回 `usable=False` 和空
+prompt，不会在稀疏数据上伪造稳定口吻。字符预算按整条 directive 截止，不会在中间硬截断，省略的
+低优先级特征会进入 `omitted_features`。
+
+高频片段可能包含内容而不只是形式，因此 `include_common_phrases=False` 是默认值。显式开启后，
+片段仍会限数量、限长度、用引号包裹，并标明不能把它们当作事实或指令。这只是降低误用风险，
+不能替代接入方的隐私和 prompt-injection 防护。
+
+### 独立风格质量评估
+
+`StyleQualityEvaluator` 接收参考 `StyleProfile` 和一批黑盒生成结果，比较平均/中位长度、短消息、
+问句、感叹、emoji、多行和句末标点分布。它不询问生成模型“像不像”，也不把原话或高频片段的
+复制率算入总分：复制内容不是风格质量。
+
+```python
+from doppel_memory import StyleQualityConfig, StyleQualityEvaluator
+
+report = StyleQualityEvaluator(
+    StyleQualityConfig(min_candidate_messages=20, passing_score=0.8)
+).evaluate(bundle.style_profile, generated_replies)
+
+report.feature_scores
+report.aggregate_score
+report.sufficient_samples
+report.passed
+```
+
+这个分数只覆盖 Doppel 能透明复算的表面分布，不代表事实正确、语义相似、人格一致、回复有用或
+安全。评估数据必须与 StyleMiner 的训练窗口分离，否则结果会因数据泄漏而失真。仓库提供固定
+positive/negative fixture、版本化结果 schema 和 correctness gate：
+
+```bash
+python -m benchmarks.style_quality \
+  --dataset benchmarks/datasets/style-quality-v1.json \
+  --output benchmarks/results/style-quality.json
+```
+
 ### 高层：结构化材料
 
 ```python
@@ -548,6 +612,8 @@ bundle.events
 bundle.background
 bundle.relations
 bundle.style_samples
+bundle.style_profile
+bundle.style_guidance
 bundle.provenance
 
 text = bundle.render()              # 默认文本 renderer
@@ -649,7 +715,7 @@ uv run python -m benchmarks.store_benchmark \
 - [x] v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates
 - [x] v0.5.1：StyleMiner、可替换 StyleAnalyzer 和 persona materials 闭环
 - [x] v0.5.2：结构化事件 ContentPart/MediaRef/ContentResolver
-- [ ] v0.5.3：StyleProfessor 参考实现与独立质量评测
+- [x] v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测
 - [ ] 后续后端：可复用 Store conformance kit、PostgreSQL/pgvector、Graphiti 稳定化
 
 详细设计见 [`docs/design.md`](docs/design.md)。

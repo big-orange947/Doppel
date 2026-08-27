@@ -8,6 +8,10 @@ import pytest
 
 from benchmarks.dataset import SyntheticDatasetConfig, generate_dataset
 from benchmarks.store_benchmark import benchmark_store, run_store_benchmark
+from benchmarks.style_quality import (
+    load_style_quality_dataset,
+    run_style_quality_benchmark,
+)
 from doppel_memory import InMemoryStore
 
 
@@ -90,5 +94,40 @@ def test_result_schema_tracks_the_runner_envelope() -> None:
         "environment",
         "backend",
         "metrics",
+        "correctness",
+    }
+
+
+async def test_style_quality_benchmark_has_independent_positive_and_negative_gates() -> (
+    None
+):
+    result = await run_style_quality_benchmark(load_style_quality_dataset())
+
+    assert result["result_schema_version"] == 1
+    assert result["dataset"]["name"] == "doppel.observable-style.v1"
+    assert result["professor"]["directive_count"] > 0
+    assert result["professor"]["prompt_chars"] <= 800
+    assert result["correctness"] == {"passed": True, "errors": []}
+    cases = {case["name"]: case for case in result["cases"]}
+    assert cases["matched-distribution"]["report"]["passed"] is True
+    assert cases["contrasting-distribution"]["report"]["passed"] is False
+    assert (
+        cases["matched-distribution"]["report"]["aggregate_score"]
+        > cases["contrasting-distribution"]["report"]["aggregate_score"]
+    )
+
+
+def test_style_result_schema_tracks_the_runner_envelope() -> None:
+    with open("benchmarks/style-result.schema.json", encoding="utf-8") as source:
+        schema = json.load(source)
+    assert schema["properties"]["result_schema_version"]["const"] == 1
+    assert schema["$defs"]["styleQualityReport"]["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "result_schema_version",
+        "doppel_version",
+        "generated_at",
+        "dataset",
+        "professor",
+        "cases",
         "correctness",
     }

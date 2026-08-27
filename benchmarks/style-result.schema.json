@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/big-orange947/Doppel/benchmarks/style-result.schema.json",
+  "title": "Doppel observable style quality benchmark result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result_schema_version",
+    "doppel_version",
+    "generated_at",
+    "dataset",
+    "professor",
+    "cases",
+    "correctness"
+  ],
+  "properties": {
+    "result_schema_version": { "const": 1 },
+    "doppel_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "fingerprint", "reference_message_count", "case_count"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "integer", "minimum": 1 },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "reference_message_count": { "type": "integer", "minimum": 1 },
+        "case_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "professor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "profile_fingerprint", "config_fingerprint", "prompt_chars", "directive_count", "omitted_features"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "profile_fingerprint": { "type": "string" },
+        "config_fingerprint": { "type": "string" },
+        "prompt_chars": { "type": "integer", "minimum": 0 },
+        "directive_count": { "type": "integer", "minimum": 0 },
+        "omitted_features": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "expected_pass", "min_score", "max_score", "report", "errors"],
+        "properties": {
+          "name": { "type": "string" },
+          "expected_pass": { "type": "boolean" },
+          "min_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "max_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "report": { "$ref": "#/$defs/styleQualityReport" },
+          "errors": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "errors"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "errors": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "styleQualityReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "evaluator",
+        "evaluator_version",
+        "reference_profile_fingerprint",
+        "config_fingerprint",
+        "candidate_input_count",
+        "candidate_message_count",
+        "sufficient_samples",
+        "feature_scores",
+        "observed",
+        "aggregate_score",
+        "passed",
+        "warnings"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "evaluator": { "type": "string" },
+        "evaluator_version": { "type": "string" },
+        "reference_profile_fingerprint": { "type": "string" },
+        "config_fingerprint": { "type": "string" },
+        "candidate_input_count": { "type": "integer", "minimum": 0 },
+        "candidate_message_count": { "type": "integer", "minimum": 0 },
+        "sufficient_samples": { "type": "boolean" },
+        "feature_scores": {
+          "type": "object",
+          "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "observed": {
+          "type": "object",
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        },
+        "aggregate_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "passed": { "type": "boolean" },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

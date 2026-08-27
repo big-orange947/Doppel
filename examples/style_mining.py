@@ -17,6 +17,10 @@ from doppel_memory import (
     MemoryScope,
     StyleMiner,
     StyleMinerConfig,
+    StyleProfessor,
+    StyleProfessorConfig,
+    StyleQualityConfig,
+    StyleQualityEvaluator,
 )
 from examples.batch_runtime import SQLiteCheckpointStore, SQLiteEventLog
 
@@ -109,9 +113,30 @@ async def main() -> None:
                 task.checkpoint_key, scope, result.committable_checkpoint
             )
 
-        materials = await memory.materials(scope, query="今天聊什么")
+        professor = StyleProfessor(
+            StyleProfessorConfig(
+                min_reliable_messages=5,
+                full_confidence_messages=10,
+            )
+        )
+        materials = await memory.materials(
+            scope,
+            query="今天聊什么",
+            style_professor=professor,
+        )
         print("style profile:", materials.style_summary)
+        print("style guidance:", materials.style_guidance)
         print(materials.render())
+
+        # Evaluate a black-box generator's outputs separately from the professor.
+        if materials.style_profile is not None:
+            report = StyleQualityEvaluator(
+                StyleQualityConfig(min_candidate_messages=3, passing_score=0.7)
+            ).evaluate(
+                materials.style_profile,
+                ["哈哈可以！", "晚点聊？", "收到哈哈", "可以的😊", "哈哈\n没问题"],
+            )
+            print("independent style quality:", report.model_dump(mode="json"))
     finally:
         await memory.close()
         await event_log.close()

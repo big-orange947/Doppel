@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.5.2：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.5.3：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -316,6 +316,40 @@ PersonaMaterialsBuilder 对 style 使用独立的空查询 + kind filter，避�
 进入 provenance。第三方模型分析器实现 async `StyleAnalyzer` 即可，模型 provider、prompt、数据
 出境和确认策略继续由接入方决定。
 
+## v0.5.3 StyleProfessor 与独立质量评测
+
+StyleProfessor 是 StyleMiner 后面的显式消费层，不是第二个 miner，也不是在线 Processor：
+
+```text
+stored style MemoryRecord.metadata.style_profile
+                ↓ explicit materials(style_professor=...)
+          StyleProfessor.compile(profile)
+                ↓ pure deterministic compilation
+ StyleGuidance(directives + bounded prompt + provenance)
+                ↓ host/model adapter decides how to consume
+```
+
+PersonaMaterialsBuilder 在有 Store 能力时用 recall 返回的 exact scope + memory ID 读取对应记录，验证
+`metadata.style_profile` 后暴露 `MaterialBundle.style_profile`。只有调用方显式传入 StyleProfessor
+才生成 `style_guidance`；否则 renderer 继续使用原 `style_summary`，保持 v0.5.1 默认行为。
+Professor 不读取其他记忆、不写 Store、不调用模型，也不把指导保存成新的长期记忆。
+
+StyleGuidance 绑定 professor/profile/config fingerprint、源 analyzer identity 和样本数。每条
+StyleDirective 保留特征、指令、数值证据、样本置信度和优先级。少于
+`min_reliable_messages` 时安全降级为空 prompt；prompt 预算只接受完整 directive，未容纳的低优先级
+特征进入 omitted list。默认不使用 common phrases，因为它们可能承载内容、隐私或指令文本；
+显式 opt-in 仍只提供有限缓解，不能构成 prompt-injection 安全边界。
+
+StyleQualityEvaluator 与 Professor 分离，直接把黑盒生成样本的可观察统计与参考 StyleProfile
+比较。v1 对平均/中位长度、短消息、问句、感叹、emoji、多行和句末标点分别给分并加权；候选数
+不足时即使表面分数较高也不能 pass。common phrase overlap 刻意不计分，避免奖励复述训练内容。
+这个 evaluator 不测事实、语义、身份、帮助性或安全，也不能替代人工盲测。
+
+repository-only `benchmarks/style_quality.py` 使用独立、版本化的 positive/negative fixture 和结果
+schema。CI gate 检查相似分布达到下限、对比分布低于上限、pass 判定正确，以及 Professor 输出
+确实可用且不越字符预算。fixture fingerprint 防止更换数据后继续比较旧数字；真实产品评测仍应
+使用严格隔离的留出对话和实际模型输出。
+
 ## v0.5.2 结构化事件
 
 结构化事件把“平台消息能否表达”“媒体是否解析”“解析结果是否进入长期记忆”拆成三个独立决定：
@@ -393,5 +427,5 @@ provenance 保存在 `raw.doppel_import`。
 - v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates（已完成）；
 - v0.5.1：StyleMiner、可替换 StyleAnalyzer 和材料装配闭环（已完成）；
 - v0.5.2：ContentPart/MediaRef/ContentResolver 结构化事件（已完成）；
-- v0.5.3：StyleProfessor 参考实现与独立质量评测；
+- v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测（已完成）；
 - 后续后端：可复用 Store conformance kit、PostgreSQL/pgvector 和 Graphiti 稳定化。

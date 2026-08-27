@@ -89,3 +89,31 @@ result = await benchmark_store(
 
 The caller owns and closes a Store passed to `benchmark_store()`. The convenience
 `run_store_benchmark()` function owns the built-in Store it constructs.
+
+## Observable style quality
+
+The separate StyleProfessor benchmark evaluates deterministic guidance and black-box
+reply samples; it is not a Store performance benchmark:
+
+```bash
+uv run python -m benchmarks.style_quality \
+  --dataset benchmarks/datasets/style-quality-v1.json \
+  --output benchmarks/results/style-quality.json
+```
+
+The committed fixture contains a reference distribution, a matched output set, and a
+deliberately contrasting output set. Its correctness gates require the matched case to
+clear a minimum score, the contrasting case to stay below a maximum score, and both
+pass decisions to match their labels. `style-result.schema.json` versions the output
+envelope, and the dataset fingerprint makes fixture changes visible.
+
+`StyleQualityEvaluator` is independent from `StyleProfessor`: it observes generated
+message length, short-message, question, exclamation, emoji, multiline, and terminal
+punctuation distributions. It does not inspect the guidance prompt or ask the generator
+to grade itself. Common-phrase overlap is intentionally excluded so copying source
+content is not rewarded as style quality.
+
+These metrics do not measure factual correctness, semantics, identity, helpfulness, or
+safety. Production evaluations should use held-out conversations and real model
+outputs, keep sampling settings fixed, report every feature score, and add human blind
+review instead of treating one aggregate number as “persona fidelity.”

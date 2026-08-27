@@ -90,12 +90,20 @@ from doppel_memory.store import MemoryStore
 from doppel_memory.style import (
     DeterministicStyleAnalyzer,
     StyleAnalyzer,
+    StyleDirective,
+    StyleGuidance,
+    StyleGuideCompiler,
     StyleMiner,
     StyleMinerConfig,
+    StyleProfessor,
+    StyleProfessorConfig,
     StyleProfile,
+    StyleQualityConfig,
+    StyleQualityEvaluator,
+    StyleQualityReport,
 )
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 
 __all__ = [
     "Actor",
@@ -170,9 +178,17 @@ __all__ = [
     "StoreMemoryReader",
     "StoreRetrievalStrategy",
     "StyleAnalyzer",
+    "StyleDirective",
+    "StyleGuidance",
+    "StyleGuideCompiler",
     "StyleMiner",
     "StyleMinerConfig",
+    "StyleProfessor",
+    "StyleProfessorConfig",
     "StyleProfile",
+    "StyleQualityConfig",
+    "StyleQualityEvaluator",
+    "StyleQualityReport",
     "WriteResult",
     "WriteStatus",
     "__version__",
