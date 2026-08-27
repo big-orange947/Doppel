@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.7.2
+
+Doppel now has its first official personal-memory extraction path. The release narrows
+the product direction from a generic conversational memory framework to a
+provenance-aware personal memory and context core for long-running personal agents,
+while preserving backend-neutral protocols and the existing Agent-runtime boundary.
+
+### Added
+
+- `PersonalMemoryDraft`, `PersonalMemoryAnalysisRequest`, and
+  `PersonalMemoryAnalysis` as schema-constrained, evidence-bound analyzer values.
+  Drafts distinguish open personal-memory types, subjects, temporal interpretation,
+  optional validity bounds, confidence, and one or more source evidence IDs.
+- `StructuredOutputModel` and `ReferencePersonalMemoryAnalyzer`, providing a small
+  provider-neutral model boundary, reviewed output schema, and a high-precision
+  reference instruction set. The core package adds no network dependency and works
+  with host-owned local or hosted providers.
+- `PersonalMemoryExtractor` for self-contained online facts and
+  `PersonalMemoryMiner` for bounded, exact-scope, checkpointed history windows. Both
+  emit ordinary candidate `MemoryProposal` values and use the existing policy,
+  authorization, hook, idempotency, and Store path.
+- Trusted post-model gates for known evidence IDs, one source actor per claim,
+  subject/source agreement, trusted owner/agent IDs, contact sender binding, maximum
+  outputs, confidence threshold, deterministic idempotency, and duplicate removal.
+  Owner memories may target user scope only through explicit `allowed_scopes`;
+  contact memories stay in the source conversation, and agent/system evidence is
+  excluded by default.
+- A separate extraction-quality runner that injects a real analyzer into the periodic
+  extraction path and reports gold evidence coverage, supported-candidate precision,
+  subject and target-scope accuracy, ignored/agent evidence writes, latency, and hard
+  cross-user leakage. It explicitly does not equate evidence overlap with semantic
+  content correctness.
+
+### Compatibility and scope
+
+- All personal-memory intelligence exports are additive and provisional. Stable
+  `MemoryStore`, `MemoryProcessor`, `MemoryProposal`, retrieval, and lifecycle shapes
+  are unchanged.
+- v0.7.2 does not consolidate conflicts, supersede old facts, infer that plans
+  happened, expire temporary states, generate answers, or grade model semantics.
+  Those remain separately auditable work for the consolidator, temporal retrieval,
+  and live-model quality stages.
+- PyPI publication, additional Stores, cloud hosting, broad provider integrations,
+  and generic knowledge-base positioning remain deferred in favor of personal-memory
+  correctness.
+
 ## 0.7.1
 
 Doppel now has a reproducible quality baseline for the problem the framework exists to

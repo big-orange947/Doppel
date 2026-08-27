@@ -9,9 +9,13 @@ import pytest
 from benchmarks.dataset import SyntheticDatasetConfig, generate_dataset
 from benchmarks.memory_quality import (
     BaselineCaseRun,
+    ExtractionCaseRun,
     MemoryQualityDataset,
+    PersonalMemoryExtractionBaseline,
     QualityCandidate,
+    QualityExtractionCandidate,
     load_memory_quality_dataset,
+    run_memory_extraction_quality_benchmark,
     run_memory_quality_benchmark,
 )
 from benchmarks.store_benchmark import benchmark_store, run_store_benchmark
@@ -20,7 +24,12 @@ from benchmarks.style_quality import (
     run_style_quality_benchmark,
 )
 from benchmarks.vector_quality import load_vector_quality_dataset
-from doppel_memory import InMemoryStore
+from doppel_memory import (
+    Actor,
+    InMemoryStore,
+    PersonalMemoryAnalysis,
+    PersonalMemoryAnalysisRequest,
+)
 
 
 def _config() -> SyntheticDatasetConfig:
@@ -292,3 +301,105 @@ def test_memory_quality_result_schema_tracks_the_runner_envelope() -> None:
         "baselines",
         "correctness",
     }
+
+
+class _SelectivePersonalMemoryAnalyzer:
+    name = "tests.selective-personal-memory"
+    version = "1"
+
+    async def analyze(
+        self, request: PersonalMemoryAnalysisRequest
+    ) -> PersonalMemoryAnalysis:
+        identities = {message.identity_key: message for message in request.messages}
+        memories = []
+        if "pref-001" in identities:
+            memories.append(
+                {
+                    "content": "用户吃火锅时不喜欢香菜。",
+                    "memory_type": "preference",
+                    "subject": Actor.OWNER,
+                    "confidence": 0.95,
+                    "evidence_ids": ["pref-001"],
+                }
+            )
+        if "allergy-001" in identities:
+            memories.append(
+                {
+                    "content": "联系人对花生过敏。",
+                    "memory_type": "fact",
+                    "subject": Actor.CONTACT,
+                    "confidence": 0.98,
+                    "evidence_ids": ["allergy-001"],
+                }
+            )
+        if "allergy-002" in identities:
+            memories.append(
+                {
+                    "content": "用户表示自己没有食物过敏。",
+                    "memory_type": "fact",
+                    "subject": Actor.OWNER,
+                    "confidence": 0.92,
+                    "evidence_ids": ["allergy-002"],
+                }
+            )
+        return PersonalMemoryAnalysis(memories=memories)
+
+
+async def test_personal_memory_extraction_quality_is_measured_separately() -> None:
+    result = await run_memory_extraction_quality_benchmark(
+        load_memory_quality_dataset(),
+        baselines=[
+            PersonalMemoryExtractionBaseline(_SelectivePersonalMemoryAnalyzer())
+        ],
+    )
+
+    assert result["correctness"] == {
+        "passed": True,
+        "scope_leakage_count": 0,
+        "errors": [],
+    }
+    assert "semantic_content_correctness" in result["not_yet_measured"]
+    report = result["baselines"][0]
+    assert report["capabilities"] == {
+        "extracts_memories": True,
+        "consolidates_memories": False,
+        "generates_answers": False,
+    }
+    assert report["aggregate"]["candidate_count"] == 3
+    assert report["aggregate"]["supported_candidate_precision"] == 1
+    assert report["aggregate"]["subject_attribution_accuracy"] == 1
+    assert report["aggregate"]["target_scope_accuracy"] == 1
+    assert report["aggregate"]["ignored_evidence_write_count"] == 0
+    assert report["aggregate"]["agent_evidence_write_count"] == 0
+    assert 0 < report["aggregate"]["gold_evidence_coverage"] < 1
+
+
+class _LeakyExtractionBaseline:
+    name = "leaky-extraction"
+    version = "1"
+
+    async def run_case(self, dataset, case):
+        del dataset
+        candidates = []
+        if case.name == "cross-user-scope-adversary":
+            candidates.append(
+                QualityExtractionCandidate(
+                    candidate_id="leaked-personal-memory",
+                    scope="owner-user",
+                    content="把另一个用户的猫写给当前用户。",
+                    subject=Actor.OWNER,
+                    source_message_ids=["pet-002"],
+                    confidence=1,
+                )
+            )
+        return ExtractionCaseRun(candidates=candidates)
+
+
+async def test_personal_memory_extraction_cross_user_write_is_a_hard_failure() -> None:
+    result = await run_memory_extraction_quality_benchmark(
+        load_memory_quality_dataset(), baselines=[_LeakyExtractionBaseline()]
+    )
+
+    assert result["correctness"]["passed"] is False
+    assert result["correctness"]["scope_leakage_count"] == 1
+    assert result["baselines"][0]["aggregate"]["scope_leakage_count"] == 1

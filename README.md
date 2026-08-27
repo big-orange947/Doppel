@@ -1,14 +1,14 @@
 # Doppel（分身）
 
-> An open-source, role-aware memory and context framework for conversational and
-> proactive IM agents.
+> An open-source, provenance-aware personal memory and context core for long-running
+> personal agents.
 >
-> 面向对话型与主动型即时通讯 Agent 的模块化记忆与上下文框架：说话人感知、精确作用域、
-> 完整溯源、可插拔后端。
+> 面向长期个人 Agent 的记忆与个人上下文中枢：聊天优先、说话人感知、精确作用域、完整溯源、
+> 可插拔后端。
 
-Doppel 把即时通讯事件标准化为带说话人、事实权威、作用域和来源的记忆，为上层
-Agent 提供摄入、生命周期、过滤检索和结构化材料能力。Doppel 不生成回复，不负责
-消息路由或发送，也不规定开发者如何消费记忆。
+Doppel 把聊天以及未来来自文件、日历、邮件和工具的个人事件，整理为带说话人、事实权威、
+作用域、时间解释和来源证据的记忆，为上层个人 Agent 提供摄入、生命周期、过滤检索和结构化
+材料能力。Doppel 不生成回复，不负责消息路由或发送，也不规定开发者如何消费记忆。
 
 “让机器人更接近号主的表达方式”是一个可选 preset；你也可以只使用事件记忆、关系
 记忆、自定义记忆类型，或者完全替换材料构建逻辑。
@@ -442,6 +442,68 @@ result = await memory.process(
 
 `client.process()` 不传 `processors` 时是 no-op，不会把所有输入悄悄变成长时事件记忆。
 需要保存原始事件时使用 `client.ingest()`，或者显式传入确定性的 `EventProcessor()`。
+
+### 个人记忆参考抽取（v0.7.2）
+
+`ReferencePersonalMemoryAnalyzer` 提供模型无关的结构化 schema 和高精度参考指令；模型 provider
+只需要实现一个很小的 `StructuredOutputModel.generate()` 边界。在线路径适合一条消息中明确、
+自包含的个人事实：
+
+```python
+from doppel_memory import (
+    PersonalMemoryExtractor,
+    ReferencePersonalMemoryAnalyzer,
+)
+
+# 由接入方连接本地模型或托管模型；返回值必须满足 request.output_schema。
+class MyStructuredModel:
+    name = "my-local-model"
+    version = "2026-08"
+
+    async def generate(self, request):
+        return await my_model.generate_json(
+            instructions=request.instructions,
+            input=request.input,
+            schema=request.output_schema,
+        )
+
+extractor = PersonalMemoryExtractor(
+    ReferencePersonalMemoryAnalyzer(MyStructuredModel())
+)
+result = await memory.process(
+    scope,
+    message,
+    processors=[extractor],
+    # owner 记忆默认提议到 user scope，仍必须由 host 明确授权。
+    allowed_scopes=[scope.user_scope()],
+)
+```
+
+模型输出只是 `PersonalMemoryDraft`，不能选择 Store、memory ID、authority、最终 scope 或生命周期
+动作。Doppel 会重新验证每个 evidence ID，只从可信消息推导 actor/authority/subject ID；owner
+事实默认提议到 user scope，contact 事实固定留在来源会话。Agent/system 消息默认不进入分析，
+低于 `minimum_confidence` 的草稿被丢弃，所有通过门禁的记录仍以 `candidate` 状态进入普通
+proposal/policy/Store 路径。
+
+需要比较“以前喜欢蓝色、现在喜欢绿色”或把多次相同陈述绑定为多条证据时，使用读取封闭窗口的
+`PersonalMemoryMiner`，而不是给在线 Processor 偷偷注入 Store：
+
+```python
+from doppel_memory import HistoryWindow, PersonalMemoryMiner
+
+miner = PersonalMemoryMiner(
+    ReferencePersonalMemoryAnalyzer(MyStructuredModel())
+)
+result = await memory.run_batch_task(
+    miner,
+    scope,
+    HistoryWindow(start=window_start, end=window_end),
+    allowed_scopes=[scope.user_scope()],
+)
+```
+
+v0.7.2 只负责证据绑定的抽取，不会擅自把冲突草稿合并、覆盖或标记过期；这部分属于 v0.7.3
+Consolidator。核心包也不绑定统一模型 SDK，托管与本地模型都通过同一 provisional 协议接入。
 
 ### 周期聚合任务
 
@@ -901,7 +963,7 @@ embedding provider。Graphiti 会把旧 v1 episode 视为 stale 并在维护时�
 
 ## Benchmark
 
-v0.7.1 新增中文 IM 长期记忆质量基线。10 个手工标注场景覆盖稳定事实、明确纠正、说话人/权威
+中文 IM 长期记忆质量基线包含 10 个手工标注场景，覆盖稳定事实、明确纠正、说话人/权威
 归属、跨用户 scope 对抗、显式 user scope、长程干扰、重复证据、过时事实和应当拒答的情况：
 
 ```bash
@@ -913,8 +975,10 @@ uv run python -m benchmarks.memory_quality \
 同一份数据运行 `no_memory`、`recent_window`、透明中文字符 n-gram 的 `raw_lexical` 和当前
 `doppel_v0_7_events` 四个确定性基线。报告分别给出 evidence recall、candidate precision、MRR、
 拒答、禁止证据、重复上下文、字符预算、延迟和 scope leakage；越权候选是硬失败。抽取、整理、冲突
-解决、最终回答正确性和模型成本在 v0.7.1 中明确标为尚未测量，不会用原始事件召回分数冒充“记忆
-智能”。数据集已经保存未来 Reference Intelligence 所需的 13 条 gold memory 和 source evidence。
+解决、最终回答正确性和模型成本仍明确标为尚未测量，不会用原始事件召回分数冒充“记忆智能”。
+v0.7.2 另提供可注入真实 `PersonalMemoryAnalyzer` 的抽取层评测，独立计算 gold evidence coverage、
+supported candidate precision、subject/scope accuracy、噪声写入和跨用户泄漏；仅仅引用正确证据不会
+被当作内容语义已经正确。
 
 首份版本化结果保存在 [`benchmarks/reference-results/`](benchmarks/reference-results/)，完整方法和边界
 见 [`benchmarks/README.md`](benchmarks/README.md)。
@@ -965,6 +1029,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口
 - [x] v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理
 - [x] v0.7.1：中文 IM 记忆质量数据集、四类基线、分层指标与版本化报告
+- [x] v0.7.2：个人记忆参考抽取、模型无关结构化输出、证据/角色/作用域门禁与独立抽取评测
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

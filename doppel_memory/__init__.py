@@ -53,6 +53,22 @@ from doppel_memory.indexing import (
     IndexWriter,
     memory_index_fingerprint,
 )
+from doppel_memory.intelligence import (
+    MemoryTemporalStatus,
+    PersonalMemoryAnalysis,
+    PersonalMemoryAnalysisRequest,
+    PersonalMemoryAnalyzer,
+    PersonalMemoryDraft,
+    PersonalMemoryEvidenceError,
+    PersonalMemoryExtractor,
+    PersonalMemoryExtractorConfig,
+    PersonalMemoryMiner,
+    PersonalMemoryMinerConfig,
+    PersonalMemoryType,
+    ReferencePersonalMemoryAnalyzer,
+    StructuredGenerationRequest,
+    StructuredOutputModel,
+)
 from doppel_memory.models import (
     Actor,
     ActorType,
@@ -134,7 +150,7 @@ from doppel_memory.vector import (
     VectorIndexUnavailableError,
 )
 
-__version__ = "0.7.1"
+__version__ = "0.7.2"
 
 __all__ = [
     "Actor",
@@ -198,9 +214,20 @@ __all__ = [
     "MemoryState",
     "MemoryStateConflictError",
     "MemoryStore",
+    "MemoryTemporalStatus",
     "OwnerPersonaPolicy",
     "PassThroughProposalPolicy",
     "PersonaMaterialsBuilder",
+    "PersonalMemoryAnalysis",
+    "PersonalMemoryAnalysisRequest",
+    "PersonalMemoryAnalyzer",
+    "PersonalMemoryDraft",
+    "PersonalMemoryEvidenceError",
+    "PersonalMemoryExtractor",
+    "PersonalMemoryExtractorConfig",
+    "PersonalMemoryMiner",
+    "PersonalMemoryMinerConfig",
+    "PersonalMemoryType",
     "PostgreSQLStore",
     "PostgreSQLVectorIndex",
     "ProcessingError",
@@ -212,6 +239,7 @@ __all__ = [
     "ProposalPolicy",
     "ProposalWriter",
     "RecallResult",
+    "ReferencePersonalMemoryAnalyzer",
     "Reranker",
     "RetrievalStrategy",
     "Retriever",
@@ -228,6 +256,8 @@ __all__ = [
     "StoreHistoryReader",
     "StoreMemoryReader",
     "StoreRetrievalStrategy",
+    "StructuredGenerationRequest",
+    "StructuredOutputModel",
     "StyleAnalyzer",
     "StyleDirective",
     "StyleGuidance",

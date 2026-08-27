@@ -35,12 +35,36 @@ evidence. Out-of-scope output is a hard runner failure; same-scope stale or
 wrong-authority evidence remains a reported quality defect so weak baselines can be
 measured instead of making the benchmark impossible to run.
 
-The report includes macro evidence recall, candidate precision, reciprocal rank,
+The retrieval report includes macro evidence recall, candidate precision, reciprocal rank,
 abstention accuracy, forbidden hits, redundant relevant candidates, context character
 count, and query/prepare latency. The dataset already includes future extraction and
 consolidation gold memories, but v0.7.1 explicitly reports those dimensions—along with
 answer correctness and model token cost—as `not_yet_measured`. They become comparable
 only when a reference intelligence implementation exists.
+
+v0.7.2 adds a separate extraction runner rather than changing these retrieval scores.
+`run_memory_extraction_quality_benchmark()` accepts one or more
+`MemoryExtractionBaseline` implementations. `PersonalMemoryExtractionBaseline` adapts
+an injected `PersonalMemoryAnalyzer` to the real exact-scope history, periodic miner,
+proposal, and Store path, so a local or hosted model can be evaluated without changing
+the dataset or granting it direct write access.
+
+The extraction report measures:
+
+- gold memories whose labeled evidence is covered by a correctly attributed,
+  correctly scoped candidate;
+- candidate support precision based on hand-labeled evidence;
+- subject attribution and target-scope accuracy;
+- writes citing ignored/noise or agent/system evidence;
+- cross-user scope leakage as a hard correctness failure;
+- end-to-end extraction latency.
+
+Evidence overlap does not prove that generated content has the right meaning. The
+report therefore keeps `semantic_content_correctness`, consolidation, conflict
+resolution, final-answer correctness, and model token cost in `not_yet_measured`.
+Live-model reports should preserve the analyzer/provider/model version, prompt/schema
+version, dataset fingerprint, decoding settings, and raw candidate inspection rather
+than comparing a single aggregate score.
 
 [`memory-quality-result.schema.json`](memory-quality-result.schema.json) versions the
 machine-readable envelope. [`reference-results/`](reference-results/) contains a

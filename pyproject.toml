@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "doppel-memory"
-version = "0.7.1"
-description = "A role-aware memory and context framework for conversational and proactive IM agents."
+version = "0.7.2"
+description = "A provenance-aware personal memory and context core for long-running agents."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Doppel Contributors" }]
 keywords = [
     "agent-memory", "llm-memory", "persona", "chat-agent",
-    "memory-framework", "im-agent", "role-aware", "sqlite", "postgresql",
+    "memory-framework", "personal-agent", "im-agent", "role-aware", "sqlite", "postgresql",
     "pgvector", "graphiti", "neo4j",
 ]
 classifiers = [

@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal, Protocol, runtime_checkable
@@ -25,9 +25,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from doppel_memory import (
     Actor,
     ChatMessage,
+    DoppelClient,
+    HistoryWindow,
     InMemoryStore,
     MemoryKind,
     MemoryScope,
+    PersonalMemoryAnalyzer,
+    PersonalMemoryMiner,
+    PersonalMemoryMinerConfig,
     RecallResult,
     Retriever,
     WriteStatus,
@@ -232,6 +237,131 @@ class QualityCandidate(BaseModel):
     score: float | None = None
 
 
+class QualityExtractionCandidate(BaseModel):
+    """One evidence-bound extracted memory before retrieval evaluation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    candidate_id: str
+    scope: str
+    content: str
+    subject: str
+    source_message_ids: list[str] = Field(min_length=1)
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractionCaseRun:
+    candidates: list[QualityExtractionCandidate]
+    latency_ms: float = 0.0
+
+
+@runtime_checkable
+class MemoryExtractionBaseline(Protocol):
+    name: str
+    version: str
+
+    async def run_case(
+        self, dataset: MemoryQualityDataset, case: QualityCase
+    ) -> ExtractionCaseRun: ...
+
+
+class PersonalMemoryExtractionBaseline:
+    """Run the real periodic extraction path with an injected analyzer."""
+
+    name = "doppel_v0_7_2_personal_memory"
+    version = "1"
+
+    def __init__(
+        self,
+        analyzer: PersonalMemoryAnalyzer,
+        *,
+        config: PersonalMemoryMinerConfig | None = None,
+    ) -> None:
+        self.analyzer = analyzer
+        self.config = config or PersonalMemoryMinerConfig()
+
+    async def run_case(
+        self, dataset: MemoryQualityDataset, case: QualityCase
+    ) -> ExtractionCaseRun:
+        scopes = {item.name: item.to_scope() for item in dataset.scopes}
+        scope_names = {scope.scope_key: name for name, scope in scopes.items()}
+        store = InMemoryStore()
+        client = DoppelClient(store)
+        started = perf_counter()
+        candidates: list[QualityExtractionCandidate] = []
+        try:
+            for message in sorted(
+                case.messages, key=lambda item: (item.at, item.message_id)
+            ):
+                result = await client.ingest(
+                    scopes[message.scope], message.to_message()
+                )
+                if result.status is not WriteStatus.CREATED:
+                    raise RuntimeError(
+                        f"quality fixture event was not created: {message.message_id}"
+                    )
+            source_scope_names = list(
+                dict.fromkeys(message.scope for message in case.messages)
+            )
+            for source_scope_name in source_scope_names:
+                source_messages = [
+                    message
+                    for message in case.messages
+                    if message.scope == source_scope_name
+                ]
+                source_scope = scopes[source_scope_name]
+                window = HistoryWindow(
+                    start=min(message.at for message in source_messages),
+                    end=max(message.at for message in source_messages)
+                    + timedelta(microseconds=1),
+                )
+                result = await client.run_batch_task(
+                    PersonalMemoryMiner(self.analyzer, self.config),
+                    source_scope,
+                    window,
+                    allowed_scopes=[source_scope.user_scope()],
+                    run_id=f"quality:{case.name}:{source_scope_name}",
+                )
+                if result.errors or any(
+                    item.status is WriteStatus.FAILED for item in result.write_results
+                ):
+                    details = [error.message for error in result.errors]
+                    details.extend(
+                        item.message or item.error_code or "write failed"
+                        for item in result.write_results
+                        if item.status is WriteStatus.FAILED
+                    )
+                    raise RuntimeError(
+                        "personal memory quality extraction failed: "
+                        + "; ".join(details)
+                    )
+                for proposal in result.proposals:
+                    evidence = proposal.metadata.get("evidence", [])
+                    evidence_ids = [
+                        str(item.get("evidence_id", ""))
+                        for item in evidence
+                        if isinstance(item, dict) and item.get("evidence_id")
+                    ]
+                    scope_name = scope_names.get(proposal.scope.scope_key, "")
+                    candidates.append(
+                        QualityExtractionCandidate(
+                            candidate_id=proposal.idempotency_key,
+                            scope=scope_name,
+                            content=proposal.content,
+                            subject=str(proposal.metadata.get("subject", "")),
+                            source_message_ids=evidence_ids,
+                            confidence=proposal.confidence,
+                        )
+                    )
+        finally:
+            await client.close()
+        return ExtractionCaseRun(
+            candidates=candidates,
+            latency_ms=_milliseconds_since(started),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class BaselineCaseRun:
     candidates: dict[str, list[QualityCandidate]]
@@ -391,6 +521,226 @@ def load_memory_quality_dataset(
 ) -> MemoryQualityDataset:
     with Path(path).open(encoding="utf-8") as source:
         return MemoryQualityDataset.model_validate(json.load(source))
+
+
+async def run_memory_extraction_quality_benchmark(
+    dataset: MemoryQualityDataset,
+    *,
+    baselines: Sequence[MemoryExtractionBaseline],
+) -> dict[str, Any]:
+    """Evaluate evidence/scope/role safety separately from semantic correctness.
+
+    This layer deliberately does not infer that an extracted sentence is semantically
+    correct merely because it cites a gold source. Content correctness still requires
+    a human-labeled or independently judged live-model report.
+    """
+
+    selected = tuple(baselines)
+    if not selected:
+        raise ValueError("at least one extraction baseline is required")
+    identities = [(baseline.name, baseline.version) for baseline in selected]
+    if len(identities) != len(set(identities)):
+        raise ValueError("memory extraction baseline identities must be unique")
+    reports = [
+        await _evaluate_extraction_baseline(dataset, baseline) for baseline in selected
+    ]
+    errors = [
+        f"{report['name']}: {error}"
+        for report in reports
+        for error in report["correctness"]["errors"]
+    ]
+    scope_leakage = sum(
+        report["aggregate"]["scope_leakage_count"] for report in reports
+    )
+    return {
+        "result_schema_version": 1,
+        "doppel_version": __version__,
+        "generated_at": utc_now().isoformat(),
+        "dataset": {
+            "name": dataset.name,
+            "version": dataset.dataset_version,
+            "fingerprint": dataset.fingerprint,
+            "case_count": len(dataset.cases),
+            "message_count": sum(len(case.messages) for case in dataset.cases),
+            "gold_memory_count": sum(len(case.gold_memories) for case in dataset.cases),
+        },
+        "measured_dimensions": [
+            "gold_evidence_coverage",
+            "supported_candidate_precision",
+            "subject_attribution",
+            "target_scope_accuracy",
+            "ignored_evidence_writes",
+            "agent_evidence_writes",
+            "scope_isolation",
+            "latency",
+        ],
+        "not_yet_measured": [
+            "semantic_content_correctness",
+            "memory_consolidation",
+            "conflict_resolution",
+            "answer_correctness",
+            "llm_token_cost",
+        ],
+        "baselines": reports,
+        "correctness": {
+            "passed": not errors and scope_leakage == 0,
+            "scope_leakage_count": scope_leakage,
+            "errors": errors,
+        },
+    }
+
+
+async def _evaluate_extraction_baseline(
+    dataset: MemoryQualityDataset,
+    baseline: MemoryExtractionBaseline,
+) -> dict[str, Any]:
+    case_reports: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for case in dataset.cases:
+        run = await baseline.run_case(dataset, case)
+        report, case_errors = _evaluate_extraction_case(
+            dataset, case, run.candidates, latency_ms=run.latency_ms
+        )
+        errors.extend(f"{case.name}: {error}" for error in case_errors)
+        case_reports.append(report)
+    candidate_reports = [
+        candidate
+        for case_report in case_reports
+        for candidate in case_report["candidates"]
+    ]
+    gold_count = sum(report["gold_memory_count"] for report in case_reports)
+    covered_gold = sum(report["covered_gold_memories"] for report in case_reports)
+    candidate_count = len(candidate_reports)
+    supported_count = sum(item["supported"] for item in candidate_reports)
+    attributed = [item for item in candidate_reports if item["supported"]]
+    latencies = [report["latency_ms"] for report in case_reports]
+    aggregate = {
+        "case_count": len(case_reports),
+        "gold_memory_count": gold_count,
+        "candidate_count": candidate_count,
+        "gold_evidence_coverage": _rounded(
+            covered_gold / gold_count if gold_count else 1.0
+        ),
+        "supported_candidate_precision": _rounded(
+            supported_count / candidate_count if candidate_count else 1.0
+        ),
+        "subject_attribution_accuracy": _mean(
+            float(item["subject_correct"]) for item in attributed
+        ),
+        "target_scope_accuracy": _mean(
+            float(item["scope_correct"]) for item in attributed
+        ),
+        "unsupported_candidate_count": candidate_count - supported_count,
+        "ignored_evidence_write_count": sum(
+            item["uses_ignored_evidence"] for item in candidate_reports
+        ),
+        "agent_evidence_write_count": sum(
+            item["uses_agent_evidence"] for item in candidate_reports
+        ),
+        "scope_leakage_count": sum(item["scope_leak"] for item in candidate_reports),
+        "latency_ms": {
+            "total": _rounded(sum(latencies)),
+            "p50": _rounded(_percentile(latencies, 50)),
+            "p95": _rounded(_percentile(latencies, 95)),
+        },
+    }
+    return {
+        "name": baseline.name,
+        "version": baseline.version,
+        "capabilities": {
+            "extracts_memories": True,
+            "consolidates_memories": False,
+            "generates_answers": False,
+        },
+        "aggregate": aggregate,
+        "cases": case_reports,
+        "correctness": {
+            "passed": not errors and aggregate["scope_leakage_count"] == 0,
+            "scope_leakage_count": aggregate["scope_leakage_count"],
+            "errors": errors,
+        },
+    }
+
+
+def _evaluate_extraction_case(
+    dataset: MemoryQualityDataset,
+    case: QualityCase,
+    candidates: Sequence[QualityExtractionCandidate],
+    *,
+    latency_ms: float,
+) -> tuple[dict[str, Any], list[str]]:
+    errors: list[str] = []
+    messages = {message.message_id: message for message in case.messages}
+    scopes = {scope.name: scope for scope in dataset.scopes}
+    ignored_ids = set(case.ignored_message_ids)
+    candidate_ids = [candidate.candidate_id for candidate in candidates]
+    if len(candidate_ids) != len(set(candidate_ids)):
+        errors.append("extraction baseline returned duplicate candidate IDs")
+    covered_gold: set[str] = set()
+    rendered: list[dict[str, Any]] = []
+    for candidate in candidates:
+        source_ids = set(candidate.source_message_ids)
+        unknown_sources = source_ids.difference(messages)
+        if unknown_sources:
+            errors.append(
+                f"candidate {candidate.candidate_id} has unknown sources "
+                f"{sorted(unknown_sources)}"
+            )
+        source_user_ids = {
+            scopes[messages[source_id].scope].user_id
+            for source_id in source_ids
+            if source_id in messages
+        }
+        target = scopes.get(candidate.scope)
+        scope_leak = target is None or any(
+            user_id != target.user_id for user_id in source_user_ids
+        )
+        matching_gold = [
+            memory
+            for memory in case.gold_memories
+            if source_ids.intersection(memory.evidence_message_ids)
+        ]
+        supported = bool(matching_gold)
+        subject_correct = any(
+            memory.subject == candidate.subject for memory in matching_gold
+        )
+        scope_correct = any(memory.scope == candidate.scope for memory in matching_gold)
+        if subject_correct and scope_correct:
+            covered_gold.update(
+                memory.memory_key
+                for memory in matching_gold
+                if memory.subject == candidate.subject
+                and memory.scope == candidate.scope
+            )
+        rendered.append(
+            {
+                **candidate.model_dump(mode="json"),
+                "supported": supported,
+                "subject_correct": subject_correct,
+                "scope_correct": scope_correct,
+                "uses_ignored_evidence": bool(source_ids.intersection(ignored_ids)),
+                "uses_agent_evidence": any(
+                    messages[source_id].actor in {Actor.AGENT, Actor.SYSTEM}
+                    for source_id in source_ids
+                    if source_id in messages
+                ),
+                "scope_leak": scope_leak,
+                "matched_gold_memory_keys": [
+                    memory.memory_key for memory in matching_gold
+                ],
+            }
+        )
+    return (
+        {
+            "name": case.name,
+            "category": case.category,
+            "gold_memory_count": len(case.gold_memories),
+            "covered_gold_memories": len(covered_gold),
+            "latency_ms": _rounded(latency_ms),
+            "candidates": rendered,
+        },
+        errors,
+    )
 
 
 async def run_memory_quality_benchmark(

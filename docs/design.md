@@ -1,11 +1,13 @@
 # Doppel 设计说明
 
-> v0.7.1：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与上下文协议。
+> v0.7.2：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
 
 ## 定位与边界
 
-Doppel 是记忆基础库，不是 Agent runtime。它标准化 IM 事件，持久化带 actor、authority、
-scope 和 provenance 的记忆，并向上层提供结构化检索材料。
+Doppel 是个人信息代理的记忆基础库，不是 Agent runtime。当前以 IM 事件作为第一类输入，持久化
+带 actor、authority、scope、时间解释和 provenance 的个人记忆，并向上层提供结构化检索材料。
+核心协议保持开放，但官方参考智能和质量门禁优先解决个人事实、状态、经历、偏好、关系、计划与
+承诺，不把项目退化为通用向量数据库包装层。
 
 核心负责：
 
@@ -626,6 +628,63 @@ consolidation、conflict resolution、answer correctness 和 LLM token cost。�
 第一次运行；其中 evidence 指标可跨环境比较，延迟只是在报告所列 Python/OS 上的观察值。CI 运行完整
 四基线并把 scope leakage 作为硬门禁，但不把当前弱检索的低 recall 变成一个无法迭代的 CI 失败。
 
+## v0.7.2 个人记忆参考智能
+
+v0.7.2 增加第一条官方个人记忆抽取路径，但不把模型变成隐式写权限：
+
+```text
+ChatMessage[] (exact source scope)
+        │
+        ▼
+PersonalMemoryAnalysisRequest
+        │
+        ▼
+PersonalMemoryAnalyzer
+  └─ ReferencePersonalMemoryAnalyzer
+       └─ StructuredOutputModel (host-provided local/hosted provider)
+        │
+        ▼
+PersonalMemoryDraft[]
+  content · type · subject · temporal status · evidence IDs
+        │
+        ▼ trusted revalidation
+known evidence · single source actor · subject binding · confidence gate
+derived authority · derived target scope · stable idempotency
+        │
+        ▼
+MemoryProposal(candidate)
+        │
+        ▼ existing ProposalWriter
+policy · exact-scope authorization · hooks · Store
+```
+
+`PersonalMemoryDraft` 能表达开放的 personal memory type，内置建议值包括 fact、state、episode、
+preference、relationship、plan 和 commitment；`MemoryTemporalStatus` 同样是开放 namespace，提供
+timeless/current/historical/planned/unknown 建议值。`valid_from/valid_to` 为下一阶段时间整理保留明确
+区间，但 v0.7.2 不根据它自动过期、覆盖或合并记录。
+
+模型只能选择草稿内容、类型、subject、时间解释、置信度和 evidence IDs。它不能选择 scope、
+authority、memory ID、Store 或 lifecycle action。转换层以输入消息重新解析 evidence：未知 ID、混合
+说话人证据、subject 与来源 actor 不一致、伪造 owner/agent subject ID 或超量输出都会使本次处理
+失败。默认只分析 owner/contact，owner 记忆提议到 user scope，contact 记忆固定留在来源会话；跨到
+user scope 仍必须由 `allowed_scopes` 明确授权。所有提议默认为 candidate。
+
+单条自包含事实使用 `PersonalMemoryExtractor`，保持 `MemoryProcessor.process(scope, message)` 无状态。
+跨消息纠正、重复证据和上下文判断使用 `PersonalMemoryMiner`；它复用 `MemoryBatchTask` 的 exact-scope
+只读历史、读取预算、checkpoint 和统一 ProposalWriter，不给在线 Processor 增加 Store 能力。
+Miner 每次读取有 `page_size/max_messages` 双重界限，checkpoint metadata 记录 eligible message 数、
+截断标志、配置 fingerprint 与 analyzer 身份。
+
+质量实验室增加独立的 `run_memory_extraction_quality_benchmark()`。它可以把真实 analyzer 注入完整
+Miner/Proposal 路径，并度量 gold evidence coverage、supported candidate precision、subject
+attribution、target scope、ignored/agent evidence writes、latency 和跨用户泄漏。这里的 supported 只
+表示候选引用了人工标注证据；报告明确把 semantic content correctness、整理、冲突、最终回答与模型
+成本保留为未测维度，避免用证据重合冒充语义正确。
+
+这一组根导出在 v0.7 系列标记为 provisional。`MemoryStore`、`MemoryProcessor`、`MemoryProposal`、
+`MemoryBatchTask` 与现有 writer 合同没有修改。模型 provider 继续由 host 管理，核心包不增加网络依赖、
+API key 处理或统一供应商 SDK。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -659,7 +718,7 @@ provenance 保存在 `raw.doppel_import`。
 - v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口（已完成）；
 - v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理（已完成）。
 - v0.7.1：中文 IM 记忆质量 fixture、四类基线、分层指标和版本化报告（已完成）。
-- v0.7.2：Reference Memory Intelligence、模型无关结构化抽取与证据门禁；
+- v0.7.2：个人记忆 Reference Intelligence、模型无关结构化抽取与证据门禁（已完成）；
 - v0.7.3：Memory Consolidator、重复证据合并和冲突/纠正决策；
 - v0.8.0：中文 lexical/semantic 检索质量与 query planning；
 - v0.8.1：类型感知的强化、衰减、归档和恢复；

@@ -34,6 +34,12 @@ provisional root APIs. They are intentionally separate from the stable `MemorySt
 and provisional query-only `SemanticIndex` contracts. `GraphitiSemanticIndex` remains
 module-only experimental even when it structurally satisfies `IndexWriter`.
 
+The v0.7.2 personal-memory analysis models, `StructuredOutputModel`,
+`PersonalMemoryAnalyzer`, `ReferencePersonalMemoryAnalyzer`, online extractor, and
+periodic miner are provisional root APIs. They compose with the unchanged stable
+`MemoryProcessor`/`MemoryProposal` surface and the existing provisional batch surface;
+the model boundary never receives Store access or authority to select write scopes.
+
 ## Compatibility rules
 
 For stable API, a patch release must not require callers or third-party implementations
