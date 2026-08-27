@@ -530,9 +530,11 @@ Store search candidates ──────────┤
 ```
 
 Graphiti episode 使用 exact `scope_key` 作为 group ID，并由 scope + core memory ID 生成稳定 episode
-UUID。查询同时把允许的 group IDs 交给 Graphiti，并再次丢弃返回中未知的 group，避免上游过滤错误
-变成跨会话泄漏。edge UUID 是派生候选身份，episode、created/valid time、scope 与 derived chain
-进入 `RecallResult`；它不会冒充 core memory ID。
+UUID；episode name 保存可逆的 core memory ID 编码。查询同时把允许的 group IDs 交给 Graphiti，批量
+解析 fact 的 source episodes，并用 exact scope 重新读取权威 Store。未知 group、无法恢复来源、已硬删
+或默认 inactive 的核心记录都会让候选被丢弃，避免上游过滤错误或图中陈旧 fact 变成跨会话/生命周期
+泄漏。edge UUID 是派生候选身份，episode、created/valid time、scope 与 derived chain 进入
+`RecallResult`；它不会冒充 core memory ID。
 
 Graphiti edge 没有 Doppel kind、actor、authority、tag 或 importance 的可靠一对一来源。适配器对这些
 过滤条件抛出 `GraphitiFilterUnsupportedError`，不以模型默认值伪造匹配。state 与时间可从 edge 的

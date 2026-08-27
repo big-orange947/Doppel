@@ -9,6 +9,7 @@ cannot satisfy Doppel's core Store contract.
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import warnings
 from collections import deque
@@ -23,6 +24,7 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.embedder.client import EmbedderClient, EmbedderConfig
 from graphiti_core.llm_client import OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.nodes import EpisodicNode
 
 from doppel_memory.models import (
     ACTIVE_MEMORY_STATES,
@@ -119,6 +121,7 @@ class GraphitiSemanticIndex:
 
     def __init__(
         self,
+        store: MemoryStore,
         *,
         neo4j_uri: str = "bolt://127.0.0.1:7687",
         neo4j_user: str = "neo4j",
@@ -129,6 +132,7 @@ class GraphitiSemanticIndex:
         enabled: bool = True,
         graphiti_client: Any | None = None,
     ) -> None:
+        self._store = store
         self._neo4j_uri = neo4j_uri
         self._neo4j_user = neo4j_user
         self._neo4j_password = neo4j_password
@@ -147,6 +151,12 @@ class GraphitiSemanticIndex:
             raise ValueError(
                 "Graphiti indexing requires a committed MemoryRecord with memory_id"
             )
+        authoritative = await self._store.get(record.scope, record.memory_id)
+        if authoritative is None:
+            raise ValueError(
+                "Graphiti indexing requires a record present in the authoritative Store"
+            )
+        record = authoritative
         episode_id = str(
             uuid5(
                 NAMESPACE_URL,
@@ -161,7 +171,7 @@ class GraphitiSemanticIndex:
         try:
             graphiti = await self._ensure_graphiti()
             result = await graphiti.add_episode(
-                name=f"Doppel:{record.memory_id}",
+                name=_graphiti_episode_name(record.memory_id),
                 episode_body=body,
                 source_description=record.extractor or "doppel",
                 reference_time=record.created_at,
@@ -215,6 +225,40 @@ class GraphitiSemanticIndex:
                 f"Graphiti semantic search failed: {exc}"
             ) from exc
 
+        edge_episodes = {
+            str(episode_id)
+            for edge in edges
+            for episode_id in (getattr(edge, "episodes", None) or [])
+            if episode_id
+        }
+        try:
+            episodes = await _load_graphiti_episodes(graphiti, edge_episodes)
+        except Exception as exc:
+            raise GraphitiIndexUnavailableError(
+                f"Graphiti episode provenance lookup failed: {exc}"
+            ) from exc
+        source_by_episode = {
+            str(getattr(episode, "uuid", "") or ""): (
+                str(getattr(episode, "group_id", "") or ""),
+                _memory_id_from_episode_name(str(getattr(episode, "name", "") or "")),
+            )
+            for episode in episodes
+        }
+        source_keys = sorted(
+            {
+                source
+                for source in source_by_episode.values()
+                if source[0] in scope_by_key and source[1]
+            }
+        )
+        source_records = await asyncio.gather(
+            *(
+                self._store.get(scope_by_key[scope_key], memory_id)
+                for scope_key, memory_id in source_keys
+            )
+        )
+        record_by_source = dict(zip(source_keys, source_records, strict=True))
+
         results: list[RecallResult] = []
         for edge in edges:
             fact = str(getattr(edge, "fact", "") or "").strip()
@@ -223,6 +267,17 @@ class GraphitiSemanticIndex:
             if not fact or scope is None:
                 continue
             episodes = getattr(edge, "episodes", None) or []
+            authoritative_sources = [
+                record_by_source.get(source_by_episode.get(str(episode_id), ("", "")))
+                for episode_id in episodes
+            ]
+            if not any(
+                source is not None
+                and source.scope.scope_key == group_id
+                and _core_record_visible(source, filter_obj)
+                for source in authoritative_sources
+            ):
+                continue
             item = RecallResult(
                 fact=fact,
                 scope=scope,
@@ -545,6 +600,44 @@ def _build_graphiti_client(
         embedder=FastEmbedderClient(),
         cross_encoder=NoOpCrossEncoder(),
     )
+
+
+async def _load_graphiti_episodes(
+    graphiti: Any, episode_ids: set[str]
+) -> Sequence[Any]:
+    if not episode_ids:
+        return []
+    ordered_ids = sorted(episode_ids)
+    injected_loader = getattr(graphiti, "get_episodes_by_uuids", None)
+    if injected_loader is not None:
+        return await graphiti.get_episodes_by_uuids(ordered_ids)
+    driver = getattr(graphiti, "driver", None)
+    if driver is None:
+        raise RuntimeError("Graphiti client does not expose a graph driver")
+    return await EpisodicNode.get_by_uuids(driver, ordered_ids)
+
+
+def _graphiti_episode_name(memory_id: str) -> str:
+    encoded = base64.urlsafe_b64encode(memory_id.encode()).decode().rstrip("=")
+    return f"DoppelMemory:v1:{encoded}"
+
+
+def _memory_id_from_episode_name(name: str) -> str:
+    prefix = "DoppelMemory:v1:"
+    if not name.startswith(prefix):
+        return ""
+    encoded = name[len(prefix) :]
+    try:
+        padded = encoded + "=" * (-len(encoded) % 4)
+        return base64.urlsafe_b64decode(padded.encode()).decode()
+    except (UnicodeDecodeError, ValueError):
+        return ""
+
+
+def _core_record_visible(record: MemoryRecord, filters: MemoryFilter) -> bool:
+    if filters.states is not None:
+        return record.state in filters.states
+    return filters.include_inactive or record.state in ACTIVE_MEMORY_STATES
 
 
 def _unsupported_graphiti_filters(filters: MemoryFilter) -> list[str]:

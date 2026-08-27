@@ -15,8 +15,9 @@ partial implementation of Doppel's authoritative Store contract.
   lexical Store candidates for this known boundary while continuing to propagate
   unexpected programming and core Store failures.
 - Graphiti-specific indexing provenance, exact-scope output guards, lifecycle mapping
-  for invalidated edges, temporal/state post-filtering, and injectable-client contract
-  tests that do not require Neo4j or an LLM service.
+  for invalidated edges, authoritative Store revalidation, temporal/state
+  post-filtering, and injectable-client contract tests that do not require Neo4j or an
+  LLM service.
 
 ### Changed
 
@@ -28,7 +29,9 @@ partial implementation of Doppel's authoritative Store contract.
   with the semantic-index protocol.
 - Graph-derived facts use their edge UUID as candidate identity and retain episode,
   extraction, validity, scope, and derivation provenance. Unknown returned scope groups
-  are dropped even when the upstream service was already given exact group IDs.
+  are dropped even when the upstream service was already given exact group IDs. A fact
+  is also dropped when none of its source episodes still maps to an active record in
+  the authoritative Store.
 
 ### Compatibility
 

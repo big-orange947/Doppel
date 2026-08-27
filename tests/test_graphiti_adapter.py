@@ -33,13 +33,20 @@ class FakeGraphiti:
         self.add_calls: list[dict[str, object]] = []
         self.search_calls: list[dict[str, object]] = []
         self.query_calls: list[str] = []
+        self.episodes: dict[str, object] = {}
         self.driver = self
 
     async def add_episode(self, **kwargs):
         if self.error is not None:
             raise self.error
         self.add_calls.append(kwargs)
-        return SimpleNamespace(episode=SimpleNamespace(uuid=kwargs["uuid"]))
+        episode = SimpleNamespace(
+            uuid=kwargs["uuid"],
+            name=kwargs["name"],
+            group_id=kwargs["group_id"],
+        )
+        self.episodes[str(episode.uuid)] = episode
+        return SimpleNamespace(episode=episode)
 
     async def search(self, **kwargs):
         if self.error is not None:
@@ -52,6 +59,11 @@ class FakeGraphiti:
             raise self.error
         self.query_calls.append(query)
         return []
+
+    async def get_episodes_by_uuids(self, episode_ids):
+        if self.error is not None:
+            raise self.error
+        return [self.episodes[value] for value in episode_ids if value in self.episodes]
 
 
 async def test_graphiti_029_adapter_constructs_without_connecting() -> None:
@@ -74,7 +86,8 @@ async def test_graphiti_unsupported_lifecycle_is_explicit() -> None:
 
 async def test_semantic_index_uses_stable_episode_and_exact_scope_group() -> None:
     fake = FakeGraphiti()
-    index = GraphitiSemanticIndex(graphiti_client=fake)
+    store = InMemoryStore()
+    index = GraphitiSemanticIndex(store, graphiti_client=fake)
     assert isinstance(index, SemanticIndex)
     scope = MemoryScope(
         user_id="u",
@@ -89,8 +102,11 @@ async def test_semantic_index_uses_stable_episode_and_exact_scope_group() -> Non
         content="The owner likes mountain hiking",
         extractor="test",
     )
+    assert (await store.put(record)).accepted
 
-    first = await index.index_record(record)
+    first = await index.index_record(
+        record.model_copy(update={"content": "untrusted caller content"})
+    )
     second = await index.index_record(record)
 
     assert first == second
@@ -100,6 +116,8 @@ async def test_semantic_index_uses_stable_episode_and_exact_scope_group() -> Non
     assert fake.add_calls[0]["uuid"] == fake.add_calls[1]["uuid"]
     assert fake.add_calls[0]["group_id"] == scope.scope_key
     assert "memory_id=memory-1" in str(fake.add_calls[0]["episode_body"])
+    assert "The owner likes mountain hiking" in str(fake.add_calls[0]["episode_body"])
+    assert "untrusted caller content" not in str(fake.add_calls[0]["episode_body"])
     assert (await index.health())["ok"] is True
     assert fake.query_calls == ["RETURN 1 AS doppel_health"]
 
@@ -113,50 +131,95 @@ async def test_semantic_search_drops_unknown_scopes_and_maps_provenance() -> Non
         chat_id="allowed",
     )
     now = datetime.now(UTC)
-    fake = FakeGraphiti(
-        edges=[
-            SimpleNamespace(
-                fact="The owner enjoys hiking",
-                group_id=scope.scope_key,
-                uuid="edge-1",
-                episodes=["episode-1"],
-                created_at=now,
-                valid_at=now - timedelta(days=1),
-                reference_time=None,
-                invalid_at=None,
-                expired_at=None,
-            ),
-            SimpleNamespace(
-                fact="must never leak",
-                group_id="different-scope",
-                uuid="edge-leak",
-                episodes=[],
-                created_at=now,
-                valid_at=now,
-                reference_time=None,
-                invalid_at=None,
-                expired_at=None,
-            ),
-            SimpleNamespace(
-                fact="an invalidated fact",
-                group_id=scope.scope_key,
-                uuid="edge-expired",
-                episodes=["episode-expired"],
-                created_at=now,
-                valid_at=now - timedelta(days=2),
-                reference_time=None,
-                invalid_at=now - timedelta(hours=1),
-                expired_at=None,
-            ),
-        ]
+    fake = FakeGraphiti()
+    store = InMemoryStore()
+    index = GraphitiSemanticIndex(store, graphiti_client=fake)
+    active = MemoryRecord(
+        memory_id="source-active",
+        scope=scope,
+        content="The owner enjoys hiking",
     )
-    index = GraphitiSemanticIndex(graphiti_client=fake)
+    stale = MemoryRecord(
+        memory_id="source-inactive",
+        scope=scope,
+        content="An inactive graph source",
+    )
+    deleted = MemoryRecord(
+        memory_id="source-deleted",
+        scope=scope,
+        content="A deleted graph source",
+    )
+    assert (await store.put(active)).accepted
+    assert (await store.put(stale)).accepted
+    assert (await store.put(deleted)).accepted
+    active_episode = await index.index_record(active)
+    stale_episode = await index.index_record(stale)
+    deleted_episode = await index.index_record(deleted)
+    assert await store.forget(scope, stale.memory_id)
+    assert await store.forget(scope, deleted.memory_id, hard=True)
+    fake.edges = [
+        SimpleNamespace(
+            fact="The owner enjoys hiking",
+            group_id=scope.scope_key,
+            uuid="edge-1",
+            episodes=[active_episode.episode_id],
+            created_at=now,
+            valid_at=now - timedelta(days=1),
+            reference_time=None,
+            invalid_at=None,
+            expired_at=None,
+        ),
+        SimpleNamespace(
+            fact="must never leak",
+            group_id="different-scope",
+            uuid="edge-leak",
+            episodes=[active_episode.episode_id],
+            created_at=now,
+            valid_at=now,
+            reference_time=None,
+            invalid_at=None,
+            expired_at=None,
+        ),
+        SimpleNamespace(
+            fact="an invalidated fact",
+            group_id=scope.scope_key,
+            uuid="edge-expired",
+            episodes=[active_episode.episode_id],
+            created_at=now,
+            valid_at=now - timedelta(days=2),
+            reference_time=None,
+            invalid_at=now - timedelta(hours=1),
+            expired_at=None,
+        ),
+        SimpleNamespace(
+            fact="must disappear after authoritative expiration",
+            group_id=scope.scope_key,
+            uuid="edge-stale",
+            episodes=[stale_episode.episode_id],
+            created_at=now,
+            valid_at=now,
+            reference_time=None,
+            invalid_at=None,
+            expired_at=None,
+        ),
+        SimpleNamespace(
+            fact="must disappear after authoritative deletion",
+            group_id=scope.scope_key,
+            uuid="edge-deleted",
+            episodes=[deleted_episode.episode_id],
+            created_at=now,
+            valid_at=now,
+            reference_time=None,
+            invalid_at=None,
+            expired_at=None,
+        ),
+    ]
 
     hits = await index.search("outdoor activity", [scope])
 
     assert [hit.memory_id for hit in hits] == ["edge-1"]
     assert hits[0].scope == scope
-    assert hits[0].source_episode == "episode-1"
+    assert hits[0].source_episode == active_episode.episode_id
     assert hits[0].extractor == "graphiti"
     assert hits[0].derived_chain == ["graphiti:0.29"]
     assert fake.search_calls[0]["group_ids"] == [scope.scope_key]
@@ -164,7 +227,7 @@ async def test_semantic_search_drops_unknown_scopes_and_maps_provenance() -> Non
 
 async def test_semantic_index_rejects_filters_it_cannot_prove() -> None:
     scope = MemoryScope(user_id="u", agent_id="bot")
-    index = GraphitiSemanticIndex(graphiti_client=FakeGraphiti())
+    index = GraphitiSemanticIndex(InMemoryStore(), graphiti_client=FakeGraphiti())
 
     with pytest.raises(GraphitiFilterUnsupportedError, match="tags"):
         await index.search("query", [scope], filters=MemoryFilter(tags={"private"}))
@@ -175,7 +238,8 @@ async def test_graphiti_outage_can_explicitly_fall_back_to_core_store() -> None:
     store = InMemoryStore()
     await store.write_background(scope, "literal fallback memory")
     index = GraphitiSemanticIndex(
-        graphiti_client=FakeGraphiti(error=TimeoutError("neo4j unavailable"))
+        store,
+        graphiti_client=FakeGraphiti(error=TimeoutError("neo4j unavailable")),
     )
     strategy = HybridRetrievalStrategy(index, fallback_to_lexical=True)
 

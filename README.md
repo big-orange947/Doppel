@@ -850,7 +850,7 @@ Graphiti 的正确组合方式是先把 `MemoryRecord` 提交给合规 Store，�
 from doppel_memory import HybridRetrievalStrategy, Retriever
 from doppel_memory.graphiti_store import GraphitiSemanticIndex
 
-graph = GraphitiSemanticIndex(llm_api_key="...")
+graph = GraphitiSemanticIndex(store, llm_api_key="...")
 created = await store.write_background(scope, "号主喜欢周末徒步")
 if created.record is not None:
     await graph.index_record(created.record)
