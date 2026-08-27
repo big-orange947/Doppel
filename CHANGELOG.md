@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.6.1
+
+An explicit pgvector semantic index and hybrid retrieval layer that preserves the
+transactional boundary of the PostgreSQL core Store.
+
+### Added
+
+- `EmbeddingProvider` and `SemanticIndex` protocols with stable provider name, version,
+  dimensions, and exact-scope search contracts.
+- `PostgreSQLVectorIndex` with profile-isolated pgvector tables, content-hash
+  idempotency, batched indexing, one-page cursor backfill, structured failure reports,
+  cosine search, optional HNSW indexes, health metadata, and hard-delete cascade.
+- `HybridRetrievalStrategy` using weighted reciprocal-rank fusion of ordinary Store
+  candidates and semantic candidates, followed by the existing Retriever scope guard.
+- `VectorIndexConfig`, `VectorIndexFailure`, `VectorIndexReport`, and
+  `VectorBackfillResult` as provisional, serializable operational APIs.
+- A `pgvector` installation extra, pinned pgvector 0.8.6 PostgreSQL 16 CI image, real
+  extension/index/search tests, and an adversarial vector-quality benchmark fixture.
+
+### Semantics
+
+- Core writes never call an embedding service. Callers explicitly index a successful
+  `MemoryRecord`, or backfill one bounded Store page at a time. A provider outage
+  therefore cannot turn a committed memory write into an ambiguous failed operation.
+- A vector profile hashes provider name, provider version, dimensions, and cosine
+  metric. Each profile gets its own table, so incompatible models or dimensions are
+  never silently compared and can coexist during a reindex rollout.
+- Indexing reloads every requested record through its exact scope and embeds the stored
+  content, not an untrusted caller copy. Identical content hashes skip provider calls.
+- The pgvector extension and HNSW creation are both opt-in. Exact nearest-neighbor
+  search remains available without HNSW; dimensions above pgvector's 2,000-dimension
+  HNSW limit are accepted only for exact search.
+- Known provider/unavailable errors may explicitly degrade hybrid search to lexical
+  candidates. Unexpected database and programming failures are not swallowed.
+
+### Evaluation and safety
+
+- The repository vector fixture supplies fixed precomputed embeddings. It measures
+  expected top-1 retrieval, hybrid top-1 retrieval, exact-scope leakage, forbidden
+  cross-scope IDs, complete indexing, and idempotent replay; it does not grade or
+  endorse a real embedding model.
+- The benchmark requires an explicit DSN and `--allow-mutating-benchmark`, and CI runs
+  it only against an ephemeral pgvector database.
+- `PostgreSQLStore.search()` and its `semantic_search` capability remain unchanged:
+  semantic retrieval belongs to the explicit index/strategy layer, not the core Store.
+
 ## 0.6.0
 
 A PostgreSQL core Store that is admitted by the same installed conformance contract as

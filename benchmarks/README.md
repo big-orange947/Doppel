@@ -117,3 +117,26 @@ These metrics do not measure factual correctness, semantics, identity, helpfulne
 safety. Production evaluations should use held-out conversations and real model
 outputs, keep sampling settings fixed, report every feature score, and add human blind
 review instead of treating one aggregate number as “persona fidelity.”
+
+## pgvector and hybrid correctness
+
+The pgvector benchmark is separate from Store performance and observable style quality:
+
+```bash
+uv run python -m benchmarks.vector_quality \
+  --dsn "postgresql://doppel:secret@127.0.0.1:5432/disposable_test" \
+  --allow-mutating-benchmark \
+  --dataset benchmarks/datasets/vector-quality-v1.json \
+  --output benchmarks/results/vector-quality.json
+```
+
+The target must be a disposable pgvector-enabled PostgreSQL database. The fixture
+provides every record/query embedding directly through a deterministic provider. This
+isolates Doppel's responsibilities: complete and idempotent indexing, expected semantic
+and hybrid top-1 IDs, exact-scope filtering, and zero forbidden cross-scope hits.
+
+The score is not an embedding-model leaderboard. It cannot establish whether a real
+provider understands an application's language or domain. Evaluate each production
+provider/version on held-out labeled queries before switching its profile. The dataset
+fingerprint and `vector-result.schema.json` make fixture and result-envelope changes
+visible in CI.

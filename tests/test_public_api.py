@@ -186,6 +186,24 @@ MODEL_FIELDS = {
         "skipped_count",
         "failed_count",
     ),
+    "VectorBackfillResult": ("report", "next_cursor", "has_more"),
+    "VectorIndexConfig": (
+        "create_extension",
+        "create_hnsw_index",
+        "embedding_batch_size",
+        "hnsw_m",
+        "hnsw_ef_construction",
+    ),
+    "VectorIndexFailure": ("memory_id", "stage", "error_type", "message"),
+    "VectorIndexReport": (
+        "schema_version",
+        "profile",
+        "attempted",
+        "indexed",
+        "skipped",
+        "failed",
+        "failures",
+    ),
     "StyleMinerConfig": (
         "min_messages",
         "page_size",
@@ -275,6 +293,7 @@ SIGNATURES = {
         ("context", "POSITIONAL_OR_KEYWORD"),
     ),
     "ContentResolver.resolve": (("message", "POSITIONAL_OR_KEYWORD"),),
+    "EmbeddingProvider.embed": (("texts", "POSITIONAL_OR_KEYWORD"),),
     "DoppelClient.__init__": (
         ("store", "POSITIONAL_OR_KEYWORD"),
         ("backend", "KEYWORD_ONLY"),
@@ -339,6 +358,22 @@ SIGNATURES = {
         ("filters", "KEYWORD_ONLY"),
         ("limit", "KEYWORD_ONLY"),
     ),
+    "HybridRetrievalStrategy.__init__": (
+        ("semantic_index", "POSITIONAL_OR_KEYWORD"),
+        ("lexical_strategy", "KEYWORD_ONLY"),
+        ("lexical_weight", "KEYWORD_ONLY"),
+        ("semantic_weight", "KEYWORD_ONLY"),
+        ("rrf_k", "KEYWORD_ONLY"),
+        ("candidate_multiplier", "KEYWORD_ONLY"),
+        ("fallback_to_lexical", "KEYWORD_ONLY"),
+    ),
+    "HybridRetrievalStrategy.search": (
+        ("store", "POSITIONAL_OR_KEYWORD"),
+        ("query", "POSITIONAL_OR_KEYWORD"),
+        ("scopes", "POSITIONAL_OR_KEYWORD"),
+        ("filters", "KEYWORD_ONLY"),
+        ("limit", "KEYWORD_ONLY"),
+    ),
     "PostgreSQLStore.__init__": (
         ("dsn", "POSITIONAL_OR_KEYWORD"),
         ("schema", "KEYWORD_ONLY"),
@@ -346,6 +381,24 @@ SIGNATURES = {
         ("min_pool_size", "KEYWORD_ONLY"),
         ("max_pool_size", "KEYWORD_ONLY"),
         ("command_timeout", "KEYWORD_ONLY"),
+    ),
+    "PostgreSQLVectorIndex.__init__": (
+        ("store", "POSITIONAL_OR_KEYWORD"),
+        ("provider", "POSITIONAL_OR_KEYWORD"),
+        ("config", "POSITIONAL_OR_KEYWORD"),
+    ),
+    "PostgreSQLVectorIndex.index_records": (("records", "POSITIONAL_OR_KEYWORD"),),
+    "PostgreSQLVectorIndex.backfill": (
+        ("scope", "POSITIONAL_OR_KEYWORD"),
+        ("filters", "KEYWORD_ONLY"),
+        ("cursor", "KEYWORD_ONLY"),
+        ("page_size", "KEYWORD_ONLY"),
+    ),
+    "PostgreSQLVectorIndex.search": (
+        ("query", "POSITIONAL_OR_KEYWORD"),
+        ("scopes", "POSITIONAL_OR_KEYWORD"),
+        ("filters", "KEYWORD_ONLY"),
+        ("limit", "KEYWORD_ONLY"),
     ),
     "PersonaMaterialsBuilder.__init__": (
         ("retriever", "POSITIONAL_OR_KEYWORD"),
@@ -389,6 +442,12 @@ SIGNATURES = {
     ),
     "ScopedMemoryReader.recall": (
         ("query", "POSITIONAL_OR_KEYWORD"),
+        ("filters", "KEYWORD_ONLY"),
+        ("limit", "KEYWORD_ONLY"),
+    ),
+    "SemanticIndex.search": (
+        ("query", "POSITIONAL_OR_KEYWORD"),
+        ("scopes", "POSITIONAL_OR_KEYWORD"),
         ("filters", "KEYWORD_ONLY"),
         ("limit", "KEYWORD_ONLY"),
     ),
@@ -466,6 +525,13 @@ def test_critical_defaults_and_enum_values_are_stable() -> None:
         "max_page_size": 2_000,
     }
     assert doppel.StyleMinerConfig().min_messages == 20
+    assert doppel.VectorIndexConfig().model_dump() == {
+        "create_extension": False,
+        "create_hnsw_index": False,
+        "embedding_batch_size": 64,
+        "hnsw_m": 16,
+        "hnsw_ef_construction": 64,
+    }
     assert doppel.StyleMinerConfig().target_scope == "conversation"
     assert doppel.StyleProfessorConfig().include_common_phrases is False
     assert doppel.StyleProfessorConfig().max_prompt_chars == 800

@@ -275,7 +275,7 @@ wheels = [
 
 [[package]]
 name = "doppel-memory"
-version = "0.6.0"
+version = "0.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
@@ -294,12 +294,16 @@ graphiti = [
     { name = "graphiti-core" },
     { name = "neo4j" },
 ]
+pgvector = [
+    { name = "asyncpg" },
+]
 postgres = [
     { name = "asyncpg" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "asyncpg", marker = "extra == 'pgvector'", specifier = ">=0.30.0,<0.32.0" },
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.30.0,<0.32.0" },
     { name = "fastembed", marker = "extra == 'graphiti'", specifier = ">=0.8.0,<0.9.0" },
     { name = "graphiti-core", marker = "extra == 'graphiti'", specifier = ">=0.29.0,<0.30.0" },
@@ -311,7 +315,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.0" },
 ]
-provides-extras = ["postgres", "graphiti", "dev"]
+provides-extras = ["postgres", "pgvector", "graphiti", "dev"]
 
 [[package]]
 name = "fastembed"

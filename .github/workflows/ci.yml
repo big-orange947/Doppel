@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:0.8.6-pg16-bookworm
         env:
           POSTGRES_DB: doppel_test
           POSTGRES_USER: doppel
@@ -119,13 +119,15 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: uv sync --locked --extra dev --extra postgres
-      - name: Run PostgreSQL contract and concurrency tests
+      - run: uv sync --locked --extra dev --extra postgres --extra pgvector
+      - name: Run PostgreSQL and pgvector integration tests
         run: >-
           uv run pytest -q
           tests/test_postgres_contract.py
           tests/test_postgres_runtime.py
           tests/test_postgres_unit.py
+          tests/test_vector_postgres.py
+          tests/test_vector_unit.py
       - name: Audit PostgreSQL through the installed CLI
         run: >-
           uv run doppel-conformance
@@ -136,6 +138,13 @@ jobs:
           --require-capability temporal_search
           --require-capability hard_delete
           --output "$RUNNER_TEMP/doppel-postgres-conformance.json"
+      - name: Run correctness-gated pgvector and hybrid quality benchmark
+        run: >-
+          uv run python -m benchmarks.vector_quality
+          --dsn "$DOPPEL_TEST_POSTGRES_DSN"
+          --allow-mutating-benchmark
+          --dataset benchmarks/datasets/vector-quality-v1.json
+          --output "$RUNNER_TEMP/doppel-vector-quality.json"
 
   style-quality-smoke:
     name: Style quality smoke test

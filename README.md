@@ -56,6 +56,14 @@ PostgreSQL 是独立可选依赖，不会增加默认安装体积：
 pip install "doppel-memory[postgres]"
 ```
 
+使用 PostgreSQL 上的可选 pgvector 语义索引：
+
+```bash
+pip install "doppel-memory[pgvector]"
+```
+
+这个 extra 提供异步 PostgreSQL 客户端；数据库服务器仍需单独安装并启用 pgvector extension。
+
 实验性 Graphiti 后端需要额外依赖：
 
 ```bash
@@ -167,8 +175,69 @@ memory = DoppelClient(
 
 后端会在已有 schema（默认 `public`）内创建和迁移 Doppel 自己的表/索引；生产角色没有
 `CREATE SCHEMA` 权限时不受影响。只有显式传入 `create_schema=True` 才会创建自定义 schema。
-当前 PostgreSQL 核心后端提供 substring/filter 检索，不宣称全文或向量检索；pgvector 会作为
-后续独立能力加入。
+当前 PostgreSQL 核心后端提供 substring/filter 检索，不把外部 embedding 调用混入 Store 事务。
+语义能力通过独立索引和 RetrievalStrategy 显式组合：
+
+```python
+from collections.abc import Sequence
+
+from doppel_memory import (
+    HybridRetrievalStrategy,
+    PostgreSQLVectorIndex,
+    Retriever,
+    VectorIndexConfig,
+)
+
+class MyEmbeddingProvider:
+    name = "my-embedding-model"
+    version = "2026-08"
+    dimensions = 768
+
+    async def embed(
+        self, texts: Sequence[str]
+    ) -> Sequence[Sequence[float]]:
+        return await my_embedding_service.embed(texts)
+
+vector_index = PostgreSQLVectorIndex(
+    store,
+    MyEmbeddingProvider(),
+    VectorIndexConfig(
+        # 只应在有权限、明确允许安装 extension 的数据库启用：
+        create_extension=False,
+        # 默认 exact NN；确认规模和构建成本后再启用 HNSW：
+        create_hnsw_index=False,
+    ),
+)
+
+created = await store.write_background(scope, "周末想去山里徒步")
+if created.record is not None:
+    report = await vector_index.index_record(created.record)
+    if not report.ok:
+        handle_failures(report.failures)
+
+retriever = Retriever(
+    store,
+    strategy=HybridRetrievalStrategy(vector_index),
+)
+hits = await retriever.recall("户外散步计划", [scope], limit=5)
+```
+
+`VectorIndexReport` 本身是结构化结果，使用 `report.ok` 和 `report.failures` 检查，不会把 provider
+失败伪装成 Store 写入失败。已有记录通过 bounded page 回填，cursor 由调用方持久化：
+
+```python
+cursor = ""
+while True:
+    page = await vector_index.backfill(scope, cursor=cursor, page_size=100)
+    handle_failures(page.report.failures)
+    cursor = page.next_cursor
+    if not page.has_more:
+        break
+```
+
+provider 的 `name + version + dimensions + cosine metric` 会形成 profile fingerprint；每个 profile
+使用独立向量表，所以模型升级和维度变化不会静默混用。相同 stored content hash 会跳过重复 embedding。
+默认 hybrid 策略只对已知的 provider/unavailable 错误降级为 lexical；数据库错误不会被吞掉。
 
 候选召回与重排是独立扩展点：
 
@@ -783,6 +852,16 @@ uv run python -m benchmarks.store_benchmark \
 保留策略混成一个“记忆智能”分数。数据集、复现规则和结果 schema 见
 [`benchmarks/README.md`](benchmarks/README.md)。
 
+pgvector 另有独立 correctness benchmark，fixture 直接提供固定向量，只验证 index/search/hybrid
+和 scope 隔离，不把某个 embedding 模型的语义能力算作 Doppel 的能力：
+
+```bash
+uv run python -m benchmarks.vector_quality \
+  --dsn "postgresql://doppel:secret@127.0.0.1:5432/disposable_test" \
+  --allow-mutating-benchmark \
+  --output benchmarks/results/vector-quality.json
+```
+
 ## 开发状态
 
 - [x] v0.2：框架定位、SQLite/InMemory、三层 API、能力声明和 provenance
@@ -799,7 +878,7 @@ uv run python -m benchmarks.store_benchmark \
 - [x] v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测
 - [x] v0.5.4：可复用、能力感知的 Store conformance kit 与 CLI
 - [x] v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI
-- [ ] v0.6.1：pgvector 可选语义/混合检索能力与独立质量门禁
+- [x] v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与独立质量门禁
 - [ ] 后续后端：Graphiti 核心合同稳定化或重新定位为专用语义适配器
 
 详细设计见 [`docs/design.md`](docs/design.md)。

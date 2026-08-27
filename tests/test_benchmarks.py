@@ -12,6 +12,7 @@ from benchmarks.style_quality import (
     load_style_quality_dataset,
     run_style_quality_benchmark,
 )
+from benchmarks.vector_quality import load_vector_quality_dataset
 from doppel_memory import InMemoryStore
 
 
@@ -128,6 +129,40 @@ def test_style_result_schema_tracks_the_runner_envelope() -> None:
         "generated_at",
         "dataset",
         "professor",
+        "cases",
+        "correctness",
+    }
+
+
+def test_vector_quality_fixture_is_scope_adversarial_and_deterministic() -> None:
+    first = load_vector_quality_dataset()
+    second = load_vector_quality_dataset()
+    assert first.fingerprint == second.fingerprint
+    assert first.name == "doppel.pgvector-fixture.v1"
+    assert first.dimensions == 3
+    record_scopes = {record.memory_id: record.scope for record in first.records}
+    assert all(query.forbidden_memory_ids for query in first.queries)
+    assert all(
+        record_scopes[query.expected_memory_id] == query.scope
+        and all(
+            record_scopes[memory_id] != query.scope
+            for memory_id in query.forbidden_memory_ids
+        )
+        for query in first.queries
+    )
+
+
+def test_vector_result_schema_tracks_the_runner_envelope() -> None:
+    with open("benchmarks/vector-result.schema.json", encoding="utf-8") as source:
+        schema = json.load(source)
+    assert schema["properties"]["result_schema_version"]["const"] == 1
+    assert schema["properties"]["correctness"]["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "result_schema_version",
+        "doppel_version",
+        "generated_at",
+        "dataset",
+        "index",
         "cases",
         "correctness",
     }

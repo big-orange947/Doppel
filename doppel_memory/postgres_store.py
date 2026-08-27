@@ -360,14 +360,18 @@ class PostgreSQLStore(MemoryStore):
 
     @staticmethod
     def _append_filters(
-        where: list[str], params: list[Any], filters: MemoryFilter
+        where: list[str],
+        params: list[Any],
+        filters: MemoryFilter,
+        *,
+        prefix: str = "",
     ) -> None:
         def append_any(
             column: str, values: list[str], *, exclude: bool = False
         ) -> None:
             params.append(values)
             operator = "<> ALL" if exclude else "= ANY"
-            where.append(f"{column} {operator}(${len(params)}::text[])")
+            where.append(f"{prefix}{column} {operator}(${len(params)}::text[])")
 
         if filters.states is not None:
             append_any("state", [state.value for state in filters.states])
@@ -391,16 +395,16 @@ class PostgreSQLStore(MemoryStore):
             )
         if filters.importance_min is not None:
             params.append(filters.importance_min)
-            where.append(f"importance >= ${len(params)}")
+            where.append(f"{prefix}importance >= ${len(params)}")
         if filters.time_from is not None:
             params.append(filters.time_from)
-            where.append(f"created_at >= ${len(params)}")
+            where.append(f"{prefix}created_at >= ${len(params)}")
         if filters.time_to is not None:
             params.append(filters.time_to)
-            where.append(f"created_at <= ${len(params)}")
+            where.append(f"{prefix}created_at <= ${len(params)}")
         if filters.tags:
             params.append(list(filters.tags))
-            where.append(f"tags @> ${len(params)}::text[]")
+            where.append(f"{prefix}tags @> ${len(params)}::text[]")
 
     async def list_recent_owner_messages(
         self, scope: MemoryScope, *, limit: int = 5

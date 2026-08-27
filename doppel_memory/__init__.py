@@ -107,8 +107,20 @@ from doppel_memory.style import (
     StyleQualityEvaluator,
     StyleQualityReport,
 )
+from doppel_memory.vector import (
+    EmbeddingProvider,
+    EmbeddingProviderError,
+    HybridRetrievalStrategy,
+    PostgreSQLVectorIndex,
+    SemanticIndex,
+    VectorBackfillResult,
+    VectorIndexConfig,
+    VectorIndexFailure,
+    VectorIndexReport,
+    VectorIndexUnavailableError,
+)
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 __all__ = [
     "Actor",
@@ -132,6 +144,8 @@ __all__ = [
     "DefaultPromptRenderer",
     "DeterministicStyleAnalyzer",
     "DoppelClient",
+    "EmbeddingProvider",
+    "EmbeddingProviderError",
     "EventProcessor",
     "FactAuthority",
     "GuardedHistoryReader",
@@ -139,6 +153,7 @@ __all__ = [
     "HistoryReaderAuditReport",
     "HistoryReaderContractError",
     "HistoryWindow",
+    "HybridRetrievalStrategy",
     "IMImportBatch",
     "IMImportItem",
     "IdentityReranker",
@@ -163,6 +178,7 @@ __all__ = [
     "PassThroughProposalPolicy",
     "PersonaMaterialsBuilder",
     "PostgreSQLStore",
+    "PostgreSQLVectorIndex",
     "ProcessingError",
     "ProcessingResult",
     "ProcessorHooks",
@@ -179,6 +195,7 @@ __all__ = [
     "ScopePolicy",
     "ScopedHistoryReader",
     "ScopedMemoryReader",
+    "SemanticIndex",
     "StoreCapabilities",
     "StoreConformanceCheck",
     "StoreConformanceConfig",
@@ -198,6 +215,11 @@ __all__ = [
     "StyleQualityConfig",
     "StyleQualityEvaluator",
     "StyleQualityReport",
+    "VectorBackfillResult",
+    "VectorIndexConfig",
+    "VectorIndexFailure",
+    "VectorIndexReport",
+    "VectorIndexUnavailableError",
     "WriteResult",
     "WriteStatus",
     "__version__",

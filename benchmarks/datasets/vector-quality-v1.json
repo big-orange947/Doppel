@@ -1,0 +1,89 @@
+{
+  "dataset_version": 1,
+  "name": "doppel.pgvector-fixture.v1",
+  "provider_name": "doppel.fixture-embedding",
+  "provider_version": "1",
+  "dimensions": 3,
+  "scopes": [
+    {
+      "name": "alpha",
+      "user_id": "vector-quality-alpha",
+      "chat_id": "alpha"
+    },
+    {
+      "name": "beta",
+      "user_id": "vector-quality-beta",
+      "chat_id": "beta"
+    }
+  ],
+  "records": [
+    {
+      "memory_id": "vector-alpha-outdoor",
+      "scope": "alpha",
+      "content": "Mountain hiking plans for Saturday",
+      "embedding": [1.0, 0.05, 0.05],
+      "tags": ["outdoor"]
+    },
+    {
+      "memory_id": "vector-alpha-tech",
+      "scope": "alpha",
+      "content": "Python debugging checklist for production",
+      "embedding": [0.05, 1.0, 0.05],
+      "tags": ["technology"]
+    },
+    {
+      "memory_id": "vector-alpha-food",
+      "scope": "alpha",
+      "content": "Fresh pasta recipe for dinner",
+      "embedding": [0.05, 0.05, 1.0],
+      "tags": ["food"]
+    },
+    {
+      "memory_id": "vector-beta-outdoor",
+      "scope": "beta",
+      "content": "Beta climbing and forest trip",
+      "embedding": [1.0, 0.05, 0.05],
+      "tags": ["outdoor"]
+    },
+    {
+      "memory_id": "vector-beta-tech",
+      "scope": "beta",
+      "content": "Beta software deployment notes",
+      "embedding": [0.05, 1.0, 0.05],
+      "tags": ["technology"]
+    },
+    {
+      "memory_id": "vector-beta-food",
+      "scope": "beta",
+      "content": "Beta bakery shopping list",
+      "embedding": [0.05, 0.05, 1.0],
+      "tags": ["food"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "alpha-outdoor-paraphrase",
+      "scope": "alpha",
+      "text": "Where should I take a quiet trail walk?",
+      "embedding": [1.0, 0.05, 0.05],
+      "expected_memory_id": "vector-alpha-outdoor",
+      "forbidden_memory_ids": ["vector-beta-outdoor"]
+    },
+    {
+      "name": "alpha-technology-paraphrase",
+      "scope": "alpha",
+      "text": "How did I plan to fix the software bug?",
+      "embedding": [0.05, 1.0, 0.05],
+      "expected_memory_id": "vector-alpha-tech",
+      "forbidden_memory_ids": ["vector-beta-tech"]
+    },
+    {
+      "name": "beta-food-paraphrase",
+      "scope": "beta",
+      "text": "What food did I want to prepare tonight?",
+      "embedding": [0.05, 0.05, 1.0],
+      "expected_memory_id": "vector-beta-food",
+      "forbidden_memory_ids": ["vector-alpha-food"]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.6.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.6.1：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -460,12 +460,54 @@ PostgreSQL 原生机制兑现相同语义：
 
 驱动是 `postgres` extra，模块顶层不会导入 asyncpg。因此默认安装和根包导入仍不依赖数据库驱动。
 当前 capability 明确限于 substring、temporal、transactions、pagination、hard delete。PostgreSQL
-全文检索和 pgvector 都不是核心 Store 自动获得的能力，必须在检索语义、降级策略和质量评测就位后
-再单独声明。
+全文检索和 pgvector 都不是核心 Store 自动获得的能力；v0.6.1 因此把 pgvector 放在显式
+SemanticIndex/RetrievalStrategy 层，`PostgreSQLStore.capabilities.semantic_search` 继续保持 false。
 
 CI 使用一次性 PostgreSQL service 运行公共 11 项 Store audit、并发/重开测试和安装后的 CLI。
 远程 CLI 额外要求 `--allow-mutating-audit`，但它只是显式确认：安全边界仍是 disposable database
 或测试 namespace，不能用参数开关替代数据隔离。
+
+## v0.6.1 pgvector 语义索引与 hybrid retrieval
+
+向量能力是 `PostgreSQLStore` 之上的显式索引，不是 Store `put()` 的隐藏副作用。边界是：
+
+```text
+MemoryStore.put() ──成功──> authoritative MemoryRecord
+                              │ 显式 index_record / bounded backfill
+EmbeddingProvider ────────────┤
+                              ▼
+                  PostgreSQLVectorIndex
+                     │ semantic candidates
+Store.search() ──────┤ lexical candidates
+                     ▼
+            HybridRetrievalStrategy (weighted RRF)
+                     ▼
+              Retriever exact-scope guard
+```
+
+embedding 服务是数据库事务之外的外部系统。如果 `put()` 自动调用它，那么“数据库已提交、provider
+超时”的结果无法用现有 `WriteResult` 准确表达。显式索引让核心写入结果保持真实，失败通过
+`VectorIndexReport.failures` 单独重试。`backfill()` 每次只消费一个 Store scan page，并返回 durable
+cursor，不在库内部创建无边界后台任务。
+
+`EmbeddingProvider` 必须声明非空 name/version 和固定 dimensions。Doppel 将这些字段与 cosine metric
+哈希成 profile；每个 profile 使用独立表，并以 core memory ID 为 FK、hard delete cascade。索引前会按
+调用者给出的 exact scope 重新读取 authoritative record，content hash 未变化时不再次调用 provider。
+模型升级或维度变化得到新表，可在旧 profile 仍在线时逐页回填，切换 strategy 后再由部署方清理旧表。
+
+pgvector extension 安装和 HNSW 都默认关闭。extension 通常是数据库级运维动作；框架只有在
+`create_extension=True` 时尝试 `CREATE EXTENSION`。无 HNSW 时使用 exact nearest neighbor，保证基线
+recall；显式启用 HNSW 时验证 pgvector vector index 的 2,000 维上限。向量输入验证数量、维度、有限值
+和非零 cosine norm，不能把 provider contract violation 写进数据库。
+
+Hybrid 使用 weighted reciprocal-rank fusion，不混合 lexical BM25、substring 0 分和 cosine similarity
+这些不同量纲的原始分数。已知 `EmbeddingProviderError`/`VectorIndexUnavailableError` 可以按配置降级到
+lexical；连接、SQL 和程序错误继续抛出。semantic SQL 自身必须带 exact scope 和全部 MemoryFilter，
+融合后仍经过 Retriever 的 scope guard 和去重。
+
+质量 fixture 使用预计算向量，在两个 scope 放置语义相同的 adversarial records，检查 semantic/hybrid
+top-1、forbidden ID、scope leakage、完整索引和 content-hash replay。它只验证 Doppel 管线，不代表
+真实 embedding 模型的语义质量；生产仍需用固定模型版本、领域数据和人工标注单独评估。
 
 ## v0.4 IM 导入格式
 
@@ -496,5 +538,5 @@ provenance 保存在 `raw.doppel_import`。
 - v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测（已完成）；
 - v0.5.4：可复用、能力感知的 Store conformance kit 与安全 CLI（已完成）；
 - v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI（已完成）；
-- v0.6.1：pgvector 可选语义/混合检索、embedding provider 与质量门禁；
+- v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与质量门禁（已完成）；
 - 后续后端：Graphiti 通过核心合同后稳定化，或重新定位为专用语义适配器。
