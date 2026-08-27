@@ -275,7 +275,7 @@ wheels = [
 
 [[package]]
 name = "doppel-memory"
-version = "0.6.1"
+version = "0.6.2"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },

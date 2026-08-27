@@ -113,6 +113,7 @@ from doppel_memory.vector import (
     HybridRetrievalStrategy,
     PostgreSQLVectorIndex,
     SemanticIndex,
+    SemanticIndexUnavailableError,
     VectorBackfillResult,
     VectorIndexConfig,
     VectorIndexFailure,
@@ -120,7 +121,7 @@ from doppel_memory.vector import (
     VectorIndexUnavailableError,
 )
 
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 
 __all__ = [
     "Actor",
@@ -196,6 +197,7 @@ __all__ = [
     "ScopedHistoryReader",
     "ScopedMemoryReader",
     "SemanticIndex",
+    "SemanticIndexUnavailableError",
     "StoreCapabilities",
     "StoreConformanceCheck",
     "StoreConformanceConfig",

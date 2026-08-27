@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "release": "0.6.1",
+  "release": "0.6.2",
   "tiers": {
     "stable": [
       "Actor",
@@ -85,6 +85,7 @@
       "ScopedHistoryReader",
       "ScopedMemoryReader",
       "SemanticIndex",
+      "SemanticIndexUnavailableError",
       "StoreHistoryReader",
       "StoreMemoryReader",
       "StyleAnalyzer",
@@ -114,6 +115,10 @@
     "__version__"
   ],
   "module_only_experimental": [
-    "doppel_memory.graphiti_store.GraphitiMemoryStore"
+    "doppel_memory.graphiti_store.GraphitiFilterUnsupportedError",
+    "doppel_memory.graphiti_store.GraphitiIndexResult",
+    "doppel_memory.graphiti_store.GraphitiIndexUnavailableError",
+    "doppel_memory.graphiti_store.GraphitiMemoryStore",
+    "doppel_memory.graphiti_store.GraphitiSemanticIndex"
   ]
 }

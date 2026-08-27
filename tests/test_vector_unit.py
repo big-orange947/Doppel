@@ -17,6 +17,7 @@ from doppel_memory.vector import (
     EmbeddingProviderError,
     HybridRetrievalStrategy,
     PostgreSQLVectorIndex,
+    SemanticIndexUnavailableError,
     VectorIndexConfig,
     VectorIndexFailure,
     VectorIndexReport,
@@ -197,9 +198,13 @@ async def test_hybrid_rrf_fuses_ranks_and_drops_scope_leaks() -> None:
 
 @pytest.mark.parametrize(
     "error",
-    [EmbeddingProviderError("offline"), VectorIndexUnavailableError("missing")],
+    [
+        EmbeddingProviderError("offline"),
+        VectorIndexUnavailableError("missing"),
+        SemanticIndexUnavailableError("unsupported semantic request"),
+    ],
 )
-async def test_hybrid_can_degrade_to_lexical_for_known_vector_failures(error) -> None:
+async def test_hybrid_can_degrade_to_lexical_for_known_semantic_failures(error) -> None:
     store = InMemoryStore()
     created = await store.write_event(
         SCOPE,

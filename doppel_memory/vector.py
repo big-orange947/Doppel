@@ -30,7 +30,11 @@ class EmbeddingProviderError(RuntimeError):
     """An embedding provider failed or violated its declared vector contract."""
 
 
-class VectorIndexUnavailableError(RuntimeError):
+class SemanticIndexUnavailableError(RuntimeError):
+    """A semantic candidate source cannot honor the current request."""
+
+
+class VectorIndexUnavailableError(SemanticIndexUnavailableError):
     """The configured database cannot currently provide the vector index."""
 
 
@@ -570,7 +574,7 @@ class HybridRetrievalStrategy:
             raise lexical_result
         lexical = lexical_result
         if isinstance(
-            semantic_result, (EmbeddingProviderError, VectorIndexUnavailableError)
+            semantic_result, (EmbeddingProviderError, SemanticIndexUnavailableError)
         ):
             if not self._fallback_to_lexical:
                 raise semantic_result

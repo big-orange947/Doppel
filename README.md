@@ -22,7 +22,8 @@ IM Platform / Agent Runtime
  role · authority · scope · provenance
           │
           ▼
- InMemory / SQLite / experimental Graphiti / custom store
+ InMemory / SQLite / PostgreSQL / custom Store
+          + explicit pgvector / Graphiti semantic indexes
 ```
 
 Doppel 负责：
@@ -64,7 +65,7 @@ pip install "doppel-memory[pgvector]"
 
 这个 extra 提供异步 PostgreSQL 客户端；数据库服务器仍需单独安装并启用 pgvector extension。
 
-实验性 Graphiti 后端需要额外依赖：
+实验性 Graphiti 语义/图索引需要额外依赖：
 
 ```bash
 pip install "doppel-memory[graphiti]"
@@ -623,8 +624,9 @@ PostgreSQL 模式必须同时给出 DSN 和 `--allow-mutating-audit`。这个开
 把生产数据库变安全；目标仍必须是一次性数据库或明确隔离的测试 namespace。
 
 可以用 `StoreConformanceConfig(checks={...})` 运行子集，但正式声明兼容 Doppel 的后端应运行完整
-核心套件，并把产品承诺的可选能力列入 `required_capabilities`。Graphiti 当前仍不能通过核心
-lifecycle/get/provenance 合同，因此继续保持 experimental，而不是因 capability skip 被误标为稳定。
+核心套件，并把产品承诺的可选能力列入 `required_capabilities`。Graphiti 无法通过核心
+lifecycle/get/provenance 合同，因此不再作为候选 Store；它只在显式 `SemanticIndex` 层保持
+experimental，不能因 capability skip 被误标为稳定后端。
 
 ### StyleMiner：从历史文本形成风格材料
 
@@ -823,16 +825,39 @@ await memory.forget(scope, memory_id, hard=True) # 后端支持时硬删除
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 | `memory` | 稳定，测试/示例 | ✅ | — | — | ✅ | ✅ | — | ✅ | — |
 | `sqlite` | 稳定，默认参考实现 | ✅ | ✅ FTS5 | — | ✅ | ✅ | — | ✅ | ✅ |
-| `graphiti` | 实验性 | — | — | ✅ | ✅ | — | ✅ | — | — |
+| `postgres` | provisional，生产候选 | ✅ | — | — | ✅ | ✅ | — | ✅ | ✅ |
 
 SQLite 使用 scope 级幂等约束、UTC 时间、WAL/串行连接操作和版本化 schema migration。
 schema v3 会在 FTS5 可用时重建已有记录的 content/metadata 索引，并用 trigger 同步后续
 insert/update/delete。FTS5 不可用、显式 `enable_fts=False` 或全文查询无结果时，自动回退到
 escaped substring search。合法的旧 scope 会自动迁移；空 user/agent 的旧数据需要先修正。
-InMemory 与 SQLite 运行同一套 Store conformance suite。
+InMemory、SQLite 与 PostgreSQL 运行同一套 Store conformance suite。
 
-Graphiti 目前只承诺 episode 写入和语义检索；持久化幂等、完整生命周期、删除和完整
-provenance 尚未实现。不支持的操作会明确抛出 `NotImplementedError`。
+语义能力是显式 sidecar，不改变核心 Store 的能力声明：
+
+| 语义索引 | 状态 | 权威记录来源 | exact scope | 可组合 hybrid | 图派生 |
+|---|---|---|---:|---:|---:|
+| `PostgreSQLVectorIndex` | provisional | `PostgreSQLStore` | ✅ | ✅ | — |
+| `GraphitiSemanticIndex` | module-only experimental | 任意合规 Store | ✅ | ✅ | ✅ |
+
+Graphiti 的正确组合方式是先把 `MemoryRecord` 提交给合规 Store，再显式调用
+`GraphitiSemanticIndex.index_record()`；检索结果是 Graphiti 派生候选，不拥有核心记录的状态和删除
+语义。Graphiti 不能可靠证明的 kind/actor/authority/tag/importance 过滤会明确报错，配置了
+`HybridRetrievalStrategy(fallback_to_lexical=True)` 时才回退到 Store。旧
+`GraphitiMemoryStore` 暂时保留并发出弃用警告，供迁移使用。
+
+```python
+from doppel_memory import HybridRetrievalStrategy, Retriever
+from doppel_memory.graphiti_store import GraphitiSemanticIndex
+
+graph = GraphitiSemanticIndex(llm_api_key="...")
+created = await store.write_background(scope, "号主喜欢周末徒步")
+if created.record is not None:
+    await graph.index_record(created.record)
+
+retriever = Retriever(store, strategy=HybridRetrievalStrategy(graph))
+hits = await retriever.recall("户外爱好", [scope])
+```
 
 ## Benchmark
 
@@ -879,7 +904,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.5.4：可复用、能力感知的 Store conformance kit 与 CLI
 - [x] v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI
 - [x] v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与独立质量门禁
-- [ ] 后续后端：Graphiti 核心合同稳定化或重新定位为专用语义适配器
+- [x] v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。
@@ -891,8 +916,9 @@ uv run python -m benchmarks.vector_quality \
 其中 `stable` 是当前 minor 系列承诺保持兼容的核心表面，`provisional` 是仍在收敛、但不会在补丁版本中
 静默破坏的批处理和 conformance 扩展表面。
 
-未列入清单的子模块对象不是冻结 API。Graphiti 目前仍是 module-only experimental；配方目录下的
-host adapter 也不是安装包合同。完整的兼容、弃用和扩展协议规则见
+未列入清单的子模块对象不是冻结 API。`GraphitiSemanticIndex` 与迁移期的
+`GraphitiMemoryStore` 都是 module-only experimental；配方目录下的 host adapter 也不是安装包
+合同。完整的兼容、弃用和扩展协议规则见
 [`docs/api-stability.md`](docs/api-stability.md)。
 
 ## License

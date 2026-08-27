@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.6.2
+
+Graphiti is now explicitly modeled as a graph-derived semantic candidate index, not a
+partial implementation of Doppel's authoritative Store contract.
+
+### Added
+
+- Experimental module-only `GraphitiSemanticIndex`, which accepts already-committed
+  `MemoryRecord` values, submits deterministic exact-scope episodes, and implements the
+  `SemanticIndex` search contract for composition with `HybridRetrievalStrategy`.
+- `SemanticIndexUnavailableError` as the shared, provisional signal for semantic
+  sources that cannot honor a request. Hybrid retrieval may explicitly fall back to
+  lexical Store candidates for this known boundary while continuing to propagate
+  unexpected programming and core Store failures.
+- Graphiti-specific indexing provenance, exact-scope output guards, lifecycle mapping
+  for invalidated edges, temporal/state post-filtering, and injectable-client contract
+  tests that do not require Neo4j or an LLM service.
+
+### Changed
+
+- `GraphitiMemoryStore` is deprecated but retained as a module-only compatibility
+  adapter. It still raises for unsupported lifecycle operations; new integrations
+  should combine InMemory, SQLite, or PostgreSQL with `GraphitiSemanticIndex`.
+- Graphiti rejects kind, actor, authority, tag, and importance filters it cannot prove
+  from Graphiti edges. It never fabricates those fields merely to appear compatible
+  with the semantic-index protocol.
+- Graph-derived facts use their edge UUID as candidate identity and retain episode,
+  extraction, validity, scope, and derivation provenance. Unknown returned scope groups
+  are dropped even when the upstream service was already given exact group IDs.
+
+### Compatibility
+
+- The preferred Graphiti API remains module-only experimental because installing it is
+  optional and its upstream 0.29 contract is pinned. The stable core Store protocol is
+  unchanged.
+- `DoppelClient(backend="graphiti")` remains temporarily available and emits the same
+  deprecation warning through `GraphitiMemoryStore`; removal requires a future minor
+  release with migration notes.
+
 ## 0.6.1
 
 An explicit pgvector semantic index and hybrid retrieval layer that preserves the

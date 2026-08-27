@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.6.1：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.6.2：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -116,8 +116,9 @@ SQLite 是稳定参考后端：
 - 普通 search 排除 inactive states；
 - `transition` 原子检查 expected state 并递增 version。
 
-InMemory 与 SQLite 必须通过同一份 conformance suite。Graphiti 在通过完整 suite 前保持
-experimental 状态。
+InMemory、SQLite 与 PostgreSQL 必须通过同一份 conformance suite。Graphiti 缺少核心
+get/lifecycle/delete/provenance 语义，不作为 Store 接受；它位于独立的 experimental
+`SemanticIndex` 层。
 
 ## v0.3 Processor 协议
 
@@ -255,8 +256,8 @@ stable 和 provisional 两层。兼容性快照同时覆盖根导出、序列化
 
 stable 层是已收敛的核心数据模型、Store、在线 Processor、检索和材料构建协议；provisional 层
 主要是新加入的批处理、只读 reader、proposal writer 和 conformance API。provisional 不是私有
-API：补丁版本同样不能静默破坏它，但在下一个 minor 版本仍可随迁移说明调整。Graphiti adapter
-继续保持 module-only experimental，不通过根包导出。
+API：补丁版本同样不能静默破坏它，但在下一个 minor 版本仍可随迁移说明调整。Graphiti semantic
+index 与迁移期 Store adapter 继续保持 module-only experimental，不通过根包导出。
 
 协议演进优先增加有默认实现的可选方法、可选 keyword 参数和 capability gate。给
 `MemoryStore` 新增抽象方法、删除或重命名模型字段、收窄字段类型、增加必填参数、删除枚举值，
@@ -350,8 +351,8 @@ database 参数时创建并清理临时目录。`audit_store()` 不替调用方�
 
 InMemory 与 SQLite 的 pytest adapter 现在只负责提供 fixture，真正语义来自安装包里的同一 auditor。
 Graphiti 即使跳过 pagination/hard-delete，也会因 stable core 的 get/lifecycle/provenance 缺口失败，
-所以仍是 module-only experimental。这份 kit 将作为 PostgreSQL/pgvector 后端进入 benchmark 之前的
-准入门槛；性能不能补偿 conformance failure。
+所以不能作为 Store；它只保留 module-only experimental semantic index。这份 kit 是后端进入
+benchmark 之前的准入门槛；性能不能补偿 conformance failure。
 
 ## v0.5.3 StyleProfessor 与独立质量评测
 
@@ -501,13 +502,46 @@ recall；显式启用 HNSW 时验证 pgvector vector index 的 2,000 维上限�
 和非零 cosine norm，不能把 provider contract violation 写进数据库。
 
 Hybrid 使用 weighted reciprocal-rank fusion，不混合 lexical BM25、substring 0 分和 cosine similarity
-这些不同量纲的原始分数。已知 `EmbeddingProviderError`/`VectorIndexUnavailableError` 可以按配置降级到
+这些不同量纲的原始分数。已知 `EmbeddingProviderError`/`SemanticIndexUnavailableError` 可以按配置降级到
 lexical；连接、SQL 和程序错误继续抛出。semantic SQL 自身必须带 exact scope 和全部 MemoryFilter，
 融合后仍经过 Retriever 的 scope guard 和去重。
 
 质量 fixture 使用预计算向量，在两个 scope 放置语义相同的 adversarial records，检查 semantic/hybrid
 top-1、forbidden ID、scope leakage、完整索引和 content-hash replay。它只验证 Doppel 管线，不代表
 真实 embedding 模型的语义质量；生产仍需用固定模型版本、领域数据和人工标注单独评估。
+
+## v0.6.2 Graphiti 重新定位
+
+Graphiti 的 graph episode、实体和派生 fact 适合提供语义候选，但不等价于 Doppel 的权威
+`MemoryRecord`。尤其是 `get()`、scope-local 持久幂等、原样 provenance round-trip、乐观状态迁移
+和删除不能通过 capability skip 变成可选。因此 v0.6.2 明确采用 sidecar 组合：
+
+```text
+conforming Store.put() ──成功──> authoritative MemoryRecord
+                                  │ explicit index_record
+                                  ▼
+                         GraphitiSemanticIndex
+                                  │ graph-derived facts
+Store search candidates ──────────┤
+                                  ▼
+                         HybridRetrievalStrategy
+                                  ▼
+                         Retriever scope guard
+```
+
+Graphiti episode 使用 exact `scope_key` 作为 group ID，并由 scope + core memory ID 生成稳定 episode
+UUID。查询同时把允许的 group IDs 交给 Graphiti，并再次丢弃返回中未知的 group，避免上游过滤错误
+变成跨会话泄漏。edge UUID 是派生候选身份，episode、created/valid time、scope 与 derived chain
+进入 `RecallResult`；它不会冒充 core memory ID。
+
+Graphiti edge 没有 Doppel kind、actor、authority、tag 或 importance 的可靠一对一来源。适配器对这些
+过滤条件抛出 `GraphitiFilterUnsupportedError`，不以模型默认值伪造匹配。state 与时间可从 edge 的
+invalid/expired/valid/reference timestamps 后过滤。外部服务不可用和无法满足的过滤统一属于
+`SemanticIndexUnavailableError`，只有调用方显式允许时 hybrid 才回退到 lexical Store。
+
+旧 `GraphitiMemoryStore` 在迁移窗口内保留并发出 `DeprecationWarning`；移除仍需未来 minor 版本和
+迁移说明。新 Graphiti 对象继续是 optional-extra、module-only experimental，不扩大默认依赖或稳定
+根 API。
 
 ## v0.4 IM 导入格式
 
@@ -539,4 +573,4 @@ provenance 保存在 `raw.doppel_import`。
 - v0.5.4：可复用、能力感知的 Store conformance kit 与安全 CLI（已完成）；
 - v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI（已完成）；
 - v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与质量门禁（已完成）；
-- 后续后端：Graphiti 通过核心合同后稳定化，或重新定位为专用语义适配器。
+- v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口（已完成）。
