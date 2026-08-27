@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/big-orange947/Doppel/benchmarks/memory-quality-result.schema.json",
+  "title": "Doppel Memory Quality Benchmark Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result_schema_version",
+    "doppel_version",
+    "generated_at",
+    "dataset",
+    "environment",
+    "measured_dimensions",
+    "not_yet_measured",
+    "baselines",
+    "correctness"
+  ],
+  "properties": {
+    "result_schema_version": { "const": 1 },
+    "doppel_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "language",
+        "fingerprint",
+        "case_count",
+        "message_count",
+        "query_count",
+        "gold_memory_count",
+        "ignored_message_count",
+        "recent_window_size"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 1 },
+        "language": { "type": "string", "minLength": 1 },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "case_count": { "type": "integer", "minimum": 1 },
+        "message_count": { "type": "integer", "minimum": 1 },
+        "query_count": { "type": "integer", "minimum": 1 },
+        "gold_memory_count": { "type": "integer", "minimum": 0 },
+        "ignored_message_count": { "type": "integer", "minimum": 0 },
+        "recent_window_size": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "implementation", "platform"],
+      "properties": {
+        "python": { "type": "string" },
+        "implementation": { "type": "string" },
+        "platform": { "type": "string" }
+      }
+    },
+    "measured_dimensions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "not_yet_measured": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "baselines": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/baseline" }
+    },
+    "correctness": { "$ref": "#/$defs/correctness" }
+  },
+  "$defs": {
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "scope_leakage_count", "errors"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "scope_leakage_count": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "number", "minimum": 0 },
+        "p50": { "type": "number", "minimum": 0 },
+        "p95": { "type": "number", "minimum": 0 },
+        "max": { "type": "number", "minimum": 0 }
+      }
+    },
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query_count",
+        "required_query_count",
+        "abstention_query_count",
+        "macro_evidence_recall",
+        "macro_candidate_precision",
+        "mean_reciprocal_rank",
+        "abstention_accuracy",
+        "forbidden_candidate_hits",
+        "scope_leakage_count",
+        "redundant_relevant_candidates",
+        "average_candidates",
+        "average_context_characters",
+        "prepare_latency_ms",
+        "query_latency_ms"
+      ],
+      "properties": {
+        "query_count": { "type": "integer", "minimum": 1 },
+        "required_query_count": { "type": "integer", "minimum": 0 },
+        "abstention_query_count": { "type": "integer", "minimum": 0 },
+        "macro_evidence_recall": { "type": "number", "minimum": 0, "maximum": 1 },
+        "macro_candidate_precision": { "type": "number", "minimum": 0, "maximum": 1 },
+        "mean_reciprocal_rank": { "type": "number", "minimum": 0, "maximum": 1 },
+        "abstention_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "forbidden_candidate_hits": { "type": "integer", "minimum": 0 },
+        "scope_leakage_count": { "type": "integer", "minimum": 0 },
+        "redundant_relevant_candidates": { "type": "integer", "minimum": 0 },
+        "average_candidates": { "type": "number", "minimum": 0 },
+        "average_context_characters": { "type": "number", "minimum": 0 },
+        "prepare_latency_ms": { "$ref": "#/$defs/latency" },
+        "query_latency_ms": { "$ref": "#/$defs/latency" }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "scope",
+        "content",
+        "source_message_ids",
+        "score",
+        "rank",
+        "relevant",
+        "forbidden",
+        "scope_leak",
+        "matched_evidence_groups"
+      ],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string" },
+        "content": { "type": "string" },
+        "source_message_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "score": { "type": ["number", "null"] },
+        "rank": { "type": "integer", "minimum": 1 },
+        "relevant": { "type": "boolean" },
+        "forbidden": { "type": "boolean" },
+        "scope_leak": { "type": "boolean" },
+        "matched_evidence_groups": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "query",
+        "authorized_scopes",
+        "required_group_count",
+        "covered_group_count",
+        "retrieved_count",
+        "relevant_candidate_count",
+        "evidence_recall",
+        "candidate_precision",
+        "reciprocal_rank",
+        "abstention_passed",
+        "forbidden_candidate_hits",
+        "scope_leakage_count",
+        "redundant_relevant_candidates",
+        "context_characters",
+        "latency_ms",
+        "candidates"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "query": { "type": "string" },
+        "authorized_scopes": { "type": "array", "items": { "type": "string" } },
+        "required_group_count": { "type": "integer", "minimum": 0 },
+        "covered_group_count": { "type": "integer", "minimum": 0 },
+        "retrieved_count": { "type": "integer", "minimum": 0 },
+        "relevant_candidate_count": { "type": "integer", "minimum": 0 },
+        "evidence_recall": { "type": "number", "minimum": 0, "maximum": 1 },
+        "candidate_precision": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reciprocal_rank": { "type": "number", "minimum": 0, "maximum": 1 },
+        "abstention_passed": { "type": "boolean" },
+        "forbidden_candidate_hits": { "type": "integer", "minimum": 0 },
+        "scope_leakage_count": { "type": "integer", "minimum": 0 },
+        "redundant_relevant_candidates": { "type": "integer", "minimum": 0 },
+        "context_characters": { "type": "integer", "minimum": 0 },
+        "latency_ms": { "type": "number", "minimum": 0 },
+        "candidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "category", "queries"],
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "queries": { "type": "array", "items": { "$ref": "#/$defs/query" } }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "capabilities", "aggregate", "cases", "correctness"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["extracts_memories", "consolidates_memories", "generates_answers"],
+          "properties": {
+            "extracts_memories": { "type": "boolean" },
+            "consolidates_memories": { "type": "boolean" },
+            "generates_answers": { "type": "boolean" }
+          }
+        },
+        "aggregate": { "$ref": "#/$defs/aggregate" },
+        "cases": { "type": "array", "items": { "$ref": "#/$defs/case" } },
+        "correctness": { "$ref": "#/$defs/correctness" }
+      }
+    }
+  }
+}

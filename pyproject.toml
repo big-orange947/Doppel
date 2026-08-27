@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "doppel-memory"
-version = "0.7.0"
+version = "0.7.1"
 description = "A role-aware memory and context framework for conversational and proactive IM agents."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,9 +1,56 @@
 # Doppel benchmarks
 
 This directory contains repository-only benchmark tooling. It is not installed as part
-of the `doppel-memory` package and is not a public runtime API.
+of the `doppel-memory` package and is not a public runtime API. Store performance,
+retrieval evidence quality, observable style, and semantic-index correctness remain
+separate reports; Doppel does not combine them into a flattering but meaningless
+"memory intelligence" score.
 
-The first benchmark deliberately measures only behavior Doppel owns:
+## Chinese IM memory quality
+
+The v1 quality lab uses a hand-labeled Chinese IM fixture with stable facts, explicit
+corrections, speaker/authority traps, cross-user adversaries, explicit user-scope
+expansion, long-horizon distractors, repeated evidence, and an abstention case:
+
+```bash
+uv run python -m benchmarks.memory_quality \
+  --dataset benchmarks/datasets/memory-quality-zh-v1.json \
+  --output benchmarks/results/memory-quality.json
+```
+
+Four deterministic baselines run over the same 10 cases, 34 messages, 13 gold
+memories, and 11 queries:
+
+- `no_memory`: no persistent context;
+- `recent_window`: latest authorized messages only;
+- `raw_lexical`: all authorized raw events ranked by transparent Chinese character
+  n-gram cosine similarity;
+- `doppel_v0_7_events`: current raw-event ingest and default Store retrieval, without
+  pretending that an extractor or consolidator exists.
+
+Gold queries describe required evidence as groups. Any message in one group can
+satisfy that fact, so repeated statements do not force a system to return every copy.
+Forbidden message IDs measure stale, wrong-speaker, agent-output, and unauthorized
+evidence. Out-of-scope output is a hard runner failure; same-scope stale or
+wrong-authority evidence remains a reported quality defect so weak baselines can be
+measured instead of making the benchmark impossible to run.
+
+The report includes macro evidence recall, candidate precision, reciprocal rank,
+abstention accuracy, forbidden hits, redundant relevant candidates, context character
+count, and query/prepare latency. The dataset already includes future extraction and
+consolidation gold memories, but v0.7.1 explicitly reports those dimensions—along with
+answer correctness and model token cost—as `not_yet_measured`. They become comparable
+only when a reference intelligence implementation exists.
+
+[`memory-quality-result.schema.json`](memory-quality-result.schema.json) versions the
+machine-readable envelope. [`reference-results/`](reference-results/) contains a
+committed baseline from the release revision; latency values are observations from the
+recorded environment, while evidence metrics and the dataset fingerprint are the
+portable comparison surface.
+
+## Store performance and correctness
+
+The Store benchmark deliberately measures only behavior Doppel owns:
 
 - sequential Store writes and idempotent duplicate writes;
 - exact-scope search latency and expected-result recall;
@@ -15,7 +62,7 @@ It does not claim to measure general “memory intelligence.” Embedding models
 extractors, rerankers, prompts, and application retention policies need separate,
 explicit evaluations.
 
-## Quick run
+### Quick run
 
 Run the same 1,000-record dataset against both stable reference Stores:
 
@@ -38,7 +85,7 @@ is enforced: shared CI runners are too noisy for meaningful regression limits. S
 latencies and throughput are observations, while exact-scope leakage and missing data
 are correctness failures.
 
-## Reproducibility
+### Reproducibility
 
 [`datasets/synthetic-small.json`](datasets/synthetic-small.json) is a compact generator
 configuration rather than a large committed record dump. Its generator name, version,
@@ -62,7 +109,7 @@ measurements. When comparing results, use the same:
 Run several repetitions and compare medians rather than treating one execution as a
 stable performance claim.
 
-## Result contract
+### Result contract
 
 [`result.schema.json`](result.schema.json) defines the machine-readable result envelope.
 `result_schema_version` versions the output structure independently from the dataset

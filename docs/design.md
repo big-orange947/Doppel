@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.7.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与上下文协议。
+> v0.7.1：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与上下文协议。
 
 ## 定位与边界
 
@@ -589,6 +589,43 @@ tombstone，由 index catalog 反向发现并清除。检索路径仍执行 Stor
 episode UUID 仍由 scope + core memory ID 生成；v1 episode 可恢复 memory ID 但没有 fingerprint，因而
 下一次 reconciliation 会判定 stale、删除旧 episode 并重建。
 
+## v0.7.1 中文 IM 记忆质量基线
+
+v0.7.1 不增加默认 extractor，也不以 Store throughput、Style 指标或固定向量 correctness 代替长期
+记忆质量。仓库先冻结 `doppel.memory-quality.zh.v1` 数据集和分层 runner，为后续 Reference
+Intelligence 提供同一把尺子：
+
+```text
+hand-labeled Chinese IM cases
+  ├─ scopes / actors / timestamps / raw messages
+  ├─ future gold memories + source evidence
+  └─ queries
+       ├─ authorized exact scopes
+       ├─ required evidence groups
+       └─ forbidden message IDs
+                    │
+                    ▼
+  no memory · recent window · raw lexical · current Doppel events
+                    │
+                    ▼
+  evidence recall · precision · MRR · abstention · forbidden evidence
+  redundancy · context characters · latency · scope leakage
+```
+
+一个 required evidence group 表示支持同一所需事实的替代来源；返回其中任一条即可覆盖该 group。这样
+同一偏好被重复说三次时，系统不会为了满分被迫返回三份重复上下文。forbidden evidence 同时覆盖旧
+事实、错误说话人、Agent 建议和跨用户对抗记录。候选离开 query 授权的 exact scope 时属于 runner
+合同失败；同 scope 内召回旧事实或错误权威属于被记录的质量缺陷，不阻止弱基线生成报告。
+
+四个 v1 baseline 都声明 `extracts_memories=False`、`consolidates_memories=False` 和
+`generates_answers=False`。结果 envelope 同时列出 `not_yet_measured`：memory extraction、memory
+consolidation、conflict resolution、answer correctness 和 LLM token cost。未来实现不能仅靠修改文字
+宣传获得这些能力，必须提供相应候选/证据并在相同 fixture 或版本化后继 fixture 上度量。
+
+数据集 fingerprint 绑定全部消息、gold、query 和参数。提交的 reference result 记录 release revision
+第一次运行；其中 evidence 指标可跨环境比较，延迟只是在报告所列 Python/OS 上的观察值。CI 运行完整
+四基线并把 scope leakage 作为硬门禁，但不把当前弱检索的低 recall 变成一个无法迭代的 CI 失败。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -621,3 +658,10 @@ provenance 保存在 `raw.doppel_import`。
 - v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与质量门禁（已完成）；
 - v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口（已完成）；
 - v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理（已完成）。
+- v0.7.1：中文 IM 记忆质量 fixture、四类基线、分层指标和版本化报告（已完成）。
+- v0.7.2：Reference Memory Intelligence、模型无关结构化抽取与证据门禁；
+- v0.7.3：Memory Consolidator、重复证据合并和冲突/纠正决策；
+- v0.8.0：中文 lexical/semantic 检索质量与 query planning；
+- v0.8.1：类型感知的强化、衰减、归档和恢复；
+- v0.8.2：AstrBot shadow mode、长期 dogfooding 和端到端质量报告；
+- v0.9.0：Agent tools、Server/CLI/Inspector 与 PyPI 发布准备。

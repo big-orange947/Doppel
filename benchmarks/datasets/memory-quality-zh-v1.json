@@ -1,0 +1,556 @@
+{
+  "dataset_version": 1,
+  "name": "doppel.memory-quality.zh.v1",
+  "language": "zh-CN",
+  "recent_window_size": 5,
+  "scopes": [
+    {
+      "name": "owner-chat-a",
+      "user_id": "quality-owner",
+      "chat_id": "contact-a"
+    },
+    {
+      "name": "owner-chat-b",
+      "user_id": "quality-owner",
+      "chat_id": "contact-b"
+    },
+    {
+      "name": "owner-user",
+      "user_id": "quality-owner",
+      "platform": "",
+      "chat_type": "",
+      "chat_id": ""
+    },
+    {
+      "name": "other-chat",
+      "user_id": "quality-other",
+      "chat_id": "contact-a"
+    }
+  ],
+  "cases": [
+    {
+      "name": "stable-preference-behind-noise",
+      "category": "stable_fact",
+      "description": "A durable preference appears before enough noise to fall out of a recent window.",
+      "messages": [
+        {
+          "message_id": "pref-001",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "我吃火锅的时候不喜欢香菜，点菜记得别放。",
+          "at": "2026-01-01T09:00:00+08:00"
+        },
+        {
+          "message_id": "pref-002",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "好，我记住了。",
+          "at": "2026-01-01T09:01:00+08:00"
+        },
+        {
+          "message_id": "pref-003",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "今天有点冷。",
+          "at": "2026-01-02T09:00:00+08:00"
+        },
+        {
+          "message_id": "pref-004",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "晚上要不要看电影？",
+          "at": "2026-01-02T09:01:00+08:00"
+        },
+        {
+          "message_id": "pref-005",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "晚点再说。",
+          "at": "2026-01-02T09:02:00+08:00"
+        },
+        {
+          "message_id": "pref-006",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "文件已经发你了。",
+          "at": "2026-01-03T09:00:00+08:00"
+        },
+        {
+          "message_id": "pref-007",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "收到。",
+          "at": "2026-01-03T09:01:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "owner.preference.no-cilantro",
+          "scope": "owner-user",
+          "content": "用户吃火锅和点菜时不喜欢香菜。",
+          "kind": "fact",
+          "evidence_message_ids": ["pref-001"]
+        }
+      ],
+      "ignored_message_ids": ["pref-002", "pref-003", "pref-004", "pref-005", "pref-006", "pref-007"],
+      "queries": [
+        {
+          "name": "q-preference-cilantro",
+          "text": "我对香菜是什么态度？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [{"message_ids": ["pref-001"]}],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "explicit-preference-correction",
+      "category": "correction",
+      "description": "A newer explicit preference should make the older preference historical, not current.",
+      "messages": [
+        {
+          "message_id": "color-001",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "我最喜欢的颜色是蓝色。",
+          "at": "2025-03-01T10:00:00+08:00"
+        },
+        {
+          "message_id": "color-002",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "蓝色确实很适合你。",
+          "at": "2025-03-01T10:01:00+08:00"
+        },
+        {
+          "message_id": "color-003",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "最近重新布置了房间。",
+          "at": "2026-02-01T10:00:00+08:00"
+        },
+        {
+          "message_id": "color-004",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "现在我更喜欢绿色了，蓝色是以前最喜欢的。",
+          "at": "2026-02-01T10:01:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "owner.preference.favorite-color.green",
+          "scope": "owner-user",
+          "content": "用户现在最喜欢绿色。",
+          "status": "current",
+          "evidence_message_ids": ["color-004"]
+        },
+        {
+          "memory_key": "owner.preference.favorite-color.blue.history",
+          "scope": "owner-user",
+          "content": "用户以前最喜欢蓝色。",
+          "status": "historical",
+          "evidence_message_ids": ["color-001", "color-004"]
+        }
+      ],
+      "ignored_message_ids": ["color-002", "color-003"],
+      "queries": [
+        {
+          "name": "q-current-favorite-color",
+          "text": "我现在最喜欢什么颜色？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [{"message_ids": ["color-004"]}],
+          "forbidden_message_ids": ["color-001"],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "speaker-attribution-allergy",
+      "category": "role_attribution",
+      "description": "A contact's allergy must not be attributed to the owner in the same conversation.",
+      "messages": [
+        {
+          "message_id": "allergy-001",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "我对花生过敏，聚餐千万别点花生。",
+          "at": "2026-03-01T11:00:00+08:00"
+        },
+        {
+          "message_id": "allergy-002",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "知道了，我自己没有食物过敏。",
+          "at": "2026-03-01T11:01:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "contact-a.health.peanut-allergy",
+          "scope": "owner-chat-a",
+          "content": "联系人对花生过敏。",
+          "subject": "contact",
+          "evidence_message_ids": ["allergy-001"]
+        },
+        {
+          "memory_key": "owner.health.no-known-food-allergy",
+          "scope": "owner-user",
+          "content": "用户表示自己没有食物过敏。",
+          "evidence_message_ids": ["allergy-002"]
+        }
+      ],
+      "queries": [
+        {
+          "name": "q-owner-peanut-allergy",
+          "text": "我自己有花生过敏吗？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [{"message_ids": ["allergy-002"]}],
+          "forbidden_message_ids": ["allergy-001"],
+          "limit": 5
+        },
+        {
+          "name": "q-contact-peanut-allergy",
+          "text": "联系人有什么食物过敏？",
+          "scopes": ["owner-chat-a"],
+          "required_evidence": [{"message_ids": ["allergy-001"]}],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "agent-suggestion-is-not-user-fact",
+      "category": "authority",
+      "description": "An agent suggestion must not become a user preference after the owner rejects it.",
+      "messages": [
+        {
+          "message_id": "diet-001",
+          "scope": "owner-chat-a",
+          "actor": "agent",
+          "text": "你可以尝试一段时间的素食饮食。",
+          "at": "2026-03-02T08:00:00+08:00"
+        },
+        {
+          "message_id": "diet-002",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "不用，我不是素食主义者，还是正常吃肉。",
+          "at": "2026-03-02T08:01:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "owner.preference.not-vegetarian",
+          "scope": "owner-user",
+          "content": "用户不是素食主义者。",
+          "evidence_message_ids": ["diet-002"]
+        }
+      ],
+      "queries": [
+        {
+          "name": "q-owner-vegetarian",
+          "text": "我是素食主义者吗？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [{"message_ids": ["diet-002"]}],
+          "forbidden_message_ids": ["diet-001"],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "cross-user-scope-adversary",
+      "category": "scope_isolation",
+      "description": "Semantically identical facts in another user's scope are forbidden evidence.",
+      "messages": [
+        {
+          "message_id": "pet-001",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "我的猫叫年糕，是一只橘猫。",
+          "at": "2026-03-03T12:00:00+08:00"
+        },
+        {
+          "message_id": "pet-002",
+          "scope": "other-chat",
+          "actor": "owner",
+          "text": "我的猫叫豆包，是一只橘猫。",
+          "at": "2026-03-03T12:01:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "owner.pet.cat-name-ricecake",
+          "scope": "owner-user",
+          "content": "用户的猫叫年糕。",
+          "evidence_message_ids": ["pet-001"]
+        }
+      ],
+      "queries": [
+        {
+          "name": "q-owner-cat-name",
+          "text": "我的猫叫什么名字？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [{"message_ids": ["pet-001"]}],
+          "forbidden_message_ids": ["pet-002"],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "explicit-cross-conversation-user-memory",
+      "category": "scope_hierarchy",
+      "description": "A caller may explicitly combine the current conversation and user-level scope.",
+      "messages": [
+        {
+          "message_id": "work-001",
+          "scope": "owner-user",
+          "actor": "owner",
+          "text": "我目前在上海做后端开发。",
+          "at": "2025-11-01T09:00:00+08:00"
+        },
+        {
+          "message_id": "work-002",
+          "scope": "owner-chat-b",
+          "actor": "owner",
+          "text": "这个周末准备休息。",
+          "at": "2026-03-04T09:00:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "owner.work.backend-shanghai",
+          "scope": "owner-user",
+          "content": "用户目前在上海从事后端开发。",
+          "evidence_message_ids": ["work-001"]
+        }
+      ],
+      "ignored_message_ids": ["work-002"],
+      "queries": [
+        {
+          "name": "q-owner-current-work",
+          "text": "我目前在哪里做什么工作？",
+          "scopes": ["owner-chat-b", "owner-user"],
+          "required_evidence": [{"message_ids": ["work-001"]}],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "paraphrase-after-long-distractors",
+      "category": "long_horizon",
+      "description": "A relevant early message uses different wording from the later natural-language query.",
+      "messages": [
+        {
+          "message_id": "hobby-001",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "周末有空我一般去爬山，最常去城郊的步道。",
+          "at": "2025-01-01T09:00:00+08:00"
+        },
+        {
+          "message_id": "hobby-002",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "新年快乐。",
+          "at": "2026-01-01T09:00:00+08:00"
+        },
+        {
+          "message_id": "hobby-003",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "下午把表格整理一下。",
+          "at": "2026-01-02T09:00:00+08:00"
+        },
+        {
+          "message_id": "hobby-004",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "会议改到三点了。",
+          "at": "2026-01-03T09:00:00+08:00"
+        },
+        {
+          "message_id": "hobby-005",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "快递放门口就行。",
+          "at": "2026-01-04T09:00:00+08:00"
+        },
+        {
+          "message_id": "hobby-006",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "图片看到了。",
+          "at": "2026-01-05T09:00:00+08:00"
+        },
+        {
+          "message_id": "hobby-007",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "明天再聊这个。",
+          "at": "2026-01-06T09:00:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "owner.hobby.weekend-hiking",
+          "scope": "owner-user",
+          "content": "用户周末通常去城郊爬山。",
+          "evidence_message_ids": ["hobby-001"]
+        }
+      ],
+      "ignored_message_ids": ["hobby-002", "hobby-003", "hobby-004", "hobby-005", "hobby-006", "hobby-007"],
+      "queries": [
+        {
+          "name": "q-weekend-outdoor-activity",
+          "text": "我周末通常做什么户外活动？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [{"message_ids": ["hobby-001"]}],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "current-residence-correction",
+      "category": "stale_fact",
+      "description": "The current residence is a newer correction; the old location is forbidden for a current query.",
+      "messages": [
+        {
+          "message_id": "home-001",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "我住在北京，通勤时间有点长。",
+          "at": "2024-06-01T09:00:00+08:00"
+        },
+        {
+          "message_id": "home-002",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "昨天整理了很多旧东西。",
+          "at": "2026-02-01T09:00:00+08:00"
+        },
+        {
+          "message_id": "home-003",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "不是北京了，我已经搬到上海长期住了。",
+          "at": "2026-02-01T09:01:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "owner.residence.shanghai",
+          "scope": "owner-user",
+          "content": "用户目前长期住在上海。",
+          "status": "current",
+          "evidence_message_ids": ["home-003"]
+        },
+        {
+          "memory_key": "owner.residence.beijing.history",
+          "scope": "owner-user",
+          "content": "用户以前住在北京。",
+          "status": "historical",
+          "evidence_message_ids": ["home-001", "home-003"]
+        }
+      ],
+      "ignored_message_ids": ["home-002"],
+      "queries": [
+        {
+          "name": "q-current-residence",
+          "text": "我现在住在哪个城市？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [{"message_ids": ["home-003"]}],
+          "forbidden_message_ids": ["home-001"],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "repeated-evidence-one-memory",
+      "category": "duplication",
+      "description": "Three statements support one durable preference and should not consume three context slots forever.",
+      "messages": [
+        {
+          "message_id": "repeat-001",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "我不喝咖啡，晚上会睡不着。",
+          "at": "2026-01-10T09:00:00+08:00"
+        },
+        {
+          "message_id": "repeat-002",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "别给我点咖啡，我还是不喝。",
+          "at": "2026-02-10T09:00:00+08:00"
+        },
+        {
+          "message_id": "repeat-003",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "之前说过我不喝咖啡，给我茶就行。",
+          "at": "2026-03-10T09:00:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "owner.preference.no-coffee",
+          "scope": "owner-user",
+          "content": "用户不喝咖啡，因为会影响睡眠。",
+          "evidence_message_ids": ["repeat-001", "repeat-002", "repeat-003"]
+        }
+      ],
+      "queries": [
+        {
+          "name": "q-owner-coffee-preference",
+          "text": "我喝咖啡吗？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [
+            {"message_ids": ["repeat-001", "repeat-002", "repeat-003"]}
+          ],
+          "limit": 5
+        }
+      ]
+    },
+    {
+      "name": "abstain-on-contact-only-fact",
+      "category": "abstention",
+      "description": "The system should not answer an owner question from a contact's first-person fact.",
+      "messages": [
+        {
+          "message_id": "blood-001",
+          "scope": "owner-chat-a",
+          "actor": "contact",
+          "text": "我的血型是AB型，献血时确认过。",
+          "at": "2026-03-12T09:00:00+08:00"
+        },
+        {
+          "message_id": "blood-002",
+          "scope": "owner-chat-a",
+          "actor": "owner",
+          "text": "原来如此。",
+          "at": "2026-03-12T09:01:00+08:00"
+        }
+      ],
+      "gold_memories": [
+        {
+          "memory_key": "contact-a.health.blood-type-ab",
+          "scope": "owner-chat-a",
+          "content": "联系人的血型是AB型。",
+          "subject": "contact",
+          "evidence_message_ids": ["blood-001"]
+        }
+      ],
+      "ignored_message_ids": ["blood-002"],
+      "queries": [
+        {
+          "name": "q-owner-unknown-blood-type",
+          "text": "我的血型是AB型吗？",
+          "scopes": ["owner-chat-a", "owner-user"],
+          "required_evidence": [],
+          "forbidden_message_ids": ["blood-001"],
+          "limit": 5
+        }
+      ]
+    }
+  ]
+}

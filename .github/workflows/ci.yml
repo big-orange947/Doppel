@@ -69,6 +69,25 @@ jobs:
           --dataset benchmarks/datasets/synthetic-small.json
           --output "$RUNNER_TEMP/doppel-benchmark.json"
 
+  memory-quality-smoke:
+    name: Memory quality baselines
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --extra dev
+      - name: Run deterministic Chinese IM memory baselines
+        run: >-
+          uv run python -m benchmarks.memory_quality
+          --dataset benchmarks/datasets/memory-quality-zh-v1.json
+          --output "$RUNNER_TEMP/doppel-memory-quality.json"
+
   store-conformance:
     name: Store conformance kit
     runs-on: ubuntu-latest

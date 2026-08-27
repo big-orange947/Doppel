@@ -1,0 +1,2205 @@
+{
+  "result_schema_version": 1,
+  "doppel_version": "0.7.1",
+  "generated_at": "2026-08-27T14:56:52.712073+00:00",
+  "dataset": {
+    "name": "doppel.memory-quality.zh.v1",
+    "version": 1,
+    "language": "zh-CN",
+    "fingerprint": "999b9f51bfa9c2bfe55935a0b8eec334f5017559a31e822246b6e41af3c9d2bc",
+    "case_count": 10,
+    "message_count": 34,
+    "query_count": 11,
+    "gold_memory_count": 13,
+    "ignored_message_count": 17,
+    "recent_window_size": 5
+  },
+  "environment": {
+    "python": "3.12.13",
+    "implementation": "CPython",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "measured_dimensions": [
+    "evidence_recall",
+    "candidate_precision",
+    "reciprocal_rank",
+    "abstention",
+    "forbidden_evidence",
+    "scope_isolation",
+    "redundancy",
+    "context_characters",
+    "retrieval_latency"
+  ],
+  "not_yet_measured": [
+    "memory_extraction",
+    "memory_consolidation",
+    "conflict_resolution",
+    "answer_correctness",
+    "llm_token_cost"
+  ],
+  "baselines": [
+    {
+      "name": "no_memory",
+      "version": "1",
+      "capabilities": {
+        "extracts_memories": false,
+        "consolidates_memories": false,
+        "generates_answers": false
+      },
+      "aggregate": {
+        "query_count": 11,
+        "required_query_count": 10,
+        "abstention_query_count": 1,
+        "macro_evidence_recall": 0.0,
+        "macro_candidate_precision": 0.0909,
+        "mean_reciprocal_rank": 0.0,
+        "abstention_accuracy": 1.0,
+        "forbidden_candidate_hits": 0,
+        "scope_leakage_count": 0,
+        "redundant_relevant_candidates": 0,
+        "average_candidates": 0.0,
+        "average_context_characters": 0.0,
+        "prepare_latency_ms": {
+          "total": 0.0,
+          "p50": 0.0,
+          "p95": 0.0
+        },
+        "query_latency_ms": {
+          "p50": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        }
+      },
+      "cases": [
+        {
+          "name": "stable-preference-behind-noise",
+          "category": "stable_fact",
+          "queries": [
+            {
+              "name": "q-preference-cilantro",
+              "query": "我对香菜是什么态度？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "explicit-preference-correction",
+          "category": "correction",
+          "queries": [
+            {
+              "name": "q-current-favorite-color",
+              "query": "我现在最喜欢什么颜色？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "speaker-attribution-allergy",
+          "category": "role_attribution",
+          "queries": [
+            {
+              "name": "q-owner-peanut-allergy",
+              "query": "我自己有花生过敏吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            },
+            {
+              "name": "q-contact-peanut-allergy",
+              "query": "联系人有什么食物过敏？",
+              "authorized_scopes": [
+                "owner-chat-a"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "agent-suggestion-is-not-user-fact",
+          "category": "authority",
+          "queries": [
+            {
+              "name": "q-owner-vegetarian",
+              "query": "我是素食主义者吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "cross-user-scope-adversary",
+          "category": "scope_isolation",
+          "queries": [
+            {
+              "name": "q-owner-cat-name",
+              "query": "我的猫叫什么名字？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "explicit-cross-conversation-user-memory",
+          "category": "scope_hierarchy",
+          "queries": [
+            {
+              "name": "q-owner-current-work",
+              "query": "我目前在哪里做什么工作？",
+              "authorized_scopes": [
+                "owner-chat-b",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "paraphrase-after-long-distractors",
+          "category": "long_horizon",
+          "queries": [
+            {
+              "name": "q-weekend-outdoor-activity",
+              "query": "我周末通常做什么户外活动？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "current-residence-correction",
+          "category": "stale_fact",
+          "queries": [
+            {
+              "name": "q-current-residence",
+              "query": "我现在住在哪个城市？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "repeated-evidence-one-memory",
+          "category": "duplication",
+          "queries": [
+            {
+              "name": "q-owner-coffee-preference",
+              "query": "我喝咖啡吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "abstain-on-contact-only-fact",
+          "category": "abstention",
+          "queries": [
+            {
+              "name": "q-owner-unknown-blood-type",
+              "query": "我的血型是AB型吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 0,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 1.0,
+              "candidate_precision": 1.0,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": true,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0,
+              "candidates": []
+            }
+          ]
+        }
+      ],
+      "correctness": {
+        "passed": true,
+        "scope_leakage_count": 0,
+        "errors": []
+      }
+    },
+    {
+      "name": "recent_window",
+      "version": "1",
+      "capabilities": {
+        "extracts_memories": false,
+        "consolidates_memories": false,
+        "generates_answers": false
+      },
+      "aggregate": {
+        "query_count": 11,
+        "required_query_count": 10,
+        "abstention_query_count": 1,
+        "macro_evidence_recall": 0.8,
+        "macro_candidate_precision": 0.4167,
+        "mean_reciprocal_rank": 0.7,
+        "abstention_accuracy": 0.0,
+        "forbidden_candidate_hits": 5,
+        "scope_leakage_count": 0,
+        "redundant_relevant_candidates": 2,
+        "average_candidates": 2.8182,
+        "average_context_characters": 32.1818,
+        "prepare_latency_ms": {
+          "total": 0.0,
+          "p50": 0.0,
+          "p95": 0.0
+        },
+        "query_latency_ms": {
+          "p50": 0.007,
+          "p95": 0.0396,
+          "max": 0.0396
+        }
+      },
+      "cases": [
+        {
+          "name": "stable-preference-behind-noise",
+          "category": "stable_fact",
+          "queries": [
+            {
+              "name": "q-preference-cilantro",
+              "query": "我对香菜是什么态度？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 5,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 31,
+              "latency_ms": 0.0396,
+              "candidates": [
+                {
+                  "candidate_id": "event:pref-007",
+                  "scope": "owner-chat-a",
+                  "content": "收到。",
+                  "source_message_ids": [
+                    "pref-007"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:pref-006",
+                  "scope": "owner-chat-a",
+                  "content": "文件已经发你了。",
+                  "source_message_ids": [
+                    "pref-006"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:pref-005",
+                  "scope": "owner-chat-a",
+                  "content": "晚点再说。",
+                  "source_message_ids": [
+                    "pref-005"
+                  ],
+                  "score": null,
+                  "rank": 3,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:pref-004",
+                  "scope": "owner-chat-a",
+                  "content": "晚上要不要看电影？",
+                  "source_message_ids": [
+                    "pref-004"
+                  ],
+                  "score": null,
+                  "rank": 4,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:pref-003",
+                  "scope": "owner-chat-a",
+                  "content": "今天有点冷。",
+                  "source_message_ids": [
+                    "pref-003"
+                  ],
+                  "score": null,
+                  "rank": 5,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "explicit-preference-correction",
+          "category": "correction",
+          "queries": [
+            {
+              "name": "q-current-favorite-color",
+              "query": "我现在最喜欢什么颜色？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 4,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.25,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 50,
+              "latency_ms": 0.0143,
+              "candidates": [
+                {
+                  "candidate_id": "event:color-004",
+                  "scope": "owner-chat-a",
+                  "content": "现在我更喜欢绿色了，蓝色是以前最喜欢的。",
+                  "source_message_ids": [
+                    "color-004"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:color-003",
+                  "scope": "owner-chat-a",
+                  "content": "最近重新布置了房间。",
+                  "source_message_ids": [
+                    "color-003"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:color-002",
+                  "scope": "owner-chat-a",
+                  "content": "蓝色确实很适合你。",
+                  "source_message_ids": [
+                    "color-002"
+                  ],
+                  "score": null,
+                  "rank": 3,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:color-001",
+                  "scope": "owner-chat-a",
+                  "content": "我最喜欢的颜色是蓝色。",
+                  "source_message_ids": [
+                    "color-001"
+                  ],
+                  "score": null,
+                  "rank": 4,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "speaker-attribution-allergy",
+          "category": "role_attribution",
+          "queries": [
+            {
+              "name": "q-owner-peanut-allergy",
+              "query": "我自己有花生过敏吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 30,
+              "latency_ms": 0.0068,
+              "candidates": [
+                {
+                  "candidate_id": "event:allergy-002",
+                  "scope": "owner-chat-a",
+                  "content": "知道了，我自己没有食物过敏。",
+                  "source_message_ids": [
+                    "allergy-002"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:allergy-001",
+                  "scope": "owner-chat-a",
+                  "content": "我对花生过敏，聚餐千万别点花生。",
+                  "source_message_ids": [
+                    "allergy-001"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            },
+            {
+              "name": "q-contact-peanut-allergy",
+              "query": "联系人有什么食物过敏？",
+              "authorized_scopes": [
+                "owner-chat-a"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 0.5,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 30,
+              "latency_ms": 0.007,
+              "candidates": [
+                {
+                  "candidate_id": "event:allergy-002",
+                  "scope": "owner-chat-a",
+                  "content": "知道了，我自己没有食物过敏。",
+                  "source_message_ids": [
+                    "allergy-002"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:allergy-001",
+                  "scope": "owner-chat-a",
+                  "content": "我对花生过敏，聚餐千万别点花生。",
+                  "source_message_ids": [
+                    "allergy-001"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "agent-suggestion-is-not-user-fact",
+          "category": "authority",
+          "queries": [
+            {
+              "name": "q-owner-vegetarian",
+              "query": "我是素食主义者吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 34,
+              "latency_ms": 0.0056,
+              "candidates": [
+                {
+                  "candidate_id": "event:diet-002",
+                  "scope": "owner-chat-a",
+                  "content": "不用，我不是素食主义者，还是正常吃肉。",
+                  "source_message_ids": [
+                    "diet-002"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:diet-001",
+                  "scope": "owner-chat-a",
+                  "content": "你可以尝试一段时间的素食饮食。",
+                  "source_message_ids": [
+                    "diet-001"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "cross-user-scope-adversary",
+          "category": "scope_isolation",
+          "queries": [
+            {
+              "name": "q-owner-cat-name",
+              "query": "我的猫叫什么名字？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 1,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 1.0,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 13,
+              "latency_ms": 0.0034,
+              "candidates": [
+                {
+                  "candidate_id": "event:pet-001",
+                  "scope": "owner-chat-a",
+                  "content": "我的猫叫年糕，是一只橘猫。",
+                  "source_message_ids": [
+                    "pet-001"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "explicit-cross-conversation-user-memory",
+          "category": "scope_hierarchy",
+          "queries": [
+            {
+              "name": "q-owner-current-work",
+              "query": "我目前在哪里做什么工作？",
+              "authorized_scopes": [
+                "owner-chat-b",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 0.5,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 21,
+              "latency_ms": 0.0053,
+              "candidates": [
+                {
+                  "candidate_id": "event:work-002",
+                  "scope": "owner-chat-b",
+                  "content": "这个周末准备休息。",
+                  "source_message_ids": [
+                    "work-002"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:work-001",
+                  "scope": "owner-user",
+                  "content": "我目前在上海做后端开发。",
+                  "source_message_ids": [
+                    "work-001"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "paraphrase-after-long-distractors",
+          "category": "long_horizon",
+          "queries": [
+            {
+              "name": "q-weekend-outdoor-activity",
+              "query": "我周末通常做什么户外活动？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 5,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 39,
+              "latency_ms": 0.0138,
+              "candidates": [
+                {
+                  "candidate_id": "event:hobby-007",
+                  "scope": "owner-chat-a",
+                  "content": "明天再聊这个。",
+                  "source_message_ids": [
+                    "hobby-007"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:hobby-006",
+                  "scope": "owner-chat-a",
+                  "content": "图片看到了。",
+                  "source_message_ids": [
+                    "hobby-006"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:hobby-005",
+                  "scope": "owner-chat-a",
+                  "content": "快递放门口就行。",
+                  "source_message_ids": [
+                    "hobby-005"
+                  ],
+                  "score": null,
+                  "rank": 3,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:hobby-004",
+                  "scope": "owner-chat-a",
+                  "content": "会议改到三点了。",
+                  "source_message_ids": [
+                    "hobby-004"
+                  ],
+                  "score": null,
+                  "rank": 4,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:hobby-003",
+                  "scope": "owner-chat-a",
+                  "content": "下午把表格整理一下。",
+                  "source_message_ids": [
+                    "hobby-003"
+                  ],
+                  "score": null,
+                  "rank": 5,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "current-residence-correction",
+          "category": "stale_fact",
+          "queries": [
+            {
+              "name": "q-current-residence",
+              "query": "我现在住在哪个城市？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 3,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.3333,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 43,
+              "latency_ms": 0.0086,
+              "candidates": [
+                {
+                  "candidate_id": "event:home-003",
+                  "scope": "owner-chat-a",
+                  "content": "不是北京了，我已经搬到上海长期住了。",
+                  "source_message_ids": [
+                    "home-003"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:home-002",
+                  "scope": "owner-chat-a",
+                  "content": "昨天整理了很多旧东西。",
+                  "source_message_ids": [
+                    "home-002"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:home-001",
+                  "scope": "owner-chat-a",
+                  "content": "我住在北京，通勤时间有点长。",
+                  "source_message_ids": [
+                    "home-001"
+                  ],
+                  "score": null,
+                  "rank": 3,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "repeated-evidence-one-memory",
+          "category": "duplication",
+          "queries": [
+            {
+              "name": "q-owner-coffee-preference",
+              "query": "我喝咖啡吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 3,
+              "relevant_candidate_count": 3,
+              "evidence_recall": 1.0,
+              "candidate_precision": 1.0,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 2,
+              "context_characters": 42,
+              "latency_ms": 0.008,
+              "candidates": [
+                {
+                  "candidate_id": "event:repeat-003",
+                  "scope": "owner-chat-a",
+                  "content": "之前说过我不喝咖啡，给我茶就行。",
+                  "source_message_ids": [
+                    "repeat-003"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:repeat-002",
+                  "scope": "owner-chat-a",
+                  "content": "别给我点咖啡，我还是不喝。",
+                  "source_message_ids": [
+                    "repeat-002"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:repeat-001",
+                  "scope": "owner-chat-a",
+                  "content": "我不喝咖啡，晚上会睡不着。",
+                  "source_message_ids": [
+                    "repeat-001"
+                  ],
+                  "score": null,
+                  "rank": 3,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "abstain-on-contact-only-fact",
+          "category": "abstention",
+          "queries": [
+            {
+              "name": "q-owner-unknown-blood-type",
+              "query": "我的血型是AB型吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 0,
+              "covered_group_count": 0,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 21,
+              "latency_ms": 0.0059,
+              "candidates": [
+                {
+                  "candidate_id": "event:blood-002",
+                  "scope": "owner-chat-a",
+                  "content": "原来如此。",
+                  "source_message_ids": [
+                    "blood-002"
+                  ],
+                  "score": null,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:blood-001",
+                  "scope": "owner-chat-a",
+                  "content": "我的血型是AB型，献血时确认过。",
+                  "source_message_ids": [
+                    "blood-001"
+                  ],
+                  "score": null,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "correctness": {
+        "passed": true,
+        "scope_leakage_count": 0,
+        "errors": []
+      }
+    },
+    {
+      "name": "raw_lexical",
+      "version": "1",
+      "capabilities": {
+        "extracts_memories": false,
+        "consolidates_memories": false,
+        "generates_answers": false
+      },
+      "aggregate": {
+        "query_count": 11,
+        "required_query_count": 10,
+        "abstention_query_count": 1,
+        "macro_evidence_recall": 1.0,
+        "macro_candidate_precision": 0.6136,
+        "mean_reciprocal_rank": 0.8,
+        "abstention_accuracy": 0.0,
+        "forbidden_candidate_hits": 5,
+        "scope_leakage_count": 0,
+        "redundant_relevant_candidates": 2,
+        "average_candidates": 1.9091,
+        "average_context_characters": 27.8182,
+        "prepare_latency_ms": {
+          "total": 0.0,
+          "p50": 0.0,
+          "p95": 0.0
+        },
+        "query_latency_ms": {
+          "p50": 0.0248,
+          "p95": 0.0576,
+          "max": 0.0576
+        }
+      },
+      "cases": [
+        {
+          "name": "stable-preference-behind-noise",
+          "category": "stable_fact",
+          "queries": [
+            {
+              "name": "q-preference-cilantro",
+              "query": "我对香菜是什么态度？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 27,
+              "latency_ms": 0.0576,
+              "candidates": [
+                {
+                  "candidate_id": "event:pref-001",
+                  "scope": "owner-chat-a",
+                  "content": "我吃火锅的时候不喜欢香菜，点菜记得别放。",
+                  "source_message_ids": [
+                    "pref-001"
+                  ],
+                  "score": 0.1098,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:pref-002",
+                  "scope": "owner-chat-a",
+                  "content": "好，我记住了。",
+                  "source_message_ids": [
+                    "pref-002"
+                  ],
+                  "score": 0.0174,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "explicit-preference-correction",
+          "category": "correction",
+          "queries": [
+            {
+              "name": "q-current-favorite-color",
+              "query": "我现在最喜欢什么颜色？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 4,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.25,
+              "reciprocal_rank": 0.5,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 50,
+              "latency_ms": 0.0388,
+              "candidates": [
+                {
+                  "candidate_id": "event:color-001",
+                  "scope": "owner-chat-a",
+                  "content": "我最喜欢的颜色是蓝色。",
+                  "source_message_ids": [
+                    "color-001"
+                  ],
+                  "score": 0.3696,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:color-004",
+                  "scope": "owner-chat-a",
+                  "content": "现在我更喜欢绿色了，蓝色是以前最喜欢的。",
+                  "source_message_ids": [
+                    "color-004"
+                  ],
+                  "score": 0.3453,
+                  "rank": 2,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:color-002",
+                  "scope": "owner-chat-a",
+                  "content": "蓝色确实很适合你。",
+                  "source_message_ids": [
+                    "color-002"
+                  ],
+                  "score": 0.0124,
+                  "rank": 3,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:color-003",
+                  "scope": "owner-chat-a",
+                  "content": "最近重新布置了房间。",
+                  "source_message_ids": [
+                    "color-003"
+                  ],
+                  "score": 0.0116,
+                  "rank": 4,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "speaker-attribution-allergy",
+          "category": "role_attribution",
+          "queries": [
+            {
+              "name": "q-owner-peanut-allergy",
+              "query": "我自己有花生过敏吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 0.5,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 30,
+              "latency_ms": 0.0282,
+              "candidates": [
+                {
+                  "candidate_id": "event:allergy-001",
+                  "scope": "owner-chat-a",
+                  "content": "我对花生过敏，聚餐千万别点花生。",
+                  "source_message_ids": [
+                    "allergy-001"
+                  ],
+                  "score": 0.3863,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:allergy-002",
+                  "scope": "owner-chat-a",
+                  "content": "知道了，我自己没有食物过敏。",
+                  "source_message_ids": [
+                    "allergy-002"
+                  ],
+                  "score": 0.348,
+                  "rank": 2,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "q-contact-peanut-allergy",
+              "query": "联系人有什么食物过敏？",
+              "authorized_scopes": [
+                "owner-chat-a"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 0.5,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 30,
+              "latency_ms": 0.0258,
+              "candidates": [
+                {
+                  "candidate_id": "event:allergy-002",
+                  "scope": "owner-chat-a",
+                  "content": "知道了，我自己没有食物过敏。",
+                  "source_message_ids": [
+                    "allergy-002"
+                  ],
+                  "score": 0.3184,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:allergy-001",
+                  "scope": "owner-chat-a",
+                  "content": "我对花生过敏，聚餐千万别点花生。",
+                  "source_message_ids": [
+                    "allergy-001"
+                  ],
+                  "score": 0.0932,
+                  "rank": 2,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "agent-suggestion-is-not-user-fact",
+          "category": "authority",
+          "queries": [
+            {
+              "name": "q-owner-vegetarian",
+              "query": "我是素食主义者吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 34,
+              "latency_ms": 0.0226,
+              "candidates": [
+                {
+                  "candidate_id": "event:diet-002",
+                  "scope": "owner-chat-a",
+                  "content": "不用，我不是素食主义者，还是正常吃肉。",
+                  "source_message_ids": [
+                    "diet-002"
+                  ],
+                  "score": 0.5052,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:diet-001",
+                  "scope": "owner-chat-a",
+                  "content": "你可以尝试一段时间的素食饮食。",
+                  "source_message_ids": [
+                    "diet-001"
+                  ],
+                  "score": 0.1235,
+                  "rank": 2,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "cross-user-scope-adversary",
+          "category": "scope_isolation",
+          "queries": [
+            {
+              "name": "q-owner-cat-name",
+              "query": "我的猫叫什么名字？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 1,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 1.0,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 13,
+              "latency_ms": 0.0171,
+              "candidates": [
+                {
+                  "candidate_id": "event:pet-001",
+                  "scope": "owner-chat-a",
+                  "content": "我的猫叫年糕，是一只橘猫。",
+                  "source_message_ids": [
+                    "pet-001"
+                  ],
+                  "score": 0.3742,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "explicit-cross-conversation-user-memory",
+          "category": "scope_hierarchy",
+          "queries": [
+            {
+              "name": "q-owner-current-work",
+              "query": "我目前在哪里做什么工作？",
+              "authorized_scopes": [
+                "owner-chat-b",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 1,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 1.0,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 12,
+              "latency_ms": 0.0247,
+              "candidates": [
+                {
+                  "candidate_id": "event:work-001",
+                  "scope": "owner-user",
+                  "content": "我目前在上海做后端开发。",
+                  "source_message_ids": [
+                    "work-001"
+                  ],
+                  "score": 0.3168,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "paraphrase-after-long-distractors",
+          "category": "long_horizon",
+          "queries": [
+            {
+              "name": "q-weekend-outdoor-activity",
+              "query": "我周末通常做什么户外活动？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 1,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 1.0,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 20,
+              "latency_ms": 0.0468,
+              "candidates": [
+                {
+                  "candidate_id": "event:hobby-001",
+                  "scope": "owner-chat-a",
+                  "content": "周末有空我一般去爬山，最常去城郊的步道。",
+                  "source_message_ids": [
+                    "hobby-001"
+                  ],
+                  "score": 0.0938,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "current-residence-correction",
+          "category": "stale_fact",
+          "queries": [
+            {
+              "name": "q-current-residence",
+              "query": "我现在住在哪个城市？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 2,
+              "relevant_candidate_count": 1,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.5,
+              "reciprocal_rank": 0.5,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 32,
+              "latency_ms": 0.0248,
+              "candidates": [
+                {
+                  "candidate_id": "event:home-001",
+                  "scope": "owner-chat-a",
+                  "content": "我住在北京，通勤时间有点长。",
+                  "source_message_ids": [
+                    "home-001"
+                  ],
+                  "score": 0.1354,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                },
+                {
+                  "candidate_id": "event:home-003",
+                  "scope": "owner-chat-a",
+                  "content": "不是北京了，我已经搬到上海长期住了。",
+                  "source_message_ids": [
+                    "home-003"
+                  ],
+                  "score": 0.0177,
+                  "rank": 2,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "repeated-evidence-one-memory",
+          "category": "duplication",
+          "queries": [
+            {
+              "name": "q-owner-coffee-preference",
+              "query": "我喝咖啡吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 1,
+              "retrieved_count": 3,
+              "relevant_candidate_count": 3,
+              "evidence_recall": 1.0,
+              "candidate_precision": 1.0,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 2,
+              "context_characters": 42,
+              "latency_ms": 0.0233,
+              "candidates": [
+                {
+                  "candidate_id": "event:repeat-001",
+                  "scope": "owner-chat-a",
+                  "content": "我不喝咖啡，晚上会睡不着。",
+                  "source_message_ids": [
+                    "repeat-001"
+                  ],
+                  "score": 0.3385,
+                  "rank": 1,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:repeat-003",
+                  "scope": "owner-chat-a",
+                  "content": "之前说过我不喝咖啡，给我茶就行。",
+                  "source_message_ids": [
+                    "repeat-003"
+                  ],
+                  "score": 0.3115,
+                  "rank": 2,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                },
+                {
+                  "candidate_id": "event:repeat-002",
+                  "scope": "owner-chat-a",
+                  "content": "别给我点咖啡，我还是不喝。",
+                  "source_message_ids": [
+                    "repeat-002"
+                  ],
+                  "score": 0.2154,
+                  "rank": 3,
+                  "relevant": true,
+                  "forbidden": false,
+                  "scope_leak": false,
+                  "matched_evidence_groups": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "abstain-on-contact-only-fact",
+          "category": "abstention",
+          "queries": [
+            {
+              "name": "q-owner-unknown-blood-type",
+              "query": "我的血型是AB型吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 0,
+              "covered_group_count": 0,
+              "retrieved_count": 1,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 1.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 1,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 16,
+              "latency_ms": 0.0186,
+              "candidates": [
+                {
+                  "candidate_id": "event:blood-001",
+                  "scope": "owner-chat-a",
+                  "content": "我的血型是AB型，献血时确认过。",
+                  "source_message_ids": [
+                    "blood-001"
+                  ],
+                  "score": 0.6496,
+                  "rank": 1,
+                  "relevant": false,
+                  "forbidden": true,
+                  "scope_leak": false,
+                  "matched_evidence_groups": []
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "correctness": {
+        "passed": true,
+        "scope_leakage_count": 0,
+        "errors": []
+      }
+    },
+    {
+      "name": "doppel_v0_7_events",
+      "version": "1",
+      "capabilities": {
+        "extracts_memories": false,
+        "consolidates_memories": false,
+        "generates_answers": false
+      },
+      "aggregate": {
+        "query_count": 11,
+        "required_query_count": 10,
+        "abstention_query_count": 1,
+        "macro_evidence_recall": 0.0,
+        "macro_candidate_precision": 0.0909,
+        "mean_reciprocal_rank": 0.0,
+        "abstention_accuracy": 1.0,
+        "forbidden_candidate_hits": 0,
+        "scope_leakage_count": 0,
+        "redundant_relevant_candidates": 0,
+        "average_candidates": 0.0,
+        "average_context_characters": 0.0,
+        "prepare_latency_ms": {
+          "total": 3.7924,
+          "p50": 0.2426,
+          "p95": 1.1645
+        },
+        "query_latency_ms": {
+          "p50": 0.0495,
+          "p95": 0.1359,
+          "max": 0.1359
+        }
+      },
+      "cases": [
+        {
+          "name": "stable-preference-behind-noise",
+          "category": "stable_fact",
+          "queries": [
+            {
+              "name": "q-preference-cilantro",
+              "query": "我对香菜是什么态度？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.1359,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "explicit-preference-correction",
+          "category": "correction",
+          "queries": [
+            {
+              "name": "q-current-favorite-color",
+              "query": "我现在最喜欢什么颜色？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0697,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "speaker-attribution-allergy",
+          "category": "role_attribution",
+          "queries": [
+            {
+              "name": "q-owner-peanut-allergy",
+              "query": "我自己有花生过敏吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0495,
+              "candidates": []
+            },
+            {
+              "name": "q-contact-peanut-allergy",
+              "query": "联系人有什么食物过敏？",
+              "authorized_scopes": [
+                "owner-chat-a"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.028,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "agent-suggestion-is-not-user-fact",
+          "category": "authority",
+          "queries": [
+            {
+              "name": "q-owner-vegetarian",
+              "query": "我是素食主义者吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0523,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "cross-user-scope-adversary",
+          "category": "scope_isolation",
+          "queries": [
+            {
+              "name": "q-owner-cat-name",
+              "query": "我的猫叫什么名字？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0395,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "explicit-cross-conversation-user-memory",
+          "category": "scope_hierarchy",
+          "queries": [
+            {
+              "name": "q-owner-current-work",
+              "query": "我目前在哪里做什么工作？",
+              "authorized_scopes": [
+                "owner-chat-b",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0502,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "paraphrase-after-long-distractors",
+          "category": "long_horizon",
+          "queries": [
+            {
+              "name": "q-weekend-outdoor-activity",
+              "query": "我周末通常做什么户外活动？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0807,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "current-residence-correction",
+          "category": "stale_fact",
+          "queries": [
+            {
+              "name": "q-current-residence",
+              "query": "我现在住在哪个城市？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0464,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "repeated-evidence-one-memory",
+          "category": "duplication",
+          "queries": [
+            {
+              "name": "q-owner-coffee-preference",
+              "query": "我喝咖啡吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 1,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 0.0,
+              "candidate_precision": 0.0,
+              "reciprocal_rank": 0.0,
+              "abstention_passed": false,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.0455,
+              "candidates": []
+            }
+          ]
+        },
+        {
+          "name": "abstain-on-contact-only-fact",
+          "category": "abstention",
+          "queries": [
+            {
+              "name": "q-owner-unknown-blood-type",
+              "query": "我的血型是AB型吗？",
+              "authorized_scopes": [
+                "owner-chat-a",
+                "owner-user"
+              ],
+              "required_group_count": 0,
+              "covered_group_count": 0,
+              "retrieved_count": 0,
+              "relevant_candidate_count": 0,
+              "evidence_recall": 1.0,
+              "candidate_precision": 1.0,
+              "reciprocal_rank": 1.0,
+              "abstention_passed": true,
+              "forbidden_candidate_hits": 0,
+              "scope_leakage_count": 0,
+              "redundant_relevant_candidates": 0,
+              "context_characters": 0,
+              "latency_ms": 0.041,
+              "candidates": []
+            }
+          ]
+        }
+      ],
+      "correctness": {
+        "passed": true,
+        "scope_leakage_count": 0,
+        "errors": []
+      }
+    }
+  ],
+  "correctness": {
+    "passed": true,
+    "scope_leakage_count": 0,
+    "errors": []
+  }
+}

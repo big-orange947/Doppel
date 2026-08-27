@@ -901,6 +901,24 @@ embedding provider。Graphiti 会把旧 v1 episode 视为 stale 并在维护时�
 
 ## Benchmark
 
+v0.7.1 新增中文 IM 长期记忆质量基线。10 个手工标注场景覆盖稳定事实、明确纠正、说话人/权威
+归属、跨用户 scope 对抗、显式 user scope、长程干扰、重复证据、过时事实和应当拒答的情况：
+
+```bash
+uv run python -m benchmarks.memory_quality \
+  --dataset benchmarks/datasets/memory-quality-zh-v1.json \
+  --output benchmarks/results/memory-quality.json
+```
+
+同一份数据运行 `no_memory`、`recent_window`、透明中文字符 n-gram 的 `raw_lexical` 和当前
+`doppel_v0_7_events` 四个确定性基线。报告分别给出 evidence recall、candidate precision、MRR、
+拒答、禁止证据、重复上下文、字符预算、延迟和 scope leakage；越权候选是硬失败。抽取、整理、冲突
+解决、最终回答正确性和模型成本在 v0.7.1 中明确标为尚未测量，不会用原始事件召回分数冒充“记忆
+智能”。数据集已经保存未来 Reference Intelligence 所需的 13 条 gold memory 和 source evidence。
+
+首份版本化结果保存在 [`benchmarks/reference-results/`](benchmarks/reference-results/)，完整方法和边界
+见 [`benchmarks/README.md`](benchmarks/README.md)。
+
 仓库包含后端无关的 Store benchmark，用固定 seed 生成相同的 scope、记忆、查询和分页负载：
 
 ```bash
@@ -946,6 +964,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与独立质量门禁
 - [x] v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口
 - [x] v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理
+- [x] v0.7.1：中文 IM 记忆质量数据集、四类基线、分层指标与版本化报告
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

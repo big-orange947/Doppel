@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.7.1
+
+Doppel now has a reproducible quality baseline for the problem the framework exists to
+solve: selecting safe, useful evidence from long-horizon Chinese IM conversations. This
+release intentionally adds no extractor or model integration; it measures the current
+gap before the reference intelligence is designed.
+
+### Added
+
+- A versioned `doppel.memory-quality.zh.v1` fixture with 10 scenarios, 34 messages,
+  13 future gold memories, and 11 evidence-labeled queries. It covers stable facts,
+  explicit corrections, speaker and authority attribution, cross-user scope attacks,
+  explicit user-scope expansion, long-horizon distractors, repeated evidence, stale
+  facts, and abstention.
+- Four deterministic baselines: no memory, a recent authorized window, transparent
+  Chinese character n-gram retrieval over all raw events, and Doppel v0.7 raw-event
+  ingest with default Store retrieval.
+- Layered retrieval metrics for evidence coverage, candidate precision, reciprocal
+  rank, abstention, forbidden evidence, redundancy, context characters, latency, and
+  scope leakage. Extraction, consolidation, answer correctness, and model cost are
+  explicitly declared unmeasured instead of being inferred from retrieval scores.
+- A strict result JSON Schema, committed release-reference report, dataset fingerprint,
+  CLI runner, adversarial contract tests, and a dedicated CI smoke job. Out-of-scope
+  candidates fail the run; weak but scope-safe quality remains observable for honest
+  baseline comparison.
+
+### Direction
+
+- The next intelligence layer must improve this fixed baseline rather than introducing
+  domain-specific processors or self-reported model scores. Gold memories and evidence
+  groups are already present for the reference extractor and consolidator planned for
+  subsequent releases.
+- PyPI publication, additional Stores, cloud hosting, and new graph features remain
+  intentionally deferred while memory quality is the primary development gate.
+
 ## 0.7.0
 
 Derived semantic indexes now have an explicit lifecycle contract and a resumable way

@@ -7,6 +7,13 @@ import json
 import pytest
 
 from benchmarks.dataset import SyntheticDatasetConfig, generate_dataset
+from benchmarks.memory_quality import (
+    BaselineCaseRun,
+    MemoryQualityDataset,
+    QualityCandidate,
+    load_memory_quality_dataset,
+    run_memory_quality_benchmark,
+)
 from benchmarks.store_benchmark import benchmark_store, run_store_benchmark
 from benchmarks.style_quality import (
     load_style_quality_dataset,
@@ -164,5 +171,124 @@ def test_vector_result_schema_tracks_the_runner_envelope() -> None:
         "dataset",
         "index",
         "cases",
+        "correctness",
+    }
+
+
+def test_memory_quality_fixture_is_deterministic_layered_and_scope_adversarial() -> (
+    None
+):
+    first = load_memory_quality_dataset()
+    second = load_memory_quality_dataset()
+
+    assert first.fingerprint == second.fingerprint
+    assert first.name == "doppel.memory-quality.zh.v1"
+    assert len(first.cases) == 10
+    assert sum(len(case.messages) for case in first.cases) == 34
+    assert sum(len(case.queries) for case in first.cases) == 11
+    assert sum(len(case.gold_memories) for case in first.cases) == 13
+    adversary = next(
+        case for case in first.cases if case.name == "cross-user-scope-adversary"
+    )
+    query = adversary.queries[0]
+    assert query.scopes == ["owner-chat-a", "owner-user"]
+    assert query.forbidden_message_ids == ["pet-002"]
+    assert (
+        next(
+            message for message in adversary.messages if message.message_id == "pet-002"
+        ).scope
+        == "other-chat"
+    )
+
+
+async def test_memory_quality_baselines_expose_current_gaps_without_faking_intelligence() -> (
+    None
+):
+    result = await run_memory_quality_benchmark(load_memory_quality_dataset())
+
+    assert result["result_schema_version"] == 1
+    assert result["correctness"] == {
+        "passed": True,
+        "scope_leakage_count": 0,
+        "errors": [],
+    }
+    assert "memory_extraction" in result["not_yet_measured"]
+    baselines = {item["name"]: item for item in result["baselines"]}
+    assert set(baselines) == {
+        "no_memory",
+        "recent_window",
+        "raw_lexical",
+        "doppel_v0_7_events",
+    }
+    assert baselines["no_memory"]["aggregate"]["macro_evidence_recall"] == 0
+    assert baselines["no_memory"]["aggregate"]["abstention_accuracy"] == 1
+    assert baselines["raw_lexical"]["aggregate"]["macro_evidence_recall"] == 1
+    assert baselines["recent_window"]["aggregate"]["macro_evidence_recall"] < 1
+    assert baselines["doppel_v0_7_events"]["capabilities"] == {
+        "extracts_memories": False,
+        "consolidates_memories": False,
+        "generates_answers": False,
+    }
+    assert all(item["correctness"]["passed"] for item in baselines.values())
+
+
+class _LeakyQualityBaseline:
+    name = "leaky-test"
+    version = "1"
+
+    async def run_case(self, dataset, case):
+        del dataset
+        candidates = {query.name: [] for query in case.queries}
+        if case.name == "cross-user-scope-adversary":
+            candidates["q-owner-cat-name"] = [
+                QualityCandidate(
+                    candidate_id="leaked-pet",
+                    scope="other-chat",
+                    content="我的猫叫豆包，是一只橘猫。",
+                    source_message_ids=["pet-002"],
+                )
+            ]
+        return BaselineCaseRun(
+            candidates=candidates,
+            query_latency_ms={query.name: 0.0 for query in case.queries},
+        )
+
+
+async def test_memory_quality_scope_leakage_is_a_hard_runner_failure() -> None:
+    result = await run_memory_quality_benchmark(
+        load_memory_quality_dataset(), baselines=[_LeakyQualityBaseline()]
+    )
+
+    assert result["correctness"]["passed"] is False
+    assert result["correctness"]["scope_leakage_count"] == 1
+    assert result["baselines"][0]["aggregate"]["forbidden_candidate_hits"] == 1
+
+
+def test_memory_quality_dataset_rejects_gold_and_forbidden_overlap() -> None:
+    dataset = load_memory_quality_dataset()
+    payload = dataset.model_dump(mode="json")
+    payload["cases"][0]["queries"][0]["forbidden_message_ids"] = ["pref-001"]
+
+    with pytest.raises(ValueError, match="required and forbidden evidence overlap"):
+        MemoryQualityDataset.model_validate(payload)
+
+
+def test_memory_quality_result_schema_tracks_the_runner_envelope() -> None:
+    with open(
+        "benchmarks/memory-quality-result.schema.json", encoding="utf-8"
+    ) as source:
+        schema = json.load(source)
+    assert schema["properties"]["result_schema_version"]["const"] == 1
+    assert schema["$defs"]["baseline"]["additionalProperties"] is False
+    assert schema["$defs"]["query"]["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "result_schema_version",
+        "doppel_version",
+        "generated_at",
+        "dataset",
+        "environment",
+        "measured_dimensions",
+        "not_yet_measured",
+        "baselines",
         "correctness",
     }
