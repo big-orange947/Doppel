@@ -26,6 +26,13 @@ from graphiti_core.llm_client import OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.nodes import EpisodicNode
 
+from doppel_memory.indexing import (
+    IndexEntry,
+    IndexEntryPage,
+    IndexOperationResult,
+    IndexOperationStatus,
+    memory_index_fingerprint,
+)
 from doppel_memory.models import (
     ACTIVE_MEMORY_STATES,
     Actor,
@@ -109,6 +116,9 @@ class GraphitiIndexResult:
     memory_id: str
     episode_id: str
     scope_key: str
+    fingerprint: str = ""
+    source_version: int = 1
+    status: IndexOperationStatus = IndexOperationStatus.INDEXED
 
 
 class GraphitiSemanticIndex:
@@ -144,7 +154,22 @@ class GraphitiSemanticIndex:
         self._owns_client = graphiti_client is None
         self._init_lock = asyncio.Lock()
 
+    @property
+    def identity(self) -> str:
+        return "graphiti:0.29:doppel-v2"
+
     async def index_record(self, record: MemoryRecord) -> GraphitiIndexResult:
+        operation = await self.upsert(record)
+        return GraphitiIndexResult(
+            memory_id=operation.memory_id,
+            episode_id=_graphiti_episode_id(record.scope, operation.memory_id),
+            scope_key=operation.scope_key,
+            fingerprint=operation.fingerprint,
+            source_version=operation.source_version or 1,
+            status=operation.status,
+        )
+
+    async def upsert(self, record: MemoryRecord) -> IndexOperationResult:
         if not self._enabled:
             raise GraphitiIndexUnavailableError("Graphiti semantic index is disabled")
         if not record.memory_id:
@@ -157,21 +182,32 @@ class GraphitiSemanticIndex:
                 "Graphiti indexing requires a record present in the authoritative Store"
             )
         record = authoritative
-        episode_id = str(
-            uuid5(
-                NAMESPACE_URL,
-                f"doppel:{record.scope.scope_key}:{record.memory_id}",
+        fingerprint = memory_index_fingerprint(record)
+        episode_id = _graphiti_episode_id(record.scope, record.memory_id)
+        current = await self.inspect(record.scope, record.memory_id)
+        if current is not None and current.fingerprint == fingerprint:
+            return IndexOperationResult(
+                index_identity=self.identity,
+                status=IndexOperationStatus.SKIPPED,
+                memory_id=record.memory_id,
+                scope_key=record.scope.scope_key,
+                fingerprint=fingerprint,
+                source_version=record.version,
             )
-        )
         body = (
-            f"[DOPPEL memory_id={record.memory_id} kind={record.kind} "
+            f"[DOPPEL memory_id={record.memory_id} version={record.version} "
+            f"fingerprint={fingerprint} kind={record.kind} "
             f"actor={record.actor or '-'} authority={record.authority.value} "
             f"state={record.state.value}] {record.content}"
         )
         try:
             graphiti = await self._ensure_graphiti()
+            if current is not None:
+                await graphiti.remove_episode(episode_id)
             result = await graphiti.add_episode(
-                name=_graphiti_episode_name(record.memory_id),
+                name=_graphiti_episode_name(
+                    record.memory_id, fingerprint, record.version
+                ),
                 episode_body=body,
                 source_description=record.extractor or "doppel",
                 reference_time=record.created_at,
@@ -183,10 +219,121 @@ class GraphitiSemanticIndex:
                 f"Graphiti episode indexing failed: {exc}"
             ) from exc
         actual_episode_id = str(getattr(result.episode, "uuid", "") or episode_id)
-        return GraphitiIndexResult(
+        if actual_episode_id != episode_id:
+            raise GraphitiIndexUnavailableError(
+                "Graphiti returned an episode UUID different from the requested ID"
+            )
+        return IndexOperationResult(
+            index_identity=self.identity,
+            status=IndexOperationStatus.INDEXED,
             memory_id=record.memory_id,
-            episode_id=actual_episode_id,
             scope_key=record.scope.scope_key,
+            fingerprint=fingerprint,
+            source_version=record.version,
+        )
+
+    async def inspect(self, scope: MemoryScope, memory_id: str) -> IndexEntry | None:
+        if not self._enabled:
+            raise GraphitiIndexUnavailableError("Graphiti semantic index is disabled")
+        graphiti = await self._ensure_graphiti()
+        episode_id = _graphiti_episode_id(scope, memory_id)
+        try:
+            episode = await _load_graphiti_episode(graphiti, episode_id)
+        except Exception as exc:
+            raise GraphitiIndexUnavailableError(
+                f"Graphiti episode inspection failed: {exc}"
+            ) from exc
+        if episode is None:
+            return None
+        group_id = str(getattr(episode, "group_id", "") or "")
+        source_id, fingerprint, source_version = _episode_index_metadata(
+            str(getattr(episode, "name", "") or "")
+        )
+        if group_id != scope.scope_key or source_id != memory_id:
+            # The deterministic UUID is occupied by malformed or legacy metadata.
+            # Treat it as stale so ``upsert``/``delete`` can repair the slot.
+            return IndexEntry(
+                memory_id=memory_id,
+                scope_key=scope.scope_key,
+                fingerprint="",
+                source_version=1,
+            )
+        return IndexEntry(
+            memory_id=memory_id,
+            scope_key=scope.scope_key,
+            fingerprint=fingerprint,
+            source_version=source_version,
+        )
+
+    async def delete(self, scope: MemoryScope, memory_id: str) -> IndexOperationResult:
+        if not self._enabled:
+            raise GraphitiIndexUnavailableError("Graphiti semantic index is disabled")
+        current = await self.inspect(scope, memory_id)
+        status = IndexOperationStatus.MISSING
+        if current is not None:
+            try:
+                graphiti = await self._ensure_graphiti()
+                await graphiti.remove_episode(_graphiti_episode_id(scope, memory_id))
+            except Exception as exc:
+                raise GraphitiIndexUnavailableError(
+                    f"Graphiti episode deletion failed: {exc}"
+                ) from exc
+            status = IndexOperationStatus.DELETED
+        return IndexOperationResult(
+            index_identity=self.identity,
+            status=status,
+            memory_id=memory_id,
+            scope_key=scope.scope_key,
+        )
+
+    async def scan_entries(
+        self,
+        scope: MemoryScope,
+        *,
+        cursor: str = "",
+        limit: int = 100,
+    ) -> IndexEntryPage:
+        if not self._enabled:
+            raise GraphitiIndexUnavailableError("Graphiti semantic index is disabled")
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        try:
+            graphiti = await self._ensure_graphiti()
+            episodes = list(
+                await _load_graphiti_scope_episodes(
+                    graphiti,
+                    scope.scope_key,
+                    limit=limit + 1,
+                    cursor=cursor,
+                )
+            )
+        except Exception as exc:
+            raise GraphitiIndexUnavailableError(
+                f"Graphiti episode catalog scan failed: {exc}"
+            ) from exc
+        selected = episodes[:limit]
+        entries: list[IndexEntry] = []
+        for episode in selected:
+            memory_id, fingerprint, source_version = _episode_index_metadata(
+                str(getattr(episode, "name", "") or "")
+            )
+            group_id = str(getattr(episode, "group_id", "") or "")
+            if memory_id and group_id == scope.scope_key:
+                entries.append(
+                    IndexEntry(
+                        memory_id=memory_id,
+                        scope_key=group_id,
+                        fingerprint=fingerprint,
+                        source_version=source_version,
+                    )
+                )
+        next_cursor = cursor
+        if selected:
+            next_cursor = str(getattr(selected[-1], "uuid", "") or cursor)
+        return IndexEntryPage(
+            entries=entries,
+            next_cursor=next_cursor,
+            has_more=len(episodes) > limit,
         )
 
     async def search(
@@ -617,16 +764,89 @@ async def _load_graphiti_episodes(
     return await EpisodicNode.get_by_uuids(driver, ordered_ids)
 
 
-def _graphiti_episode_name(memory_id: str) -> str:
+async def _load_graphiti_episode(graphiti: Any, episode_id: str) -> Any | None:
+    injected_loader = getattr(graphiti, "get_episode_by_uuid", None)
+    if injected_loader is not None:
+        return await injected_loader(episode_id)
+    injected_bulk_loader = getattr(graphiti, "get_episodes_by_uuids", None)
+    if injected_bulk_loader is not None:
+        episodes = await injected_bulk_loader([episode_id])
+        return episodes[0] if episodes else None
+    driver = getattr(graphiti, "driver", None)
+    if driver is None:
+        raise RuntimeError("Graphiti client does not expose a graph driver")
+    try:
+        return await EpisodicNode.get_by_uuid(driver, episode_id)
+    except Exception as exc:
+        if type(exc).__name__ == "NodeNotFoundError":
+            return None
+        raise
+
+
+async def _load_graphiti_scope_episodes(
+    graphiti: Any,
+    scope_key: str,
+    *,
+    limit: int,
+    cursor: str,
+) -> Sequence[Any]:
+    injected_loader = getattr(graphiti, "get_episodes_by_group_ids", None)
+    if injected_loader is not None:
+        return await injected_loader(
+            [scope_key], limit=limit, uuid_cursor=cursor or None
+        )
+    driver = getattr(graphiti, "driver", None)
+    if driver is None:
+        raise RuntimeError("Graphiti client does not expose a graph driver")
+    return await EpisodicNode.get_by_group_ids(
+        driver,
+        [scope_key],
+        limit=limit,
+        uuid_cursor=cursor or None,
+    )
+
+
+def _graphiti_episode_id(scope: MemoryScope, memory_id: str) -> str:
+    return str(uuid5(NAMESPACE_URL, f"doppel:{scope.scope_key}:{memory_id}"))
+
+
+def _graphiti_episode_name(
+    memory_id: str, fingerprint: str, source_version: int
+) -> str:
     encoded = base64.urlsafe_b64encode(memory_id.encode()).decode().rstrip("=")
-    return f"DoppelMemory:v1:{encoded}"
+    return f"DoppelMemory:v2:{encoded}:{fingerprint}:{source_version}"
+
+
+def _episode_index_metadata(name: str) -> tuple[str, str, int]:
+    prefix_v2 = "DoppelMemory:v2:"
+    if name.startswith(prefix_v2):
+        parts = name[len(prefix_v2) :].split(":")
+        if len(parts) != 3:
+            return "", "", 1
+        encoded, fingerprint, raw_version = parts
+        try:
+            source_version = int(raw_version)
+        except ValueError:
+            return "", "", 1
+        if (
+            source_version < 1
+            or len(fingerprint) != 64
+            or any(value not in "0123456789abcdef" for value in fingerprint)
+        ):
+            return "", "", 1
+        return _decode_memory_id(encoded), fingerprint, source_version
+
+    prefix_v1 = "DoppelMemory:v1:"
+    if name.startswith(prefix_v1):
+        return _decode_memory_id(name[len(prefix_v1) :]), "", 1
+    return "", "", 1
 
 
 def _memory_id_from_episode_name(name: str) -> str:
-    prefix = "DoppelMemory:v1:"
-    if not name.startswith(prefix):
-        return ""
-    encoded = name[len(prefix) :]
+    return _episode_index_metadata(name)[0]
+
+
+def _decode_memory_id(encoded: str) -> str:
     try:
         padded = encoded + "=" * (-len(encoded) % 4)
         return base64.urlsafe_b64decode(padded.encode()).decode()

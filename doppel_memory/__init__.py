@@ -40,6 +40,19 @@ from doppel_memory.content import (
 )
 from doppel_memory.imports import IMImportBatch, IMImportItem, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
+from doppel_memory.indexing import (
+    IndexEntry,
+    IndexEntryPage,
+    IndexMaintainer,
+    IndexMaintenanceCheckpoint,
+    IndexMaintenanceFailure,
+    IndexMaintenancePhase,
+    IndexMaintenanceReport,
+    IndexOperationResult,
+    IndexOperationStatus,
+    IndexWriter,
+    memory_index_fingerprint,
+)
 from doppel_memory.models import (
     Actor,
     ActorType,
@@ -121,7 +134,7 @@ from doppel_memory.vector import (
     VectorIndexUnavailableError,
 )
 
-__version__ = "0.6.2"
+__version__ = "0.7.0"
 
 __all__ = [
     "Actor",
@@ -160,6 +173,16 @@ __all__ = [
     "IdentityReranker",
     "ImportResult",
     "InMemoryStore",
+    "IndexEntry",
+    "IndexEntryPage",
+    "IndexMaintainer",
+    "IndexMaintenanceCheckpoint",
+    "IndexMaintenanceFailure",
+    "IndexMaintenancePhase",
+    "IndexMaintenanceReport",
+    "IndexOperationResult",
+    "IndexOperationStatus",
+    "IndexWriter",
     "MaterialBundle",
     "MediaRef",
     "MemoryBatchTask",
@@ -228,5 +251,6 @@ __all__ = [
     "audit_batch_task",
     "audit_history_reader",
     "audit_store",
+    "memory_index_fingerprint",
     "resolve_content",
 ]

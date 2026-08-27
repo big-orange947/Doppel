@@ -11,6 +11,9 @@ import pytest
 from doppel_memory import (
     ChatMessage,
     HybridRetrievalStrategy,
+    IndexMaintainer,
+    IndexOperationStatus,
+    IndexWriter,
     MemoryFilter,
     MemoryKind,
     MemoryScope,
@@ -166,4 +169,35 @@ async def test_hard_delete_cascades_vector_and_hybrid_fallback_is_explicit() -> 
 
     assert await store.forget(scope, created.memory_id, hard=True)
     assert await working.search("trail walk", [scope]) == []
+    assert await working.inspect(scope, created.memory_id) is None
+    await store.close()
+
+
+async def test_vector_index_writer_reconciles_authoritative_lifecycle() -> None:
+    store = PostgreSQLStore(POSTGRES_DSN, min_pool_size=0, max_pool_size=4)
+    index = _index(store)
+    assert isinstance(index, IndexWriter)
+    scope = _scope("maintenance")
+    active = await store.write_background(scope, "Mountain hiking plan")
+    inactive = await store.write_background(scope, "Old pasta plan")
+    assert active.record is not None
+    assert inactive.record is not None
+    first_write = await index.upsert(inactive.record)
+    assert first_write.status == IndexOperationStatus.INDEXED
+    assert await store.forget(scope, inactive.memory_id)
+
+    maintainer = IndexMaintainer(store, index)
+    records = await maintainer.reconcile(scope, page_size=10)
+    assert records.ok
+    assert records.indexed == 1
+    assert records.deleted == 1
+    assert records.committable_checkpoint is not None
+    entries = await maintainer.reconcile(
+        scope,
+        checkpoint=records.committable_checkpoint,
+        page_size=10,
+    )
+    assert entries.ok and entries.complete
+    assert await index.inspect(scope, active.memory_id) is not None
+    assert await index.inspect(scope, inactive.memory_id) is None
     await store.close()

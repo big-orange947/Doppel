@@ -29,6 +29,11 @@ The manifest has three classifications:
 experimental. Files under `examples/` are reference recipes, not installed API.
 Underscore-prefixed names are always private.
 
+The v0.7 `IndexWriter`, `IndexMaintainer`, and index maintenance wire models are
+provisional root APIs. They are intentionally separate from the stable `MemoryStore`
+and provisional query-only `SemanticIndex` contracts. `GraphitiSemanticIndex` remains
+module-only experimental even when it structurally satisfies `IndexWriter`.
+
 ## Compatibility rules
 
 For stable API, a patch release must not require callers or third-party implementations

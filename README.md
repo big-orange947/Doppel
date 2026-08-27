@@ -1,8 +1,10 @@
 # Doppel（分身）
 
-> An open-source, role-aware memory framework for IM agents.
+> An open-source, role-aware memory and context framework for conversational and
+> proactive IM agents.
 >
-> 面向即时通讯代理的模块化记忆框架：说话人感知、精确作用域、完整溯源、可插拔后端。
+> 面向对话型与主动型即时通讯 Agent 的模块化记忆与上下文框架：说话人感知、精确作用域、
+> 完整溯源、可插拔后端。
 
 Doppel 把即时通讯事件标准化为带说话人、事实权威、作用域和来源的记忆，为上层
 Agent 提供摄入、生命周期、过滤检索和结构化材料能力。Doppel 不生成回复，不负责
@@ -18,7 +20,7 @@ IM Platform / Agent Runtime
           │ normalized events / explicit scopes
           ▼
         Doppel
- put · ingest · process · search · lifecycle · materials
+ put · ingest · process · search · lifecycle · index maintenance · materials
  role · authority · scope · provenance
           │
           ▼
@@ -34,7 +36,8 @@ Doppel 负责：
 - 可插拔 MemoryProcessor、周期 BatchTask、MemoryProposal、状态策略和有限 hooks；
 - 按 kind、actor、authority、state、tag、重要性和时间过滤；
 - 可追溯的检索结果和结构化材料；
-- 可替换后端及明确的能力声明。
+- 可替换后端及明确的能力声明；
+- 派生语义索引的幂等写入、指纹校验、恢复和孤儿清理。
 
 Doppel 不负责：
 
@@ -859,6 +862,43 @@ retriever = Retriever(store, strategy=HybridRetrievalStrategy(graph))
 hits = await retriever.recall("户外爱好", [scope])
 ```
 
+## 派生索引生命周期
+
+Store 是记忆状态、scope、provenance 和删除语义的唯一权威来源。`SemanticIndex` 只描述查询；
+需要被周期维护的 pgvector、Graphiti 或第三方索引另外实现 `IndexWriter`。这样检索协议不会被迫承担
+写入和清理职责，也不会把某个 sidecar 误当成核心 Store。
+
+`IndexMaintainer` 每次只处理一个有界页面。第一阶段扫描权威记录，补齐活跃记录并移除 inactive
+记录；第二阶段反向扫描索引目录，清理硬删除孤儿并修复两阶段之间发生的变化：
+
+```python
+from doppel_memory import IndexMaintainer
+
+maintainer = IndexMaintainer(store, semantic_index)
+checkpoint = await my_checkpoint_store.load(
+    semantic_index.identity,
+    scope.scope_key,
+)
+
+report = await maintainer.reconcile(
+    scope,
+    checkpoint=checkpoint,
+    page_size=100,
+)
+if report.committable_checkpoint is not None:
+    await my_checkpoint_store.save(report.committable_checkpoint)
+```
+
+checkpoint 同时绑定 index identity、exact scope 和 schema。任一条操作失败时，本页不会释放新
+checkpoint；已经成功的 `upsert`/`delete` 是幂等的，可以从旧 checkpoint 重放。`complete=True`
+表示本轮两阶段审计完成，返回的 checkpoint 已回到 records 阶段并递增 `cycle`，可供下一次周期任务
+继续使用。调度、租约和 checkpoint 数据库仍由 Agent runtime 决定。
+
+`PostgreSQLVectorIndex` 和 `GraphitiSemanticIndex` 已实现该协议。索引条目保存完整
+`MemoryRecord` 指纹和 source version；pgvector 对仅生命周期/元数据变化只更新 manifest，不重复调用
+embedding provider。Graphiti 会把旧 v1 episode 视为 stale 并在维护时升级，硬删除后遗留的 episode
+会在 entries 阶段清除。
+
 ## Benchmark
 
 仓库包含后端无关的 Store benchmark，用固定 seed 生成相同的 scope、记忆、查询和分页负载：
@@ -905,6 +945,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI
 - [x] v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与独立质量门禁
 - [x] v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口
+- [x] v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

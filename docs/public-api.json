@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "release": "0.6.2",
+  "release": "0.7.0",
   "tiers": {
     "stable": [
       "Actor",
@@ -74,6 +74,16 @@
       "HistoryReaderContractError",
       "HistoryWindow",
       "HybridRetrievalStrategy",
+      "IndexEntry",
+      "IndexEntryPage",
+      "IndexMaintainer",
+      "IndexMaintenanceCheckpoint",
+      "IndexMaintenanceFailure",
+      "IndexMaintenancePhase",
+      "IndexMaintenanceReport",
+      "IndexOperationResult",
+      "IndexOperationStatus",
+      "IndexWriter",
       "MemoryBatchTask",
       "MemoryPage",
       "MediaRef",
@@ -108,6 +118,7 @@
       "audit_batch_task",
       "audit_history_reader",
       "audit_store",
+      "memory_index_fingerprint",
       "resolve_content"
     ]
   },

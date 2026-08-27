@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.6.2：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.7.0：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与上下文协议。
 
 ## 定位与边界
 
@@ -545,6 +545,50 @@ invalid/expired/valid/reference timestamps 后过滤。外部服务不可用和�
 迁移说明。新 Graphiti 对象继续是 optional-extra、module-only experimental，不扩大默认依赖或稳定
 根 API。
 
+## v0.7.0 派生索引生命周期
+
+`SemanticIndex` 只负责返回语义候选，不能表达写入、删除、目录枚举或恢复进度。v0.7.0 用独立的
+`IndexWriter` 组合协议补齐运维面，同时保持 Store 是唯一权威来源：
+
+```text
+                         ┌──────────────── SemanticIndex.search ──> candidates
+                         │
+authoritative Store ─────┤
+                         │
+                         └── IndexMaintainer ──> IndexWriter
+                               records phase       inspect/upsert/delete
+                               entries phase       exact-scope catalog scan
+```
+
+一个 index entry 保存 `memory_id`、exact `scope_key`、source version 和完整记录 fingerprint。
+fingerprint 是 canonical JSON `MemoryRecord` 的 SHA-256，包括 content、state、kind、actor、authority、
+importance、tags、timestamps、provenance、metadata 和 record version。只做 content hash 不足以发现
+Graphiti episode header、过滤材料或生命周期语义的变化。
+
+reconciliation 是两阶段、有界且可重放的：
+
+1. `records` 阶段用 `MemoryFilter(include_inactive=True)` oldest-first 扫描一个 Store page。active
+   记录执行幂等 upsert，inactive 记录执行 exact-scope delete；
+2. records 扫描结束后进入 `entries` 阶段，按 index 自身稳定 cursor 枚举同一 exact scope。每个 entry
+   重新读取 Store：不存在或 inactive 时删除，fingerprint 不同时 upsert，相同时跳过；
+3. entries 扫描结束后完成一个 cycle，checkpoint 回到空 cursor 的 records 阶段并递增 cycle。
+
+checkpoint 绑定 schema、index identity 和 exact scope，不能跨 embedding profile、Graphiti adapter 或
+会话复用。任一页有失败都不返回 `committable_checkpoint`；本页已经成功的操作依靠 IndexWriter 幂等
+合同安全重放。Doppel 不拥有 scheduler、lease 或 checkpoint persistence，host 与 batch task 一样只在
+拿到 committable checkpoint 后推进。
+
+两阶段不是跨 Store 与 sidecar 的分布式快照。并发新增但尚未进入本轮 records page 的索引缺口会在下
+一个 cycle 修复；两阶段之间的更新由 entries 阶段再次读取权威 Store 捕获。硬删除后的孤儿不依赖 core
+tombstone，由 index catalog 反向发现并清除。检索路径仍执行 Store revalidation，因此清理暂时失败不会
+放宽 scope 或 lifecycle 可见性。
+
+`PostgreSQLVectorIndex` profile table schema v2 增加 scope、完整 fingerprint 和 source version。向量
+外键继续 `ON DELETE CASCADE`；fingerprint 变化但 content hash 不变时只更新 manifest，避免状态变化
+触发无意义 embedding。`GraphitiSemanticIndex` 使用 v2 episode name 编码 fingerprint/version，稳定
+episode UUID 仍由 scope + core memory ID 生成；v1 episode 可恢复 memory ID 但没有 fingerprint，因而
+下一次 reconciliation 会判定 stale、删除旧 episode 并重建。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -575,4 +619,5 @@ provenance 保存在 `raw.doppel_import`。
 - v0.5.4：可复用、能力感知的 Store conformance kit 与安全 CLI（已完成）；
 - v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI（已完成）；
 - v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与质量门禁（已完成）；
-- v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口（已完成）。
+- v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口（已完成）；
+- v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理（已完成）。

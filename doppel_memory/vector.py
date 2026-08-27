@@ -11,6 +11,13 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, model_validator
 
+from doppel_memory.indexing import (
+    IndexEntry,
+    IndexEntryPage,
+    IndexOperationResult,
+    IndexOperationStatus,
+    memory_index_fingerprint,
+)
 from doppel_memory.models import (
     MemoryFilter,
     MemoryIsolationError,
@@ -23,7 +30,7 @@ from doppel_memory.postgres_store import PostgreSQLStore
 from doppel_memory.retriever import RetrievalStrategy, StoreRetrievalStrategy
 from doppel_memory.store import MemoryStore
 
-VECTOR_SCHEMA_VERSION = 1
+VECTOR_SCHEMA_VERSION = 2
 
 
 class EmbeddingProviderError(RuntimeError):
@@ -155,7 +162,6 @@ class PostgreSQLVectorIndex:
         }
         payload = json.dumps(identity, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(payload.encode()).hexdigest()[:16]
-        self._identity = identity
         self._identity_json = payload
         self._profile = f"dplv_{fingerprint}"
         self._table_name = f"doppel_memory_vectors_{fingerprint}"
@@ -173,6 +179,12 @@ class PostgreSQLVectorIndex:
     @property
     def dimensions(self) -> int:
         return self._dimensions
+
+    @property
+    def identity(self) -> str:
+        """Stable identity used to bind maintenance checkpoints."""
+
+        return f"pgvector:{self._profile}"
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -231,11 +243,53 @@ class PostgreSQLVectorIndex:
                 CREATE TABLE IF NOT EXISTS {self._table_sql} (
                     memory_id TEXT PRIMARY KEY REFERENCES
                         {self._store._records_sql}(id) ON DELETE CASCADE,
+                    scope_key TEXT NOT NULL,
                     content_hash TEXT NOT NULL,
+                    record_fingerprint TEXT NOT NULL,
+                    source_version INTEGER NOT NULL,
                     embedding {vector_type_sql}({self._dimensions}) NOT NULL,
                     embedded_at TIMESTAMPTZ NOT NULL
                 )
                 """
+            )
+            await connection.execute(
+                f"ALTER TABLE {self._table_sql} ADD COLUMN IF NOT EXISTS scope_key TEXT"
+            )
+            await connection.execute(
+                f"ALTER TABLE {self._table_sql} "
+                "ADD COLUMN IF NOT EXISTS record_fingerprint TEXT"
+            )
+            await connection.execute(
+                f"ALTER TABLE {self._table_sql} "
+                "ADD COLUMN IF NOT EXISTS source_version INTEGER"
+            )
+            await connection.execute(
+                f"""
+                UPDATE {self._table_sql} AS vector
+                SET scope_key=record.scope_key,
+                    record_fingerprint=COALESCE(vector.record_fingerprint, ''),
+                    source_version=record.version
+                FROM {self._store._records_sql} AS record
+                WHERE vector.memory_id=record.id
+                  AND (vector.scope_key IS NULL
+                       OR vector.record_fingerprint IS NULL
+                       OR vector.source_version IS NULL)
+                """
+            )
+            await connection.execute(
+                f"ALTER TABLE {self._table_sql} ALTER COLUMN scope_key SET NOT NULL"
+            )
+            await connection.execute(
+                f"ALTER TABLE {self._table_sql} "
+                "ALTER COLUMN record_fingerprint SET NOT NULL"
+            )
+            await connection.execute(
+                f"ALTER TABLE {self._table_sql} "
+                "ALTER COLUMN source_version SET NOT NULL"
+            )
+            await connection.execute(
+                f'CREATE INDEX IF NOT EXISTS "{self._table_name}_scope_memory" '
+                f"ON {self._table_sql}(scope_key, memory_id)"
             )
             if self._config.create_hnsw_index:
                 await connection.execute(
@@ -295,20 +349,42 @@ class PostgreSQLVectorIndex:
         hashes = {
             record.memory_id: _content_hash(record.content) for record in authoritative
         }
-        existing = await self._existing_hashes(list(hashes))
+        fingerprints = {
+            record.memory_id: memory_index_fingerprint(record)
+            for record in authoritative
+        }
+        existing = await self._existing_metadata(list(hashes))
         pending = [
             record
             for record in authoritative
-            if existing.get(record.memory_id) != hashes[record.memory_id]
+            if existing.get(record.memory_id, ("", ""))[1]
+            != fingerprints[record.memory_id]
         ]
         skipped = len(authoritative) - len(pending)
         indexed = 0
+        manifest_only = [
+            record
+            for record in pending
+            if existing.get(record.memory_id, ("", ""))[0] == hashes[record.memory_id]
+        ]
+        if manifest_only:
+            try:
+                await self._update_manifests(manifest_only, hashes, fingerprints)
+                indexed += len(manifest_only)
+            except Exception as exc:  # noqa: BLE001 - report database batch failures
+                failures.extend(
+                    _failure(record.memory_id, "persist", exc)
+                    for record in manifest_only
+                )
+        embedding_pending = [
+            record for record in pending if record not in manifest_only
+        ]
         batch_size = self._config.embedding_batch_size
-        for offset in range(0, len(pending), batch_size):
-            batch = pending[offset : offset + batch_size]
+        for offset in range(0, len(embedding_pending), batch_size):
+            batch = embedding_pending[offset : offset + batch_size]
             try:
                 vectors = await self._embed_texts([record.content for record in batch])
-                await self._upsert_vectors(batch, vectors, hashes)
+                await self._upsert_vectors(batch, vectors, hashes, fingerprints)
                 indexed += len(batch)
             except EmbeddingProviderError as exc:
                 failures.extend(
@@ -327,17 +403,26 @@ class PostgreSQLVectorIndex:
             failures=failures,
         )
 
-    async def _existing_hashes(self, memory_ids: list[str]) -> dict[str, str]:
+    async def _existing_metadata(
+        self, memory_ids: list[str]
+    ) -> dict[str, tuple[str, str]]:
         if not memory_ids:
             return {}
         pool = await self._store._ensure_pool()
         async with pool.acquire() as connection:
             rows = await connection.fetch(
-                f"SELECT memory_id, content_hash FROM {self._table_sql} "
+                f"SELECT memory_id, content_hash, record_fingerprint "
+                f"FROM {self._table_sql} "
                 "WHERE memory_id=ANY($1::text[])",
                 memory_ids,
             )
-        return {str(row["memory_id"]): str(row["content_hash"]) for row in rows}
+        return {
+            str(row["memory_id"]): (
+                str(row["content_hash"]),
+                str(row["record_fingerprint"]),
+            )
+            for row in rows
+        }
 
     async def _embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
         try:
@@ -381,13 +466,17 @@ class PostgreSQLVectorIndex:
         records: Sequence[MemoryRecord],
         vectors: Sequence[Sequence[float]],
         hashes: Mapping[str, str],
+        fingerprints: Mapping[str, str],
     ) -> None:
         pool = await self._store._ensure_pool()
         now = utc_now()
         rows = [
             (
                 record.memory_id,
+                record.scope.scope_key,
                 hashes[record.memory_id],
+                fingerprints[record.memory_id],
+                record.version,
                 _vector_literal(vector),
                 now,
             )
@@ -397,15 +486,147 @@ class PostgreSQLVectorIndex:
             await connection.executemany(
                 f"""
                 INSERT INTO {self._table_sql}
-                    (memory_id, content_hash, embedding, embedded_at)
-                VALUES($1, $2, $3::{self._vector_type_sql}({self._dimensions}), $4)
+                    (memory_id, scope_key, content_hash, record_fingerprint,
+                     source_version, embedding, embedded_at)
+                VALUES($1, $2, $3, $4, $5,
+                       $6::{self._vector_type_sql}({self._dimensions}), $7)
                 ON CONFLICT (memory_id) DO UPDATE SET
+                    scope_key=EXCLUDED.scope_key,
                     content_hash=EXCLUDED.content_hash,
+                    record_fingerprint=EXCLUDED.record_fingerprint,
+                    source_version=EXCLUDED.source_version,
                     embedding=EXCLUDED.embedding,
                     embedded_at=EXCLUDED.embedded_at
                 """,
                 rows,
             )
+
+    async def _update_manifests(
+        self,
+        records: Sequence[MemoryRecord],
+        hashes: Mapping[str, str],
+        fingerprints: Mapping[str, str],
+    ) -> None:
+        pool = await self._store._ensure_pool()
+        rows = [
+            (
+                record.scope.scope_key,
+                hashes[record.memory_id],
+                fingerprints[record.memory_id],
+                record.version,
+                record.memory_id,
+            )
+            for record in records
+        ]
+        async with pool.acquire() as connection, connection.transaction():
+            await connection.executemany(
+                f"""
+                UPDATE {self._table_sql}
+                SET scope_key=$1, content_hash=$2, record_fingerprint=$3,
+                    source_version=$4
+                WHERE memory_id=$5
+                """,
+                rows,
+            )
+
+    async def inspect(self, scope: MemoryScope, memory_id: str) -> IndexEntry | None:
+        await self.initialize()
+        pool = await self._store._ensure_pool()
+        async with pool.acquire() as connection:
+            row = await connection.fetchrow(
+                f"""
+                SELECT memory_id, scope_key, record_fingerprint, source_version
+                FROM {self._table_sql}
+                WHERE memory_id=$1 AND scope_key=$2
+                """,
+                memory_id,
+                scope.scope_key,
+            )
+        if row is None:
+            return None
+        return _vector_index_entry(row)
+
+    async def upsert(self, record: MemoryRecord) -> IndexOperationResult:
+        if not record.memory_id:
+            raise ValueError("vector indexing requires a committed memory ID")
+        authoritative = await self._store.get(record.scope, record.memory_id)
+        if authoritative is None:
+            raise ValueError(
+                "vector indexing requires a record in the authoritative exact scope"
+            )
+        fingerprint = memory_index_fingerprint(authoritative)
+        current = await self.inspect(authoritative.scope, authoritative.memory_id)
+        if current is not None and current.fingerprint == fingerprint:
+            status = IndexOperationStatus.SKIPPED
+        else:
+            report = await self.index_record(authoritative)
+            if not report.ok:
+                failure = report.failures[0]
+                raise VectorIndexUnavailableError(
+                    f"{failure.stage}: {failure.error_type}: {failure.message}"
+                )
+            status = IndexOperationStatus.INDEXED
+        return IndexOperationResult(
+            index_identity=self.identity,
+            status=status,
+            memory_id=authoritative.memory_id,
+            scope_key=authoritative.scope.scope_key,
+            fingerprint=fingerprint,
+            source_version=authoritative.version,
+        )
+
+    async def delete(self, scope: MemoryScope, memory_id: str) -> IndexOperationResult:
+        await self.initialize()
+        pool = await self._store._ensure_pool()
+        async with pool.acquire() as connection:
+            removed = await connection.fetchval(
+                f"DELETE FROM {self._table_sql} "
+                "WHERE memory_id=$1 AND scope_key=$2 RETURNING memory_id",
+                memory_id,
+                scope.scope_key,
+            )
+        return IndexOperationResult(
+            index_identity=self.identity,
+            status=(
+                IndexOperationStatus.DELETED
+                if removed is not None
+                else IndexOperationStatus.MISSING
+            ),
+            memory_id=memory_id,
+            scope_key=scope.scope_key,
+        )
+
+    async def scan_entries(
+        self,
+        scope: MemoryScope,
+        *,
+        cursor: str = "",
+        limit: int = 100,
+    ) -> IndexEntryPage:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        await self.initialize()
+        pool = await self._store._ensure_pool()
+        async with pool.acquire() as connection:
+            rows = await connection.fetch(
+                f"""
+                SELECT memory_id, scope_key, record_fingerprint, source_version
+                FROM {self._table_sql}
+                WHERE scope_key=$1 AND memory_id>$2
+                ORDER BY memory_id ASC
+                LIMIT $3
+                """,
+                scope.scope_key,
+                cursor,
+                limit + 1,
+            )
+        selected = rows[:limit]
+        entries = [_vector_index_entry(row) for row in selected]
+        return IndexEntryPage(
+            entries=entries,
+            next_cursor=entries[-1].memory_id if entries else cursor,
+            has_more=len(rows) > limit,
+        )
 
     async def backfill(
         self,
@@ -658,6 +879,15 @@ def _recall_identity(candidate: RecallResult) -> tuple[str, ...]:
 
 def _content_hash(content: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()
+
+
+def _vector_index_entry(row: Mapping[str, Any]) -> IndexEntry:
+    return IndexEntry(
+        memory_id=str(row["memory_id"]),
+        scope_key=str(row["scope_key"]),
+        fingerprint=str(row["record_fingerprint"]),
+        source_version=int(row["source_version"]),
+    )
 
 
 def _vector_literal(vector: Sequence[float]) -> str:

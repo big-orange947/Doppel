@@ -8,6 +8,7 @@ import pytest
 
 from doppel_memory import (
     ChatMessage,
+    IndexWriter,
     InMemoryStore,
     MemoryScope,
     RecallResult,
@@ -119,6 +120,7 @@ def test_profile_identity_and_vector_validation_are_deterministic() -> None:
         {"name": "tests.tiny", "version": "2", "dimensions": 3},
     )()
     third = PostgreSQLVectorIndex(PostgreSQLStore("postgresql://unused"), changed)
+    assert isinstance(first, IndexWriter)
     assert first.profile == second.profile
     assert first.profile != third.profile
     assert first._validate_vector([1, 0, 0]) == [1.0, 0.0, 0.0]

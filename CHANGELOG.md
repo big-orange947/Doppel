@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.7.0
+
+Derived semantic indexes now have an explicit lifecycle contract and a resumable way
+to converge on the authoritative Store. Retrieval remains independent: implementing
+`SemanticIndex.search()` does not silently make an index a persistence owner.
+
+### Added
+
+- Provisional `IndexWriter` with exact-scope `inspect`, idempotent `upsert`/`delete`,
+  and paginated `scan_entries` operations, plus serializable entry, operation,
+  checkpoint, failure, and report models.
+- `IndexMaintainer`, which reconciles one bounded page at a time in two phases. The
+  records phase adds or refreshes active records and removes inactive records; the
+  entries phase removes hard-delete orphans and repairs changes racing the first
+  phase.
+- `memory_index_fingerprint()` as the canonical SHA-256 digest binding an index entry
+  to the complete authoritative `MemoryRecord`, including lifecycle version and
+  provenance.
+- Failure-safe, index/scope/schema-bound maintenance checkpoints. A failed page never
+  releases a new checkpoint, while successful index mutations remain safe to replay.
+
+### Backends
+
+- `PostgreSQLVectorIndex` now implements `IndexWriter`. Its profile table records exact
+  scope, complete record fingerprint, and source version; existing profile tables are
+  migrated in place. Metadata-only lifecycle changes do not call the embedding
+  provider, and hard deletes remain protected by the core-record foreign key cascade.
+- `GraphitiSemanticIndex` now implements the same maintenance contract. Versioned
+  Doppel episode names carry the source fingerprint, repeated submissions skip
+  unchanged episodes, stale episodes are replaced, and exact-scope catalog scans allow
+  orphan pruning through Graphiti's episode removal API. Legacy v1 episode names are
+  recognized as stale and repaired during reconciliation.
+
+### Compatibility
+
+- The stable `MemoryStore` and `SemanticIndex.search()` contracts are unchanged. The
+  new lifecycle surface is provisional and additive at the package root.
+- `GraphitiSemanticIndex` remains module-only experimental even though it implements
+  the provisional root `IndexWriter` protocol. `GraphitiMemoryStore` remains deprecated.
+- Hosts own scheduling and checkpoint persistence. Doppel executes one bounded page;
+  a completed cycle returns a reset records-phase checkpoint with an incremented cycle
+  counter for the next audit.
+
 ## 0.6.2
 
 Graphiti is now explicitly modeled as a graph-derived semantic candidate index, not a
