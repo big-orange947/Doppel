@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.5.4
+
+A reusable, dependency-free Store conformance kit that makes the installed contract—
+not repository-only pytest helpers—the backend acceptance source of truth.
+
+### Added
+
+- `StoreConformanceConfig`, `StoreConformanceCheck`, `StoreConformanceReport`, and
+  `audit_store()` as provisional root APIs for third-party backend CI.
+- Eleven isolated checks covering health, exact-scope isolation, hierarchy and extra
+  dimensions, idempotency, arbitrary record round trips, filters/provenance, structured
+  owner samples, lifecycle, convenience writers, pagination, temporal filters, and hard
+  deletion.
+- Capability-aware skip/fail semantics and `required_capabilities` for turning product
+  claims into enforceable gates.
+- The installed `doppel-conformance` command with InMemory and safe disposable-SQLite
+  recipes, JSON output, non-zero failure status, and refusal to reuse an existing
+  SQLite database.
+- Focused tests for optional capabilities, required capability failures, continuation
+  after a failed check, invalid configuration, and both stable reference Stores.
+
+### Semantics
+
+- Every check receives a run/check-specific scope, event, and memory namespace. One
+  failure is captured as a structured issue and does not hide later check outcomes.
+- Optional pagination, temporal-filter, and hard-delete checks skip only when the Store
+  does not advertise the corresponding capability. Stable core get/lifecycle/scope and
+  provenance behavior is not optional.
+- The auditor reports the Store class, capability snapshot, per-check status, aggregate
+  counts, `ok`, flattened issues, and `raise_for_errors()`.
+
+### Safety and compatibility
+
+- `audit_store()` mutates a caller-owned backend but never closes it. It transitions or
+  deletes only records it created, and explicitly requires a disposable database, test
+  tenant, or isolated namespace because universal cleanup is impossible without hard
+  delete.
+- The SQLite CLI refuses existing database files and uses a temporary database by
+  default. It never guesses that an application database is safe to audit.
+- Existing InMemory/SQLite pytest adapters now invoke the installed auditor instead of
+  carrying a second contract implementation. Existing MemoryStore abstract methods and
+  StoreCapabilities fields are unchanged.
+
+### Roadmap
+
+- The conformance kit becomes the admission gate for PostgreSQL/pgvector and for any
+  future Graphiti stabilization. Backend benchmarks run only after conformance passes.
+
 ## 0.5.3
 
 Deterministic, opt-in consumption of structured style profiles plus an independent

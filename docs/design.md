@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.5.3：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
+> v0.5.4：面向 IM Agent 的 role-aware、exact-scope、backend-neutral 记忆与检索协议。
 
 ## 定位与边界
 
@@ -316,6 +316,43 @@ PersonaMaterialsBuilder 对 style 使用独立的空查询 + kind filter，避�
 进入 provenance。第三方模型分析器实现 async `StyleAnalyzer` 即可，模型 provider、prompt、数据
 出境和确认策略继续由接入方决定。
 
+## v0.5.4 可复用 Store conformance kit
+
+`audit_store()` 把 stable MemoryStore 的行为合同从 repository pytest mixin 提升为安装包内的
+dependency-free auditor。它接收 caller-owned Store，不构造、不清空也不关闭后端；每个 check 使用
+由 run ID 和 check name 组成的唯一 user/chat/memory/event namespace，避免同一次运行中相互污染。
+
+```text
+caller-owned writable Store
+           ↓
+ StoreConformanceConfig
+           ↓
+ core checks + capability-gated checks
+           ↓ continue after individual failure
+ StoreConformanceReport
+   ├─ Store identity + capability snapshot
+   ├─ passed / skipped / failed per check
+   ├─ structured ConformanceIssue[]
+   └─ aggregate counts + raise_for_errors()
+```
+
+核心合同检查 health、exact scope、显式 user hierarchy、extra dimensions、无 scope 拒绝、scope-local
+idempotency、generic record/metadata round-trip、返回值副本隔离、组合 filters、provenance、结构化
+owner samples、active-state 筛选、乐观生命周期和 convenience writers。pagination、temporal filter、
+hard delete 只在对应 capability 为 true 时执行；未声明能力正常 skip，调用方通过
+`required_capabilities` 声明产品承诺后，缺失能力转为失败。尚未映射到具体 check 的 required
+capability 仍产生独立 capability failure，不能静默忽略。
+
+Auditor 会写数据并改变自己创建记录的状态。hard-delete check 只删除自己创建的 record，但不支持
+hard delete 的 backend 无法由通用合同安全清理剩余 fixture。因此 API 明确要求 disposable database、
+test tenant 或隔离 namespace，不能对生产数据运行。CLI 的 SQLite recipe 拒绝已存在数据库；无
+database 参数时创建并清理临时目录。`audit_store()` 不替调用方关闭连接，避免库函数越权管理资源。
+
+InMemory 与 SQLite 的 pytest adapter 现在只负责提供 fixture，真正语义来自安装包里的同一 auditor。
+Graphiti 即使跳过 pagination/hard-delete，也会因 stable core 的 get/lifecycle/provenance 缺口失败，
+所以仍是 module-only experimental。这份 kit 将作为 PostgreSQL/pgvector 后端进入 benchmark 之前的
+准入门槛；性能不能补偿 conformance failure。
+
 ## v0.5.3 StyleProfessor 与独立质量评测
 
 StyleProfessor 是 StyleMiner 后面的显式消费层，不是第二个 miner，也不是在线 Processor：
@@ -428,4 +465,5 @@ provenance 保存在 `raw.doppel_import`。
 - v0.5.1：StyleMiner、可替换 StyleAnalyzer 和材料装配闭环（已完成）；
 - v0.5.2：ContentPart/MediaRef/ContentResolver 结构化事件（已完成）；
 - v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测（已完成）；
-- 后续后端：可复用 Store conformance kit、PostgreSQL/pgvector 和 Graphiti 稳定化。
+- v0.5.4：可复用、能力感知的 Store conformance kit 与安全 CLI（已完成）；
+- 后续后端：PostgreSQL/pgvector 和 Graphiti 稳定化。

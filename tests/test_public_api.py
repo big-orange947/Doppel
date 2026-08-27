@@ -165,6 +165,27 @@ MODEL_FIELDS = {
         "reranking",
         "pagination",
     ),
+    "StoreConformanceCheck": (
+        "name",
+        "status",
+        "capability",
+        "issues",
+    ),
+    "StoreConformanceConfig": (
+        "run_id",
+        "checks",
+        "required_capabilities",
+    ),
+    "StoreConformanceReport": (
+        "schema_version",
+        "run_id",
+        "store",
+        "capabilities",
+        "checks",
+        "passed_count",
+        "skipped_count",
+        "failed_count",
+    ),
     "StyleMinerConfig": (
         "min_messages",
         "page_size",
@@ -379,6 +400,10 @@ SIGNATURES = {
     "StyleQualityEvaluator.evaluate": (
         ("reference", "POSITIONAL_OR_KEYWORD"),
         ("candidates", "POSITIONAL_OR_KEYWORD"),
+    ),
+    "audit_store": (
+        ("store", "POSITIONAL_OR_KEYWORD"),
+        ("config", "KEYWORD_ONLY"),
     ),
     "resolve_content": (
         ("message", "POSITIONAL_OR_KEYWORD"),

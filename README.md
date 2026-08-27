@@ -476,6 +476,49 @@ task_report.raise_for_errors()
 reader audit 会检查多页推进和最终 exhausted read；应针对不会并发写入的测试 fixture 执行。
 task audit 只运行纯 proposal 阶段，不写 Doppel Store，并检查 checkpoint 与 proposal scope。
 
+### 第三方 Store conformance kit
+
+`audit_store()` 是安装包内可直接调用、无 pytest 依赖的 Store 验收工具。它把 InMemory/SQLite 原先
+只存在于测试目录的合同变成第三方后端可以在自己 CI 中运行的结构化检查：
+
+```python
+from doppel_memory import StoreConformanceConfig, audit_store
+
+report = await audit_store(
+    my_store,
+    config=StoreConformanceConfig(
+        run_id="my-backend-ci",
+        required_capabilities={"pagination"},
+    ),
+)
+report.raise_for_errors()
+```
+
+核心检查覆盖 health、exact-scope/user/extra-dimension 隔离、空 scope 拒绝、幂等、通用 record
+往返与副本隔离、filter/provenance、结构化 owner samples、生命周期和 convenience writers。分页、
+时区过滤和 hard delete 按 `StoreCapabilities` 运行：未声明时是 `skipped`，但列入
+`required_capabilities` 后会成为结构化失败。
+
+每项检查有独立的唯一 scope namespace；一个失败不会隐藏后续结果。`StoreConformanceReport`
+包含 Store identity、能力快照、每项 passed/skipped/failed、结构化 issue 和汇总计数。调用方仍拥有
+Store 生命周期，auditor 不会调用 `close()`。
+
+⚠️ 这是一套会写数据、改变自己所建记录状态并在声明 hard-delete 时删除测试记录的验收工具。
+没有 hard-delete 的后端会留下唯一命名的测试数据，所以只能对一次性数据库、测试 tenant 或明确
+隔离的 namespace 运行，不能直接指向生产数据。
+
+安装包同时提供命令行工具。SQLite 模式拒绝已有文件，以免误写应用数据库；不传路径时使用一次性
+临时数据库：
+
+```bash
+doppel-conformance --backend memory
+doppel-conformance --backend sqlite --output store-conformance.json
+```
+
+可以用 `StoreConformanceConfig(checks={...})` 运行子集，但正式声明兼容 Doppel 的后端应运行完整
+核心套件，并把产品承诺的可选能力列入 `required_capabilities`。Graphiti 当前仍不能通过核心
+lifecycle/get/provenance 合同，因此继续保持 experimental，而不是因 capability skip 被误标为稳定。
+
 ### StyleMiner：从历史文本形成风格材料
 
 `StyleMiner` 是基于 `MemoryBatchTask` 的可选周期工具。它只读取一个 exact scope 中号主发送的
@@ -716,7 +759,8 @@ uv run python -m benchmarks.store_benchmark \
 - [x] v0.5.1：StyleMiner、可替换 StyleAnalyzer 和 persona materials 闭环
 - [x] v0.5.2：结构化事件 ContentPart/MediaRef/ContentResolver
 - [x] v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测
-- [ ] 后续后端：可复用 Store conformance kit、PostgreSQL/pgvector、Graphiti 稳定化
+- [x] v0.5.4：可复用、能力感知的 Store conformance kit 与 CLI
+- [ ] 后续后端：PostgreSQL/pgvector、Graphiti 稳定化
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

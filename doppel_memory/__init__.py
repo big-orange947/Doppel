@@ -25,8 +25,12 @@ from doppel_memory.conformance import (
     ConformanceError,
     ConformanceIssue,
     HistoryReaderAuditReport,
+    StoreConformanceCheck,
+    StoreConformanceConfig,
+    StoreConformanceReport,
     audit_batch_task,
     audit_history_reader,
+    audit_store,
 )
 from doppel_memory.content import (
     ContentResolution,
@@ -103,7 +107,7 @@ from doppel_memory.style import (
     StyleQualityReport,
 )
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 
 __all__ = [
     "Actor",
@@ -174,6 +178,9 @@ __all__ = [
     "ScopedHistoryReader",
     "ScopedMemoryReader",
     "StoreCapabilities",
+    "StoreConformanceCheck",
+    "StoreConformanceConfig",
+    "StoreConformanceReport",
     "StoreHistoryReader",
     "StoreMemoryReader",
     "StoreRetrievalStrategy",
@@ -194,5 +201,6 @@ __all__ = [
     "__version__",
     "audit_batch_task",
     "audit_history_reader",
+    "audit_store",
     "resolve_content",
 ]

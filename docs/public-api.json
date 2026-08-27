@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "release": "0.5.3",
+  "release": "0.5.4",
   "tiers": {
     "stable": [
       "Actor",
@@ -42,6 +42,9 @@
       "SQLiteStore",
       "ScopePolicy",
       "StoreCapabilities",
+      "StoreConformanceCheck",
+      "StoreConformanceConfig",
+      "StoreConformanceReport",
       "StoreRetrievalStrategy",
       "WriteResult",
       "WriteStatus"
@@ -92,6 +95,7 @@
       "StyleQualityReport",
       "audit_batch_task",
       "audit_history_reader",
+      "audit_store",
       "resolve_content"
     ]
   },
