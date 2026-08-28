@@ -174,6 +174,91 @@ MODEL_FIELDS = {
         "fingerprint",
         "source_version",
     ),
+    "DeterministicGovernancePolicyConfig": (
+        "reinforcement_evidence_threshold",
+        "reinforcement_step",
+        "reinforcement_cap",
+        "expirable_memory_types",
+        "enable_decay",
+        "ephemeral_retention_classes",
+        "decay_after_days",
+        "decay_step",
+        "decay_floor",
+    ),
+    "MemoryGovernanceAction": (
+        "decision_id",
+        "operation",
+        "reason",
+        "confidence",
+        "source",
+        "proposal",
+        "transition_source",
+    ),
+    "MemoryGovernanceActionResult": (
+        "decision_id",
+        "operation",
+        "replacement_write",
+        "transition",
+        "complete",
+    ),
+    "MemoryGovernanceAnalysis": ("decisions",),
+    "MemoryGovernanceCheckpoint": (
+        "schema_version",
+        "cycle",
+        "policy",
+        "policy_version",
+        "config_fingerprint",
+        "input_fingerprint",
+        "completed_at",
+    ),
+    "MemoryGovernanceConfig": (
+        "page_size",
+        "max_records",
+        "max_decisions",
+        "minimum_confidence",
+    ),
+    "MemoryGovernanceDecision": (
+        "operation",
+        "source_memory_id",
+        "target_importance",
+        "confidence",
+        "reason",
+    ),
+    "MemoryGovernanceInput": ("scope", "records", "now"),
+    "MemoryGovernancePlan": (
+        "schema_version",
+        "plan_id",
+        "run_id",
+        "scope",
+        "policy",
+        "policy_version",
+        "evaluated_at",
+        "config_fingerprint",
+        "input_fingerprint",
+        "input_record_count",
+        "actions",
+        "next_checkpoint",
+    ),
+    "MemoryGovernanceRunResult": (
+        "plan",
+        "actions",
+        "errors",
+        "committable_checkpoint",
+    ),
+    "MemoryGovernanceSourceSnapshot": (
+        "memory_id",
+        "state",
+        "version",
+        "fingerprint",
+    ),
+    "MemoryGovernanceTransitionResult": (
+        "memory_id",
+        "status",
+        "from_state",
+        "to_state",
+        "record",
+        "error",
+    ),
     "MemoryFilter": (
         "kinds",
         "actors",
@@ -541,6 +626,16 @@ SIGNATURES = {
         ("hooks", "KEYWORD_ONLY"),
         ("run_id", "KEYWORD_ONLY"),
     ),
+    "DoppelClient.govern_personal_memory": (
+        ("scope", "POSITIONAL_OR_KEYWORD"),
+        ("policy", "KEYWORD_ONLY"),
+        ("now", "KEYWORD_ONLY"),
+        ("checkpoint", "KEYWORD_ONLY"),
+        ("config", "KEYWORD_ONLY"),
+        ("evaluator", "KEYWORD_ONLY"),
+        ("hooks", "KEYWORD_ONLY"),
+        ("run_id", "KEYWORD_ONLY"),
+    ),
     "DoppelClient.process": (
         ("scope", "POSITIONAL_OR_KEYWORD"),
         ("message", "POSITIONAL_OR_KEYWORD"),
@@ -583,6 +678,16 @@ SIGNATURES = {
         ("read_limits", "KEYWORD_ONLY"),
         ("run_id", "KEYWORD_ONLY"),
     ),
+    "DoppelClient.restore_personal_memory": (
+        ("scope", "POSITIONAL_OR_KEYWORD"),
+        ("archived_memory_id", "POSITIONAL_OR_KEYWORD"),
+        ("target_state", "KEYWORD_ONLY"),
+        ("now", "KEYWORD_ONLY"),
+        ("config", "KEYWORD_ONLY"),
+        ("evaluator", "KEYWORD_ONLY"),
+        ("hooks", "KEYWORD_ONLY"),
+        ("run_id", "KEYWORD_ONLY"),
+    ),
     "DeterministicStyleAnalyzer.analyze": (
         ("messages", "POSITIONAL_OR_KEYWORD"),
         ("config", "KEYWORD_ONLY"),
@@ -596,6 +701,7 @@ SIGNATURES = {
     ),
     "MemoryBatchTask.propose": (("context", "POSITIONAL_OR_KEYWORD"),),
     "MemoryConsolidator.consolidate": (("input", "POSITIONAL_OR_KEYWORD"),),
+    "MemoryGovernancePolicy.evaluate": (("input", "POSITIONAL_OR_KEYWORD"),),
     "MemoryProcessor.process": (
         ("scope", "POSITIONAL_OR_KEYWORD"),
         ("message", "POSITIONAL_OR_KEYWORD"),
@@ -867,6 +973,13 @@ def test_critical_defaults_and_enum_values_are_stable() -> None:
     )
     assert inspect.signature(doppel.MemoryStore.scan).parameters["cursor"].default == ""
     assert inspect.signature(doppel.MemoryStore.scan).parameters["limit"].default == 100
+    assert doppel.DeterministicGovernancePolicyConfig().enable_decay is False
+    assert (
+        inspect.signature(doppel.DoppelClient.restore_personal_memory)
+        .parameters["target_state"]
+        .default
+        is doppel.MemoryState.CANDIDATE
+    )
     assert (
         inspect.signature(doppel.ScopedHistoryReader.read).parameters["limit"].default
         == 500

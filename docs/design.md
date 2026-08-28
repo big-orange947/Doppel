@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.8.0：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
+> v0.8.1：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
 
 ## 定位与边界
 
@@ -783,6 +783,45 @@ repository-only query benchmark 固定 10 条记忆和 9 个中文问题，报�
 count、ambiguity、scope leakage 和 latency；所有正确性计数必须为零。它验证确定性 planner/engine
 合同，不代表任意 embedding 或模型 provider 已达到同等质量。
 
+## v0.8.1 个人记忆治理
+
+治理不扩展稳定 Store，也不把可变分数原地覆盖。policy 读取一个 bounded exact-scope active
+personal-memory snapshot，只能返回 source memory ID、reinforce/decay/archive 动作、目标 importance、
+置信度和原因。runner 重新绑定 scope、状态、版本、完整 record fingerprint、policy/config identity 和
+输入 fingerprint，生成可序列化且带 gpl_ 完整性校验的 plan：
+
+    active personal-memory snapshot + trusted now
+            │
+            ▼
+    MemoryGovernancePolicy (read-only decisions)
+            │ trusted binding / optimistic source snapshots
+            ▼
+    immutable MemoryGovernancePlan
+            │
+            ├─ ProposalWriter: idempotent replacement snapshot
+            └─ Store.transition: active source -> superseded
+            ▼
+    checkpoint only after every action completes
+
+reinforce 只认可 human_self/peer_statement 的不同 evidence identity，不把 Agent 自己生成的内容当成人类
+事实强化。治理快照记录 observed_evidence_count；同一批 evidence 不会在每个周期反复加分。默认上限为
+0.9，importance 仍只是召回信号，不取代 authority、subject、scope 或 temporal 门禁。
+
+archive 仅对 state/plan/commitment 且 explicit valid_to 已结束的记录生效，不推断计划已经兑现，也不对
+长期 fact/preference/relationship/episode 做“长期未访问即过期”。归档写成 `expired` replacement，再把
+active source 转为 `superseded`；这复用旧 Store 的既有状态和索引维护语义。archive 保留原 content、
+evidence、validity interval 和 claim created_at，治理执行时间只进入 provenance，避免污染历史查询。
+
+decay 默认关闭。启用后也只处理 host 显式标记 retention_class=ephemeral 的记录，并按 evidence/上次
+decay 时间设置最小间隔和下限。低 importance 不触发自动 archive。restore 是 host-authorized 独立路径，
+只接受 Doppel archive snapshot，生成新的 candidate/confirmed 记录，archive 本身保持 inactive；原
+valid_to 默认保留，时间含义需要由后续新证据纠正，而不是恢复操作暗改。
+
+和 consolidation 一样，通用 Store 没有跨记录事务，host 必须保证一个 exact scope 同时只有一个治理或
+整理 plan。相同 plan 的写入和 transition 可幂等重放；checkpoint 只在所有动作成功后释放。治理质量
+fixture 把 false action 作为硬错误，覆盖已结束临时状态、未来状态、老旧长期事实/偏好、默认关闭的
+ephemeral decay、可信多证据强化和 Agent 输出拒绝。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -819,6 +858,6 @@ provenance 保存在 `raw.doppel_import`。
 - v0.7.2：个人记忆 Reference Intelligence、模型无关结构化抽取与证据门禁（已完成）；
 - v0.7.3：Memory Consolidator、重复证据合并和冲突/纠正决策（已完成）；
 - v0.8.0：中文 lexical/semantic 检索质量与 query planning（已完成）；
-- v0.8.1：类型感知的强化、衰减、归档和恢复；
+- v0.8.1：类型感知的强化、衰减、归档和恢复（已完成）；
 - v0.8.2：AstrBot shadow mode、长期 dogfooding 和端到端质量报告；
 - v0.9.0：Agent tools、Server/CLI/Inspector 与 PyPI 发布准备。

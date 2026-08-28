@@ -1,0 +1,83 @@
+{
+  "dataset_version": 1,
+  "name": "doppel.governance-quality.zh.v1",
+  "language": "zh-CN",
+  "now": "2026-08-28T12:00:00+00:00",
+  "cases": [
+    {
+      "name": "archive-ended-temporary-state",
+      "memory_id": "gov-ended-state",
+      "content": "用户临时在北京出差两个月。",
+      "memory_type": "state",
+      "importance": 0.6,
+      "authority": "human_self",
+      "valid_to": "2026-06-01T00:00:00+00:00",
+      "evidence_count": 1,
+      "expected_operation": "archive"
+    },
+    {
+      "name": "keep-future-temporary-state",
+      "memory_id": "gov-future-state",
+      "content": "用户将在北京出差到九月底。",
+      "memory_type": "state",
+      "importance": 0.6,
+      "authority": "human_self",
+      "valid_to": "2026-09-30T00:00:00+00:00",
+      "evidence_count": 1,
+      "expected_operation": null
+    },
+    {
+      "name": "never-age-out-long-term-fact",
+      "memory_id": "gov-long-fact",
+      "content": "用户长期住在上海。",
+      "memory_type": "fact",
+      "importance": 0.7,
+      "authority": "human_self",
+      "valid_to": "2020-01-01T00:00:00+00:00",
+      "evidence_count": 1,
+      "expected_operation": null
+    },
+    {
+      "name": "never-default-decay-preference",
+      "memory_id": "gov-old-preference",
+      "content": "用户不喜欢香菜。",
+      "memory_type": "preference",
+      "importance": 0.5,
+      "authority": "human_self",
+      "evidence_count": 1,
+      "expected_operation": null
+    },
+    {
+      "name": "decay-remains-disabled-for-ephemeral",
+      "memory_id": "gov-ephemeral-default",
+      "content": "一条过时的临时线索。",
+      "memory_type": "fact",
+      "importance": 0.5,
+      "authority": "human_self",
+      "retention_class": "ephemeral",
+      "evidence_count": 1,
+      "expected_operation": null
+    },
+    {
+      "name": "reinforce-distinct-owner-evidence",
+      "memory_id": "gov-reinforce-owner",
+      "content": "用户住在上海。",
+      "memory_type": "fact",
+      "importance": 0.5,
+      "authority": "human_self",
+      "evidence_count": 3,
+      "expected_operation": "reinforce",
+      "expected_importance": 0.6
+    },
+    {
+      "name": "never-reinforce-agent-output",
+      "memory_id": "gov-agent-output",
+      "content": "Agent 猜测用户喜欢徒步。",
+      "memory_type": "preference",
+      "importance": 0.5,
+      "authority": "agent_output",
+      "evidence_count": 4,
+      "expected_operation": null
+    }
+  ]
+}

@@ -693,6 +693,11 @@ def _structural_match(
     valid_from = _metadata_time(record, "valid_from")
     valid_to = _metadata_time(record, "valid_to")
     effective_at = valid_from or record.created_at
+    if plan.intent == PersonalMemoryQueryIntent.CURRENT:
+        if valid_from is not None and valid_from > plan.now:
+            return None
+        if valid_to is not None and valid_to < plan.now:
+            return None
     if plan.as_of is not None:
         if valid_from is not None and valid_from > plan.as_of:
             return None
@@ -722,6 +727,10 @@ def _structural_match(
         reasons.append("temporal_status")
     if plan.as_of is not None:
         reasons.append("valid_at_as_of")
+    elif plan.intent == PersonalMemoryQueryIntent.CURRENT and (
+        valid_from is not None or valid_to is not None
+    ):
+        reasons.append("valid_at_now")
     return effective_at, reasons
 
 

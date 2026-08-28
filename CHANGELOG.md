@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.8.1
+
+Doppel can now evolve personal memories without turning age or recall frequency into
+an implicit deletion policy. The new governance layer is conservative by default,
+fully provenance-bound, and additive to the frozen Store lifecycle.
+
+### Added
+
+- `MemoryGovernancePolicy`, schema-constrained decisions, full exact-scope inputs,
+  integrity-bound plans, checkpoints, action results, and `MemoryGovernanceRunner`.
+  Policies can propose reinforcement, decay, or archive for supplied active IDs but
+  cannot select scope, mutate evidence, write directly, or delete records.
+- `DeterministicMemoryGovernancePolicy`: distinct trusted owner/peer evidence can raise
+  importance; only state/plan/commitment memories with an explicit ended `valid_to`
+  archive automatically. Stable facts, preferences, relationships, and historical
+  episodes never disappear merely because they are old or have not been recalled.
+- Decay is disabled by default and remains limited to records explicitly marked by the
+  host with `retention_class=ephemeral`. When enabled, it is interval-limited, bounded
+  by a floor, and produces a new audited snapshot rather than mutating in place.
+- Archive uses an inactive `expired` replacement snapshot with source fingerprint,
+  version, policy/config identity, reason, evaluation time, importance values, and
+  derived chain. The active source is then optimistically transitioned to
+  `superseded`; no evidence is deleted.
+- Explicit restoration from a Doppel archive to a new candidate or confirmed snapshot.
+  Restore preserves the original validity interval and keeps the archive inactive, so
+  recovery does not silently rewrite temporal meaning.
+- `DoppelClient.govern_personal_memory()` and
+  `DoppelClient.restore_personal_memory()` convenience entries.
+- Current-intent personal-memory queries now apply `valid_from`/`valid_to` against the
+  plan's trusted `now`, so an ended temporary state is excluded even before the next
+  scheduled governance cycle runs.
+- A versioned Chinese governance fixture, report schema, CLI runner, tests, and CI gate
+  for false/missing actions, operation choice, importance, lifecycle, provenance, and
+  scope isolation.
+
+### Compatibility and operations
+
+- Governance APIs are additive provisional APIs; stable `MemoryStore`, `MemoryState`,
+  `MemoryProposal`, query, and retrieval shapes are unchanged. Existing Stores with
+  stable pagination work without a schema migration.
+- Hosts own scheduling, durable plan/checkpoint storage, and one in-flight governance
+  or consolidation writer per exact scope. Replay handles partial failure of the same
+  plan; it is not a substitute for a distributed lease between competing plans.
+- v0.8.1 does not infer that a planned event occurred, decay from last-access time,
+  synthesize new facts, or permanently delete archived evidence. Those choices require
+  explicit evidence or host policy.
+
 ## 0.8.0
 
 Doppel now retrieves personal memories by question intent and time semantics instead

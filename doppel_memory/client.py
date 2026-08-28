@@ -38,6 +38,14 @@ from doppel_memory.consolidation import (
     ConsolidationRunResult,
     MemoryConsolidator,
 )
+from doppel_memory.governance import (
+    DeterministicMemoryGovernancePolicy,
+    MemoryGovernanceCheckpoint,
+    MemoryGovernanceConfig,
+    MemoryGovernancePolicy,
+    MemoryGovernanceRunner,
+    MemoryGovernanceRunResult,
+)
 from doppel_memory.imports import IMImportBatch, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.models import (
@@ -201,6 +209,54 @@ class DoppelClient:
             consolidator,
             scope,
             checkpoint=checkpoint,
+            evaluator=evaluator,
+            hooks=hooks,
+            run_id=run_id,
+        )
+
+    async def govern_personal_memory(
+        self,
+        scope: MemoryScope,
+        *,
+        policy: MemoryGovernancePolicy | None = None,
+        now: datetime | None = None,
+        checkpoint: MemoryGovernanceCheckpoint | None = None,
+        config: MemoryGovernanceConfig | None = None,
+        evaluator: ProposalEvaluator | None = None,
+        hooks: ProcessorHooks | None = None,
+        run_id: str | None = None,
+    ) -> MemoryGovernanceRunResult:
+        """Run one conservative exact-scope personal-memory governance cycle."""
+
+        return await MemoryGovernanceRunner(self._store, config).run_once(
+            policy or DeterministicMemoryGovernancePolicy(),
+            scope,
+            now=now,
+            checkpoint=checkpoint,
+            evaluator=evaluator,
+            hooks=hooks,
+            run_id=run_id,
+        )
+
+    async def restore_personal_memory(
+        self,
+        scope: MemoryScope,
+        archived_memory_id: str,
+        *,
+        target_state: MemoryState = MemoryState.CANDIDATE,
+        now: datetime | None = None,
+        config: MemoryGovernanceConfig | None = None,
+        evaluator: ProposalEvaluator | None = None,
+        hooks: ProcessorHooks | None = None,
+        run_id: str | None = None,
+    ) -> MemoryGovernanceRunResult:
+        """Explicitly recover one Doppel archive as a new active snapshot."""
+
+        return await MemoryGovernanceRunner(self._store, config).restore(
+            scope,
+            archived_memory_id,
+            target_state=target_state,
+            now=now,
             evaluator=evaluator,
             hooks=hooks,
             run_id=run_id,

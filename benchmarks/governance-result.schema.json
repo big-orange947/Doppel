@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/big-orange947/Doppel/benchmarks/governance-result.schema.json",
+  "title": "Doppel governance quality result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result_schema_version",
+    "doppel_version",
+    "generated_at",
+    "dataset",
+    "environment",
+    "metrics",
+    "cases",
+    "correctness"
+  ],
+  "properties": {
+    "result_schema_version": { "const": 1 },
+    "doppel_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "language", "case_count", "fingerprint"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "const": 1 },
+        "language": { "type": "string" },
+        "case_count": { "type": "integer", "minimum": 1 },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "platform"],
+      "properties": {
+        "python": { "type": "string" },
+        "platform": { "type": "string" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_action_count",
+        "actual_action_count",
+        "false_action_count",
+        "missing_action_count",
+        "wrong_operation_count",
+        "importance_error_count",
+        "lifecycle_error_count",
+        "scope_leakage_count",
+        "latency_ms"
+      ],
+      "properties": {
+        "expected_action_count": { "type": "integer", "minimum": 0 },
+        "actual_action_count": { "type": "integer", "minimum": 0 },
+        "false_action_count": { "type": "integer", "minimum": 0 },
+        "missing_action_count": { "type": "integer", "minimum": 0 },
+        "wrong_operation_count": { "type": "integer", "minimum": 0 },
+        "importance_error_count": { "type": "integer", "minimum": 0 },
+        "lifecycle_error_count": { "type": "integer", "minimum": 0 },
+        "scope_leakage_count": { "type": "integer", "minimum": 0 },
+        "latency_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "expected_operation",
+          "actual_operation",
+          "source_state",
+          "replacement_state",
+          "replacement_importance",
+          "false_action_count",
+          "missing_action_count",
+          "wrong_operation_count",
+          "importance_error_count",
+          "lifecycle_error_count",
+          "scope_leakage_count",
+          "latency_ms",
+          "errors"
+        ],
+        "properties": {
+          "name": { "type": "string" },
+          "expected_operation": {
+            "type": ["string", "null"],
+            "enum": ["reinforce", "decay", "archive", null]
+          },
+          "actual_operation": {
+            "type": ["string", "null"],
+            "enum": ["reinforce", "decay", "archive", null]
+          },
+          "source_state": { "type": ["string", "null"] },
+          "replacement_state": { "type": ["string", "null"] },
+          "replacement_importance": { "type": ["number", "null"] },
+          "false_action_count": { "type": "integer", "minimum": 0 },
+          "missing_action_count": { "type": "integer", "minimum": 0 },
+          "wrong_operation_count": { "type": "integer", "minimum": 0 },
+          "importance_error_count": { "type": "integer", "minimum": 0 },
+          "lifecycle_error_count": { "type": "integer", "minimum": 0 },
+          "scope_leakage_count": { "type": "integer", "minimum": 0 },
+          "latency_ms": { "type": "number", "minimum": 0 },
+          "errors": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "scope_leakage_count", "errors"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "scope_leakage_count": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

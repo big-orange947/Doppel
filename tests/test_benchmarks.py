@@ -11,6 +11,10 @@ from benchmarks.consolidation_quality import (
     run_consolidation_quality_benchmark,
 )
 from benchmarks.dataset import SyntheticDatasetConfig, generate_dataset
+from benchmarks.governance_quality import (
+    load_governance_quality_dataset,
+    run_governance_quality_benchmark,
+)
 from benchmarks.memory_quality import (
     BaselineCaseRun,
     ExtractionCaseRun,
@@ -91,6 +95,49 @@ def test_consolidation_quality_result_schema_tracks_runner_envelope() -> None:
     with open(
         "benchmarks/consolidation-result.schema.json", encoding="utf-8"
     ) as source:
+        schema = json.load(source)
+
+    assert schema["properties"]["result_schema_version"]["const"] == 1
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["cases"]["items"]["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "result_schema_version",
+        "doppel_version",
+        "generated_at",
+        "dataset",
+        "environment",
+        "metrics",
+        "cases",
+        "correctness",
+    }
+
+
+async def test_governance_quality_guards_false_actions_and_lifecycle() -> None:
+    dataset = load_governance_quality_dataset()
+    result = await run_governance_quality_benchmark(dataset)
+
+    assert dataset.name == "doppel.governance-quality.zh.v1"
+    assert len(dataset.cases) == 7
+    assert result["metrics"] == {
+        "expected_action_count": 2,
+        "actual_action_count": 2,
+        "false_action_count": 0,
+        "missing_action_count": 0,
+        "wrong_operation_count": 0,
+        "importance_error_count": 0,
+        "lifecycle_error_count": 0,
+        "scope_leakage_count": 0,
+        "latency_ms": result["metrics"]["latency_ms"],
+    }
+    assert result["correctness"] == {
+        "passed": True,
+        "scope_leakage_count": 0,
+        "errors": [],
+    }
+
+
+def test_governance_quality_result_schema_tracks_runner_envelope() -> None:
+    with open("benchmarks/governance-result.schema.json", encoding="utf-8") as source:
         schema = json.load(source)
 
     assert schema["properties"]["result_schema_version"]["const"] == 1

@@ -59,6 +59,26 @@ from doppel_memory.content import (
     ContentResolver,
     resolve_content,
 )
+from doppel_memory.governance import (
+    DeterministicGovernancePolicyConfig,
+    DeterministicMemoryGovernancePolicy,
+    MemoryGovernanceAction,
+    MemoryGovernanceActionResult,
+    MemoryGovernanceAnalysis,
+    MemoryGovernanceCheckpoint,
+    MemoryGovernanceConfig,
+    MemoryGovernanceDecision,
+    MemoryGovernanceInput,
+    MemoryGovernanceOperation,
+    MemoryGovernancePlan,
+    MemoryGovernancePlanningError,
+    MemoryGovernancePolicy,
+    MemoryGovernanceReadLimitError,
+    MemoryGovernanceRunner,
+    MemoryGovernanceRunResult,
+    MemoryGovernanceSourceSnapshot,
+    MemoryGovernanceTransitionResult,
+)
 from doppel_memory.imports import IMImportBatch, IMImportItem, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.indexing import (
@@ -188,7 +208,7 @@ from doppel_memory.vector import (
     VectorIndexUnavailableError,
 )
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 
 __all__ = [
     "Actor",
@@ -226,7 +246,9 @@ __all__ = [
     "ContentResolver",
     "DefaultPromptRenderer",
     "DeterministicConsolidatorConfig",
+    "DeterministicGovernancePolicyConfig",
     "DeterministicMemoryConsolidator",
+    "DeterministicMemoryGovernancePolicy",
     "DeterministicPersonalMemoryQueryPlanner",
     "DeterministicStyleAnalyzer",
     "DoppelClient",
@@ -260,6 +282,22 @@ __all__ = [
     "MemoryBatchTask",
     "MemoryConsolidator",
     "MemoryFilter",
+    "MemoryGovernanceAction",
+    "MemoryGovernanceActionResult",
+    "MemoryGovernanceAnalysis",
+    "MemoryGovernanceCheckpoint",
+    "MemoryGovernanceConfig",
+    "MemoryGovernanceDecision",
+    "MemoryGovernanceInput",
+    "MemoryGovernanceOperation",
+    "MemoryGovernancePlan",
+    "MemoryGovernancePlanningError",
+    "MemoryGovernancePolicy",
+    "MemoryGovernanceReadLimitError",
+    "MemoryGovernanceRunResult",
+    "MemoryGovernanceRunner",
+    "MemoryGovernanceSourceSnapshot",
+    "MemoryGovernanceTransitionResult",
     "MemoryIsolationError",
     "MemoryKind",
     "MemoryPage",

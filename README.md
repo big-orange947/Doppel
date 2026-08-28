@@ -590,6 +590,64 @@ else:
 但不会把 planned 自动当作已经发生。若同一 topic 仍有两条冲突的 current 记录，Doppel 返回两条证据
 并标记 ambiguous=True，不会只按更新时间偷偷选一条。
 
+### 个人记忆治理（v0.8.1）
+
+治理是周期任务，不在每次 recall 时偷偷修改记忆。默认策略只做两类保守动作：同一条个人记忆拥有至少
+三份不同的 owner/peer 证据时提高 importance；`state`、`plan` 或 `commitment` 带有已经结束的明确
+`valid_to` 时归档。长期事实、偏好、关系和历史经历不会因为“很久没问”自动衰减或消失：
+
+```python
+from doppel_memory import DeterministicMemoryGovernancePolicy
+
+result = await memory.govern_personal_memory(
+    scope.user_scope(),
+    policy=DeterministicMemoryGovernancePolicy(),
+    checkpoint=checkpoint,
+    run_id="nightly-governance",
+)
+if result.committable_checkpoint is not None:
+    await my_checkpoint_store.save(result.committable_checkpoint)
+```
+
+每个动作先形成可持久化、带完整性指纹的 `MemoryGovernancePlan`。执行时通过普通 ProposalWriter 幂等
+写入替代快照，再以 expected-state 乐观并发把 active 来源转为 `superseded`。归档快照使用既有的
+`expired` 状态并保留 content、时间区间、evidence、来源 fingerprint、策略/配置版本、原因和治理时间；
+框架不删除证据，也没有扩展 Store 协议或状态枚举。
+
+衰减默认完全关闭。确实需要短命线索时，host 必须同时在记录上标记
+`metadata.retention_class="ephemeral"`，并显式启用策略配置：
+
+```python
+from doppel_memory import (
+    DeterministicGovernancePolicyConfig,
+    DeterministicMemoryGovernancePolicy,
+)
+
+policy = DeterministicMemoryGovernancePolicy(
+    DeterministicGovernancePolicyConfig(
+        enable_decay=True,
+        decay_after_days=30,
+        decay_step=0.1,
+    )
+)
+```
+
+恢复必须由 host 明确指定 Doppel 生成的 archive ID；默认恢复为 candidate，并保留原来的 valid_to，
+避免把一条已结束的临时状态悄悄改写成当前事实：
+
+```python
+restored = await memory.restore_personal_memory(
+    scope.user_scope(),
+    archived_memory_id,
+    target_state=MemoryState.CANDIDATE,
+)
+```
+
+生产调度需要对同一个 exact scope 设置单写者租约，并持久化 plan/checkpoint。重放保证同一计划的部分
+失败可恢复，不代替多实例分布式锁。Doppel 不根据“最后召回时间”强化或衰减，因为被系统多问不等于
+事实更真实，没被问也不等于事实已经失效。即使周期治理尚未运行，current 查询也会用查询 plan 绑定的
+`now` 检查 validity interval，不会把已结束的临时状态当成当前状态返回。
+
 ### 周期聚合任务
 
 需要“累计多次戳一戳后形成关系记忆”或 StyleMiner 这类历史统计时，使用独立的
@@ -1132,6 +1190,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.7.2：个人记忆参考抽取、模型无关结构化输出、证据/角色/作用域门禁与独立抽取评测
 - [x] v0.7.3：可重放 Memory Consolidator、保守重复/纠错决策与独立质量门禁
 - [x] v0.8.0：中文个人记忆 Query Planner、时间感知检索、安全事件计数与词法/语义融合
+- [x] v0.8.1：类型感知的强化、显式短期衰减、可审计归档与恢复
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

@@ -53,6 +53,14 @@ provisional root APIs. They are additive beside the unchanged stable generic
 optional `SemanticIndex` may score only already-authorized records; exact-scope,
 subject, temporal, and metadata gates remain engine responsibilities.
 
+The v0.8.1 governance policy, decision, plan, checkpoint, result, and runner types are
+provisional root APIs. Governance is additive to the stable Store lifecycle: every
+reinforcement, opt-in decay, archive, or restore writes an auditable replacement
+through `ProposalWriter`. Archive snapshots use the existing inactive `expired` state;
+active sources are superseded with optimistic concurrency, and no policy can delete
+evidence. Hosts retain scheduling, durable plan/checkpoint storage, explicit restore
+authority, and a single-writer lease per exact scope.
+
 ## Compatibility rules
 
 For stable API, a patch release must not require callers or third-party implementations

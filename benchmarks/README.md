@@ -119,6 +119,25 @@ indexes must be evaluated separately on held-out domain queries; regardless of p
 quality, their candidates remain subject to the authoritative Store, scope, subject,
 and temporal gates.
 
+## Personal-memory governance quality
+
+The v0.8.1 governance benchmark runs the real deterministic policy, integrity-bound
+planner, ProposalWriter, InMemoryStore lifecycle, and checkpoint release:
+
+```bash
+uv run python -m benchmarks.governance_quality \
+  --dataset benchmarks/datasets/governance-quality-zh-v1.json \
+  --output benchmarks/results/governance-quality.json
+```
+
+The fixture requires an ended temporary state to archive and distinct trusted evidence
+to reinforce. Negative controls protect a future state, an old long-term fact, an old
+preference, an ephemeral record while decay is disabled, and repeated Agent output.
+False/missing actions, wrong operations, importance errors, source/replacement lifecycle
+errors, and scope leakage are hard failures. `governance-result.schema.json` versions
+the machine-readable report. The fixture validates the default deterministic policy;
+custom retention policies need their own domain-labelled false-positive evaluation.
+
 ## Store performance and correctness
 
 The Store benchmark deliberately measures only behavior Doppel owns:

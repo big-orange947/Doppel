@@ -151,6 +151,42 @@ async def test_current_residence_excludes_planned_and_historical_records() -> No
     assert result.ambiguous is False
 
 
+async def test_current_query_excludes_ended_validity_before_governance_runs() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "ended-beijing-trip",
+            "用户临时在北京住两个月。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="residence.primary",
+            day=1,
+            valid_from=datetime(2026, 3, 1, tzinfo=UTC),
+            valid_to=datetime(2026, 5, 1, tzinfo=UTC),
+        ),
+        _record(
+            "home-shanghai",
+            "用户长期住在上海。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="residence.primary",
+            day=2,
+            valid_from=datetime(2025, 1, 1, tzinfo=UTC),
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "我现在住在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["home-shanghai"]
+    assert "valid_at_now" in result.hits[0].reasons
+
+
 async def test_planned_residence_does_not_claim_the_plan_already_happened() -> None:
     store = InMemoryStore()
     await _put(
