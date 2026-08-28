@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.7.3：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
+> v0.8.0：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
 
 ## 定位与边界
 
@@ -737,6 +737,52 @@ canonical，再把来源逐条转为 `superseded`。部分 transition 失败时�
 报告 false/missing action、wrong canonical、scope leakage 与 latency；前四类正确性指标是 CI 硬门禁。
 v0.7.3 不做 temporary expiry、计划兑现推断、episode 身份判定/旅行次数聚合或答案生成。
 
+## v0.8.0 结构化个人记忆查询
+
+通用 Retriever 只承诺 scope-guarded candidates，RecallResult 也不携带个人记忆的 topic、subject、
+temporal status、validity interval 或 event identity。v0.8.0 因此以组合方式增加独立 query layer，
+不向稳定 Store/Retriever 协议塞入个人信息代理特有语义：
+
+    natural-language question + trusted now
+            │
+            ▼
+    PersonalMemoryQueryPlanner
+      ├─ deterministic Chinese baseline
+      └─ reference planner over StructuredOutputModel
+            │ scope-free draft
+            ▼ trusted binding
+    explicit exact scopes · one user_id · authorized subject · config fingerprint
+            │
+            ▼ complete bounded active personal-memory snapshot
+    subject/type/topic/temporal/validity hard gates
+            │
+            ├─ deterministic Chinese lexical score
+            └─ optional SemanticIndex scores for known authorized IDs only
+            ▼
+    evidence hits · ambiguity · warnings · conservative count
+
+planner intent 是 lookup/current/history/planned/list/count/as_of。模型不能选择 scope、Store、memory
+ID、生命周期或答案；plan 绑定提问时刻、全部 exact scopes、subject、过滤条件、planner identity 和 config，
+执行前验证 pmq_ fingerprint。多个 scope 可以属于同一个人，但一个 query 不允许跨 user ID。
+contact/custom subject ID 必须由 host 显式授权。
+
+engine 使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
+“一共几次”。结构化条件是硬门禁，lexical/semantic 只能排序或补充候选。SemanticIndex 的结果必须
+同时满足 scope 在 plan 中、memory ID 已从 authoritative Store 读到；未知、孤儿和越权 candidate
+直接丢弃。可配置 provider failure 是否回退 lexical，warning 会进入结果。
+
+as_of 使用 valid_from/valid_to，无区间的 historical/planned 不被猜测为当时有效。planned 默认
+不会因为查询日期落在计划区间就被当成实际状态；只有明确 planned intent/过滤才返回计划。current 或
+as-of 同 topic 出现多个不同 active 内容时全部返回并标记 ambiguous，不以 recency 掩盖未整理冲突。
+
+episode 计数基于 event_key 去重。同一 event 的多次提及可以保留多条 evidence record，但只计一个
+key；任一匹配 episode 没有 key 时 count 为 indeterminate。这里的 exact 表示完整授权 snapshot 上
+key 的精确 distinct count，event key 本身的真实语义仍依赖 evidence-bound analyzer 与质量评测。
+
+repository-only query benchmark 固定 10 条记忆和 9 个中文问题，报告 missing/forbidden hits、intent、
+count、ambiguity、scope leakage 和 latency；所有正确性计数必须为零。它验证确定性 planner/engine
+合同，不代表任意 embedding 或模型 provider 已达到同等质量。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -772,7 +818,7 @@ provenance 保存在 `raw.doppel_import`。
 - v0.7.1：中文 IM 记忆质量 fixture、四类基线、分层指标和版本化报告（已完成）。
 - v0.7.2：个人记忆 Reference Intelligence、模型无关结构化抽取与证据门禁（已完成）；
 - v0.7.3：Memory Consolidator、重复证据合并和冲突/纠正决策（已完成）；
-- v0.8.0：中文 lexical/semantic 检索质量与 query planning；
+- v0.8.0：中文 lexical/semantic 检索质量与 query planning（已完成）；
 - v0.8.1：类型感知的强化、衰减、归档和恢复；
 - v0.8.2：AstrBot shadow mode、长期 dogfooding 和端到端质量报告；
 - v0.9.0：Agent tools、Server/CLI/Inspector 与 PyPI 发布准备。

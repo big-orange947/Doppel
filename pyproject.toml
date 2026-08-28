@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "doppel-memory"
-version = "0.7.3"
+version = "0.8.0"
 description = "A provenance-aware personal memory and context core for long-running agents."
 readme = "README.md"
 requires-python = ">=3.11"

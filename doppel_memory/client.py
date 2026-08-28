@@ -17,6 +17,7 @@ prompt_block = bundle.render()                    # ③ 拼进你自己的 promp
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from typing import Any
 
 from doppel_memory.batch import (
@@ -49,6 +50,7 @@ from doppel_memory.models import (
     StoreCapabilities,
     WriteResult,
     WriteStatus,
+    utc_now,
 )
 from doppel_memory.persona import MaterialBundle, PersonaMaterialsBuilder
 from doppel_memory.postgres_store import PostgreSQLStore
@@ -60,10 +62,18 @@ from doppel_memory.processing import (
     ProposalEvaluator,
     ProposalPolicy,
 )
+from doppel_memory.query import (
+    DeterministicPersonalMemoryQueryPlanner,
+    PersonalMemoryQueryConfig,
+    PersonalMemoryQueryEngine,
+    PersonalMemoryQueryPlanner,
+    PersonalMemoryQueryResult,
+)
 from doppel_memory.retriever import Reranker, RetrievalStrategy, Retriever
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
 from doppel_memory.style import StyleGuideCompiler
+from doppel_memory.vector import SemanticIndex
 
 
 class DoppelClient:
@@ -282,6 +292,33 @@ class DoppelClient:
     ) -> list[RecallResult]:
         """中层检索：scope 显式 + filters 组合。"""
         return await self._retriever.recall(query, scopes, filters=filters, limit=limit)
+
+    async def query_personal_memory(
+        self,
+        query: str,
+        scopes: Sequence[MemoryScope],
+        *,
+        planner: PersonalMemoryQueryPlanner | None = None,
+        now: datetime | None = None,
+        config: PersonalMemoryQueryConfig | None = None,
+        semantic_index: SemanticIndex | None = None,
+        default_subject: str = "owner",
+        default_subject_id: str = "",
+        allowed_subject_ids: Sequence[str] = (),
+    ) -> PersonalMemoryQueryResult:
+        """Return structured personal-memory evidence and safe aggregation."""
+
+        return await PersonalMemoryQueryEngine(
+            self._store, config, semantic_index=semantic_index
+        ).query(
+            planner or DeterministicPersonalMemoryQueryPlanner(),
+            query,
+            scopes,
+            now=now or utc_now(),
+            default_subject=default_subject,
+            default_subject_id=default_subject_id,
+            allowed_subject_ids=allowed_subject_ids,
+        )
 
     # ---------------------------------------------------------------- 高层 API
 

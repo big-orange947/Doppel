@@ -73,6 +73,7 @@ class PersonalMemoryDraft(BaseModel):
     content: str
     memory_type: str = PersonalMemoryType.FACT
     topic_key: str = ""
+    event_key: str = ""
     kind: str = MemoryKind.FACT
     subject: str = Actor.OWNER
     subject_id: str = ""
@@ -102,6 +103,11 @@ class PersonalMemoryDraft(BaseModel):
     @classmethod
     def _normalize_topic_key(cls, value: Any) -> str:
         return str(value or "").strip().lower()[:128]
+
+    @field_validator("event_key", mode="before")
+    @classmethod
+    def _normalize_event_key(cls, value: Any) -> str:
+        return str(value or "").strip().lower()[:160]
 
     @field_validator("kind", mode="before")
     @classmethod
@@ -153,6 +159,8 @@ class PersonalMemoryDraft(BaseModel):
     def _validate_interval(self) -> PersonalMemoryDraft:
         if self.valid_from and self.valid_to and self.valid_to < self.valid_from:
             raise ValueError("valid_to must not precede valid_from")
+        if self.event_key and self.memory_type != PersonalMemoryType.EPISODE:
+            raise ValueError("event_key is only valid for episode memories")
         return self
 
 
@@ -226,9 +234,12 @@ commitments only when useful beyond the immediate utterance. Keep temporary stat
 historical events distinct from timeless facts. Preserve explicit temporal bounds when
 the evidence provides them. When a claim belongs to one stable mutable slot, provide a
 lowercase topic_key such as residence.primary or preference.favorite-color; omit it
-when no precise slot is justified. Do not choose a storage scope, memory ID, authority, or
-lifecycle action: Doppel derives those from trusted input. Do not consolidate conflicts
-or silently discard old facts; that is a separate audited stage.
+when no precise slot is justified. For an episode, provide event_key only when the
+evidence identifies one stable real-world event; repeated mentions of the same event
+must use the same key, while separate events must not share one. Omit it when uncertain.
+Do not choose a storage scope, memory ID, authority, or lifecycle action: Doppel derives
+those from trusted input. Do not consolidate conflicts or silently discard old facts;
+that is a separate audited stage.
 """
 
 
@@ -483,6 +494,7 @@ def _analysis_to_proposals(
             "content": draft.content,
             "memory_type": draft.memory_type,
             "topic_key": draft.topic_key,
+            "event_key": draft.event_key,
             "subject": draft.subject,
             "subject_id": subject_id,
             "evidence_ids": sorted(draft.evidence_ids),
@@ -507,6 +519,7 @@ def _analysis_to_proposals(
             {
                 "personal_memory_type": draft.memory_type,
                 "topic_key": draft.topic_key,
+                "event_key": draft.event_key,
                 "subject": draft.subject,
                 "subject_id": subject_id,
                 "temporal_status": draft.temporal_status,

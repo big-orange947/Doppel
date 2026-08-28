@@ -1,0 +1,240 @@
+{
+  "dataset_version": 1,
+  "name": "doppel.personal-query-quality.zh.v1",
+  "language": "zh-CN",
+  "now": "2026-08-28T12:00:00+08:00",
+  "scopes": [
+    {
+      "name": "owner",
+      "user_id": "query-owner",
+      "agent_id": "personal-agent"
+    },
+    {
+      "name": "other",
+      "user_id": "query-other",
+      "agent_id": "personal-agent"
+    }
+  ],
+  "memories": [
+    {
+      "memory_id": "owner-home-shanghai",
+      "scope": "owner",
+      "content": "用户现在长期住在上海。",
+      "at": "2025-01-01T09:00:00+08:00",
+      "memory_type": "state",
+      "topic_key": "residence.primary",
+      "temporal_status": "current",
+      "valid_from": "2025-01-01T00:00:00+08:00",
+      "evidence_ids": ["home-shanghai-message"]
+    },
+    {
+      "memory_id": "owner-planned-beijing",
+      "scope": "owner",
+      "content": "用户计划去北京临时住两个月。",
+      "at": "2026-08-01T09:00:00+08:00",
+      "memory_type": "state",
+      "topic_key": "residence.primary",
+      "temporal_status": "planned",
+      "valid_from": "2026-09-01T00:00:00+08:00",
+      "valid_to": "2026-10-31T23:59:59+08:00",
+      "evidence_ids": ["planned-beijing-message"]
+    },
+    {
+      "memory_id": "owner-home-beijing-2024",
+      "scope": "owner",
+      "content": "用户在2024年住在北京。",
+      "at": "2024-01-01T09:00:00+08:00",
+      "memory_type": "state",
+      "topic_key": "residence.primary",
+      "temporal_status": "historical",
+      "valid_from": "2024-01-01T00:00:00+08:00",
+      "valid_to": "2024-12-31T23:59:59+08:00",
+      "evidence_ids": ["home-beijing-2024-message"]
+    },
+    {
+      "memory_id": "owner-trip-beijing-mention-1",
+      "scope": "owner",
+      "content": "用户在2025年5月去北京旅行。",
+      "at": "2025-05-10T09:00:00+08:00",
+      "memory_type": "episode",
+      "event_key": "trip:2025-05:beijing",
+      "temporal_status": "historical",
+      "valid_from": "2025-05-01T00:00:00+08:00",
+      "valid_to": "2025-05-08T23:59:59+08:00",
+      "evidence_ids": ["trip-beijing-message-1"]
+    },
+    {
+      "memory_id": "owner-trip-beijing-mention-2",
+      "scope": "owner",
+      "content": "用户后来再次提到2025年的北京之旅。",
+      "at": "2026-01-10T09:00:00+08:00",
+      "memory_type": "episode",
+      "event_key": "trip:2025-05:beijing",
+      "temporal_status": "historical",
+      "valid_from": "2025-05-01T00:00:00+08:00",
+      "valid_to": "2025-05-08T23:59:59+08:00",
+      "evidence_ids": ["trip-beijing-message-2"]
+    },
+    {
+      "memory_id": "owner-trip-chengdu",
+      "scope": "owner",
+      "content": "用户在2026年3月去成都旅行。",
+      "at": "2026-03-20T09:00:00+08:00",
+      "memory_type": "episode",
+      "event_key": "trip:2026-03:chengdu",
+      "temporal_status": "historical",
+      "valid_from": "2026-03-12T00:00:00+08:00",
+      "valid_to": "2026-03-18T23:59:59+08:00",
+      "evidence_ids": ["trip-chengdu-message"]
+    },
+    {
+      "memory_id": "owner-color-green",
+      "scope": "owner",
+      "content": "用户现在最喜欢绿色。",
+      "at": "2026-02-01T09:00:00+08:00",
+      "memory_type": "preference",
+      "topic_key": "preference.favorite-color",
+      "temporal_status": "current",
+      "evidence_ids": ["color-green-message"]
+    },
+    {
+      "memory_id": "owner-color-blue-history",
+      "scope": "owner",
+      "content": "用户以前最喜欢蓝色。",
+      "at": "2024-02-01T09:00:00+08:00",
+      "memory_type": "preference",
+      "topic_key": "preference.favorite-color",
+      "temporal_status": "historical",
+      "valid_from": "2024-01-01T00:00:00+08:00",
+      "valid_to": "2024-12-31T23:59:59+08:00",
+      "evidence_ids": ["color-blue-message"]
+    },
+    {
+      "memory_id": "other-trip-known",
+      "scope": "other",
+      "content": "另一用户去过西安旅行。",
+      "at": "2026-04-01T09:00:00+08:00",
+      "memory_type": "episode",
+      "event_key": "trip:2026-04:xian",
+      "temporal_status": "historical",
+      "evidence_ids": ["other-trip-known-message"]
+    },
+    {
+      "memory_id": "other-trip-unknown",
+      "scope": "other",
+      "content": "另一用户还提过一次无法确定身份的旅行。",
+      "at": "2026-05-01T09:00:00+08:00",
+      "memory_type": "episode",
+      "temporal_status": "historical",
+      "evidence_ids": ["other-trip-unknown-message"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "current-residence",
+      "scope": "owner",
+      "query": "我现在住在哪里？",
+      "expected_intent": "current",
+      "required_hit_ids": ["owner-home-shanghai"],
+      "forbidden_hit_ids": ["owner-planned-beijing", "owner-home-beijing-2024"],
+      "expected_count_status": "not_requested",
+      "expected_ambiguous": false
+    },
+    {
+      "name": "planned-residence",
+      "scope": "owner",
+      "query": "我计划住在哪里？",
+      "expected_intent": "planned",
+      "required_hit_ids": ["owner-planned-beijing"],
+      "forbidden_hit_ids": ["owner-home-shanghai", "owner-home-beijing-2024"],
+      "expected_count_status": "not_requested",
+      "expected_ambiguous": false
+    },
+    {
+      "name": "historical-residence",
+      "scope": "owner",
+      "query": "我以前住在哪里？",
+      "expected_intent": "history",
+      "required_hit_ids": ["owner-home-beijing-2024"],
+      "forbidden_hit_ids": ["owner-home-shanghai", "owner-planned-beijing"],
+      "expected_count_status": "not_requested",
+      "expected_ambiguous": false
+    },
+    {
+      "name": "as-of-residence",
+      "scope": "owner",
+      "query": "我在2024年06月01日住在哪里？",
+      "expected_intent": "as_of",
+      "required_hit_ids": ["owner-home-beijing-2024"],
+      "forbidden_hit_ids": ["owner-home-shanghai", "owner-planned-beijing"],
+      "expected_count_status": "not_requested",
+      "expected_ambiguous": false
+    },
+    {
+      "name": "travel-list",
+      "scope": "owner",
+      "query": "我去过哪些地方旅行？",
+      "expected_intent": "list",
+      "required_hit_ids": [
+        "owner-trip-beijing-mention-1",
+        "owner-trip-beijing-mention-2",
+        "owner-trip-chengdu"
+      ],
+      "forbidden_hit_ids": ["other-trip-known", "other-trip-unknown"],
+      "expected_count_status": "not_requested",
+      "expected_ambiguous": false
+    },
+    {
+      "name": "travel-count-exact",
+      "scope": "owner",
+      "query": "我一共旅行了几次？",
+      "expected_intent": "count",
+      "required_hit_ids": [
+        "owner-trip-beijing-mention-1",
+        "owner-trip-beijing-mention-2",
+        "owner-trip-chengdu"
+      ],
+      "forbidden_hit_ids": ["other-trip-known", "other-trip-unknown"],
+      "expected_count_status": "exact",
+      "expected_count_value": 2,
+      "expected_ambiguous": false
+    },
+    {
+      "name": "travel-count-indeterminate",
+      "scope": "other",
+      "query": "我一共旅行了几次？",
+      "expected_intent": "count",
+      "required_hit_ids": ["other-trip-known", "other-trip-unknown"],
+      "forbidden_hit_ids": [
+        "owner-trip-beijing-mention-1",
+        "owner-trip-beijing-mention-2",
+        "owner-trip-chengdu"
+      ],
+      "expected_count_status": "indeterminate",
+      "expected_ambiguous": false
+    },
+    {
+      "name": "current-favorite-color",
+      "scope": "owner",
+      "query": "我现在最喜欢什么颜色？",
+      "expected_intent": "current",
+      "required_hit_ids": ["owner-color-green"],
+      "forbidden_hit_ids": ["owner-color-blue-history"],
+      "expected_count_status": "not_requested",
+      "expected_ambiguous": false
+    },
+    {
+      "name": "lexical-beijing-travel",
+      "scope": "owner",
+      "query": "告诉我北京旅行的记忆",
+      "expected_intent": "lookup",
+      "required_hit_ids": [
+        "owner-trip-beijing-mention-1",
+        "owner-trip-beijing-mention-2"
+      ],
+      "forbidden_hit_ids": ["owner-trip-chengdu", "other-trip-known"],
+      "expected_count_status": "not_requested",
+      "expected_ambiguous": false
+    }
+  ]
+}

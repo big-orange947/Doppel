@@ -47,6 +47,12 @@ part of the core package. The host must enforce one in-flight plan per exact sco
 Consolidators select existing memory IDs only; trusted scope, authority, lifecycle
 transitions, optimistic concurrency, and writes remain runner and Store responsibilities.
 
+The v0.8.0 personal-query draft, plan, hit, count, result, planner, and engine types are
+provisional root APIs. They are additive beside the unchanged stable generic
+`Retriever`/`RecallResult` surface. Query planners never select read scopes, while an
+optional `SemanticIndex` may score only already-authorized records; exact-scope,
+subject, temporal, and metadata gates remain engine responsibilities.
+
 ## Compatibility rules
 
 For stable API, a patch release must not require callers or third-party implementations

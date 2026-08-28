@@ -124,6 +124,38 @@ async def test_online_owner_memory_is_evidence_bound_and_user_scoped() -> None:
     assert proposal.idempotency_key.startswith("personal-memory:")
 
 
+async def test_episode_event_key_is_evidence_bound_and_persisted() -> None:
+    message = _message("trip-beijing", "我去年五月去北京旅行了。")
+    extractor = PersonalMemoryExtractor(
+        StubAnalyzer(
+            [
+                {
+                    "content": "用户在去年五月去北京旅行。",
+                    "memory_type": "episode",
+                    "event_key": "trip:2025-05:beijing",
+                    "temporal_status": "historical",
+                    "evidence_ids": [message.identity_key],
+                }
+            ]
+        )
+    )
+
+    (proposal,) = await extractor.process(SCOPE, message)
+
+    assert proposal.metadata["event_key"] == "trip:2025-05:beijing"
+    assert proposal.idempotency_key.startswith("personal-memory:")
+
+
+def test_event_key_is_rejected_for_non_episode_memories() -> None:
+    with pytest.raises(ValueError, match="only valid for episode"):
+        PersonalMemoryDraft(
+            content="用户住在上海。",
+            memory_type="state",
+            event_key="not-an-event",
+            evidence_ids=["message-1"],
+        )
+
+
 @pytest.mark.asyncio
 async def test_user_scope_write_still_requires_explicit_pipeline_authorization() -> (
     None

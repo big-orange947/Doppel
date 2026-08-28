@@ -133,6 +133,23 @@ from doppel_memory.processing import (
     ProposalPolicy,
     ProposalWriter,
 )
+from doppel_memory.query import (
+    DeterministicPersonalMemoryQueryPlanner,
+    PersonalMemoryCountResult,
+    PersonalMemoryCountStatus,
+    PersonalMemoryQueryConfig,
+    PersonalMemoryQueryDraft,
+    PersonalMemoryQueryEngine,
+    PersonalMemoryQueryHit,
+    PersonalMemoryQueryIntent,
+    PersonalMemoryQueryPlan,
+    PersonalMemoryQueryPlanner,
+    PersonalMemoryQueryPlanningError,
+    PersonalMemoryQueryReadLimitError,
+    PersonalMemoryQueryRequest,
+    PersonalMemoryQueryResult,
+    ReferencePersonalMemoryQueryPlanner,
+)
 from doppel_memory.retriever import (
     IdentityReranker,
     Reranker,
@@ -171,7 +188,7 @@ from doppel_memory.vector import (
     VectorIndexUnavailableError,
 )
 
-__version__ = "0.7.3"
+__version__ = "0.8.0"
 
 __all__ = [
     "Actor",
@@ -210,6 +227,7 @@ __all__ = [
     "DefaultPromptRenderer",
     "DeterministicConsolidatorConfig",
     "DeterministicMemoryConsolidator",
+    "DeterministicPersonalMemoryQueryPlanner",
     "DeterministicStyleAnalyzer",
     "DoppelClient",
     "EmbeddingProvider",
@@ -260,12 +278,25 @@ __all__ = [
     "PersonalMemoryAnalysis",
     "PersonalMemoryAnalysisRequest",
     "PersonalMemoryAnalyzer",
+    "PersonalMemoryCountResult",
+    "PersonalMemoryCountStatus",
     "PersonalMemoryDraft",
     "PersonalMemoryEvidenceError",
     "PersonalMemoryExtractor",
     "PersonalMemoryExtractorConfig",
     "PersonalMemoryMiner",
     "PersonalMemoryMinerConfig",
+    "PersonalMemoryQueryConfig",
+    "PersonalMemoryQueryDraft",
+    "PersonalMemoryQueryEngine",
+    "PersonalMemoryQueryHit",
+    "PersonalMemoryQueryIntent",
+    "PersonalMemoryQueryPlan",
+    "PersonalMemoryQueryPlanner",
+    "PersonalMemoryQueryPlanningError",
+    "PersonalMemoryQueryReadLimitError",
+    "PersonalMemoryQueryRequest",
+    "PersonalMemoryQueryResult",
     "PersonalMemoryType",
     "PostgreSQLStore",
     "PostgreSQLVectorIndex",
@@ -280,6 +311,7 @@ __all__ = [
     "RecallResult",
     "ReferenceMemoryConsolidator",
     "ReferencePersonalMemoryAnalyzer",
+    "ReferencePersonalMemoryQueryPlanner",
     "Reranker",
     "RetrievalStrategy",
     "Retriever",

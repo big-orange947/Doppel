@@ -22,6 +22,10 @@ from benchmarks.memory_quality import (
     run_memory_extraction_quality_benchmark,
     run_memory_quality_benchmark,
 )
+from benchmarks.personal_query_quality import (
+    load_personal_query_quality_dataset,
+    run_personal_query_quality_benchmark,
+)
 from benchmarks.store_benchmark import benchmark_store, run_store_benchmark
 from benchmarks.style_quality import (
     load_style_quality_dataset,
@@ -86,6 +90,50 @@ async def test_consolidation_quality_guards_expected_and_false_actions() -> None
 def test_consolidation_quality_result_schema_tracks_runner_envelope() -> None:
     with open(
         "benchmarks/consolidation-result.schema.json", encoding="utf-8"
+    ) as source:
+        schema = json.load(source)
+
+    assert schema["properties"]["result_schema_version"]["const"] == 1
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["cases"]["items"]["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "result_schema_version",
+        "doppel_version",
+        "generated_at",
+        "dataset",
+        "environment",
+        "metrics",
+        "cases",
+        "correctness",
+    }
+
+
+async def test_personal_query_quality_guards_temporal_hits_and_counts() -> None:
+    dataset = load_personal_query_quality_dataset()
+    result = await run_personal_query_quality_benchmark(dataset)
+
+    assert dataset.name == "doppel.personal-query-quality.zh.v1"
+    assert len(dataset.memories) == 10
+    assert len(dataset.queries) == 9
+    assert result["metrics"] == {
+        "missing_hit_count": 0,
+        "forbidden_hit_count": 0,
+        "intent_error_count": 0,
+        "count_error_count": 0,
+        "ambiguity_error_count": 0,
+        "scope_leakage_count": 0,
+        "latency_ms": result["metrics"]["latency_ms"],
+    }
+    assert result["correctness"] == {
+        "passed": True,
+        "scope_leakage_count": 0,
+        "errors": [],
+    }
+
+
+def test_personal_query_quality_result_schema_tracks_runner_envelope() -> None:
+    with open(
+        "benchmarks/personal-query-result.schema.json", encoding="utf-8"
     ) as source:
         schema = json.load(source)
 

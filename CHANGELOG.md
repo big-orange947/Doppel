@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.8.0
+
+Doppel now retrieves personal memories by question intent and time semantics instead
+of treating every query as an unstructured similarity search. The new layer returns an
+auditable evidence set and conservative aggregation; final answer generation remains an
+Agent-runtime responsibility.
+
+### Added
+
+- Scope-free PersonalMemoryQueryPlanner drafts for lookup, current, history, planned,
+  list, count, and explicit as_of questions, with a transparent Chinese deterministic
+  baseline and a schema-constrained reference planner over StructuredOutputModel.
+- PersonalMemoryQueryEngine binds planner output to explicit exact scopes and a trusted
+  subject, performs bounded complete active-memory scans, applies subject/type/topic/
+  temporal/validity gates, and returns integrity-bound plans plus complete evidence.
+- Current, planned, historical, and point-in-time retrieval semantics. Planned records
+  do not become actual facts merely because an as_of date falls in their proposed
+  interval, and unresolved current/as-of conflicts are returned as ambiguous evidence.
+- Conservative episode counts based on distinct non-empty event_key values. Counts are
+  indeterminate if any matching episode lacks a stable identity.
+- Optional semantic scoring over the existing SemanticIndex protocol. Only known
+  memory IDs already loaded from authorized exact scopes can receive semantic scores;
+  unknown and cross-scope candidates are discarded.
+- DoppelClient.query_personal_memory() as the convenience entry point. Analyzer drafts
+  gain optional episode-only event_key metadata for downstream deduplication.
+- A versioned Chinese query-quality dataset, result schema, CLI runner, tests, and CI
+  gate covering temporal residence, travel enumeration and count safety, Chinese
+  lexical paraphrases, ambiguity, and cross-user isolation.
+
+### Compatibility and scope
+
+- Query APIs and PersonalMemoryDraft.event_key are additive provisional APIs. The
+  stable generic Store/Retriever/RecallResult contracts are unchanged.
+- The deterministic planner intentionally covers a small, transparent Chinese intent
+  set. Applications may inject the reference model planner or their own planner;
+  semantic quality still depends on the host's index and embedding provider.
+- An exact count is exact over the complete authorized snapshot's asserted stable event
+  keys. It does not independently prove that an analyzer assigned real-world event
+  identity correctly. Generated answers, temporary-state expiry, and plan fulfillment
+  remain outside v0.8.0.
+
 ## 0.7.3
 
 Doppel can now turn evidence-bound personal-memory candidates into an auditable active

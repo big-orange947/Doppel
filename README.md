@@ -541,6 +541,55 @@ plan 并重放即可继续，不会复制 canonical。需要将计划持久化�
 v0.7.3 不负责临时状态到期、推断计划已经发生、旅行事件去重/计数或凭空综合新事实；这些边界分别
 留给时间治理、事件身份与查询聚合阶段。
 
+### 个人记忆查询（v0.8.0）
+
+通用 recall() 仍适合后端无关的候选召回；需要回答“现在、以前、计划、某个时间点、列举、计数”
+这类个人问题时，使用结构化查询层：
+
+~~~python
+result = await memory.query_personal_memory(
+    "我现在住在哪里？",
+    [scope.user_scope(), scope],
+)
+
+for hit in result.hits:
+    print(hit.record.content, hit.reasons)
+~~~
+
+默认 DeterministicPersonalMemoryQueryPlanner 提供透明的中文常见意图规则；需要更开放的自然语言时，
+注入 ReferencePersonalMemoryQueryPlanner(MyStructuredModel())。planner 只能输出 scope-free draft，
+不能选择读哪些用户、memory ID、Store 操作或最终答案。engine 会把它重新绑定到 host 明确传入的
+exact scopes 和可信 subject，同一次查询禁止跨 user_id。
+
+执行顺序是结构化门禁优先：subject → personal memory type → topic → temporal status →
+valid_from/valid_to，之后才进行中文字符词法和可选语义评分。语义索引返回的未知 ID 或越权 scope
+不会进入结果：
+
+~~~python
+result = await memory.query_personal_memory(
+    "告诉我北京旅行的记忆",
+    [scope.user_scope()],
+    semantic_index=my_semantic_index,
+)
+~~~
+
+返回值不是一段不可审计的自然语言，而是 PersonalMemoryQueryPlan、带完整 MemoryRecord provenance
+的 hits、透明分数/原因、冲突标志、warning 和可选 count。上层 Agent 根据这些材料组织回答。
+
+旅行计数使用 episode 的稳定 event_key，而不是直接数记忆条数。同一次北京旅行被提到两次、两条
+记录使用同一 key 时只计一次；只要有一条匹配 episode 缺少 key，结果就是 indeterminate：
+
+~~~python
+if result.count.status == "exact":
+    print(result.count.value)
+else:
+    print(result.count.reason)
+~~~
+
+“当前住上海”只匹配 current，“计划去北京住两个月”只匹配 planned；明确时间点查询使用有效区间，
+但不会把 planned 自动当作已经发生。若同一 topic 仍有两条冲突的 current 记录，Doppel 返回两条证据
+并标记 ambiguous=True，不会只按更新时间偷偷选一条。
+
 ### 周期聚合任务
 
 需要“累计多次戳一戳后形成关系记忆”或 StyleMiner 这类历史统计时，使用独立的
@@ -1016,6 +1065,13 @@ v0.7.2 另提供可注入真实 `PersonalMemoryAnalyzer` 的抽取层评测，�
 supported candidate precision、subject/scope accuracy、噪声写入和跨用户泄漏；仅仅引用正确证据不会
 被当作内容语义已经正确。
 
+v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
+计数、歧义和 scope leakage 做硬门禁：
+
+~~~bash
+uv run python -m benchmarks.personal_query_quality --output benchmarks/results/personal-query-quality.json
+~~~
+
 v0.7.3 的独立 consolidation fixture 运行真实 Store/runner 路径，对重复、显式纠正和四类误合并陷阱
 进行硬门禁；任何 false action、missing action、canonical 选择错误或 scope leakage 都使进程失败：
 
@@ -1075,6 +1131,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.7.1：中文 IM 记忆质量数据集、四类基线、分层指标与版本化报告
 - [x] v0.7.2：个人记忆参考抽取、模型无关结构化输出、证据/角色/作用域门禁与独立抽取评测
 - [x] v0.7.3：可重放 Memory Consolidator、保守重复/纠错决策与独立质量门禁
+- [x] v0.8.0：中文个人记忆 Query Planner、时间感知检索、安全事件计数与词法/语义融合
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

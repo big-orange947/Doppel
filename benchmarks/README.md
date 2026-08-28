@@ -96,6 +96,29 @@ boundaries; it does not establish semantic quality for an injected model consoli
 Live-model evaluation still needs held-out paraphrases, ambiguous conflicts, human
 review, and provider/prompt/version metadata.
 
+## Chinese personal-memory query quality
+
+The v0.8.0 query benchmark runs the real deterministic planner and
+PersonalMemoryQueryEngine over one versioned multi-user fixture:
+
+~~~bash
+uv run python -m benchmarks.personal_query_quality \
+  --dataset benchmarks/datasets/personal-query-quality-zh-v1.json \
+  --output benchmarks/results/personal-query-quality.json
+~~~
+
+The nine questions cover current, planned, historical, and explicit point-in-time
+residence; travel enumeration; exact distinct-event counting with repeated mentions;
+count abstention when an event identity is missing; current preference; and a Chinese
+lexical paraphrase. It reports missing and forbidden hits, intent/count/ambiguity
+errors, scope leakage, and latency. Every correctness count must be zero.
+
+personal-query-result.schema.json versions the result envelope. The committed fixture
+evaluates the deterministic lexical path, not an embedding model. Production semantic
+indexes must be evaluated separately on held-out domain queries; regardless of provider
+quality, their candidates remain subject to the authoritative Store, scope, subject,
+and temporal gates.
+
 ## Store performance and correctness
 
 The Store benchmark deliberately measures only behavior Doppel owns:
