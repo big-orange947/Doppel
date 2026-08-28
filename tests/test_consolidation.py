@@ -45,6 +45,7 @@ def _record(
     temporal_status: str = "current",
     scope: MemoryScope = SCOPE,
     state: MemoryState = MemoryState.CANDIDATE,
+    revision_kind: str = "assertion",
 ) -> MemoryRecord:
     return MemoryRecord(
         memory_id=memory_id,
@@ -66,6 +67,7 @@ def _record(
             "subject": Actor.OWNER,
             "subject_id": scope.user_id,
             "temporal_status": temporal_status,
+            "revision_kind": revision_kind,
             "valid_from": datetime(2026, 1, day, tzinfo=UTC).isoformat(),
             "evidence": [
                 {
@@ -148,6 +150,7 @@ async def test_explicit_topic_slot_correction_keeps_newest_current_claim() -> No
         "用户现在最喜欢绿色。",
         day=5,
         topic_key="preference.favorite-color",
+        revision_kind="correction",
     )
     await _put(store, old, new)
 
@@ -166,6 +169,64 @@ async def test_explicit_topic_slot_correction_keeps_newest_current_claim() -> No
     stored_new = await store.get(SCOPE, "color-green")
     assert stored_old is not None and stored_old.state is MemoryState.SUPERSEDED
     assert stored_new is not None and stored_new.state is MemoryState.SUPERSEDED
+
+
+async def test_unmarked_divergent_claims_create_replay_safe_open_conflict() -> None:
+    store = InMemoryStore()
+    first = _record(
+        "home-shanghai",
+        "用户现在住在上海。",
+        day=1,
+        topic_key="residence.primary",
+        memory_type="state",
+    )
+    second = _record(
+        "home-hangzhou",
+        "用户现在住在杭州。",
+        day=2,
+        topic_key="residence.primary",
+        memory_type="state",
+    )
+    await _put(store, first, second)
+    runner = ConsolidationRunner(store)
+
+    result = await runner.run_once(
+        DeterministicMemoryConsolidator(), SCOPE, run_id="open-conflict"
+    )
+
+    assert not result.errors
+    assert result.committable_checkpoint is not None
+    assert len(result.actions) == 1
+    action = result.actions[0]
+    assert action.operation == "conflict"
+    assert action.complete is True
+    assert action.transitions == []
+    marker = action.canonical_write.record
+    assert marker is not None
+    assert marker.kind == "memory_conflict"
+    assert marker.authority is FactAuthority.DERIVED_SUMMARY
+    assert marker.tags == ["memory-conflict", "open"]
+    assert marker.metadata["conflict"]["status"] == "open"
+    assert marker.metadata["consolidation"]["canonical_source_memory_id"] == ""
+    assert {
+        item["memory_id"]
+        for item in marker.metadata["conflict"]["source_memories"]
+    } == {first.memory_id, second.memory_id}
+    assert (await store.get(SCOPE, first.memory_id)).state is MemoryState.CANDIDATE
+    assert (await store.get(SCOPE, second.memory_id)).state is MemoryState.CANDIDATE
+
+    replayed = await runner.run_once(
+        DeterministicMemoryConsolidator(), SCOPE, run_id="replay-conflict"
+    )
+
+    assert not replayed.errors
+    assert replayed.actions[0].canonical_write.status is WriteStatus.DUPLICATE
+    markers = await store.scan(
+        SCOPE,
+        filters=MemoryFilter(tags={"memory-conflict"}),
+        limit=20,
+    )
+    assert [record.memory_id for record in markers.records] == [marker.memory_id]
 
 
 async def test_correction_does_not_supersede_historical_claims_in_same_topic() -> None:
@@ -188,6 +249,7 @@ async def test_correction_does_not_supersede_historical_claims_in_same_topic() -
         "用户现在住在杭州。",
         day=5,
         topic_key="residence.primary",
+        revision_kind="correction",
     )
     await _put(store, historical, old_current, new_current)
 
@@ -237,6 +299,71 @@ async def test_current_and_planned_claims_coexist_in_one_topic_slot() -> None:
 
     assert result.plan.actions == []
     assert result.committable_checkpoint is not None
+
+
+async def test_equal_text_current_and_historical_claims_do_not_merge() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "same-city-historical",
+            "用户住在上海。",
+            day=1,
+            topic_key="residence.primary",
+            memory_type="state",
+            temporal_status="historical",
+        ),
+        _record(
+            "same-city-current",
+            "用户住在上海。",
+            day=2,
+            topic_key="residence.primary",
+            memory_type="state",
+            temporal_status="current",
+        ),
+    )
+
+    result = await ConsolidationRunner(store).run_once(
+        DeterministicMemoryConsolidator(), SCOPE
+    )
+
+    assert not result.errors
+    assert result.plan.actions == []
+
+
+async def test_tied_latest_revision_cannot_correct_an_older_claim() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "old-color",
+            "用户最喜欢蓝色。",
+            day=1,
+            topic_key="preference.favorite-color",
+        ),
+        _record(
+            "tied-color-green",
+            "用户最喜欢绿色。",
+            day=5,
+            topic_key="preference.favorite-color",
+            revision_kind="correction",
+        ),
+        _record(
+            "tied-color-red",
+            "用户最喜欢红色。",
+            day=5,
+            topic_key="preference.favorite-color",
+            revision_kind="correction",
+        ),
+    )
+
+    result = await ConsolidationRunner(store).run_once(
+        DeterministicMemoryConsolidator(), SCOPE
+    )
+
+    assert not result.errors
+    assert result.actions[0].operation == "conflict"
+    assert result.actions[0].transitions == []
 
 
 async def test_different_claims_without_topic_key_are_not_silently_corrected() -> None:
@@ -556,7 +683,11 @@ class _StubStructuredModel:
 async def test_reference_consolidator_only_selects_existing_canonical_content() -> None:
     first = _record("old-city", "用户住在北京。", day=1, topic_key="residence.primary")
     second = _record(
-        "new-city", "用户现在住在上海。", day=2, topic_key="residence.primary"
+        "new-city",
+        "用户现在住在上海。",
+        day=2,
+        topic_key="residence.primary",
+        revision_kind="correction",
     )
     model = _StubStructuredModel(
         {
@@ -584,6 +715,45 @@ async def test_reference_consolidator_only_selects_existing_canonical_content() 
     assert request.output_schema["title"] == "ConsolidationAnalysis"
 
 
+async def test_runner_rejects_model_correction_without_explicit_revision() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "unsafe-old-city",
+            "用户住在北京。",
+            day=1,
+            topic_key="residence.primary",
+            memory_type="state",
+        ),
+        _record(
+            "unsafe-new-city",
+            "用户住在上海。",
+            day=2,
+            topic_key="residence.primary",
+            memory_type="state",
+        ),
+    )
+    model = _StubStructuredModel(
+        {
+            "decisions": [
+                {
+                    "operation": "correct",
+                    "source_memory_ids": ["unsafe-old-city", "unsafe-new-city"],
+                    "canonical_source_memory_id": "unsafe-new-city",
+                    "confidence": 0.99,
+                    "explanation": "unsafe newest wins",
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ConsolidationPlanningError, match="explicit correction"):
+        await ConsolidationRunner(store).plan_once(
+            ReferenceMemoryConsolidator(model), SCOPE
+        )
+
+
 async def test_full_scope_record_bound_fails_instead_of_partial_consolidation() -> None:
     store = InMemoryStore()
     await _put(
@@ -606,6 +776,13 @@ def test_decision_models_reject_generated_content_scope_and_invalid_sources() ->
             source_memory_ids=["one", "two"],
             canonical_source_memory_id="three",
             explanation="invalid",
+        )
+    with pytest.raises(ValueError, match="must not select a canonical"):
+        ConsolidationDecision(
+            operation="conflict",
+            source_memory_ids=["one", "two"],
+            canonical_source_memory_id="two",
+            explanation="conflicts have no winner",
         )
     with pytest.raises(ValueError, match="Extra inputs are not permitted"):
         ConsolidationDecision.model_validate(

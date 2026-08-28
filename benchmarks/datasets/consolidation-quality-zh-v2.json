@@ -1,6 +1,6 @@
 {
-  "dataset_version": 1,
-  "name": "doppel.consolidation-quality.zh.v1",
+  "dataset_version": 2,
+  "name": "doppel.consolidation-quality.zh.v2",
   "language": "zh-CN",
   "scopes": [
     {
@@ -68,6 +68,7 @@
           "at": "2026-01-01T09:00:00+08:00",
           "memory_type": "preference",
           "topic_key": "preference.favorite-color",
+          "revision_kind": "correction",
           "evidence_ids": ["color-message-green"]
         }
       ],
@@ -213,6 +214,110 @@
         }
       ],
       "expected_actions": []
+    },
+    {
+      "name": "unmarked-residence-change-becomes-conflict",
+      "category": "conflict_guard",
+      "description": "A newer incompatible current claim without explicit correction evidence must remain unresolved instead of silently replacing the older home.",
+      "scope": "owner-user",
+      "memories": [
+        {
+          "memory_id": "unmarked-home-shanghai",
+          "scope": "owner-user",
+          "content": "用户现在住在上海。",
+          "at": "2026-03-01T09:00:00+08:00",
+          "memory_type": "state",
+          "topic_key": "residence.primary",
+          "temporal_status": "current",
+          "evidence_ids": ["unmarked-home-shanghai-message"]
+        },
+        {
+          "memory_id": "unmarked-home-hangzhou",
+          "scope": "owner-user",
+          "content": "用户现在住在杭州。",
+          "at": "2026-04-01T09:00:00+08:00",
+          "memory_type": "state",
+          "topic_key": "residence.primary",
+          "temporal_status": "current",
+          "evidence_ids": ["unmarked-home-hangzhou-message"]
+        }
+      ],
+      "expected_actions": [
+        {
+          "operation": "conflict",
+          "source_memory_ids": ["unmarked-home-shanghai", "unmarked-home-hangzhou"],
+          "canonical_source_memory_id": ""
+        }
+      ]
+    },
+    {
+      "name": "explicit-residence-retraction-corrects",
+      "category": "explicit_retraction",
+      "description": "A strictly newer explicit retraction may replace the old current value in the same trusted topic slot.",
+      "scope": "owner-user",
+      "memories": [
+        {
+          "memory_id": "retracted-home-shanghai",
+          "scope": "owner-user",
+          "content": "用户目前住在上海。",
+          "at": "2026-05-01T09:00:00+08:00",
+          "memory_type": "state",
+          "topic_key": "residence.primary",
+          "temporal_status": "current",
+          "evidence_ids": ["retracted-home-shanghai-message"]
+        },
+        {
+          "memory_id": "no-longer-shanghai",
+          "scope": "owner-user",
+          "content": "用户明确表示已经不住在上海。",
+          "at": "2026-06-01T09:00:00+08:00",
+          "memory_type": "state",
+          "topic_key": "residence.primary",
+          "temporal_status": "current",
+          "revision_kind": "retraction",
+          "evidence_ids": ["no-longer-shanghai-message"]
+        }
+      ],
+      "expected_actions": [
+        {
+          "operation": "correct",
+          "source_memory_ids": ["retracted-home-shanghai", "no-longer-shanghai"],
+          "canonical_source_memory_id": "no-longer-shanghai"
+        }
+      ]
+    },
+    {
+      "name": "equal-time-incompatible-claims-conflict",
+      "category": "conflict_tie",
+      "description": "Incompatible claims with equal effective times cannot select a newest canonical and must remain an open conflict.",
+      "scope": "other-user",
+      "memories": [
+        {
+          "memory_id": "tie-color-blue",
+          "scope": "other-user",
+          "content": "用户最喜欢蓝色。",
+          "at": "2026-07-01T09:00:00+08:00",
+          "memory_type": "preference",
+          "topic_key": "preference.favorite-color",
+          "evidence_ids": ["tie-color-blue-message"]
+        },
+        {
+          "memory_id": "tie-color-green",
+          "scope": "other-user",
+          "content": "用户最喜欢绿色。",
+          "at": "2026-07-01T09:00:00+08:00",
+          "memory_type": "preference",
+          "topic_key": "preference.favorite-color",
+          "evidence_ids": ["tie-color-green-message"]
+        }
+      ],
+      "expected_actions": [
+        {
+          "operation": "conflict",
+          "source_memory_ids": ["tie-color-blue", "tie-color-green"],
+          "canonical_source_memory_id": ""
+        }
+      ]
     }
   ]
 }

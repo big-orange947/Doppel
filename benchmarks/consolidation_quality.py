@@ -28,10 +28,10 @@ from doppel_memory import (
     WriteStatus,
     __version__,
 )
-from doppel_memory.models import utc_now
+from doppel_memory.models import ACTIVE_MEMORY_STATES, utc_now
 
 DEFAULT_DATASET = (
-    Path(__file__).parent / "datasets" / "consolidation-quality-zh-v1.json"
+    Path(__file__).parent / "datasets" / "consolidation-quality-zh-v2.json"
 )
 
 
@@ -56,19 +56,24 @@ class ConsolidationQualityMemory(BaseModel):
     memory_type: str
     topic_key: str = ""
     temporal_status: str = "current"
+    revision_kind: Literal["assertion", "correction", "retraction"] = "assertion"
     evidence_ids: list[str] = Field(min_length=1)
 
 
 class ExpectedConsolidationAction(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    operation: Literal["merge", "correct"]
+    operation: Literal["merge", "correct", "conflict"]
     source_memory_ids: list[str] = Field(min_length=2)
-    canonical_source_memory_id: str
+    canonical_source_memory_id: str = ""
 
     @model_validator(mode="after")
     def _canonical_is_a_source(self) -> ExpectedConsolidationAction:
-        if self.canonical_source_memory_id not in self.source_memory_ids:
+        if self.operation == "conflict" and self.canonical_source_memory_id:
+            raise ValueError("expected conflict must not select a canonical source")
+        if self.operation != "conflict" and (
+            self.canonical_source_memory_id not in self.source_memory_ids
+        ):
             raise ValueError("expected canonical source must be in source_memory_ids")
         return self
 
@@ -87,7 +92,7 @@ class ConsolidationQualityCase(BaseModel):
 class ConsolidationQualityDataset(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    dataset_version: Literal[1] = 1
+    dataset_version: Literal[2] = 2
     name: str
     language: str = "zh-CN"
     scopes: list[ConsolidationQualityScope] = Field(min_length=2)
@@ -144,6 +149,7 @@ async def run_consolidation_quality_benchmark(
     total_false_merges = 0
     total_missing_actions = 0
     total_wrong_canonical = 0
+    total_lifecycle_errors = 0
     latencies: list[float] = []
     for case in dataset.cases:
         report = await _run_case(scopes, case)
@@ -153,9 +159,10 @@ async def run_consolidation_quality_benchmark(
         total_false_merges += report["false_action_count"]
         total_missing_actions += report["missing_action_count"]
         total_wrong_canonical += report["wrong_canonical_count"]
+        total_lifecycle_errors += report["source_lifecycle_error_count"]
         latencies.append(report["latency_ms"])
     return {
-        "result_schema_version": 1,
+        "result_schema_version": 2,
         "doppel_version": __version__,
         "generated_at": utc_now().isoformat(),
         "dataset": {
@@ -178,6 +185,7 @@ async def run_consolidation_quality_benchmark(
             "false_action_count": total_false_merges,
             "missing_action_count": total_missing_actions,
             "wrong_canonical_count": total_wrong_canonical,
+            "source_lifecycle_error_count": total_lifecycle_errors,
             "scope_leakage_count": total_leakage,
             "latency_ms": {
                 "total": _rounded(sum(latencies)),
@@ -190,7 +198,8 @@ async def run_consolidation_quality_benchmark(
             and not total_leakage
             and not total_false_merges
             and not total_missing_actions
-            and not total_wrong_canonical,
+            and not total_wrong_canonical
+            and not total_lifecycle_errors,
             "scope_leakage_count": total_leakage,
             "errors": errors,
         },
@@ -227,6 +236,7 @@ async def _run_case(
                     "subject": Actor.OWNER,
                     "subject_id": scope.user_id,
                     "temporal_status": item.temporal_status,
+                    "revision_kind": item.revision_kind,
                     "valid_from": item.at.isoformat(),
                     "evidence": [
                         {
@@ -303,6 +313,61 @@ async def _run_case(
             errors.extend(error.message for error in result.errors)
         if result.committable_checkpoint is None:
             errors.append("clean fixture run did not release a checkpoint")
+        lifecycle_errors: list[str] = []
+        result_actions = {item.decision_id: item for item in result.actions}
+        for expected_item in expected:
+            matching = next(
+                (
+                    item
+                    for item in actual
+                    if item["operation"] == expected_item["operation"]
+                    and item["source_memory_ids"]
+                    == expected_item["source_memory_ids"]
+                ),
+                None,
+            )
+            if matching is None:
+                continue
+            source_records = [
+                await store.get(scope, memory_id)
+                for memory_id in expected_item["source_memory_ids"]
+            ]
+            action_result = result_actions.get(matching["decision_id"])
+            if expected_item["operation"] == "conflict":
+                if any(
+                    source is None or source.state not in ACTIVE_MEMORY_STATES
+                    for source in source_records
+                ):
+                    lifecycle_errors.append(
+                        "conflict action did not preserve all source memories as active"
+                    )
+                marker = (
+                    action_result.canonical_write.record
+                    if action_result is not None
+                    else None
+                )
+                if (
+                    marker is None
+                    or marker.kind != "memory_conflict"
+                    or "memory-conflict" not in marker.tags
+                    or "personal-memory" in marker.tags
+                    or marker.state not in ACTIVE_MEMORY_STATES
+                ):
+                    lifecycle_errors.append(
+                        "conflict action did not create an isolated active marker"
+                    )
+                if action_result is None or action_result.transitions:
+                    lifecycle_errors.append(
+                        "conflict action unexpectedly transitioned source memories"
+                    )
+            elif any(
+                source is None or source.state is not MemoryState.SUPERSEDED
+                for source in source_records
+            ):
+                lifecycle_errors.append(
+                    f"{expected_item['operation']} action did not supersede all sources"
+                )
+        errors.extend(lifecycle_errors)
         all_records = await store.scan(
             scope,
             filters=MemoryFilter(include_inactive=True),
@@ -316,6 +381,11 @@ async def _run_case(
             for record in all_records.records
             if record.state in {MemoryState.CANDIDATE, MemoryState.CONFIRMED}
         ]
+        conflict_markers = [
+            record
+            for record in active
+            if record.kind == "memory_conflict" and "memory-conflict" in record.tags
+        ]
         return {
             "name": case.name,
             "category": case.category,
@@ -325,7 +395,9 @@ async def _run_case(
             "false_action_count": len(false_actions),
             "missing_action_count": len(missing_actions),
             "wrong_canonical_count": wrong_canonical,
+            "source_lifecycle_error_count": len(lifecycle_errors),
             "scope_leakage_count": scope_leakage,
+            "conflict_marker_count": len(conflict_markers),
             "active_memory_count": len(active),
             "active_contents": [record.content for record in active],
             "actions": actual,

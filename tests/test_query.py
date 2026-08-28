@@ -7,6 +7,10 @@ from typing import Any
 
 import pytest
 
+from doppel_memory.consolidation import (
+    ConsolidationRunner,
+    DeterministicMemoryConsolidator,
+)
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.intelligence import StructuredGenerationRequest
 from doppel_memory.models import (
@@ -58,6 +62,7 @@ def _record(
     valid_to: datetime | None = None,
     subject: str = Actor.OWNER,
     subject_id: str = "",
+    revision_kind: str = "assertion",
 ) -> MemoryRecord:
     created_at = datetime(2026, 1, day, tzinfo=UTC)
     return MemoryRecord(
@@ -80,6 +85,7 @@ def _record(
             "subject": subject,
             "subject_id": subject_id or scope.user_id,
             "temporal_status": temporal_status,
+            "revision_kind": revision_kind,
             "valid_from": valid_from.isoformat() if valid_from else None,
             "valid_to": valid_to.isoformat() if valid_to else None,
             "evidence": [{"evidence_id": f"message-{memory_id}"}],
@@ -148,6 +154,116 @@ async def test_current_residence_excludes_planned_and_historical_records() -> No
     assert result.plan.intent == PersonalMemoryQueryIntent.CURRENT
     assert result.plan.topic_keys == ["residence.primary"]
     assert [hit.record.memory_id for hit in result.hits] == ["home-shanghai"]
+    assert result.ambiguous is False
+
+
+async def test_current_query_surfaces_open_conflict_without_recalling_marker_as_fact() -> (
+    None
+):
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "home-shanghai-conflict",
+            "用户现在住在上海。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="residence.primary",
+            day=1,
+        ),
+        _record(
+            "home-hangzhou-conflict",
+            "用户现在住在杭州。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="residence.primary",
+            day=2,
+        ),
+    )
+    consolidation = await ConsolidationRunner(store).run_once(
+        DeterministicMemoryConsolidator(), SCOPE, run_id="query-open-conflict"
+    )
+    assert not consolidation.errors
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "我现在住在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.ambiguous is True
+    assert result.scanned_conflict_count == 1
+    assert {hit.record.memory_id for hit in result.hits} == {
+        "home-shanghai-conflict",
+        "home-hangzhou-conflict",
+    }
+    assert all(hit.record.kind != "memory_conflict" for hit in result.hits)
+    assert len(result.conflicts) == 1
+    conflict = result.conflicts[0]
+    assert conflict.record.kind == "memory_conflict"
+    assert set(conflict.source_memory_ids) == {
+        "home-shanghai-conflict",
+        "home-hangzhou-conflict",
+    }
+    assert set(conflict.matched_source_memory_ids) == set(conflict.source_memory_ids)
+
+
+async def test_later_explicit_correction_makes_old_conflict_marker_query_inert() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "inert-home-shanghai",
+            "用户现在住在上海。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="residence.primary",
+            day=1,
+        ),
+        _record(
+            "inert-home-hangzhou",
+            "用户现在住在杭州。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="residence.primary",
+            day=2,
+        ),
+    )
+    runner = ConsolidationRunner(store)
+    first = await runner.run_once(
+        DeterministicMemoryConsolidator(), SCOPE, run_id="create-old-conflict"
+    )
+    assert first.actions[0].operation == "conflict"
+    await _put(
+        store,
+        _record(
+            "inert-home-suzhou",
+            "用户明确更正：现在住在苏州。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="residence.primary",
+            revision_kind="correction",
+            day=3,
+        ),
+    )
+    corrected = await runner.run_once(
+        DeterministicMemoryConsolidator(), SCOPE, run_id="resolve-old-conflict"
+    )
+    assert corrected.actions[0].operation == "correct"
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "我现在住在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.content for hit in result.hits] == [
+        "用户明确更正：现在住在苏州。"
+    ]
+    assert result.scanned_conflict_count == 1
+    assert result.conflicts == []
     assert result.ambiguous is False
 
 

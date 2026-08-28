@@ -15,7 +15,7 @@
     "correctness"
   ],
   "properties": {
-    "result_schema_version": { "const": 1 },
+    "result_schema_version": { "const": 2 },
     "doppel_version": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "dataset": {
@@ -57,6 +57,7 @@
         "false_action_count",
         "missing_action_count",
         "wrong_canonical_count",
+        "source_lifecycle_error_count",
         "scope_leakage_count",
         "latency_ms"
       ],
@@ -64,6 +65,7 @@
         "false_action_count": { "type": "integer", "minimum": 0 },
         "missing_action_count": { "type": "integer", "minimum": 0 },
         "wrong_canonical_count": { "type": "integer", "minimum": 0 },
+        "source_lifecycle_error_count": { "type": "integer", "minimum": 0 },
         "scope_leakage_count": { "type": "integer", "minimum": 0 },
         "latency_ms": {
           "type": "object",
@@ -91,7 +93,9 @@
           "false_action_count",
           "missing_action_count",
           "wrong_canonical_count",
+          "source_lifecycle_error_count",
           "scope_leakage_count",
+          "conflict_marker_count",
           "active_memory_count",
           "active_contents",
           "actions",
@@ -107,7 +111,9 @@
           "false_action_count": { "type": "integer", "minimum": 0 },
           "missing_action_count": { "type": "integer", "minimum": 0 },
           "wrong_canonical_count": { "type": "integer", "minimum": 0 },
+          "source_lifecycle_error_count": { "type": "integer", "minimum": 0 },
           "scope_leakage_count": { "type": "integer", "minimum": 0 },
+          "conflict_marker_count": { "type": "integer", "minimum": 0 },
           "active_memory_count": { "type": "integer", "minimum": 0 },
           "active_contents": {
             "type": "array",
@@ -125,7 +131,7 @@
                 "decision_id"
               ],
               "properties": {
-                "operation": { "enum": ["merge", "correct"] },
+                "operation": { "enum": ["merge", "correct", "conflict"] },
                 "source_memory_ids": {
                   "type": "array",
                   "minItems": 2,
@@ -133,8 +139,7 @@
                   "items": { "type": "string", "minLength": 1 }
                 },
                 "canonical_source_memory_id": {
-                  "type": "string",
-                  "minLength": 1
+                  "type": "string"
                 },
                 "decision_id": {
                   "type": "string",

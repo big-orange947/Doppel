@@ -61,6 +61,13 @@ active sources are superseded with optimistic concurrency, and no policy can del
 evidence. Hosts retain scheduling, durable plan/checkpoint storage, explicit restore
 authority, and a single-writer lease per exact scope.
 
+The v0.8.2 revision-kind and conflict-hit types, conflict consolidation operation, and
+additive draft/action/query-result fields are provisional root APIs. Ordinary claims
+default to `assertion`; correction remains runner-authorized and requires an explicit
+newer `correction` or `retraction`. Conflict markers are ordinary Store records but are
+isolated from `personal-memory` recall by their dedicated kind/tag. Hosts must treat a
+returned open conflict as ambiguity rather than generated truth.
+
 ## Compatibility rules
 
 For stable API, a patch release must not require callers or third-party implementations

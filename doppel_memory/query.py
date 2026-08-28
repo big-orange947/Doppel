@@ -316,6 +316,37 @@ class PersonalMemoryQueryHit(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class PersonalMemoryConflictHit(BaseModel):
+    """One persisted open conflict relevant to the authorized query."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    record: MemoryRecord
+    source_memory_ids: list[str] = Field(min_length=2)
+    matched_source_memory_ids: list[str] = Field(default_factory=list)
+    topic_key: str
+    reason: str
+
+    @field_validator("source_memory_ids", "matched_source_memory_ids")
+    @classmethod
+    def _normalize_source_ids(cls, value: list[str]) -> list[str]:
+        normalized = [str(item or "").strip() for item in value]
+        if any(not item for item in normalized):
+            raise ValueError("conflict source memory IDs must not be empty")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("conflict source memory IDs must be unique")
+        return normalized
+
+    @model_validator(mode="after")
+    def _matched_sources_are_bound(self) -> PersonalMemoryConflictHit:
+        unknown = set(self.matched_source_memory_ids).difference(
+            self.source_memory_ids
+        )
+        if unknown:
+            raise ValueError("matched conflict sources must be source memory IDs")
+        return self
+
+
 class PersonalMemoryCountResult(BaseModel):
     """Conservative episode aggregation; indeterminate is a first-class result."""
 
@@ -343,8 +374,10 @@ class PersonalMemoryQueryResult(BaseModel):
 
     plan: PersonalMemoryQueryPlan
     hits: list[PersonalMemoryQueryHit] = Field(default_factory=list)
+    conflicts: list[PersonalMemoryConflictHit] = Field(default_factory=list)
     matched_record_count: int = Field(default=0, ge=0)
     scanned_record_count: int = Field(default=0, ge=0)
+    scanned_conflict_count: int = Field(default=0, ge=0)
     count: PersonalMemoryCountResult
     ambiguous: bool = False
     warnings: list[str] = Field(default_factory=list)
@@ -437,8 +470,10 @@ class PersonalMemoryQueryEngine:
         bound = PersonalMemoryQueryPlan.model_validate(plan)
         self._validate_plan(bound)
         records: list[MemoryRecord] = []
+        conflict_records: list[MemoryRecord] = []
         for scope in bound.scopes:
             records.extend(await self._read_scope(scope))
+            conflict_records.extend(await self._read_conflicts(scope))
         semantic_scores, semantic_warnings = await self._semantic_scores(bound, records)
         matched: list[tuple[MemoryRecord, float, float, datetime, list[str]]] = []
         warnings = list(semantic_warnings)
@@ -471,8 +506,14 @@ class PersonalMemoryQueryEngine:
                 (record, lexical_score, semantic_score, effective_at, reasons)
             )
 
+        conflicts = _relevant_conflicts(bound, records, matched, conflict_records)
         ambiguous, ambiguity_warnings = _detect_ambiguity(bound, matched)
+        ambiguous = ambiguous or bool(conflicts)
         warnings.extend(ambiguity_warnings)
+        warnings.extend(
+            f"open conflict in topic {item.topic_key}: {item.reason}"
+            for item in conflicts
+        )
         matched.sort(
             key=lambda item: (
                 _rank_score(self.config, bound, item[0], item[1], item[2], item[3]),
@@ -507,8 +548,10 @@ class PersonalMemoryQueryEngine:
         return PersonalMemoryQueryResult(
             plan=bound,
             hits=hits,
+            conflicts=conflicts,
             matched_record_count=len(matched),
             scanned_record_count=len(records),
+            scanned_conflict_count=len(conflict_records),
             count=count,
             ambiguous=ambiguous,
             warnings=list(dict.fromkeys(warnings)),
@@ -561,6 +604,34 @@ class PersonalMemoryQueryEngine:
             if len(records) >= self.config.max_records_per_scope:
                 raise PersonalMemoryQueryReadLimitError(
                     f"active personal memories in {scope.describe()} exceed "
+                    f"max_records_per_scope {self.config.max_records_per_scope}"
+                )
+
+    async def _read_conflicts(self, scope: MemoryScope) -> list[MemoryRecord]:
+        records: list[MemoryRecord] = []
+        cursor = ""
+        while True:
+            remaining = self.config.max_records_per_scope - len(records)
+            if remaining <= 0:
+                raise PersonalMemoryQueryReadLimitError(
+                    f"active conflict markers in {scope.describe()} exceed "
+                    f"max_records_per_scope {self.config.max_records_per_scope}"
+                )
+            page = await self._store.scan(
+                scope,
+                filters=MemoryFilter(
+                    tags={"memory-conflict"}, states=set(ACTIVE_MEMORY_STATES)
+                ),
+                cursor=cursor,
+                limit=min(self.config.page_size, remaining),
+            )
+            records.extend(page.records)
+            if not page.has_more:
+                return records
+            cursor = page.next_cursor
+            if len(records) >= self.config.max_records_per_scope:
+                raise PersonalMemoryQueryReadLimitError(
+                    f"active conflict markers in {scope.describe()} exceed "
                     f"max_records_per_scope {self.config.max_records_per_scope}"
                 )
 
@@ -756,6 +827,71 @@ def _rank_score(
         + recency_tiebreaker,
         6,
     )
+
+
+def _relevant_conflicts(
+    plan: PersonalMemoryQueryPlan,
+    active_records: Sequence[MemoryRecord],
+    matched: Sequence[tuple[MemoryRecord, float, float, datetime, list[str]]],
+    conflict_records: Sequence[MemoryRecord],
+) -> list[PersonalMemoryConflictHit]:
+    active_ids = {
+        (record.scope.scope_key, record.memory_id) for record in active_records
+    }
+    matched_ids = {
+        (record.scope.scope_key, record.memory_id) for record, *_ in matched
+    }
+    results: list[PersonalMemoryConflictHit] = []
+    for record in conflict_records:
+        conflict = record.metadata.get("conflict", {})
+        if not isinstance(conflict, dict) or conflict.get("status") != "open":
+            continue
+        if str(conflict.get("subject", "")).strip().lower() != plan.subject:
+            continue
+        if (
+            str(conflict.get("subject_id", "")).strip().lower()
+            != plan.subject_id.lower()
+        ):
+            continue
+        memory_type = str(conflict.get("personal_memory_type", "")).strip().lower()
+        topic_key = str(conflict.get("topic_key", "")).strip().lower()
+        temporal_status = str(conflict.get("temporal_status", "")).strip().lower()
+        if plan.memory_types and memory_type not in plan.memory_types:
+            continue
+        if plan.topic_keys and topic_key not in plan.topic_keys:
+            continue
+        if plan.temporal_statuses and temporal_status not in plan.temporal_statuses:
+            continue
+        raw_sources = conflict.get("source_memories", [])
+        if not isinstance(raw_sources, list):
+            continue
+        source_ids = [
+            str(item.get("memory_id", "") or "").strip()
+            for item in raw_sources
+            if isinstance(item, dict) and item.get("memory_id")
+        ]
+        live_sources = [
+            memory_id
+            for memory_id in source_ids
+            if (record.scope.scope_key, memory_id) in active_ids
+        ]
+        matched_sources = [
+            memory_id
+            for memory_id in live_sources
+            if (record.scope.scope_key, memory_id) in matched_ids
+        ]
+        if len(live_sources) < 2 or not matched_sources:
+            continue
+        results.append(
+            PersonalMemoryConflictHit(
+                record=record,
+                source_memory_ids=source_ids,
+                matched_source_memory_ids=matched_sources,
+                topic_key=topic_key,
+                reason=str(conflict.get("reason", "") or "").strip(),
+            )
+        )
+    return results
 
 
 def _detect_ambiguity(

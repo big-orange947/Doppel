@@ -105,6 +105,7 @@ from doppel_memory.intelligence import (
     PersonalMemoryExtractorConfig,
     PersonalMemoryMiner,
     PersonalMemoryMinerConfig,
+    PersonalMemoryRevisionKind,
     PersonalMemoryType,
     ReferencePersonalMemoryAnalyzer,
     StructuredGenerationRequest,
@@ -155,6 +156,7 @@ from doppel_memory.processing import (
 )
 from doppel_memory.query import (
     DeterministicPersonalMemoryQueryPlanner,
+    PersonalMemoryConflictHit,
     PersonalMemoryCountResult,
     PersonalMemoryCountStatus,
     PersonalMemoryQueryConfig,
@@ -208,7 +210,7 @@ from doppel_memory.vector import (
     VectorIndexUnavailableError,
 )
 
-__version__ = "0.8.1"
+__version__ = "0.8.2"
 
 __all__ = [
     "Actor",
@@ -316,6 +318,7 @@ __all__ = [
     "PersonalMemoryAnalysis",
     "PersonalMemoryAnalysisRequest",
     "PersonalMemoryAnalyzer",
+    "PersonalMemoryConflictHit",
     "PersonalMemoryCountResult",
     "PersonalMemoryCountStatus",
     "PersonalMemoryDraft",
@@ -335,6 +338,7 @@ __all__ = [
     "PersonalMemoryQueryReadLimitError",
     "PersonalMemoryQueryRequest",
     "PersonalMemoryQueryResult",
+    "PersonalMemoryRevisionKind",
     "PersonalMemoryType",
     "PostgreSQLStore",
     "PostgreSQLVectorIndex",

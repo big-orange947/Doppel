@@ -505,7 +505,7 @@ result = await memory.run_batch_task(
 抽取层只负责证据绑定，不会擅自把冲突草稿合并、覆盖或标记过期。核心包也不绑定统一模型 SDK，
 托管与本地模型都通过同一 provisional 协议接入。
 
-### 个人记忆整理（v0.7.3）
+### 个人记忆整理与冲突安全（v0.7.3–v0.8.2）
 
 `MemoryConsolidator` 与抽取器分离：它周期性审计一个 exact scope 内已有的 active
 `personal-memory`，只提议“哪些现有记录应合并/纠正，以及哪条现有记录作为 canonical”，不能生成
@@ -533,10 +533,14 @@ plan 并重放即可继续，不会复制 canonical。需要将计划持久化�
 租约）。重放解决的是同一 plan 的部分失败，不把无事务的通用 Store 协议伪装成分布式锁。
 
 确定性纠错必须同时满足相同 subject、类型、非空 `topic_key` 和时间类别，只在 `current` 内或
-`planned` 内选择严格更新的记录。因而“目前住上海”与“计划去北京住两个月”会并存，计划不会被当成
-已经发生；historical/unknown 记录也不会覆盖当前事实。无事件身份的相同旅行文本不会自动合并，
-不同 topic 即使文本相同也保持独立。模型语义版可使用 `ReferenceMemoryConsolidator`，但仍经过同一组
-可信门禁。
+`planned` 内接受严格更新、且带 `revision_kind="correction"` 或 `"retraction"` 的记录。单纯“说得
+更晚”不是旧事实错误的证据；两条同 slot 的不相容普通 assertion 会产生 `CONFLICT`。该动作写入独立的
+`memory_conflict` marker，但不选择赢家，也不 supersede 两条来源。模型语义版即使提出 `CORRECT`，也
+必须通过同一 runner 门禁。
+
+因此“目前住上海”与“计划去北京住两个月”会并存，计划不会被当成已经发生；historical/unknown 记录
+也不会覆盖当前事实。无事件身份的相同旅行文本不会自动合并，不同 topic 即使文本相同也保持独立。
+冲突 marker 没有 `personal-memory` tag，不会伪装成用户事实进入普通召回。
 
 v0.7.3 不负责临时状态到期、推断计划已经发生、旅行事件去重/计数或凭空综合新事实；这些边界分别
 留给时间治理、事件身份与查询聚合阶段。
@@ -574,7 +578,14 @@ result = await memory.query_personal_memory(
 ~~~
 
 返回值不是一段不可审计的自然语言，而是 PersonalMemoryQueryPlan、带完整 MemoryRecord provenance
-的 hits、透明分数/原因、冲突标志、warning 和可选 count。上层 Agent 根据这些材料组织回答。
+的 hits、透明分数/原因、结构化 conflicts、warning 和可选 count。上层 Agent 根据这些材料组织回答：
+
+~~~python
+if result.conflicts:
+    # 不猜赢家；可以向用户澄清，或在回答中同时陈述两份来源
+    for conflict in result.conflicts:
+        print(conflict.topic_key, conflict.source_memory_ids)
+~~~
 
 旅行计数使用 episode 的稳定 event_key，而不是直接数记忆条数。同一次北京旅行被提到两次、两条
 记录使用同一 key 时只计一次；只要有一条匹配 episode 缺少 key，结果就是 indeterminate：
@@ -1191,6 +1202,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.7.3：可重放 Memory Consolidator、保守重复/纠错决策与独立质量门禁
 - [x] v0.8.0：中文个人记忆 Query Planner、时间感知检索、安全事件计数与词法/语义融合
 - [x] v0.8.1：类型感知的强化、显式短期衰减、可审计归档与恢复
+- [x] v0.8.2：显式纠正证据、持久冲突标记、查询冲突 provenance 与生命周期质量门禁
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.8.1：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
+> v0.8.2：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
 
 ## 定位与边界
 
@@ -822,6 +822,38 @@ valid_to 默认保留，时间含义需要由后续新证据纠正，而不是�
 fixture 把 false action 作为硬错误，覆盖已结束临时状态、未来状态、老旧长期事实/偏好、默认关闭的
 ephemeral decay、可信多证据强化和 Agent 输出拒绝。
 
+## v0.8.2 显式纠正与开放冲突
+
+`topic_key` 只说明两条 claim 属于同一可变槽位，不证明较新的 claim 一定正确。抽取草稿新增
+`revision_kind=assertion|correction|retraction`；默认是 assertion。Reference analyzer 只有在绑定的
+消息证据明确表达“改为”“不再”“前述有误”等修订关系时，才应输出 correction/retraction。
+
+ConsolidationRunner 把这一点作为不可绕过的可信门禁，而不只依赖模型提示。`CORRECT` 必须满足：来源
+均 active、subject/subject_id/type/topic 相同、topic 非空、temporal status 同为 current 或同为
+planned、canonical 在有效时间上严格最新，并且 canonical 明确标记 correction/retraction。缺少任一
+条件都会拒绝 plan；模型 consolidator 也不能用高 confidence 绕过。
+
+同一可信 slot 中存在不相容 assertion 时，确定性策略输出 `CONFLICT`：
+
+    active claim A ─┐
+                    ├─ conflict decision ──> derived memory_conflict marker
+    active claim B ─┘                         (no canonical, no source transition)
+
+marker 使用 `FactAuthority.DERIVED_SUMMARY`、`kind=memory_conflict` 和
+`tags=[memory-conflict, open]`，保存全部 source ID/version/state/fingerprint、topic、subject、原因和
+consolidator/config/input identity。它故意不带 `personal-memory` tag，所以普通 recall、consolidation
+和治理不会把 marker 当作用户事实。幂等 key 绑定 decision ID，同一未解决冲突重复运行不会复制 marker。
+
+PersonalMemoryQueryEngine 另外读取 authorized exact scope 的 active conflict marker，并只在至少两条
+引用来源仍然 active、且其中至少一条进入当前查询候选时返回 `PersonalMemoryConflictHit`。结果包含全部
+source IDs 与实际 matched source IDs，同时强制 ambiguous。上层 Agent 应澄清或并列陈述，不得选择
+marker 内容作为事实答案。
+
+后续显式 correction supersede 相关来源后，旧 marker 因不足两条 active source 自动变为 query-inert。
+v0.8.2 尚不写回 `status=closed`，避免为了清理派生标记扩张本轮的事务与治理范围；周期 compaction 可在
+后续版本加入。consolidation fixture v2 同时检查 operation、canonical、来源生命周期、marker 隔离、
+scope leakage 和 replay-safe 写入。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -859,5 +891,7 @@ provenance 保存在 `raw.doppel_import`。
 - v0.7.3：Memory Consolidator、重复证据合并和冲突/纠正决策（已完成）；
 - v0.8.0：中文 lexical/semantic 检索质量与 query planning（已完成）；
 - v0.8.1：类型感知的强化、衰减、归档和恢复（已完成）；
-- v0.8.2：AstrBot shadow mode、长期 dogfooding 和端到端质量报告；
-- v0.9.0：Agent tools、Server/CLI/Inspector 与 PyPI 发布准备。
+- v0.8.2：显式纠正证据、开放冲突标记和 query provenance（已完成）；
+- v0.8.3：OpenAI-compatible reference provider 与配置/错误边界；
+- v0.9.0：MemoEcho shadow mode、长期 dogfooding 和端到端质量报告；
+- v0.10.0：Agent tools、Server/CLI/Inspector 与 PyPI 发布准备。

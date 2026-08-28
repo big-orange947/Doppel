@@ -74,21 +74,24 @@ portable comparison surface.
 
 ## Personal-memory consolidation quality
 
-The v0.7.3 consolidation runner exercises the real `InMemoryStore`,
+The v0.8.2 consolidation runner exercises the real `InMemoryStore`,
 `ConsolidationRunner`, and conservative deterministic consolidator over a versioned
 Chinese fixture:
 
 ```bash
 uv run python -m benchmarks.consolidation_quality \
-  --dataset benchmarks/datasets/consolidation-quality-zh-v1.json \
+  --dataset benchmarks/datasets/consolidation-quality-zh-v2.json \
   --output benchmarks/results/consolidation-quality.json
 ```
 
-The fixture includes exact duplicates and an explicit current-value correction, plus
-negative cases for unrelated preferences, identical episode text without event
-identity, equal text in different topic slots, and a newer historical mention. The
-report counts false actions, missing actions, wrong canonical choices, scope leakage,
-and latency. Every correctness count must be zero or the command exits nonzero.
+The fixture includes exact duplicates, explicit correction/retraction, unmarked
+incompatible assertions, and equal-time conflicts, plus negative cases for unrelated
+preferences, identical episode text without event identity, equal text in different
+topic slots, a newer historical mention, and planned/current coexistence. The report
+counts false actions, missing actions, wrong canonical choices, source lifecycle
+errors, scope leakage, and latency. It also verifies that conflict markers are active
+and isolated while their source claims remain active. Every correctness count must be
+zero or the command exits nonzero.
 
 [`consolidation-result.schema.json`](consolidation-result.schema.json) versions the
 machine-readable report. This deterministic fixture validates policy and execution

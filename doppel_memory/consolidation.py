@@ -23,6 +23,7 @@ from doppel_memory.intelligence import (
 )
 from doppel_memory.models import (
     ACTIVE_MEMORY_STATES,
+    FactAuthority,
     MemoryFilter,
     MemoryRecord,
     MemoryScope,
@@ -43,10 +44,11 @@ from doppel_memory.store import MemoryStore
 
 
 class ConsolidationOperation:
-    """Closed v1 operation set; expiry and deletion are intentionally absent."""
+    """Closed v2 operation set; expiry and deletion are intentionally absent."""
 
     MERGE = "merge"
     CORRECT = "correct"
+    CONFLICT = "conflict"
 
 
 class ConsolidationDecision(BaseModel):
@@ -54,9 +56,9 @@ class ConsolidationDecision(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    operation: Literal["merge", "correct"]
+    operation: Literal["merge", "correct", "conflict"]
     source_memory_ids: list[str] = Field(min_length=2)
-    canonical_source_memory_id: str
+    canonical_source_memory_id: str = ""
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     explanation: str
 
@@ -70,17 +72,27 @@ class ConsolidationDecision(BaseModel):
             raise ValueError("source memory IDs must be unique")
         return normalized
 
-    @field_validator("canonical_source_memory_id", "explanation", mode="before")
+    @field_validator("canonical_source_memory_id", mode="before")
+    @classmethod
+    def _normalize_canonical(cls, value: Any) -> str:
+        return str(value or "").strip()
+
+    @field_validator("explanation", mode="before")
     @classmethod
     def _require_text(cls, value: Any) -> str:
         normalized = str(value or "").strip()
         if not normalized:
-            raise ValueError("canonical source and explanation are required")
+            raise ValueError("explanation is required")
         return normalized
 
     @model_validator(mode="after")
     def _require_canonical_source(self) -> ConsolidationDecision:
-        if self.canonical_source_memory_id not in self.source_memory_ids:
+        if self.operation == ConsolidationOperation.CONFLICT:
+            if self.canonical_source_memory_id:
+                raise ValueError(
+                    "conflict decisions must not select a canonical source"
+                )
+        elif self.canonical_source_memory_id not in self.source_memory_ids:
             raise ValueError("canonical source must be included in source_memory_ids")
         return self
 
@@ -117,7 +129,7 @@ class ConsolidationInput(BaseModel):
 
 @runtime_checkable
 class MemoryConsolidator(Protocol):
-    """Select merge/correction decisions from a read-only memory snapshot."""
+    """Select merge/correction/conflict decisions from a read-only snapshot."""
 
     name: str
     version: str
@@ -126,17 +138,17 @@ class MemoryConsolidator(Protocol):
 
 
 REFERENCE_CONSOLIDATION_INSTRUCTIONS = """\
-You audit already-extracted personal memories. Return only merge or correction
-decisions over the supplied memory IDs. A merge requires claims about the same subject
-and meaning. A correction requires the same non-empty topic_key and explicit evidence
-that the newer canonical source replaces an older mutable value with the same current
-or planned temporal_status. Current and planned claims may coexist and must not replace
-one another. Select one supplied record as canonical_source_memory_id; do not generate
-replacement scope, authority, state, IDs, or deletion actions. Do not generate replacement content.
-Do not merge
-separate episodes merely because they are similar. Do not infer that a plan happened,
-expire temporary state, or resolve ambiguous disagreement. Prefer no decision when
-evidence is insufficient.
+You audit already-extracted personal memories. Return merge, correction, or conflict
+decisions over supplied memory IDs. A merge requires claims about the same subject and
+meaning. A correction requires the same non-empty topic_key, the same current or
+planned temporal_status, and an explicit revision_kind=correction or retraction on the
+strictly newer canonical source. When incompatible claims share that slot but no such
+explicit revision exists, return conflict with an empty canonical_source_memory_id.
+Conflict sources remain active. Current and planned claims may coexist and must not
+replace one another. Do not generate replacement scope, authority, state, IDs,
+or deletion actions. Do not generate replacement content. Do not merge separate episodes merely
+because they are similar. Do not infer that a plan happened or expire temporary state.
+Prefer no decision when evidence is insufficient.
 """
 
 
@@ -144,7 +156,7 @@ class ReferenceMemoryConsolidator:
     """Schema-constrained semantic consolidator using a host-owned model provider."""
 
     name = "doppel.reference-memory-consolidator"
-    version = "1"
+    version = "2"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -172,6 +184,9 @@ class ReferenceMemoryConsolidator:
                                 "personal_memory_type", ""
                             ),
                             "topic_key": record.metadata.get("topic_key", ""),
+                            "revision_kind": record.metadata.get(
+                                "revision_kind", "assertion"
+                            ),
                             "subject": record.metadata.get("subject", ""),
                             "subject_id": record.metadata.get("subject_id", ""),
                             "temporal_status": record.metadata.get(
@@ -208,6 +223,7 @@ class DeterministicConsolidatorConfig(BaseModel):
         }
     )
     enable_latest_correction: bool = True
+    emit_conflicts: bool = True
 
     @field_validator("mutable_memory_types", mode="before")
     @classmethod
@@ -220,14 +236,16 @@ class DeterministicConsolidatorConfig(BaseModel):
 
     @property
     def fingerprint(self) -> str:
-        return _fingerprint(self.model_dump(mode="json"))
+        payload = self.model_dump(mode="json")
+        payload["mutable_memory_types"] = sorted(self.mutable_memory_types)
+        return _fingerprint(payload)
 
 
 class DeterministicMemoryConsolidator:
-    """Merge exact claims and apply newest-wins only within an explicit topic slot."""
+    """Merge exact claims and require explicit revision evidence for correction."""
 
     name = "doppel.deterministic-memory-consolidator"
-    version = "1"
+    version = "2"
 
     def __init__(self, config: DeterministicConsolidatorConfig | None = None) -> None:
         self.config = config or DeterministicConsolidatorConfig()
@@ -257,7 +275,16 @@ class DeterministicMemoryConsolidator:
         for group in topic_groups.values():
             if len(group) < 2:
                 continue
-            content_groups = _content_groups(group)
+            content_groups: dict[tuple[str, str], list[MemoryRecord]] = defaultdict(
+                list
+            )
+            for record in group:
+                content_groups[
+                    (
+                        _normalize_content(record.content),
+                        _metadata_text(record, "temporal_status"),
+                    )
+                ].append(record)
             memory_type = _metadata_text(group[0], "personal_memory_type")
             temporal_groups: dict[str, list[MemoryRecord]] = defaultdict(list)
             for record in group:
@@ -267,30 +294,46 @@ class DeterministicMemoryConsolidator:
                     MemoryTemporalStatus.PLANNED,
                 }:
                     temporal_groups[temporal_status].append(record)
-            if (
-                self.config.enable_latest_correction
-                and memory_type in self.config.mutable_memory_types
-            ):
+            if memory_type in self.config.mutable_memory_types:
                 for temporal_status, mutable_group in temporal_groups.items():
                     if len(_content_groups(mutable_group)) <= 1:
                         continue
                     canonical = _strictly_latest_record(mutable_group)
-                    if canonical is None:
-                        continue
                     source_ids = [record.memory_id for record in mutable_group]
-                    decisions.append(
-                        ConsolidationDecision(
-                            operation=ConsolidationOperation.CORRECT,
-                            source_memory_ids=source_ids,
-                            canonical_source_memory_id=canonical.memory_id,
-                            explanation=(
-                                f"newest {temporal_status} claim replaces older values "
-                                "in the explicit topic slot "
-                                f"{_metadata_text(canonical, 'topic_key')}"
-                            ),
+                    explicit_revision = canonical is not None and _metadata_text(
+                        canonical, "revision_kind"
+                    ) in {"correction", "retraction"}
+                    if (
+                        self.config.enable_latest_correction
+                        and canonical is not None
+                        and explicit_revision
+                    ):
+                        decisions.append(
+                            ConsolidationDecision(
+                                operation=ConsolidationOperation.CORRECT,
+                                source_memory_ids=source_ids,
+                                canonical_source_memory_id=canonical.memory_id,
+                                explanation=(
+                                    f"explicit {temporal_status} revision replaces "
+                                    "older values in topic "
+                                    f"{_metadata_text(canonical, 'topic_key')}"
+                                ),
+                            )
                         )
-                    )
-                    used.update(source_ids)
+                        used.update(source_ids)
+                    elif self.config.emit_conflicts:
+                        decisions.append(
+                            ConsolidationDecision(
+                                operation=ConsolidationOperation.CONFLICT,
+                                source_memory_ids=source_ids,
+                                explanation=(
+                                    f"incompatible {temporal_status} claims in topic "
+                                    f"{_metadata_text(mutable_group[0], 'topic_key')} "
+                                    "lack explicit correction evidence"
+                                ),
+                            )
+                        )
+                        used.update(source_ids)
             for exact_group in content_groups.values():
                 available = [
                     record for record in exact_group if record.memory_id not in used
@@ -308,9 +351,9 @@ class DeterministicMemoryConsolidator:
                     )
                     used.update(source_ids)
 
-        unkeyed: dict[tuple[str, str, str, str, str], list[MemoryRecord]] = defaultdict(
-            list
-        )
+        unkeyed: dict[
+            tuple[str, str, str, str, str, str], list[MemoryRecord]
+        ] = defaultdict(list)
         for record in records:
             if record.memory_id in used:
                 continue
@@ -324,6 +367,7 @@ class DeterministicMemoryConsolidator:
                     _metadata_text(record, "subject_id"),
                     memory_type,
                     topic_key,
+                    _metadata_text(record, "temporal_status"),
                     _normalize_content(record.content),
                 )
             ].append(record)
@@ -399,11 +443,21 @@ class ConsolidationAction(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     decision_id: str
-    operation: Literal["merge", "correct"]
+    operation: Literal["merge", "correct", "conflict"]
     explanation: str
     confidence: float = Field(ge=0.0, le=1.0)
     sources: list[ConsolidationSourceSnapshot] = Field(min_length=2)
     proposal: MemoryProposal
+    transition_sources: bool = True
+
+    @model_validator(mode="after")
+    def _validate_transition_policy(self) -> ConsolidationAction:
+        expected = self.operation != ConsolidationOperation.CONFLICT
+        if self.transition_sources is not expected:
+            raise ValueError(
+                f"{self.operation} actions require transition_sources={expected}"
+            )
+        return self
 
 
 class ConsolidationPlan(BaseModel):
@@ -443,7 +497,7 @@ class ConsolidationActionResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     decision_id: str
-    operation: Literal["merge", "correct"]
+    operation: Literal["merge", "correct", "conflict"]
     canonical_write: WriteResult
     transitions: list[ConsolidationTransitionResult] = Field(default_factory=list)
     complete: bool = False
@@ -656,7 +710,11 @@ class ConsolidationRunner:
                 )
             sources = [known[memory_id] for memory_id in decision.source_memory_ids]
             self._validate_source_compatibility(decision, sources)
-            canonical = known[decision.canonical_source_memory_id]
+            canonical = (
+                known[decision.canonical_source_memory_id]
+                if decision.canonical_source_memory_id
+                else None
+            )
             decision_payload = {
                 "operation": decision.operation,
                 "scope_key": scope.scope_key,
@@ -664,20 +722,32 @@ class ConsolidationRunner:
                 "sources": sorted(
                     (record.memory_id, record.version) for record in sources
                 ),
-                "canonical": canonical.memory_id,
-                "content": canonical.content,
+                "canonical": canonical.memory_id if canonical is not None else "",
+                "content": canonical.content if canonical is not None else "",
             }
             decision_id = "cds_" + _fingerprint(decision_payload)
-            proposal = _canonical_proposal(
-                scope,
-                canonical,
-                sources,
-                decision,
-                decision_id=decision_id,
-                consolidator=consolidator,
-                config_fingerprint=self.config.fingerprint,
-                input_fingerprint=input_fingerprint,
-            )
+            if decision.operation == ConsolidationOperation.CONFLICT:
+                proposal = _conflict_proposal(
+                    scope,
+                    sources,
+                    decision,
+                    decision_id=decision_id,
+                    consolidator=consolidator,
+                    config_fingerprint=self.config.fingerprint,
+                    input_fingerprint=input_fingerprint,
+                )
+            else:
+                assert canonical is not None
+                proposal = _canonical_proposal(
+                    scope,
+                    canonical,
+                    sources,
+                    decision,
+                    decision_id=decision_id,
+                    consolidator=consolidator,
+                    config_fingerprint=self.config.fingerprint,
+                    input_fingerprint=input_fingerprint,
+                )
             actions.append(
                 ConsolidationAction(
                     decision_id=decision_id,
@@ -694,14 +764,16 @@ class ConsolidationRunner:
                         for record in sources
                     ],
                     proposal=proposal,
+                    transition_sources=(
+                        decision.operation != ConsolidationOperation.CONFLICT
+                    ),
                 )
             )
             claimed_sources.update(decision.source_memory_ids)
         return actions
 
-    @staticmethod
     def _validate_source_compatibility(
-        decision: ConsolidationDecision, sources: Sequence[MemoryRecord]
+        self, decision: ConsolidationDecision, sources: Sequence[MemoryRecord]
     ) -> None:
         if any(record.state not in ACTIVE_MEMORY_STATES for record in sources):
             raise ConsolidationPlanningError(
@@ -722,13 +794,17 @@ class ConsolidationRunner:
             raise ConsolidationPlanningError(
                 "source memories disagree on non-empty topic_key"
             )
-        if decision.operation == ConsolidationOperation.CORRECT and (
-            len(nonempty_topics) != 1 or "" in topic_keys
-        ):
+        if decision.operation in {
+            ConsolidationOperation.CORRECT,
+            ConsolidationOperation.CONFLICT,
+        } and (len(nonempty_topics) != 1 or "" in topic_keys):
             raise ConsolidationPlanningError(
-                "correction requires one identical non-empty topic_key"
+                f"{decision.operation} requires one identical non-empty topic_key"
             )
-        if decision.operation == ConsolidationOperation.CORRECT:
+        if decision.operation in {
+            ConsolidationOperation.CORRECT,
+            ConsolidationOperation.CONFLICT,
+        }:
             temporal_statuses = {
                 _metadata_text(record, "temporal_status") for record in sources
             }
@@ -739,8 +815,33 @@ class ConsolidationRunner:
                 }
             ):
                 raise ConsolidationPlanningError(
-                    "correction requires one shared current or planned temporal_status"
+                    f"{decision.operation} requires one shared current or planned "
+                    "temporal_status"
                 )
+        if decision.operation == ConsolidationOperation.CORRECT:
+            canonical = next(
+                record
+                for record in sources
+                if record.memory_id == decision.canonical_source_memory_id
+            )
+            if _strictly_latest_record(sources) != canonical:
+                raise ConsolidationPlanningError(
+                    "correction canonical source must be strictly latest"
+                )
+            if _metadata_text(canonical, "revision_kind") not in {
+                "correction",
+                "retraction",
+            }:
+                raise ConsolidationPlanningError(
+                    "correction requires explicit correction or retraction evidence"
+                )
+        if (
+            decision.operation == ConsolidationOperation.CONFLICT
+            and len(_content_groups(sources)) <= 1
+        ):
+            raise ConsolidationPlanningError(
+                "conflict requires incompatible source contents"
+            )
 
     def _validate_plan_identity(self, plan: ConsolidationPlan) -> None:
         if plan.schema_version != 1:
@@ -790,7 +891,8 @@ class ConsolidationRunner:
                 continue
             current[source.memory_id] = record
             if (
-                record.state is MemoryState.SUPERSEDED
+                action.transition_sources
+                and record.state is MemoryState.SUPERSEDED
                 and record.version == source.version + 1
             ):
                 already_applied.add(source.memory_id)
@@ -840,8 +942,12 @@ class ConsolidationRunner:
         )
         errors.extend(batch.errors)
         write = batch.write_results[0]
-        write_ok = write.status in {WriteStatus.CREATED, WriteStatus.DUPLICATE}
-        if write_ok and write.record is not None:
+        write_ok = (
+            write.status in {WriteStatus.CREATED, WriteStatus.DUPLICATE}
+            and write.record is not None
+        )
+        if write_ok:
+            assert write.record is not None
             consolidation = write.record.metadata.get("consolidation", {})
             if not isinstance(consolidation, dict) or (
                 consolidation.get("decision_id") != action.decision_id
@@ -877,6 +983,17 @@ class ConsolidationRunner:
             )
 
         transitions: list[ConsolidationTransitionResult] = []
+        if not action.transition_sources:
+            return (
+                ConsolidationActionResult(
+                    decision_id=action.decision_id,
+                    operation=action.operation,
+                    canonical_write=write,
+                    transitions=[],
+                    complete=not errors,
+                ),
+                errors,
+            )
         for source in action.sources:
             if source.memory_id in already_applied:
                 transitions.append(
@@ -1012,6 +1129,79 @@ def _canonical_proposal(
     )
 
 
+def _conflict_proposal(
+    scope: MemoryScope,
+    sources: Sequence[MemoryRecord],
+    decision: ConsolidationDecision,
+    *,
+    decision_id: str,
+    consolidator: MemoryConsolidator,
+    config_fingerprint: str,
+    input_fingerprint: str,
+) -> MemoryProposal:
+    anchor = _latest_record(sources)
+    source_snapshots = [
+        {
+            "memory_id": record.memory_id,
+            "version": record.version,
+            "state": record.state.value,
+            "fingerprint": memory_index_fingerprint(record),
+        }
+        for record in sources
+    ]
+    conflict = {
+        "conflict_id": decision_id,
+        "status": "open",
+        "reason": decision.explanation,
+        "source_memories": source_snapshots,
+        "subject": _metadata_text(anchor, "subject"),
+        "subject_id": _metadata_text(anchor, "subject_id"),
+        "personal_memory_type": _metadata_text(anchor, "personal_memory_type"),
+        "topic_key": _metadata_text(anchor, "topic_key"),
+        "temporal_status": _metadata_text(anchor, "temporal_status"),
+    }
+    metadata = {
+        "subject": conflict["subject"],
+        "subject_id": conflict["subject_id"],
+        "personal_memory_type": conflict["personal_memory_type"],
+        "topic_key": conflict["topic_key"],
+        "temporal_status": conflict["temporal_status"],
+        "conflict": conflict,
+        "consolidation": {
+            "decision_id": decision_id,
+            "operation": decision.operation,
+            "explanation": decision.explanation,
+            "source_memories": source_snapshots,
+            "canonical_source_memory_id": "",
+            "consolidator": consolidator.name,
+            "consolidator_version": consolidator.version,
+            "config_fingerprint": config_fingerprint,
+            "input_fingerprint": input_fingerprint,
+        },
+    }
+    chain = [f"memory:{record.memory_id}" for record in sources]
+    return MemoryProposal(
+        scope=scope,
+        content=(
+            "Unresolved personal-memory conflict in topic "
+            f"{conflict['topic_key']} across {len(sources)} active claims."
+        ),
+        kind="memory_conflict",
+        actor=anchor.actor,
+        authority=FactAuthority.DERIVED_SUMMARY,
+        confidence=decision.confidence,
+        proposed_state=MemoryState.CONFIRMED,
+        tags=["memory-conflict", "open"],
+        importance=max(record.importance for record in sources),
+        idempotency_key=f"consolidation:{decision_id}",
+        processor=consolidator.name,
+        processor_version=consolidator.version,
+        derived_chain=chain,
+        created_at=anchor.created_at,
+        metadata=metadata,
+    )
+
+
 def _content_groups(records: Sequence[MemoryRecord]) -> dict[str, list[MemoryRecord]]:
     groups: dict[str, list[MemoryRecord]] = defaultdict(list)
     for record in records:
@@ -1033,7 +1223,11 @@ def _strictly_latest_record(records: Sequence[MemoryRecord]) -> MemoryRecord | N
     if not records:
         return None
     canonical = _latest_record(records)
-    if any(_effective_time(canonical) > _effective_time(record) for record in records):
+    if all(
+        record.memory_id == canonical.memory_id
+        or _effective_time(canonical) > _effective_time(record)
+        for record in records
+    ):
         return canonical
     return None
 

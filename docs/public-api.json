@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "release": "0.8.1",
+  "release": "0.8.2",
   "tiers": {
     "stable": [
       "Actor",
@@ -136,6 +136,7 @@
       "PersonalMemoryMinerConfig",
       "PersonalMemoryCountResult",
       "PersonalMemoryCountStatus",
+      "PersonalMemoryConflictHit",
       "PersonalMemoryQueryConfig",
       "PersonalMemoryQueryDraft",
       "PersonalMemoryQueryEngine",
@@ -147,6 +148,7 @@
       "PersonalMemoryQueryReadLimitError",
       "PersonalMemoryQueryRequest",
       "PersonalMemoryQueryResult",
+      "PersonalMemoryRevisionKind",
       "PersonalMemoryType",
       "ReferencePersonalMemoryAnalyzer",
       "ReferencePersonalMemoryQueryPlanner",

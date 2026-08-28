@@ -57,6 +57,7 @@ MODEL_FIELDS = {
         "confidence",
         "sources",
         "proposal",
+        "transition_sources",
     ),
     "ConsolidationActionResult": (
         "decision_id",
@@ -128,6 +129,7 @@ MODEL_FIELDS = {
     "DeterministicConsolidatorConfig": (
         "mutable_memory_types",
         "enable_latest_correction",
+        "emit_conflicts",
     ),
     "IMImportBatch": (
         "format_version",
@@ -310,6 +312,7 @@ MODEL_FIELDS = {
         "memory_type",
         "topic_key",
         "event_key",
+        "revision_kind",
         "kind",
         "subject",
         "subject_id",
@@ -327,6 +330,13 @@ MODEL_FIELDS = {
         "value",
         "observed_records",
         "distinct_event_keys",
+        "reason",
+    ),
+    "PersonalMemoryConflictHit": (
+        "record",
+        "source_memory_ids",
+        "matched_source_memory_ids",
+        "topic_key",
         "reason",
     ),
     "PersonalMemoryQueryConfig": (
@@ -393,8 +403,10 @@ MODEL_FIELDS = {
     "PersonalMemoryQueryResult": (
         "plan",
         "hits",
+        "conflicts",
         "matched_record_count",
         "scanned_record_count",
+        "scanned_conflict_count",
         "count",
         "ambiguous",
         "warnings",

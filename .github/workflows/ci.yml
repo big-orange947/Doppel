@@ -104,7 +104,7 @@ jobs:
       - name: Run deterministic personal-memory consolidation quality gates
         run: >-
           uv run python -m benchmarks.consolidation_quality
-          --dataset benchmarks/datasets/consolidation-quality-zh-v1.json
+          --dataset benchmarks/datasets/consolidation-quality-zh-v2.json
           --output "$RUNNER_TEMP/doppel-consolidation-quality.json"
 
   personal-query-quality-smoke:

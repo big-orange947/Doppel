@@ -65,6 +65,21 @@ class MemoryTemporalStatus:
         return (value or cls.UNKNOWN)[:64]
 
 
+class PersonalMemoryRevisionKind:
+    """How a claim relates to an earlier value in the same explicit topic slot."""
+
+    ASSERTION = "assertion"
+    CORRECTION = "correction"
+    RETRACTION = "retraction"
+
+    @classmethod
+    def normalize(cls, raw: str | None) -> str:
+        value = str(raw or "").strip().lower() or cls.ASSERTION
+        if value not in {cls.ASSERTION, cls.CORRECTION, cls.RETRACTION}:
+            raise ValueError(f"unsupported personal memory revision kind: {value}")
+        return value
+
+
 class PersonalMemoryDraft(BaseModel):
     """One analyzer-produced memory claim before trusted scope derivation."""
 
@@ -74,6 +89,9 @@ class PersonalMemoryDraft(BaseModel):
     memory_type: str = PersonalMemoryType.FACT
     topic_key: str = ""
     event_key: str = ""
+    revision_kind: Literal["assertion", "correction", "retraction"] = (
+        PersonalMemoryRevisionKind.ASSERTION
+    )
     kind: str = MemoryKind.FACT
     subject: str = Actor.OWNER
     subject_id: str = ""
@@ -108,6 +126,11 @@ class PersonalMemoryDraft(BaseModel):
     @classmethod
     def _normalize_event_key(cls, value: Any) -> str:
         return str(value or "").strip().lower()[:160]
+
+    @field_validator("revision_kind", mode="before")
+    @classmethod
+    def _normalize_revision_kind(cls, value: Any) -> str:
+        return PersonalMemoryRevisionKind.normalize(value)
 
     @field_validator("kind", mode="before")
     @classmethod
@@ -232,7 +255,9 @@ system; never turn agent suggestions or acknowledgements into owner facts. Extra
 personal facts, current states, episodes, preferences, relationships, plans, and
 commitments only when useful beyond the immediate utterance. Keep temporary states and
 historical events distinct from timeless facts. Preserve explicit temporal bounds when
-the evidence provides them. When a claim belongs to one stable mutable slot, provide a
+the evidence provides them. Set revision_kind=correction or retraction only when the
+bound evidence explicitly replaces or withdraws an earlier value; otherwise use
+assertion. When a claim belongs to one stable mutable slot, provide a
 lowercase topic_key such as residence.primary or preference.favorite-color; omit it
 when no precise slot is justified. For an episode, provide event_key only when the
 evidence identifies one stable real-world event; repeated mentions of the same event
@@ -247,7 +272,7 @@ class ReferencePersonalMemoryAnalyzer:
     """Reference prompt and schema around any structured-output model provider."""
 
     name = "doppel.reference-personal-memory-analyzer"
-    version = "1"
+    version = "2"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -495,6 +520,7 @@ def _analysis_to_proposals(
             "memory_type": draft.memory_type,
             "topic_key": draft.topic_key,
             "event_key": draft.event_key,
+            "revision_kind": draft.revision_kind,
             "subject": draft.subject,
             "subject_id": subject_id,
             "evidence_ids": sorted(draft.evidence_ids),
@@ -520,6 +546,7 @@ def _analysis_to_proposals(
                 "personal_memory_type": draft.memory_type,
                 "topic_key": draft.topic_key,
                 "event_key": draft.event_key,
+                "revision_kind": draft.revision_kind,
                 "subject": draft.subject,
                 "subject_id": subject_id,
                 "temporal_status": draft.temporal_status,

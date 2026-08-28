@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.8.2
+
+Doppel no longer treats a newer incompatible claim as sufficient proof that an older
+personal memory is wrong. Conflicting current or planned claims now remain visible and
+queryable until evidence explicitly marks a correction or retraction.
+
+### Added
+
+- `PersonalMemoryDraft.revision_kind` and `PersonalMemoryRevisionKind` distinguish an
+  ordinary assertion from evidence-bound correction or retraction. The reference
+  analyzer is instructed to use revision markers only when the cited message says so.
+- `ConsolidationOperation.CONFLICT` and replay-safe conflict actions. A conflict writes
+  one derived `memory_conflict` marker while keeping every source memory active; it
+  does not select canonical content or transition sources.
+- Runner-side correction safety gates apply to deterministic and model consolidators:
+  `CORRECT` requires one shared non-empty topic, one current/planned temporal class, a
+  strictly latest canonical source, and explicit correction/retraction metadata.
+- Personal-memory query results expose `conflicts` with marker provenance, all source
+  IDs, and matched source IDs. Conflict markers are read separately and never appear
+  in ordinary personal-memory hits; a relevant open conflict forces `ambiguous=True`.
+- Consolidation quality fixture v2 adds unmarked divergence, explicit retraction, and
+  equal-time conflict cases. Its schema v2 also makes source lifecycle and isolated
+  conflict-marker creation correctness gates.
+
+### Compatibility and operations
+
+- The new draft/result fields, root exports, and conflict operation are additive
+  provisional APIs. Stores need no schema migration because markers use ordinary
+  `MemoryRecord`/`MemoryProposal` primitives and a dedicated tag.
+- This release intentionally tightens the provisional consolidation policy: records
+  produced before v0.8.2 default to `revision_kind=assertion`, so they cannot silently
+  replace an incompatible claim. Re-extract explicit correction evidence or annotate
+  trusted imported records before requesting `CORRECT`.
+- Conflict markers become query-inert once fewer than two referenced source memories
+  remain active, for example after a later explicit correction. v0.8.2 does not mutate
+  the old marker to a closed state; marker compaction is left to later governance.
+
 ## 0.8.1
 
 Doppel can now evolve personal memories without turning age or recall frequency into

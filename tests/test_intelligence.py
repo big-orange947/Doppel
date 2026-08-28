@@ -110,6 +110,7 @@ async def test_online_owner_memory_is_evidence_bound_and_user_scoped() -> None:
     assert proposal.derived_chain == ["event:owner-pref"]
     assert proposal.tags[:2] == ["personal-memory", "preference"]
     assert proposal.metadata["subject_id"] == "owner-1"
+    assert proposal.metadata["revision_kind"] == "assertion"
     assert proposal.metadata["source_scope_key"] == SCOPE.scope_key
     assert proposal.metadata["evidence"] == [
         {
@@ -122,6 +123,29 @@ async def test_online_owner_memory_is_evidence_bound_and_user_scoped() -> None:
         }
     ]
     assert proposal.idempotency_key.startswith("personal-memory:")
+
+
+async def test_explicit_correction_kind_is_normalized_and_persisted() -> None:
+    message = _message("owner-correction", "更正一下，我现在住在杭州。")
+    extractor = PersonalMemoryExtractor(
+        StubAnalyzer(
+            [
+                {
+                    "content": "用户更正当前居住地为杭州。",
+                    "memory_type": "state",
+                    "topic_key": "residence.primary",
+                    "revision_kind": " CORRECTION ",
+                    "temporal_status": "current",
+                    "evidence_ids": [message.identity_key],
+                }
+            ]
+        )
+    )
+
+    (proposal,) = await extractor.process(SCOPE, message)
+
+    assert proposal.metadata["revision_kind"] == "correction"
+    assert proposal.metadata["topic_key"] == "residence.primary"
 
 
 async def test_episode_event_key_is_evidence_bound_and_persisted() -> None:
@@ -431,6 +455,12 @@ def test_personal_memory_models_reject_unstable_evidence_and_time() -> None:
             evidence_ids=["time"],
             valid_from=datetime(2026, 1, 2, tzinfo=UTC),
             valid_to=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    with pytest.raises(ValueError, match="unsupported personal memory revision"):
+        PersonalMemoryDraft(
+            content="无效修订类型",
+            evidence_ids=["revision"],
+            revision_kind="newest-wins",
         )
     with pytest.raises(ValueError, match="Extra inputs are not permitted"):
         PersonalMemoryDraft.model_validate(
