@@ -209,7 +209,9 @@ async def test_current_query_surfaces_open_conflict_without_recalling_marker_as_
     assert set(conflict.matched_source_memory_ids) == set(conflict.source_memory_ids)
 
 
-async def test_later_explicit_correction_makes_old_conflict_marker_query_inert() -> None:
+async def test_later_explicit_correction_makes_old_conflict_marker_query_inert() -> (
+    None
+):
     store = InMemoryStore()
     await _put(
         store,

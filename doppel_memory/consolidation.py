@@ -351,9 +351,9 @@ class DeterministicMemoryConsolidator:
                     )
                     used.update(source_ids)
 
-        unkeyed: dict[
-            tuple[str, str, str, str, str, str], list[MemoryRecord]
-        ] = defaultdict(list)
+        unkeyed: dict[tuple[str, str, str, str, str, str], list[MemoryRecord]] = (
+            defaultdict(list)
+        )
         for record in records:
             if record.memory_id in used:
                 continue

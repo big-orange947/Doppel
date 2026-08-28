@@ -209,8 +209,7 @@ async def test_unmarked_divergent_claims_create_replay_safe_open_conflict() -> N
     assert marker.metadata["conflict"]["status"] == "open"
     assert marker.metadata["consolidation"]["canonical_source_memory_id"] == ""
     assert {
-        item["memory_id"]
-        for item in marker.metadata["conflict"]["source_memories"]
+        item["memory_id"] for item in marker.metadata["conflict"]["source_memories"]
     } == {first.memory_id, second.memory_id}
     assert (await store.get(SCOPE, first.memory_id)).state is MemoryState.CANDIDATE
     assert (await store.get(SCOPE, second.memory_id)).state is MemoryState.CANDIDATE

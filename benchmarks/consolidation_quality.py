@@ -321,8 +321,7 @@ async def _run_case(
                     item
                     for item in actual
                     if item["operation"] == expected_item["operation"]
-                    and item["source_memory_ids"]
-                    == expected_item["source_memory_ids"]
+                    and item["source_memory_ids"] == expected_item["source_memory_ids"]
                 ),
                 None,
             )

@@ -339,9 +339,7 @@ class PersonalMemoryConflictHit(BaseModel):
 
     @model_validator(mode="after")
     def _matched_sources_are_bound(self) -> PersonalMemoryConflictHit:
-        unknown = set(self.matched_source_memory_ids).difference(
-            self.source_memory_ids
-        )
+        unknown = set(self.matched_source_memory_ids).difference(self.source_memory_ids)
         if unknown:
             raise ValueError("matched conflict sources must be source memory IDs")
         return self
@@ -838,9 +836,7 @@ def _relevant_conflicts(
     active_ids = {
         (record.scope.scope_key, record.memory_id) for record in active_records
     }
-    matched_ids = {
-        (record.scope.scope_key, record.memory_id) for record, *_ in matched
-    }
+    matched_ids = {(record.scope.scope_key, record.memory_id) for record, *_ in matched}
     results: list[PersonalMemoryConflictHit] = []
     for record in conflict_records:
         conflict = record.metadata.get("conflict", {})
