@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.8.2：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
+> v0.8.3：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
 
 ## 定位与边界
 
@@ -20,7 +20,7 @@ Doppel 是个人信息代理的记忆基础库，不是 Agent runtime。当前�
 7. Store 能力声明与跨后端一致性测试；
 8. 只产生提议、不绑定 LLM 的在线 MemoryProcessor 和周期 MemoryBatchTask 管线。
 
-核心不负责回复生成、路由、发送、工具调用、平台协议、确认 UI 或统一 LLM provider。
+核心不负责回复生成、路由、发送、工具调用、平台协议、确认 UI、模型/账号选择或 API key 托管。
 
 ## 不变量
 
@@ -641,7 +641,7 @@ PersonalMemoryAnalysisRequest
         ▼
 PersonalMemoryAnalyzer
   └─ ReferencePersonalMemoryAnalyzer
-       └─ StructuredOutputModel (host-provided local/hosted provider)
+       └─ StructuredOutputModel (official compatible or custom provider)
         │
         ▼
 PersonalMemoryDraft[]
@@ -682,8 +682,9 @@ attribution、target scope、ignored/agent evidence writes、latency 和跨用�
 成本保留为未测维度，避免用证据重合冒充语义正确。
 
 这一组根导出在 v0.7 系列标记为 provisional。`MemoryStore`、`MemoryProcessor`、`MemoryProposal`、
-`MemoryBatchTask` 与现有 writer 合同没有修改。模型 provider 继续由 host 管理，核心包不增加网络依赖、
-API key 处理或统一供应商 SDK。
+`MemoryBatchTask` 与现有 writer 合同没有修改。v0.7.2 当时只定义 host provider 边界；v0.8.3 增加
+OpenAI-compatible HTTP 参考实现，但 API key、账号、模型选择和重试策略仍由 host 管理，核心不绑定
+统一供应商 SDK。
 
 ## v0.7.3 可审计个人记忆整理
 
@@ -854,6 +855,46 @@ v0.8.2 尚不写回 `status=closed`，避免为了清理派生标记扩张本轮
 后续版本加入。consolidation fixture v2 同时检查 operation、canonical、来源生命周期、marker 隔离、
 scope leakage 和 replay-safe 写入。
 
+## v0.8.3 OpenAI-compatible 结构化输出
+
+`StructuredOutputModel` 继续是 Reference analyzer、query planner 和 consolidator 共用的最小模型边界。
+官方实现 `OpenAICompatibleStructuredOutputModel` 使用异步 HTTP 调用
+`{base_url}/chat/completions`，不依赖供应商 SDK，也不获得 Store、scope 或生命周期写权限：
+
+    Reference component
+          │ instructions + JSON input + output schema
+          ▼
+    OpenAICompatibleStructuredOutputModel
+          │ bounded request / private credentials
+          ▼
+    /chat/completions (OpenAI or compatible endpoint)
+          │ refusal / finish reason / JSON envelope
+          ▼
+    Mapping[str, Any]
+          │ component-specific Pydantic validation
+          ▼
+    trusted Doppel binding and runner gates
+
+配置记录 model、base URL、schema mode、strict、timeout、请求/响应字节上限以及可选 generation 参数，
+但不记录 API key。`json_schema` 是默认 wire mode；`strict_schema` 默认 false，因为 Doppel reference
+schema 含默认字段和开放 metadata，不满足 strict subset 的“全部字段 required、对象关闭额外属性”约束。
+这不等于信任任意 JSON：provider 要求顶层 object，Reference component 随后仍用自己的 Pydantic 模型
+验证字段、枚举、时间和 extra-forbid 边界。strict-compatible 的自定义 schema 可显式打开 strict。
+completion token 上限默认使用 `max_completion_tokens`；仅接受旧参数的兼容服务可显式切换为
+`max_tokens`，未配置上限时两者都不会发送。
+
+`json_object` 是兼容较旧本地服务的显式 fallback；schema 会进入 system instruction。两种模式都对
+请求和响应大小设硬上限，并区分 timeout、transport、authentication、rate limit、HTTP 失败、拒绝、
+content filter、length truncation、异常 finish reason、非法 envelope、非法 JSON 与非 object 内容。
+错误只暴露稳定 code、status、retryable 和可解析的 Retry-After，不回显 key、prompt、响应正文或拒绝
+文本。核心不自动重试，重试次数、成本预算、退避和熔断属于 host。
+
+provider 的 version 绑定会影响生成行为的配置 fingerprint，但排除 timeout/字节上限等纯运行参数。
+Reference analyzer、planner 与 consolidator 又将自身 version 绑定 provider name/version，因此切换模型、
+端点或 schema mode 时，不会沿用旧 analyzer 幂等身份、query planner identity 或 consolidation
+checkpoint。外部注入的 `httpx.AsyncClient` 生命周期仍归 host；provider 自建 client 可用 `aclose()`
+或 async context manager 关闭。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -892,6 +933,6 @@ provenance 保存在 `raw.doppel_import`。
 - v0.8.0：中文 lexical/semantic 检索质量与 query planning（已完成）；
 - v0.8.1：类型感知的强化、衰减、归档和恢复（已完成）；
 - v0.8.2：显式纠正证据、开放冲突标记和 query provenance（已完成）；
-- v0.8.3：OpenAI-compatible reference provider 与配置/错误边界；
+- v0.8.3：OpenAI-compatible reference provider 与配置/错误边界（已完成）；
 - v0.9.0：MemoEcho shadow mode、长期 dogfooding 和端到端质量报告；
 - v0.10.0：Agent tools、Server/CLI/Inspector 与 PyPI 发布准备。

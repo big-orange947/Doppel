@@ -305,6 +305,18 @@ MODEL_FIELDS = {
         "created_at",
         "metadata",
     ),
+    "OpenAICompatibleStructuredOutputConfig": (
+        "model",
+        "base_url",
+        "schema_mode",
+        "strict_schema",
+        "timeout_seconds",
+        "max_request_bytes",
+        "max_response_bytes",
+        "max_completion_tokens",
+        "max_tokens_parameter",
+        "temperature",
+    ),
     "PersonalMemoryAnalysis": ("memories",),
     "PersonalMemoryAnalysisRequest": ("scope", "messages"),
     "PersonalMemoryDraft": (
@@ -719,6 +731,16 @@ SIGNATURES = {
         ("message", "POSITIONAL_OR_KEYWORD"),
     ),
     "PersonalMemoryAnalyzer.analyze": (("request", "POSITIONAL_OR_KEYWORD"),),
+    "OpenAICompatibleStructuredOutputModel.__init__": (
+        ("config", "POSITIONAL_OR_KEYWORD"),
+        ("api_key", "KEYWORD_ONLY"),
+        ("headers", "KEYWORD_ONLY"),
+        ("client", "KEYWORD_ONLY"),
+    ),
+    "OpenAICompatibleStructuredOutputModel.generate": (
+        ("request", "POSITIONAL_OR_KEYWORD"),
+    ),
+    "OpenAICompatibleStructuredOutputModel.aclose": (),
     "PersonalMemoryExtractor.__init__": (
         ("analyzer", "POSITIONAL_OR_KEYWORD"),
         ("config", "POSITIONAL_OR_KEYWORD"),

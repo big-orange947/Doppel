@@ -43,12 +43,13 @@ Doppel 不负责：
 
 - 对话路由、回复生成、工具调用和消息发送；
 - 完整短期上下文管理和具体平台协议；
-- 确认 UI、统一 LLM provider 或强制 prompt 模板；
+- 确认 UI、模型/账号选择、API key 托管或强制 prompt 模板；
 - 替开发者决定哪些记忆应该参与当前回复。
 
 ## 安装
 
-核心包只依赖 Pydantic，默认包含 InMemory 和 SQLite 后端：
+核心包依赖 Pydantic 和异步 HTTP 客户端 httpx，默认包含 InMemory、SQLite 后端以及
+OpenAI-compatible 结构化输出 provider：
 
 ```bash
 pip install doppel-memory
@@ -445,39 +446,58 @@ result = await memory.process(
 
 ### 个人记忆参考抽取（v0.7.2）
 
-`ReferencePersonalMemoryAnalyzer` 提供模型无关的结构化 schema 和高精度参考指令；模型 provider
-只需要实现一个很小的 `StructuredOutputModel.generate()` 边界。在线路径适合一条消息中明确、
-自包含的个人事实：
+`ReferencePersonalMemoryAnalyzer` 提供模型无关的结构化 schema 和高精度参考指令；v0.8.3 提供
+`OpenAICompatibleStructuredOutputModel`，也仍允许开发者实现很小的
+`StructuredOutputModel.generate()` 边界。在线路径适合一条消息中明确、自包含的个人事实：
 
 ```python
+import os
+
 from doppel_memory import (
+    OpenAICompatibleStructuredOutputConfig,
+    OpenAICompatibleStructuredOutputModel,
     PersonalMemoryExtractor,
     ReferencePersonalMemoryAnalyzer,
 )
 
-# 由接入方连接本地模型或托管模型；返回值必须满足 request.output_schema。
-class MyStructuredModel:
-    name = "my-local-model"
-    version = "2026-08"
-
-    async def generate(self, request):
-        return await my_model.generate_json(
-            instructions=request.instructions,
-            input=request.input,
-            schema=request.output_schema,
-        )
-
-extractor = PersonalMemoryExtractor(
-    ReferencePersonalMemoryAnalyzer(MyStructuredModel())
+provider = OpenAICompatibleStructuredOutputModel(
+    OpenAICompatibleStructuredOutputConfig(
+        model="your-model-id",
+        # OpenAI 默认值是 https://api.openai.com/v1；本地/兼容服务可替换。
+        base_url="https://api.openai.com/v1",
+    ),
+    # key 由 host 注入，不进入 config、fingerprint、异常或记忆 provenance。
+    api_key=os.environ["DOPPEL_API_KEY"],
 )
-result = await memory.process(
-    scope,
-    message,
-    processors=[extractor],
-    # owner 记忆默认提议到 user scope，仍必须由 host 明确授权。
-    allowed_scopes=[scope.user_scope()],
-)
+try:
+    extractor = PersonalMemoryExtractor(
+        ReferencePersonalMemoryAnalyzer(provider)
+    )
+    result = await memory.process(
+        scope,
+        message,
+        processors=[extractor],
+        # owner 记忆默认提议到 user scope，仍必须由 host 明确授权。
+        allowed_scopes=[scope.user_scope()],
+    )
+finally:
+    await provider.aclose()
 ```
+
+完整可运行入口见 [`examples/openai_compatible.py`](examples/openai_compatible.py)。设置
+`DOPPEL_MODEL`、可选的 `DOPPEL_API_KEY` 和 `DOPPEL_OPENAI_BASE_URL` 后运行即可。同一个 provider
+也可注入 `ReferencePersonalMemoryQueryPlanner` 和 `ReferenceMemoryConsolidator`。
+
+默认 `schema_mode="json_schema"`，但 `strict_schema=False`。这是刻意的：Doppel 的开放 metadata 和
+带默认值字段不是 OpenAI strict JSON Schema 子集；模型结果返回后仍会经过对应 Pydantic 模型验证。
+若自定义输出 schema 已满足 strict 子集，可显式启用 `strict_schema=True`。只支持 JSON Object 的本地
+服务可设 `schema_mode="json_object"`，provider 会把完整 schema 放入 system instruction，再进行本地
+JSON object 门禁。旧兼容服务若只接受 `max_tokens`，可设置
+`max_tokens_parameter="max_tokens"`；默认使用当前的 `max_completion_tokens`。
+
+provider 不自动重试，避免在不明确的幂等/成本条件下重复调用。`StructuredOutputProviderError` 提供
+`code`、HTTP status、`retryable` 和 `retry_after_seconds`，由 MemoEcho/AstrBot 等 host 决定退避、
+熔断或转入 shadow failure；异常不会包含 API key、prompt、响应正文或模型拒绝原文。
 
 模型输出只是 `PersonalMemoryDraft`，不能选择 Store、memory ID、authority、最终 scope 或生命周期
 动作。Doppel 会重新验证每个 evidence ID，只从可信消息推导 actor/authority/subject ID；owner
@@ -502,8 +522,8 @@ result = await memory.run_batch_task(
 )
 ```
 
-抽取层只负责证据绑定，不会擅自把冲突草稿合并、覆盖或标记过期。核心包也不绑定统一模型 SDK，
-托管与本地模型都通过同一 provisional 协议接入。
+抽取层只负责证据绑定，不会擅自把冲突草稿合并、覆盖或标记过期。核心包不绑定供应商 SDK；官方
+OpenAI-compatible HTTP 实现和任意自定义 provider 都通过同一 provisional 协议接入。
 
 ### 个人记忆整理与冲突安全（v0.7.3–v0.8.2）
 
@@ -1203,6 +1223,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.8.0：中文个人记忆 Query Planner、时间感知检索、安全事件计数与词法/语义融合
 - [x] v0.8.1：类型感知的强化、显式短期衰减、可审计归档与恢复
 - [x] v0.8.2：显式纠正证据、持久冲突标记、查询冲突 provenance 与生命周期质量门禁
+- [x] v0.8.3：OpenAI-compatible 结构化输出 provider、错误边界与模型身份绑定
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

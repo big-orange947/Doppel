@@ -131,6 +131,11 @@ from doppel_memory.models import (
     WriteResult,
     WriteStatus,
 )
+from doppel_memory.openai_compatible import (
+    OpenAICompatibleStructuredOutputConfig,
+    OpenAICompatibleStructuredOutputModel,
+    StructuredOutputProviderError,
+)
 from doppel_memory.persona import (
     DefaultPromptRenderer,
     MaterialBundle,
@@ -210,7 +215,7 @@ from doppel_memory.vector import (
     VectorIndexUnavailableError,
 )
 
-__version__ = "0.8.2"
+__version__ = "0.8.3"
 
 __all__ = [
     "Actor",
@@ -312,6 +317,8 @@ __all__ = [
     "MemoryStateConflictError",
     "MemoryStore",
     "MemoryTemporalStatus",
+    "OpenAICompatibleStructuredOutputConfig",
+    "OpenAICompatibleStructuredOutputModel",
     "OwnerPersonaPolicy",
     "PassThroughProposalPolicy",
     "PersonaMaterialsBuilder",
@@ -372,6 +379,7 @@ __all__ = [
     "StoreRetrievalStrategy",
     "StructuredGenerationRequest",
     "StructuredOutputModel",
+    "StructuredOutputProviderError",
     "StyleAnalyzer",
     "StyleDirective",
     "StyleGuidance",

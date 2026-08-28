@@ -68,6 +68,14 @@ newer `correction` or `retraction`. Conflict markers are ordinary Store records 
 isolated from `personal-memory` recall by their dedicated kind/tag. Hosts must treat a
 returned open conflict as ambiguity rather than generated truth.
 
+The v0.8.3 OpenAI-compatible config, provider, and provider error are provisional root
+APIs. The adapter targets the chat-completions JSON-schema/JSON-object wire boundary
+without a vendor SDK. API keys and custom authentication headers are constructor-only
+private state and are excluded from config fingerprints, persisted plans, and error
+messages. Callers own retry policy and must close a provider-created HTTP client. The
+reference analyzer, query planner, and consolidator bind their component version to the
+injected model identity so changing model/config does not reuse the old identity.
+
 ## Compatibility rules
 
 For stable API, a patch release must not require callers or third-party implementations

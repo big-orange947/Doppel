@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "release": "0.8.2",
+  "release": "0.8.3",
   "tiers": {
     "stable": [
       "Actor",
@@ -125,6 +125,8 @@
       "MemoryPage",
       "MediaRef",
       "MemoryTemporalStatus",
+      "OpenAICompatibleStructuredOutputConfig",
+      "OpenAICompatibleStructuredOutputModel",
       "PersonalMemoryAnalysis",
       "PersonalMemoryAnalysisRequest",
       "PersonalMemoryAnalyzer",
@@ -178,6 +180,7 @@
       "StyleQualityReport",
       "StructuredGenerationRequest",
       "StructuredOutputModel",
+      "StructuredOutputProviderError",
       "VectorBackfillResult",
       "VectorIndexConfig",
       "VectorIndexFailure",

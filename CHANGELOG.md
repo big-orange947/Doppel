@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.8.3
+
+Doppel now includes an official OpenAI-compatible implementation of its existing
+provider-neutral `StructuredOutputModel` boundary. Reference extraction, query
+planning, and semantic consolidation can run without every host rebuilding HTTP,
+schema, refusal, and failure handling.
+
+### Added
+
+- `OpenAICompatibleStructuredOutputModel` over async `/v1/chat/completions`, with
+  configurable model/base URL and JSON Schema or JSON Object response formats. It can
+  target OpenAI or compatible local/gateway endpoints without a vendor SDK.
+- `OpenAICompatibleStructuredOutputConfig` with bounded request/response sizes,
+  timeout, optional completion-token/temperature controls, normalized secret-free base
+  URLs, deterministic config fingerprints, and a generation identity that excludes
+  purely operational limits.
+- `StructuredOutputProviderError` classifies authentication, rate limiting, retryable
+  HTTP/transport/timeout failures, refusal, content filtering, truncation, unexpected
+  finish reasons, invalid envelopes, invalid JSON, and size violations. Errors expose
+  safe machine-readable status/retry context without response, prompt, or key text.
+- Async context-manager/`aclose()` support and optional host-owned `httpx.AsyncClient`
+  injection for connection policy and deterministic tests.
+- A real-provider-bound Reference analyzer test and an executable environment-driven
+  example. The full transport suite covers JSON Schema/Object requests, Unicode,
+  authentication/header rules, refusal/truncation, retry metadata, size limits, and
+  downstream Pydantic validation.
+
+### Compatibility and operations
+
+- The provider/config/error APIs are additive provisional root exports. `httpx` moves
+  from the dev extra to the small core dependency set so the official provider works
+  after a normal install; Store protocols and persisted database schemas are unchanged.
+- API keys are constructor-only private state: they are absent from Pydantic config,
+  fingerprints, plans, memory provenance, exception messages, and repr output. Hosts
+  still own environment/secret management, retries, budgets, fallback, and shutdown.
+- `strict_schema` defaults to false because Doppel reference schemas intentionally
+  contain defaulted fields and open metadata that are outside the OpenAI strict JSON
+  Schema subset. Endpoint output still must be a JSON object and is always revalidated
+  by the component-specific Pydantic model. Compatible custom strict schemas may opt in.
+- Reference analyzer, query planner, and consolidator versions now bind the injected
+  structured model identity. Changing model, endpoint, schema mode, or generation
+  parameters therefore changes proposal idempotency/planner/checkpoint identity instead
+  of silently replaying an earlier model configuration.
+
 ## 0.8.2
 
 Doppel no longer treats a newer incompatible claim as sufficient proof that an older

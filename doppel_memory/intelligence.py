@@ -272,11 +272,12 @@ class ReferencePersonalMemoryAnalyzer:
     """Reference prompt and schema around any structured-output model provider."""
 
     name = "doppel.reference-personal-memory-analyzer"
-    version = "2"
+    version = "3"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
         _require_identity(model, "structured output model")
+        self.version = _model_bound_version(self.version, model)
 
     async def analyze(
         self, request: PersonalMemoryAnalysisRequest
@@ -636,6 +637,10 @@ def _require_identity(component: Any, label: str) -> None:
         raise ValueError(f"{label} name must not be empty")
     if not str(getattr(component, "version", "") or "").strip():
         raise ValueError(f"{label} version must not be empty")
+
+
+def _model_bound_version(base_version: str, model: StructuredOutputModel) -> str:
+    return f"{base_version}.{_fingerprint({'name': model.name, 'version': model.version})[:16]}"
 
 
 def _fingerprint(value: Any) -> str:

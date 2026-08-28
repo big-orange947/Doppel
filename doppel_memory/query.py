@@ -173,11 +173,12 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "1"
+    version = "2"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
         _require_identity(model, "structured output model")
+        self.version = _model_bound_version(self.version, model)
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
@@ -1103,3 +1104,7 @@ def _require_identity(value: Any, label: str) -> None:
     for attribute in ("name", "version"):
         if not str(getattr(value, attribute, "") or "").strip():
             raise ValueError(f"{label} requires non-empty {attribute}")
+
+
+def _model_bound_version(base_version: str, model: StructuredOutputModel) -> str:
+    return f"{base_version}.{_fingerprint({'name': model.name, 'version': model.version})[:16]}"
