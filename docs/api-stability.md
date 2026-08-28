@@ -40,6 +40,13 @@ periodic miner are provisional root APIs. They compose with the unchanged stable
 `MemoryProcessor`/`MemoryProposal` surface and the existing provisional batch surface;
 the model boundary never receives Store access or authority to select write scopes.
 
+The v0.7.3 consolidation decision, plan, checkpoint, result, consolidator, and runner
+types are provisional root APIs. Plans are serializable and integrity-bound for safe
+host persistence and replay, but host scheduling and plan/checkpoint durability are not
+part of the core package. The host must enforce one in-flight plan per exact scope.
+Consolidators select existing memory IDs only; trusted scope, authority, lifecycle
+transitions, optimistic concurrency, and writes remain runner and Store responsibilities.
+
 ## Compatibility rules
 
 For stable API, a patch release must not require callers or third-party implementations

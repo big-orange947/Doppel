@@ -1,0 +1,218 @@
+{
+  "dataset_version": 1,
+  "name": "doppel.consolidation-quality.zh.v1",
+  "language": "zh-CN",
+  "scopes": [
+    {
+      "name": "owner-user",
+      "user_id": "quality-owner"
+    },
+    {
+      "name": "other-user",
+      "user_id": "quality-other"
+    }
+  ],
+  "cases": [
+    {
+      "name": "repeated-preference-merge",
+      "category": "duplicate",
+      "description": "Repeated extraction of one preference becomes one canonical memory with both source records preserved as superseded.",
+      "scope": "owner-user",
+      "memories": [
+        {
+          "memory_id": "coffee-001",
+          "scope": "owner-user",
+          "content": "用户不喝咖啡。",
+          "at": "2026-01-01T09:00:00+08:00",
+          "memory_type": "preference",
+          "topic_key": "beverage.coffee",
+          "evidence_ids": ["coffee-message-001"]
+        },
+        {
+          "memory_id": "coffee-002",
+          "scope": "owner-user",
+          "content": "用户不喝咖啡",
+          "at": "2026-02-01T09:00:00+08:00",
+          "memory_type": "preference",
+          "topic_key": "beverage.coffee",
+          "evidence_ids": ["coffee-message-002"]
+        }
+      ],
+      "expected_actions": [
+        {
+          "operation": "merge",
+          "source_memory_ids": ["coffee-001", "coffee-002"],
+          "canonical_source_memory_id": "coffee-002"
+        }
+      ]
+    },
+    {
+      "name": "favorite-color-correction",
+      "category": "correction",
+      "description": "A newer current value in the same explicit mutable slot replaces the older value.",
+      "scope": "owner-user",
+      "memories": [
+        {
+          "memory_id": "color-blue",
+          "scope": "owner-user",
+          "content": "用户最喜欢蓝色。",
+          "at": "2025-01-01T09:00:00+08:00",
+          "memory_type": "preference",
+          "topic_key": "preference.favorite-color",
+          "evidence_ids": ["color-message-blue"]
+        },
+        {
+          "memory_id": "color-green",
+          "scope": "owner-user",
+          "content": "用户现在最喜欢绿色。",
+          "at": "2026-01-01T09:00:00+08:00",
+          "memory_type": "preference",
+          "topic_key": "preference.favorite-color",
+          "evidence_ids": ["color-message-green"]
+        }
+      ],
+      "expected_actions": [
+        {
+          "operation": "correct",
+          "source_memory_ids": ["color-blue", "color-green"],
+          "canonical_source_memory_id": "color-green"
+        }
+      ]
+    },
+    {
+      "name": "unrelated-preferences-remain-separate",
+      "category": "false_merge_guard",
+      "description": "Different claims without a stable shared topic are not interpreted as a correction.",
+      "scope": "owner-user",
+      "memories": [
+        {
+          "memory_id": "hobby-hiking",
+          "scope": "owner-user",
+          "content": "用户喜欢爬山。",
+          "at": "2026-01-01T09:00:00+08:00",
+          "memory_type": "preference",
+          "evidence_ids": ["hobby-message-hiking"]
+        },
+        {
+          "memory_id": "hobby-swimming",
+          "scope": "owner-user",
+          "content": "用户喜欢游泳。",
+          "at": "2026-01-02T09:00:00+08:00",
+          "memory_type": "preference",
+          "evidence_ids": ["hobby-message-swimming"]
+        }
+      ],
+      "expected_actions": []
+    },
+    {
+      "name": "identical-travel-episodes-remain-separate",
+      "category": "event_identity",
+      "description": "Identical episode text without a stable event identity may describe two trips and must not be merged.",
+      "scope": "owner-user",
+      "memories": [
+        {
+          "memory_id": "trip-2025",
+          "scope": "owner-user",
+          "content": "用户去北京旅行。",
+          "at": "2025-05-01T09:00:00+08:00",
+          "memory_type": "episode",
+          "evidence_ids": ["trip-message-2025"]
+        },
+        {
+          "memory_id": "trip-2026",
+          "scope": "owner-user",
+          "content": "用户去北京旅行。",
+          "at": "2026-05-01T09:00:00+08:00",
+          "memory_type": "episode",
+          "evidence_ids": ["trip-message-2026"]
+        }
+      ],
+      "expected_actions": []
+    },
+    {
+      "name": "same-text-different-topic-remains-separate",
+      "category": "topic_identity",
+      "description": "Equal wording in two explicit topic slots is not enough to merge the memories.",
+      "scope": "owner-user",
+      "memories": [
+        {
+          "memory_id": "quiet-hotel",
+          "scope": "owner-user",
+          "content": "用户偏好安静的环境。",
+          "at": "2026-01-01T09:00:00+08:00",
+          "memory_type": "preference",
+          "topic_key": "hotel.environment",
+          "evidence_ids": ["quiet-hotel-message"]
+        },
+        {
+          "memory_id": "quiet-office",
+          "scope": "owner-user",
+          "content": "用户偏好安静的环境。",
+          "at": "2026-01-02T09:00:00+08:00",
+          "memory_type": "preference",
+          "topic_key": "office.environment",
+          "evidence_ids": ["quiet-office-message"]
+        }
+      ],
+      "expected_actions": []
+    },
+    {
+      "name": "historical-mention-does-not-replace-current",
+      "category": "temporal_guard",
+      "description": "A newer historical statement in the same topic slot must not become the current canonical value.",
+      "scope": "owner-user",
+      "memories": [
+        {
+          "memory_id": "current-shanghai",
+          "scope": "owner-user",
+          "content": "用户目前长期住在上海。",
+          "at": "2026-01-01T09:00:00+08:00",
+          "memory_type": "state",
+          "topic_key": "residence.primary",
+          "temporal_status": "current",
+          "evidence_ids": ["current-shanghai-message"]
+        },
+        {
+          "memory_id": "historical-beijing",
+          "scope": "owner-user",
+          "content": "用户以前住在北京。",
+          "at": "2026-02-01T09:00:00+08:00",
+          "memory_type": "state",
+          "topic_key": "residence.primary",
+          "temporal_status": "historical",
+          "evidence_ids": ["historical-beijing-message"]
+        }
+      ],
+      "expected_actions": []
+    },
+    {
+      "name": "planned-stay-does-not-replace-current-home",
+      "category": "temporal_class_guard",
+      "description": "A planned temporary stay and a current primary residence may coexist in the same topic slot.",
+      "scope": "other-user",
+      "memories": [
+        {
+          "memory_id": "current-home-shanghai",
+          "scope": "other-user",
+          "content": "用户现在长期住在上海。",
+          "at": "2026-01-01T09:00:00+08:00",
+          "memory_type": "state",
+          "topic_key": "residence.primary",
+          "temporal_status": "current",
+          "evidence_ids": ["current-home-shanghai-message"]
+        },
+        {
+          "memory_id": "planned-stay-beijing",
+          "scope": "other-user",
+          "content": "用户计划去北京临时住两个月。",
+          "at": "2026-02-01T09:00:00+08:00",
+          "memory_type": "state",
+          "topic_key": "residence.primary",
+          "temporal_status": "planned",
+          "evidence_ids": ["planned-stay-beijing-message"]
+        }
+      ],
+      "expected_actions": []
+    }
+  ]
+}

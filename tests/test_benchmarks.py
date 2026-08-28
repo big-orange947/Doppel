@@ -6,6 +6,10 @@ import json
 
 import pytest
 
+from benchmarks.consolidation_quality import (
+    load_consolidation_quality_dataset,
+    run_consolidation_quality_benchmark,
+)
 from benchmarks.dataset import SyntheticDatasetConfig, generate_dataset
 from benchmarks.memory_quality import (
     BaselineCaseRun,
@@ -58,6 +62,46 @@ def test_synthetic_dataset_is_deterministic_and_scope_adversarial() -> None:
         == first.config.scope_count
         for query in first.queries
     )
+
+
+async def test_consolidation_quality_guards_expected_and_false_actions() -> None:
+    dataset = load_consolidation_quality_dataset()
+    result = await run_consolidation_quality_benchmark(dataset)
+
+    assert dataset.name == "doppel.consolidation-quality.zh.v1"
+    assert len(dataset.cases) == 7
+    assert result["dataset"]["memory_count"] == 14
+    assert result["dataset"]["expected_action_count"] == 2
+    assert result["metrics"]["false_action_count"] == 0
+    assert result["metrics"]["missing_action_count"] == 0
+    assert result["metrics"]["wrong_canonical_count"] == 0
+    assert result["correctness"] == {
+        "passed": True,
+        "scope_leakage_count": 0,
+        "errors": [],
+    }
+    assert all(not case["errors"] for case in result["cases"])
+
+
+def test_consolidation_quality_result_schema_tracks_runner_envelope() -> None:
+    with open(
+        "benchmarks/consolidation-result.schema.json", encoding="utf-8"
+    ) as source:
+        schema = json.load(source)
+
+    assert schema["properties"]["result_schema_version"]["const"] == 1
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["cases"]["items"]["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "result_schema_version",
+        "doppel_version",
+        "generated_at",
+        "dataset",
+        "environment",
+        "metrics",
+        "cases",
+        "correctness",
+    }
 
 
 @pytest.mark.parametrize("backend", ["memory", "sqlite"])

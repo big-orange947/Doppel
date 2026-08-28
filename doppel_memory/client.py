@@ -30,6 +30,13 @@ from doppel_memory.batch import (
     ScopedHistoryReader,
     ScopedMemoryReader,
 )
+from doppel_memory.consolidation import (
+    ConsolidationCheckpoint,
+    ConsolidationConfig,
+    ConsolidationRunner,
+    ConsolidationRunResult,
+    MemoryConsolidator,
+)
 from doppel_memory.imports import IMImportBatch, ImportResult
 from doppel_memory.in_memory_store import InMemoryStore
 from doppel_memory.models import (
@@ -50,6 +57,7 @@ from doppel_memory.processing import (
     MemoryProcessor,
     ProcessingResult,
     ProcessorHooks,
+    ProposalEvaluator,
     ProposalPolicy,
 )
 from doppel_memory.retriever import Reranker, RetrievalStrategy, Retriever
@@ -163,6 +171,28 @@ class DoppelClient:
             policy=policy,
             hooks=hooks,
             read_limits=read_limits,
+            run_id=run_id,
+        )
+
+    async def consolidate(
+        self,
+        consolidator: MemoryConsolidator,
+        scope: MemoryScope,
+        *,
+        checkpoint: ConsolidationCheckpoint | None = None,
+        config: ConsolidationConfig | None = None,
+        evaluator: ProposalEvaluator | None = None,
+        hooks: ProcessorHooks | None = None,
+        run_id: str | None = None,
+    ) -> ConsolidationRunResult:
+        """Plan and execute one exact-scope personal-memory consolidation cycle."""
+
+        return await ConsolidationRunner(self._store, config).run_once(
+            consolidator,
+            scope,
+            checkpoint=checkpoint,
+            evaluator=evaluator,
+            hooks=hooks,
             run_id=run_id,
         )
 

@@ -72,6 +72,7 @@ class PersonalMemoryDraft(BaseModel):
 
     content: str
     memory_type: str = PersonalMemoryType.FACT
+    topic_key: str = ""
     kind: str = MemoryKind.FACT
     subject: str = Actor.OWNER
     subject_id: str = ""
@@ -96,6 +97,11 @@ class PersonalMemoryDraft(BaseModel):
     @classmethod
     def _normalize_memory_type(cls, value: Any) -> str:
         return PersonalMemoryType.normalize(value)
+
+    @field_validator("topic_key", mode="before")
+    @classmethod
+    def _normalize_topic_key(cls, value: Any) -> str:
+        return str(value or "").strip().lower()[:128]
 
     @field_validator("kind", mode="before")
     @classmethod
@@ -218,7 +224,9 @@ system; never turn agent suggestions or acknowledgements into owner facts. Extra
 personal facts, current states, episodes, preferences, relationships, plans, and
 commitments only when useful beyond the immediate utterance. Keep temporary states and
 historical events distinct from timeless facts. Preserve explicit temporal bounds when
-the evidence provides them. Do not choose a storage scope, memory ID, authority, or
+the evidence provides them. When a claim belongs to one stable mutable slot, provide a
+lowercase topic_key such as residence.primary or preference.favorite-color; omit it
+when no precise slot is justified. Do not choose a storage scope, memory ID, authority, or
 lifecycle action: Doppel derives those from trusted input. Do not consolidate conflicts
 or silently discard old facts; that is a separate audited stage.
 """
@@ -474,6 +482,7 @@ def _analysis_to_proposals(
             "scope": target_scope.scope_key,
             "content": draft.content,
             "memory_type": draft.memory_type,
+            "topic_key": draft.topic_key,
             "subject": draft.subject,
             "subject_id": subject_id,
             "evidence_ids": sorted(draft.evidence_ids),
@@ -497,6 +506,7 @@ def _analysis_to_proposals(
         metadata.update(
             {
                 "personal_memory_type": draft.memory_type,
+                "topic_key": draft.topic_key,
                 "subject": draft.subject,
                 "subject_id": subject_id,
                 "temporal_status": draft.temporal_status,

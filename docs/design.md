@@ -1,6 +1,6 @@
 # Doppel 设计说明
 
-> v0.7.2：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
+> v0.7.3：面向长期个人 Agent 的 provenance-aware、exact-scope、backend-neutral 记忆与上下文内核。
 
 ## 定位与边界
 
@@ -685,6 +685,58 @@ attribution、target scope、ignored/agent evidence writes、latency 和跨用�
 `MemoryBatchTask` 与现有 writer 合同没有修改。模型 provider 继续由 host 管理，核心包不增加网络依赖、
 API key 处理或统一供应商 SDK。
 
+## v0.7.3 可审计个人记忆整理
+
+抽取和整理是两个不同的信任边界。Extractor 只从消息证据产生 candidate；Consolidator 只读取一个
+exact scope 内 active、带 `personal-memory` tag 的现有记录，并返回现有 source memory ID、操作类型与
+现有 canonical source ID。参考模型不拥有 Store，也不能生成 replacement content、scope、authority、
+state、ID、expiry 或 deletion。
+
+```text
+full exact-scope active snapshot
+        │
+        ▼
+MemoryConsolidator
+  ├─ DeterministicMemoryConsolidator
+  └─ ReferenceMemoryConsolidator(StructuredOutputModel)
+        │
+        ▼ trusted binding
+known IDs · no overlap · actor/authority/type/subject/topic agreement
+correction temporal-class gate · source version/fingerprint snapshots
+        │
+        ▼ serializable integrity-bound ConsolidationPlan
+idempotent canonical proposal write
+        │
+        ▼ optimistic source transitions
+candidate/confirmed → superseded
+        │
+        ▼
+checkpoint released only when the complete plan is clean
+```
+
+Runner 必须读取完整 scope 才能做否定性判断；`max_records` 达到上限时直接失败，不用截断快照做危险
+整理。plan 绑定 runner config、consolidator identity、输入 fingerprint、全部 action/proposal/source
+snapshot 和 next checkpoint。执行前重新验证 plan ID；执行中重新读取每个来源的 state、version 和完整
+record fingerprint，变化即停止 canonical 写入。
+
+host 必须以 exact scope 为键提供 single-writer lease；同一 scope 上不能并发执行两个不同 plan。
+replay-safe 表示同一持久化 plan 可在部分失败后恢复，不表示通用 Store 自动提供分布式串行化。
+
+由于 Store 协议不提供跨记录事务，执行采用可恢复顺序：先写 idempotency key 绑定 decision ID 的
+canonical，再把来源逐条转为 `superseded`。部分 transition 失败时不释放 checkpoint；同一 plan 重放会
+识别 canonical duplicate 和已经完成的 `version + 1 / superseded` 来源，再继续剩余 transition。新记录
+保留 canonical 原文、合并后的 evidence、所有 source fingerprint 与 derived chain，审计时无需相信模型
+解释。
+
+确定性策略优先避免 false merge：无 topic 的 episode 即使文本一致也不合并；不同非空 topic 永不因
+文本一致而合并；纠错要求相同 subject/subject ID/type/topic 与相同 temporal status，并且只接受
+`current` 或 `planned`。当前事实和未来计划不会彼此覆盖，historical/unknown 也不参与 newest-wins。
+严格时间并列时保持两条记录等待更强证据。语义模型版仍受这些 runner 门禁约束。
+
+版本化 consolidation benchmark 使用真实 InMemory Store、runner 和 deterministic consolidator，分别
+报告 false/missing action、wrong canonical、scope leakage 与 latency；前四类正确性指标是 CI 硬门禁。
+v0.7.3 不做 temporary expiry、计划兑现推断、episode 身份判定/旅行次数聚合或答案生成。
+
 ## v0.4 IM 导入格式
 
 `IMImportBatch` 表示一个导出页或批次，`IMImportItem` 将标准化 `ChatMessage` 与 exact
@@ -719,7 +771,7 @@ provenance 保存在 `raw.doppel_import`。
 - v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理（已完成）。
 - v0.7.1：中文 IM 记忆质量 fixture、四类基线、分层指标和版本化报告（已完成）。
 - v0.7.2：个人记忆 Reference Intelligence、模型无关结构化抽取与证据门禁（已完成）；
-- v0.7.3：Memory Consolidator、重复证据合并和冲突/纠正决策；
+- v0.7.3：Memory Consolidator、重复证据合并和冲突/纠正决策（已完成）；
 - v0.8.0：中文 lexical/semantic 检索质量与 query planning；
 - v0.8.1：类型感知的强化、衰减、归档和恢复；
 - v0.8.2：AstrBot shadow mode、长期 dogfooding 和端到端质量报告；

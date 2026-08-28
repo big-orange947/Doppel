@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.7.3
+
+Doppel can now turn evidence-bound personal-memory candidates into an auditable active
+set without giving a model direct Store authority. This release adds conservative
+duplicate consolidation and explicit-slot correction while treating false merges as a
+harder failure than missed merges.
+
+### Added
+
+- `MemoryConsolidator`, schema-constrained `ConsolidationDecision` values, and
+  `ReferenceMemoryConsolidator`. A model may select existing source IDs and one existing
+  canonical source, but cannot generate replacement content, scope, authority, state,
+  IDs, or deletion/expiry actions.
+- `DeterministicMemoryConsolidator`, which merges normalized duplicate non-episode
+  memories and applies newest-wins correction only inside one identical non-empty
+  `topic_key`, subject, personal-memory type, and temporal class. `current` and
+  `planned` claims coexist; historical/unknown claims are never treated as replacements.
+- `ConsolidationRunner` and `DoppelClient.consolidate()` with full exact-scope reads,
+  bounded planning, immutable source snapshots, Store fingerprints, optimistic
+  lifecycle transitions, and a serializable integrity-bound plan. The canonical record
+  is written idempotently before source records become `superseded`; a partial failure
+  can replay the same plan without creating another canonical record.
+- Consolidated records preserve the selected canonical content and union source
+  evidence/provenance. A checkpoint is released only after every canonical write and
+  source transition completes cleanly.
+- A versioned Chinese consolidation-quality fixture, result schema, CLI runner, and CI
+  correctness gate measuring false/missing actions, canonical selection, scope leakage,
+  and latency. Adversarial cases cover unrelated claims, repeated trips, topic-key
+  collisions, historical mentions, and current-versus-planned state.
+- Optional `PersonalMemoryDraft.topic_key`, allowing analyzers to identify stable slots
+  such as `residence.primary` while leaving the field empty when uncertain.
+
+### Compatibility and scope
+
+- Consolidation APIs and `topic_key` are additive provisional APIs. Existing stable
+  Store, processor, proposal, retrieval, and lifecycle contracts are unchanged.
+- v0.7.3 deliberately does not infer that a plan happened, expire temporary facts,
+  count semantically distinct trips, invent a synthesized fact, or solve ambiguous
+  conflicts. Those require temporal policy, event identity/aggregation, or a reviewed
+  application/model decision in later stages.
+- Hosts own scheduling, a single-writer lease per exact scope, and durable
+  checkpoint/plan storage. A Store needs stable pagination for a full-scope
+  consolidation audit.
+
 ## 0.7.2
 
 Doppel now has its first official personal-memory extraction path. The release narrows

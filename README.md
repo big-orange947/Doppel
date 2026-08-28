@@ -502,8 +502,44 @@ result = await memory.run_batch_task(
 )
 ```
 
-v0.7.2 只负责证据绑定的抽取，不会擅自把冲突草稿合并、覆盖或标记过期；这部分属于 v0.7.3
-Consolidator。核心包也不绑定统一模型 SDK，托管与本地模型都通过同一 provisional 协议接入。
+抽取层只负责证据绑定，不会擅自把冲突草稿合并、覆盖或标记过期。核心包也不绑定统一模型 SDK，
+托管与本地模型都通过同一 provisional 协议接入。
+
+### 个人记忆整理（v0.7.3）
+
+`MemoryConsolidator` 与抽取器分离：它周期性审计一个 exact scope 内已有的 active
+`personal-memory`，只提议“哪些现有记录应合并/纠正，以及哪条现有记录作为 canonical”，不能生成
+替代文本或选择写入 scope。保守的确定性实现可直接用于重复证据整理：
+
+```python
+from doppel_memory import DeterministicMemoryConsolidator
+
+result = await memory.consolidate(
+    DeterministicMemoryConsolidator(),
+    scope,
+    checkpoint=checkpoint,
+    run_id="nightly-personal-memory",
+)
+if result.committable_checkpoint is not None:
+    await my_checkpoint_store.save(result.committable_checkpoint)
+```
+
+每次运行先生成可序列化、带完整性校验的 `ConsolidationPlan`，再幂等写入保留 canonical 内容和全部
+证据链的新记录，最后以乐观并发把来源记录转为 `superseded`。中途失败不会释放 checkpoint；保存原
+plan 并重放即可继续，不会复制 canonical。需要将计划持久化后再执行时，可直接使用
+`ConsolidationRunner.plan_once()` 与 `execute()` 两阶段接口。
+
+调度器必须保证同一 exact scope 同时只有一个 consolidation plan 在执行（多实例部署应使用数据库
+租约）。重放解决的是同一 plan 的部分失败，不把无事务的通用 Store 协议伪装成分布式锁。
+
+确定性纠错必须同时满足相同 subject、类型、非空 `topic_key` 和时间类别，只在 `current` 内或
+`planned` 内选择严格更新的记录。因而“目前住上海”与“计划去北京住两个月”会并存，计划不会被当成
+已经发生；historical/unknown 记录也不会覆盖当前事实。无事件身份的相同旅行文本不会自动合并，
+不同 topic 即使文本相同也保持独立。模型语义版可使用 `ReferenceMemoryConsolidator`，但仍经过同一组
+可信门禁。
+
+v0.7.3 不负责临时状态到期、推断计划已经发生、旅行事件去重/计数或凭空综合新事实；这些边界分别
+留给时间治理、事件身份与查询聚合阶段。
 
 ### 周期聚合任务
 
@@ -973,12 +1009,20 @@ uv run python -m benchmarks.memory_quality \
 ```
 
 同一份数据运行 `no_memory`、`recent_window`、透明中文字符 n-gram 的 `raw_lexical` 和当前
-`doppel_v0_7_events` 四个确定性基线。报告分别给出 evidence recall、candidate precision、MRR、
+  `doppel_v0_7_events` 四个确定性基线。报告分别给出 evidence recall、candidate precision、MRR、
 拒答、禁止证据、重复上下文、字符预算、延迟和 scope leakage；越权候选是硬失败。抽取、整理、冲突
 解决、最终回答正确性和模型成本仍明确标为尚未测量，不会用原始事件召回分数冒充“记忆智能”。
 v0.7.2 另提供可注入真实 `PersonalMemoryAnalyzer` 的抽取层评测，独立计算 gold evidence coverage、
 supported candidate precision、subject/scope accuracy、噪声写入和跨用户泄漏；仅仅引用正确证据不会
 被当作内容语义已经正确。
+
+v0.7.3 的独立 consolidation fixture 运行真实 Store/runner 路径，对重复、显式纠正和四类误合并陷阱
+进行硬门禁；任何 false action、missing action、canonical 选择错误或 scope leakage 都使进程失败：
+
+```bash
+uv run python -m benchmarks.consolidation_quality \
+  --output benchmarks/results/consolidation-quality.json
+```
 
 首份版本化结果保存在 [`benchmarks/reference-results/`](benchmarks/reference-results/)，完整方法和边界
 见 [`benchmarks/README.md`](benchmarks/README.md)。
@@ -1030,6 +1074,7 @@ uv run python -m benchmarks.vector_quality \
 - [x] v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理
 - [x] v0.7.1：中文 IM 记忆质量数据集、四类基线、分层指标与版本化报告
 - [x] v0.7.2：个人记忆参考抽取、模型无关结构化输出、证据/角色/作用域门禁与独立抽取评测
+- [x] v0.7.3：可重放 Memory Consolidator、保守重复/纠错决策与独立质量门禁
 
 详细设计见 [`docs/design.md`](docs/design.md)。
 从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。

@@ -26,7 +26,7 @@ memories, and 11 queries:
 - `raw_lexical`: all authorized raw events ranked by transparent Chinese character
   n-gram cosine similarity;
 - `doppel_v0_7_events`: current raw-event ingest and default Store retrieval, without
-  pretending that an extractor or consolidator exists.
+  invoking the optional extractor or consolidator stages.
 
 Gold queries describe required evidence as groups. Any message in one group can
 satisfy that fact, so repeated statements do not force a system to return every copy.
@@ -71,6 +71,30 @@ machine-readable envelope. [`reference-results/`](reference-results/) contains a
 committed baseline from the release revision; latency values are observations from the
 recorded environment, while evidence metrics and the dataset fingerprint are the
 portable comparison surface.
+
+## Personal-memory consolidation quality
+
+The v0.7.3 consolidation runner exercises the real `InMemoryStore`,
+`ConsolidationRunner`, and conservative deterministic consolidator over a versioned
+Chinese fixture:
+
+```bash
+uv run python -m benchmarks.consolidation_quality \
+  --dataset benchmarks/datasets/consolidation-quality-zh-v1.json \
+  --output benchmarks/results/consolidation-quality.json
+```
+
+The fixture includes exact duplicates and an explicit current-value correction, plus
+negative cases for unrelated preferences, identical episode text without event
+identity, equal text in different topic slots, and a newer historical mention. The
+report counts false actions, missing actions, wrong canonical choices, scope leakage,
+and latency. Every correctness count must be zero or the command exits nonzero.
+
+[`consolidation-result.schema.json`](consolidation-result.schema.json) versions the
+machine-readable report. This deterministic fixture validates policy and execution
+boundaries; it does not establish semantic quality for an injected model consolidator.
+Live-model evaluation still needs held-out paraphrases, ambiguous conflicts, human
+review, and provider/prompt/version metadata.
 
 ## Store performance and correctness
 
