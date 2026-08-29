@@ -285,6 +285,9 @@ mutable present conditions are memory_type="state" with temporal_status="current
 future intentions are memory_type="plan" with temporal_status="planned"; completed
 real-world occurrences are memory_type="episode" with temporal_status="historical";
 stable current ownership, preferences, and relationships are "current", not "unknown".
+An explicitly cancelled, hypothetical, intended-but-not-completed, or denied occurrence
+is not an episode and must not receive event_key. Represent a cancelled intention as a
+plan retraction/correction or historical plan, with evidence for the cancellation.
 Use temporal_status only from timeless/current/historical/planned/unknown unless the
 evidence truly requires a domain-specific extension. When multiple supplied messages
 describe the same entity or compatible claim, emit one enriched memory and bind every
@@ -301,7 +304,7 @@ class ReferencePersonalMemoryAnalyzer:
     """Reference prompt and schema around any structured-output model provider."""
 
     name = "doppel.reference-personal-memory-analyzer"
-    version = "7"
+    version = "8"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model

@@ -404,6 +404,8 @@ async def test_reference_analyzer_supplies_bounded_input_and_schema() -> None:
     assert 'memory_type="state"' in generated.instructions
     assert "overlapping single-evidence duplicates" in generated.instructions
     assert "primary language" in generated.instructions
+    assert "intended-but-not-completed" in generated.instructions
+    assert "is not an episode" in generated.instructions
     assert generated.input["scope"] == SCOPE.describe()
     assert generated.input["messages"][0]["evidence_id"] == "coffee"
     assert generated.output_schema["title"] == "PersonalMemoryAnalysis"

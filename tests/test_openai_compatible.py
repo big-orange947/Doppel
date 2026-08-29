@@ -411,6 +411,6 @@ async def test_reference_analyzer_runs_through_real_provider_boundary() -> None:
     assert result.memories[0].content == "用户现在住在上海。"
     assert result.memories[0].revision_kind == "assertion"
     assert captured_schema["title"] == "PersonalMemoryAnalysis"
-    assert analyzer.version.startswith("7.")
+    assert analyzer.version.startswith("8.")
     assert planner.version.startswith("2.")
     assert consolidator.version.startswith("3.")

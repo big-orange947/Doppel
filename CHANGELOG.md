@@ -25,6 +25,9 @@
 - Reference-model `subject_id` values are now discarded before draft validation;
   owner/agent identity is derived from trusted scope and contact identity from bound
   evidence. Custom analyzers still receive the strict mismatch checks.
+- The reference extraction contract explicitly excludes cancelled, hypothetical,
+  denied, and intended-but-not-completed occurrences from episode/event-key counting;
+  cancellations remain auditable plan revisions instead of invented completed trips.
 
 ## 0.8.3
 
