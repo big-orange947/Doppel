@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- OpenAI-compatible structured output can optionally send a provider thinking-mode
+  toggle. This supports low-cost non-thinking extraction on compatible providers while
+  leaving the existing request shape unchanged by default.
+- The provider accepts an optional content-free usage observer and normalizes common
+  OpenAI/DeepSeek prompt, completion, cache-hit/cache-miss, total, and reasoning token
+  counters before structured-content validation. Hosts can enforce budgets even when a
+  paid response is later rejected as truncated or invalid.
+- The reference personal-memory analyzer now validates model drafts independently:
+  invalid items are rejected with content-free diagnostics while valid siblings remain
+  usable. Its prompt also makes the `episode`/`event_key`/`kind=event` relationship
+  explicit for JSON-object providers that cannot enforce cross-field JSON Schema rules.
+- Reference extraction now asks compatible models to use Doppel's canonical temporal
+  and memory-type vocabulary and to merge compatible evidence about one entity inside
+  a batch. Common provider aliases (`future`, `past`, `history`, `present`) normalize to
+  `planned`, `historical`, and `current` at the validation boundary.
+- Extracted memory content is instructed to preserve the evidence's primary language
+  and identifying terms so lexical retrieval and evidence audits do not fail because a
+  compatible model unnecessarily translated names or locations.
+- Reference-model `subject_id` values are now discarded before draft validation;
+  owner/agent identity is derived from trusted scope and contact identity from bound
+  evidence. Custom analyzers still receive the strict mismatch checks.
+
 ## 0.8.3
 
 Doppel now includes an official OpenAI-compatible implementation of its existing

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from types import TracebackType
 from typing import Any, Literal, Self
 from urllib.parse import urlsplit, urlunsplit
@@ -14,6 +15,8 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from doppel_memory.intelligence import StructuredGenerationRequest
+
+logger = logging.getLogger(__name__)
 
 
 class StructuredOutputProviderError(RuntimeError):
@@ -52,6 +55,7 @@ class OpenAICompatibleStructuredOutputConfig(BaseModel):
         "max_completion_tokens"
     )
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    thinking: Literal["enabled", "disabled"] | None = None
 
     @field_validator("model", mode="before")
     @classmethod
@@ -111,6 +115,7 @@ class OpenAICompatibleStructuredOutputConfig(BaseModel):
             "schema_mode": self.schema_mode,
             "strict_schema": self.strict_schema,
             "temperature": self.temperature,
+            "thinking": self.thinking,
         }
         encoded = json.dumps(
             payload,
@@ -133,10 +138,12 @@ class OpenAICompatibleStructuredOutputModel:
         api_key: str = "",
         headers: Mapping[str, str] | None = None,
         client: httpx.AsyncClient | None = None,
+        usage_observer: Callable[[Mapping[str, int]], None] | None = None,
     ) -> None:
         self.config = OpenAICompatibleStructuredOutputConfig.model_validate(config)
         self._api_key = str(api_key or "").strip()
         self._headers = _normalize_headers(headers)
+        self._usage_observer = usage_observer
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             timeout=self.config.timeout_seconds,
@@ -203,6 +210,12 @@ class OpenAICompatibleStructuredOutputModel:
                 "structured-output provider returned invalid response JSON",
                 status_code=response.status_code,
             ) from None
+        usage = _normalized_usage(envelope)
+        if usage is not None and self._usage_observer is not None:
+            try:
+                self._usage_observer(usage)
+            except Exception:
+                logger.warning("structured-output usage observer failed", exc_info=True)
         return _structured_content(envelope, status_code=response.status_code)
 
     async def aclose(self) -> None:
@@ -286,6 +299,8 @@ class OpenAICompatibleStructuredOutputModel:
             )
         if self.config.temperature is not None:
             payload["temperature"] = self.config.temperature
+        if self.config.thinking is not None:
+            payload["thinking"] = {"type": self.config.thinking}
         return payload
 
 
@@ -302,6 +317,48 @@ def _normalize_headers(headers: Mapping[str, str] | None) -> dict[str, str]:
             raise ValueError("custom header is reserved")
         normalized[name] = value
     return normalized
+
+
+def _normalized_usage(envelope: Any) -> dict[str, int] | None:
+    if not isinstance(envelope, Mapping):
+        return None
+    raw = envelope.get("usage")
+    if not isinstance(raw, Mapping):
+        return None
+
+    def _token(*names: str) -> int:
+        for name in names:
+            value = raw.get(name)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)) and value >= 0:
+                return int(value)
+        return 0
+
+    input_tokens = _token("prompt_tokens", "input_tokens")
+    output_tokens = _token("completion_tokens", "output_tokens")
+    total_tokens = _token("total_tokens") or input_tokens + output_tokens
+    cached_input_tokens = _token("prompt_cache_hit_tokens")
+    cache_miss_input_tokens = _token("prompt_cache_miss_tokens")
+    details = raw.get("prompt_tokens_details")
+    if not cached_input_tokens and isinstance(details, Mapping):
+        value = details.get("cached_tokens")
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+            cached_input_tokens = int(value)
+    completion_details = raw.get("completion_tokens_details")
+    reasoning_tokens = 0
+    if isinstance(completion_details, Mapping):
+        value = completion_details.get("reasoning_tokens")
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+            reasoning_tokens = int(value)
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "cache_miss_input_tokens": cache_miss_input_tokens,
+        "reasoning_tokens": reasoning_tokens,
+    }
 
 
 def _schema_name(schema: Mapping[str, Any]) -> str:

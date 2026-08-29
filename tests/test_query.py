@@ -508,6 +508,18 @@ async def test_business_trip_count_is_structurally_limited_to_episodes() -> None
     assert draft.memory_types == ["episode"]
 
 
+async def test_pet_name_question_reduces_to_retrievable_entity_text() -> None:
+    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
+        PersonalMemoryQueryRequest(
+            query="我的猫叫什么？",
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.search_text == "猫"
+
+
 async def test_current_conflicts_are_returned_as_ambiguous_evidence() -> None:
     store = InMemoryStore()
     await _put(

@@ -9,11 +9,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from doppel_memory.batch import (
     BatchCheckpoint,
@@ -29,6 +37,8 @@ from doppel_memory.models import (
     MemoryState,
 )
 from doppel_memory.processing import MemoryProposal
+
+logger = logging.getLogger(__name__)
 
 
 class PersonalMemoryType:
@@ -62,7 +72,13 @@ class MemoryTemporalStatus:
     @classmethod
     def normalize(cls, raw: str | None) -> str:
         value = str(raw or "").strip().lower()
-        return (value or cls.UNKNOWN)[:64]
+        aliases = {
+            "present": cls.CURRENT,
+            "future": cls.PLANNED,
+            "past": cls.HISTORICAL,
+            "history": cls.HISTORICAL,
+        }
+        return aliases.get(value, value or cls.UNKNOWN)[:64]
 
 
 class PersonalMemoryRevisionKind:
@@ -262,6 +278,19 @@ lowercase topic_key such as residence.primary or preference.favorite-color; omit
 when no precise slot is justified. For an episode, provide event_key only when the
 evidence identifies one stable real-world event; repeated mentions of the same event
 must use the same key, while separate events must not share one. Omit it when uncertain.
+Whenever event_key is present, memory_type must be exactly "episode" and kind must be
+"event". Never attach event_key to facts, states, preferences, plans, or relationships.
+Use Doppel's canonical built-ins for ordinary personal memory: residence and other
+mutable present conditions are memory_type="state" with temporal_status="current";
+future intentions are memory_type="plan" with temporal_status="planned"; completed
+real-world occurrences are memory_type="episode" with temporal_status="historical";
+stable current ownership, preferences, and relationships are "current", not "unknown".
+Use temporal_status only from timeless/current/historical/planned/unknown unless the
+evidence truly requires a domain-specific extension. When multiple supplied messages
+describe the same entity or compatible claim, emit one enriched memory and bind every
+supporting evidence_id instead of emitting overlapping single-evidence duplicates.
+Write each memory content in the primary language of its supporting evidence. Do not
+translate personal names, pet names, city names, or other identifying terms.
 Do not choose a storage scope, memory ID, authority, or lifecycle action: Doppel derives
 those from trusted input. Do not consolidate conflicts or silently discard old facts;
 that is a separate audited stage.
@@ -272,7 +301,7 @@ class ReferencePersonalMemoryAnalyzer:
     """Reference prompt and schema around any structured-output model provider."""
 
     name = "doppel.reference-personal-memory-analyzer"
-    version = "3"
+    version = "7"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -307,7 +336,36 @@ class ReferencePersonalMemoryAnalyzer:
         )
         if isinstance(raw, BaseModel):
             raw = raw.model_dump(warnings=False)
-        return PersonalMemoryAnalysis.model_validate(raw)
+        if not isinstance(raw, Mapping):
+            return PersonalMemoryAnalysis.model_validate(raw)
+        # Provider JSON modes do not all enforce cross-field constraints. Keep
+        # high-precision valid drafts instead of losing an entire batch because
+        # one model-produced item is malformed. Top-level shape remains strict.
+        if set(raw) != {"memories"} or not isinstance(raw.get("memories"), list):
+            return PersonalMemoryAnalysis.model_validate(raw)
+        accepted: list[PersonalMemoryDraft] = []
+        rejected: list[tuple[int, list[tuple[str, str]]]] = []
+        for index, item in enumerate(raw["memories"]):
+            try:
+                # Reference-model identity is never authoritative. Owner/agent IDs
+                # come from scope and contact IDs from bound evidence later.
+                if isinstance(item, Mapping):
+                    item = {**item, "subject_id": ""}
+                accepted.append(PersonalMemoryDraft.model_validate(item))
+            except ValidationError as exc:
+                errors = [
+                    (".".join(str(part) for part in error["loc"]), error["type"])
+                    for error in exc.errors(include_url=False, include_input=False)
+                ]
+                rejected.append((index, errors))
+        if rejected:
+            logger.warning(
+                "personal-memory analyzer rejected %d/%d invalid drafts: %s",
+                len(rejected),
+                len(raw["memories"]),
+                rejected,
+            )
+        return PersonalMemoryAnalysis(memories=accepted)
 
 
 class PersonalMemoryExtractorConfig(BaseModel):

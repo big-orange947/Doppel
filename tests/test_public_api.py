@@ -316,6 +316,7 @@ MODEL_FIELDS = {
         "max_completion_tokens",
         "max_tokens_parameter",
         "temperature",
+        "thinking",
     ),
     "PersonalMemoryAnalysis": ("memories",),
     "PersonalMemoryAnalysisRequest": ("scope", "messages"),
@@ -736,6 +737,7 @@ SIGNATURES = {
         ("api_key", "KEYWORD_ONLY"),
         ("headers", "KEYWORD_ONLY"),
         ("client", "KEYWORD_ONLY"),
+        ("usage_observer", "KEYWORD_ONLY"),
     ),
     "OpenAICompatibleStructuredOutputModel.generate": (
         ("request", "POSITIONAL_OR_KEYWORD"),

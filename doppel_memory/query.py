@@ -1028,6 +1028,8 @@ def _search_text(query: str) -> str:
         "哪些",
         "哪里",
         "哪儿",
+        "叫什么",
+        "叫啥",
         "是什么",
         "的记忆",
         "相关记忆",
@@ -1036,6 +1038,7 @@ def _search_text(query: str) -> str:
         "回忆",
         "吗",
         "呢",
+        "的",
     ):
         cleaned = cleaned.replace(phrase, "")
     return re.sub(r"[\s，。！？；：、,.!?;:]+", "", cleaned).strip()

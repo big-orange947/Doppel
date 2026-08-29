@@ -180,6 +180,27 @@ def test_event_key_is_rejected_for_non_episode_memories() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("future", "planned"),
+        ("past", "historical"),
+        ("history", "historical"),
+        ("present", "current"),
+    ],
+)
+def test_common_provider_temporal_aliases_are_canonicalized(
+    raw: str, expected: str
+) -> None:
+    draft = PersonalMemoryDraft(
+        content="测试记忆",
+        temporal_status=raw,
+        evidence_ids=["message-1"],
+    )
+
+    assert draft.temporal_status == expected
+
+
 @pytest.mark.asyncio
 async def test_user_scope_write_still_requires_explicit_pipeline_authorization() -> (
     None
@@ -380,9 +401,74 @@ async def test_reference_analyzer_supplies_bounded_input_and_schema() -> None:
     generated = model.requests[0]
     assert "Prefer precision" in generated.instructions
     assert "Do not consolidate conflicts" in generated.instructions
+    assert 'memory_type="state"' in generated.instructions
+    assert "overlapping single-evidence duplicates" in generated.instructions
+    assert "primary language" in generated.instructions
     assert generated.input["scope"] == SCOPE.describe()
     assert generated.input["messages"][0]["evidence_id"] == "coffee"
     assert generated.output_schema["title"] == "PersonalMemoryAnalysis"
+
+
+@pytest.mark.asyncio
+async def test_reference_analyzer_keeps_valid_drafts_when_one_is_invalid(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    model = StubStructuredModel(
+        {
+            "memories": [
+                {
+                    "content": "用户长期居住在上海。",
+                    "memory_type": "state",
+                    "evidence_ids": ["residence"],
+                },
+                {
+                    "content": "用户去杭州旅行。",
+                    "memory_type": "fact",
+                    "event_key": "trip:hangzhou",
+                    "evidence_ids": ["residence"],
+                },
+            ]
+        }
+    )
+    analyzer = ReferencePersonalMemoryAnalyzer(model)
+
+    analysis = await analyzer.analyze(
+        PersonalMemoryAnalysisRequest(
+            scope=SCOPE,
+            messages=[_message("residence", "我长期住在上海。")],
+        )
+    )
+
+    assert [draft.content for draft in analysis.memories] == ["用户长期居住在上海。"]
+    assert "rejected 1/2 invalid drafts" in caplog.text
+    assert "用户去杭州旅行" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_reference_analyzer_discards_model_supplied_subject_identity() -> None:
+    model = StubStructuredModel(
+        {
+            "memories": [
+                {
+                    "content": "用户住在上海。",
+                    "memory_type": "state",
+                    "subject": "owner",
+                    "subject_id": "untrusted-raw-account-id",
+                    "evidence_ids": ["residence"],
+                }
+            ]
+        }
+    )
+    analyzer = ReferencePersonalMemoryAnalyzer(model)
+
+    analysis = await analyzer.analyze(
+        PersonalMemoryAnalysisRequest(
+            scope=SCOPE,
+            messages=[_message("residence", "我住在上海。")],
+        )
+    )
+
+    assert analysis.memories[0].subject_id == ""
 
 
 @pytest.mark.asyncio

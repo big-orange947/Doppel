@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -40,6 +41,7 @@ def _request() -> StructuredGenerationRequest:
 
 async def test_json_schema_request_is_bounded_authenticated_and_parsed() -> None:
     observed: dict[str, Any] = {}
+    observed_usage: list[Mapping[str, int]] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         observed["url"] = str(request.url)
@@ -49,6 +51,13 @@ async def test_json_schema_request_is_bounded_authenticated_and_parsed() -> None
         return httpx.Response(
             200,
             json={
+                "usage": {
+                    "prompt_tokens": 120,
+                    "completion_tokens": 30,
+                    "total_tokens": 150,
+                    "prompt_cache_hit_tokens": 80,
+                    "prompt_cache_miss_tokens": 40,
+                },
                 "choices": [
                     {
                         "finish_reason": "stop",
@@ -65,10 +74,12 @@ async def test_json_schema_request_is_bounded_authenticated_and_parsed() -> None
             base_url="https://models.example/v1/",
             max_completion_tokens=512,
             temperature=0.2,
+            thinking="disabled",
         ),
         api_key="secret-key",
         headers={"OpenAI-Organization": "org-test"},
         client=client,
+        usage_observer=observed_usage.append,
     )
 
     result = await provider.generate(_request())
@@ -90,6 +101,17 @@ async def test_json_schema_request_is_bounded_authenticated_and_parsed() -> None
     }
     assert payload["max_completion_tokens"] == 512
     assert payload["temperature"] == 0.2
+    assert payload["thinking"] == {"type": "disabled"}
+    assert observed_usage == [
+        {
+            "input_tokens": 120,
+            "output_tokens": 30,
+            "total_tokens": 150,
+            "cached_input_tokens": 80,
+            "cache_miss_input_tokens": 40,
+            "reasoning_tokens": 0,
+        }
+    ]
     assert provider.version.startswith("1.")
     await provider.aclose()
     assert not client.is_closed
@@ -389,6 +411,6 @@ async def test_reference_analyzer_runs_through_real_provider_boundary() -> None:
     assert result.memories[0].content == "用户现在住在上海。"
     assert result.memories[0].revision_kind == "assertion"
     assert captured_schema["title"] == "PersonalMemoryAnalysis"
-    assert analyzer.version.startswith("3.")
+    assert analyzer.version.startswith("7.")
     assert planner.version.startswith("2.")
     assert consolidator.version.startswith("3.")
