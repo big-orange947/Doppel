@@ -738,6 +738,46 @@ class _LowSemanticIndex:
         ]
 
 
+class _CountingSemanticIndex:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def search(self, query, scopes, *, filters=None, limit=10):
+        del query, scopes, filters, limit
+        self.calls += 1
+        return []
+
+
+async def test_exact_count_never_depends_on_bounded_semantic_top_k() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "counted-event",
+            "用户参加了一次公开活动。",
+            memory_type="episode",
+            temporal_status="historical",
+            event_key="event:2026-01:public",
+            day=1,
+        ),
+    )
+    semantic_index = _CountingSemanticIndex()
+
+    result = await PersonalMemoryQueryEngine(
+        store, semantic_index=semantic_index
+    ).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "我参加公开活动几次？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert semantic_index.calls == 0
+    assert result.complete is True
+    assert result.count.status == PersonalMemoryCountStatus.EXACT
+    assert result.count.value == 1
+
+
 async def test_low_semantic_similarity_does_not_turn_every_candidate_into_a_hit() -> (
     None
 ):

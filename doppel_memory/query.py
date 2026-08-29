@@ -488,10 +488,14 @@ class PersonalMemoryQueryEngine:
         else:
             for scope in bound.scopes:
                 records.extend(await self._read_scope(scope))
-            semantic_scores, semantic_warnings = await self._semantic_scores(
-                bound, records
-            )
-            warnings.extend(semantic_warnings)
+            # A SemanticIndex is a bounded top-k interface. It may improve lookup
+            # recall, but it cannot define an exhaustive set for an exact count.
+            # Counts therefore use only the complete structural/lexical scan.
+            if bound.intent != PersonalMemoryQueryIntent.COUNT:
+                semantic_scores, semantic_warnings = await self._semantic_scores(
+                    bound, records
+                )
+                warnings.extend(semantic_warnings)
         for scope in bound.scopes:
             conflict_records.extend(await self._read_conflicts(scope))
         matched: list[tuple[MemoryRecord, float, float, datetime, list[str]]] = []

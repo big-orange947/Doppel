@@ -780,7 +780,8 @@ candidate 直接丢弃，因此不需要先扫描 2,000 条才能使用向量索
 top-k 不是完整 snapshot。semantic provider 失败时可配置回退完整 lexical scan，warning 会进入结果。
 
 count 始终使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
-“一共几次”。结构化条件是硬门禁，lexical/semantic 只能筛选或排序候选。
+“一共几次”。SemanticIndex 是 top-k 协议，因此不参与 exact count 的集合定义；计数只使用完整
+结构/词法扫描。普通查询中，结构化条件仍是硬门禁，lexical/semantic 只能筛选或排序候选。
 
 as_of 使用 valid_from/valid_to，无区间的 historical/planned 不被猜测为当时有效。planned 默认
 不会因为查询日期落在计划区间就被当成实际状态；只有明确 planned intent/过滤才返回计划。current 或

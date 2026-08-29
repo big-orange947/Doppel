@@ -611,7 +611,9 @@ if result.conflicts:
 ~~~
 
 旅行计数使用 episode 的稳定 event_key，而不是直接数记忆条数。同一次北京旅行被提到两次、两条
-记录使用同一 key 时只计一次；只要有一条匹配 episode 缺少 key，结果就是 indeterminate：
+记录使用同一 key 时只计一次；只要有一条匹配 episode 缺少 key，结果就是 indeterminate。计数
+不会调用 top-k SemanticIndex；它只在完整 exact-scope 结构/词法扫描上计算，避免漏掉向量候选窗口外
+的事件却仍声称 exact：
 
 ~~~python
 if result.count.status == "exact":
