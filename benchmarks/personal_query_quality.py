@@ -1,4 +1,4 @@
-"""Deterministic correctness benchmark for Chinese personal-memory queries."""
+"""Domain-neutral lexical baseline for Chinese personal-memory queries."""
 
 from __future__ import annotations
 
@@ -192,7 +192,7 @@ async def run_personal_query_quality_benchmark(
     scope_leakage = sum(report["scope_leakage_count"] for report in reports)
     latencies = [report["latency_ms"] for report in reports]
     return {
-        "result_schema_version": 1,
+        "result_schema_version": 2,
         "doppel_version": __version__,
         "generated_at": utc_now().isoformat(),
         "dataset": {
@@ -207,6 +207,12 @@ async def run_personal_query_quality_benchmark(
             "python": platform.python_version(),
             "implementation": platform.python_implementation(),
             "platform": platform.platform(),
+        },
+        "retrieval": {
+            "mode": "lexical-domain-neutral",
+            "semantic_index": False,
+            "planner": planner.name,
+            "planner_version": planner.version,
         },
         "metrics": {
             "missing_hit_count": missing_hits,
@@ -315,6 +321,18 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET))
     parser.add_argument("--output")
+    parser.add_argument(
+        "--max-missing-hits",
+        type=int,
+        default=0,
+        help="accepted lexical baseline ceiling; does not alter reported correctness",
+    )
+    parser.add_argument(
+        "--max-forbidden-hits",
+        type=int,
+        default=0,
+        help="accepted lexical baseline ceiling; does not alter reported correctness",
+    )
     return parser
 
 
@@ -331,7 +349,21 @@ async def _main(argv: list[str] | None = None) -> int:
         print(f"personal query quality result: {output}")
     else:
         sys.stdout.write(rendered)
-    return 0 if result["correctness"]["passed"] else 1
+    metrics = result["metrics"]
+    hard_error_count = sum(
+        metrics[name]
+        for name in (
+            "intent_error_count",
+            "count_error_count",
+            "ambiguity_error_count",
+            "scope_leakage_count",
+        )
+    )
+    within_declared_baseline = (
+        metrics["missing_hit_count"] <= args.max_missing_hits
+        and metrics["forbidden_hit_count"] <= args.max_forbidden_hits
+    )
+    return 0 if hard_error_count == 0 and within_declared_baseline else 1
 
 
 def main(argv: list[str] | None = None) -> int:

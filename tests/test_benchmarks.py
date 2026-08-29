@@ -157,27 +157,39 @@ def test_governance_quality_result_schema_tracks_runner_envelope() -> None:
     }
 
 
-async def test_personal_query_quality_guards_temporal_hits_and_counts() -> None:
+async def test_personal_query_quality_reports_lexical_gaps_without_hiding_them() -> None:
     dataset = load_personal_query_quality_dataset()
     result = await run_personal_query_quality_benchmark(dataset)
 
     assert dataset.name == "doppel.personal-query-quality.zh.v1"
     assert len(dataset.memories) == 10
     assert len(dataset.queries) == 9
-    assert result["metrics"] == {
-        "missing_hit_count": 0,
-        "forbidden_hit_count": 0,
-        "intent_error_count": 0,
-        "count_error_count": 0,
-        "ambiguity_error_count": 0,
-        "scope_leakage_count": 0,
-        "latency_ms": result["metrics"]["latency_ms"],
+    assert result["result_schema_version"] == 2
+    assert result["retrieval"] == {
+        "mode": "lexical-domain-neutral",
+        "semantic_index": False,
+        "planner": "doppel.deterministic-personal-memory-query-planner",
+        "planner_version": "3",
     }
-    assert result["correctness"] == {
-        "passed": True,
-        "scope_leakage_count": 0,
-        "errors": [],
+    assert set(result["metrics"]) == {
+        "missing_hit_count",
+        "forbidden_hit_count",
+        "intent_error_count",
+        "count_error_count",
+        "ambiguity_error_count",
+        "scope_leakage_count",
+        "latency_ms",
     }
+    assert result["metrics"]["intent_error_count"] == 0
+    assert result["metrics"]["count_error_count"] == 0
+    assert result["metrics"]["ambiguity_error_count"] == 0
+    assert result["metrics"]["scope_leakage_count"] == 0
+    assert result["metrics"]["missing_hit_count"] <= 3
+    assert result["metrics"]["forbidden_hit_count"] <= 1
+    assert result["correctness"]["scope_leakage_count"] == 0
+    assert result["correctness"]["passed"] is (
+        not result["correctness"]["errors"]
+    )
 
 
 def test_personal_query_quality_result_schema_tracks_runner_envelope() -> None:
@@ -186,7 +198,7 @@ def test_personal_query_quality_result_schema_tracks_runner_envelope() -> None:
     ) as source:
         schema = json.load(source)
 
-    assert schema["properties"]["result_schema_version"]["const"] == 1
+    assert schema["properties"]["result_schema_version"]["const"] == 2
     assert schema["additionalProperties"] is False
     assert schema["properties"]["cases"]["items"]["additionalProperties"] is False
     assert set(schema["required"]) == {
@@ -195,6 +207,7 @@ def test_personal_query_quality_result_schema_tracks_runner_envelope() -> None:
         "generated_at",
         "dataset",
         "environment",
+        "retrieval",
         "metrics",
         "cases",
         "correctness",

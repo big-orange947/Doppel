@@ -120,10 +120,12 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - run: uv sync --locked --extra dev
-      - name: Run deterministic Chinese personal-memory query quality gates
+      - name: Run domain-neutral Chinese lexical query baseline
         run: >-
           uv run python -m benchmarks.personal_query_quality
           --dataset benchmarks/datasets/personal-query-quality-zh-v1.json
+          --max-missing-hits 3
+          --max-forbidden-hits 1
           --output "$RUNNER_TEMP/doppel-personal-query-quality.json"
 
   governance-quality-smoke:

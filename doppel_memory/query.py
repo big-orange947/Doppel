@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import math
@@ -160,10 +161,12 @@ Plan retrieval over already-extracted personal memories. Return one structured q
 draft and never choose read scopes, Store operations, memory IDs, lifecycle actions, or
 an answer. Use current for facts true now, planned only for unfulfilled future plans,
 history for prior facts, list for episode enumeration, count for episode counts, and
-as_of only with an explicit point in time. Prefer stable topic keys such as
-residence.primary when the question clearly names one slot. Use episode memory type for
-travel/experience enumeration and counting. Keep search_text empty when structural
-type/topic filters should retrieve the complete set. Do not infer that a plan happened.
+as_of only with an explicit point in time. Preserve a concise semantic search_text for
+ordinary lookup/list questions. Omit topic_keys unless the host's extracted memories
+use one explicit stable slot that the question names exactly; topic_keys are hard
+filters, not guesses or synonyms. Use episode memory type for occurrence counting and
+keep search_text empty only when a complete structural set is required. Do not infer
+that a plan happened.
 Use the supplied current time to resolve relative expressions. Prefer a conservative
 draft and explain ambiguity rather than broadening the subject or time range.
 """
@@ -173,7 +176,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "2"
+    version = "3"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -197,10 +200,10 @@ class ReferencePersonalMemoryQueryPlanner:
 
 
 class DeterministicPersonalMemoryQueryPlanner:
-    """Transparent Chinese baseline for common owner-memory questions."""
+    """Domain-neutral baseline for temporal and aggregation structure only."""
 
     name = "doppel.deterministic-personal-memory-query-planner"
-    version = "2"
+    version = "3"
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
@@ -213,66 +216,12 @@ class DeterministicPersonalMemoryQueryPlanner:
         temporal_statuses: list[str] = []
         search_text = _search_text(query)
 
-        if _contains_any(query, ("住", "居住", "住所", "住址", "家在哪")):
-            memory_types = [PersonalMemoryType.STATE]
-            topic_keys = ["residence.primary"]
-            search_text = ""
-        elif _contains_any(query, ("旅行", "旅游", "去过", "游玩", "出差", "行程")):
+        # Event counting is structurally defined by stable event_key values.
+        # Domain concepts (food, work, residence, travel, pets, etc.) must stay
+        # in search_text and be handled by lexical/semantic retrieval rather
+        # than accumulating benchmark-specific topic dictionaries here.
+        if intent == PersonalMemoryQueryIntent.COUNT:
             memory_types = [PersonalMemoryType.EPISODE]
-            if intent in {
-                PersonalMemoryQueryIntent.COUNT,
-                PersonalMemoryQueryIntent.LIST,
-            }:
-                search_text = ""
-        elif _contains_any(query, ("开会", "会议", "参会")):
-            memory_types = [PersonalMemoryType.PLAN]
-            topic_keys = ["meeting.plan", "travel.plan"]
-            search_text = ""
-        elif re.search(r"(?:最)?喜欢.*(?:颜色|色)", query):
-            memory_types = [PersonalMemoryType.PREFERENCE]
-            topic_keys = ["preference.favorite-color"]
-            search_text = ""
-        elif _contains_any(
-            query,
-            (
-                "不吃什么",
-                "不喜欢吃",
-                "讨厌吃",
-                "忌口",
-                "不能吃",
-                "喜欢吃",
-                "爱吃",
-                "口味",
-            ),
-        ):
-            # Topic keys are more stable than an analyzer's open memory_type
-            # choice. Some providers reasonably model a repeated dislike as a
-            # current state while others use preference.
-            topic_keys = ["preference.food-dislike", "preference.food-like"]
-            search_text = ""
-        elif _contains_any(
-            query,
-            (
-                "在哪里工作",
-                "在哪工作",
-                "工作地点",
-                "在哪上班",
-                "在哪里上班",
-                "做什么工作",
-                "什么职业",
-            ),
-        ):
-            memory_types = [PersonalMemoryType.STATE, PersonalMemoryType.FACT]
-            # Reference providers do not yet agree on one work-location slot.
-            # Bind the known conservative aliases instead of scanning every
-            # personal state or depending on accidental lexical overlap.
-            topic_keys = [
-                "work.location",
-                "work.current",
-                "career.current",
-                "residence.primary",
-            ]
-            search_text = ""
 
         if intent == PersonalMemoryQueryIntent.CURRENT:
             temporal_statuses = [
@@ -298,7 +247,7 @@ class DeterministicPersonalMemoryQueryPlanner:
             subject=bound.default_subject,
             subject_id=bound.default_subject_id,
             as_of=as_of,
-            explanation="deterministic Chinese intent and topic rules",
+            explanation="domain-neutral temporal and aggregation rules",
         )
 
 
@@ -312,6 +261,7 @@ class PersonalMemoryQueryConfig(BaseModel):
     limit: int = Field(default=20, ge=1, le=1_000)
     minimum_planner_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
     minimum_lexical_score: float = Field(default=0.25, ge=0.0, le=1.0)
+    minimum_semantic_score: float = Field(default=0.35, ge=0.0, le=1.0)
     semantic_candidate_limit: int = Field(default=100, ge=1, le=10_000)
     lexical_weight: float = Field(default=1.0, ge=0.0, le=10.0)
     semantic_weight: float = Field(default=1.0, ge=0.0, le=10.0)
@@ -437,7 +387,7 @@ class PersonalMemoryQueryReadLimitError(RuntimeError):
 
 
 class PersonalMemoryQueryEngine:
-    """Plan and execute a full-snapshot personal-memory query."""
+    """Execute bounded lookups and complete exact-count personal-memory queries."""
 
     def __init__(
         self,
@@ -515,12 +465,36 @@ class PersonalMemoryQueryEngine:
         self._validate_plan(bound)
         records: list[MemoryRecord] = []
         conflict_records: list[MemoryRecord] = []
+        warnings: list[str] = []
+        complete = True
+        semantic_scores: dict[tuple[str, str], float] = {}
+        if (
+            self._semantic_index is not None
+            and bound.search_text
+            and bound.intent != PersonalMemoryQueryIntent.COUNT
+        ):
+            candidate_result = await self._read_candidates(bound)
+            if candidate_result is None:
+                for scope in bound.scopes:
+                    records.extend(await self._read_scope(scope))
+                semantic_scores, semantic_warnings = await self._semantic_scores(
+                    bound, records
+                )
+                warnings.extend(semantic_warnings)
+            else:
+                records, semantic_scores, candidate_warnings = candidate_result
+                warnings.extend(candidate_warnings)
+                complete = False
+        else:
+            for scope in bound.scopes:
+                records.extend(await self._read_scope(scope))
+            semantic_scores, semantic_warnings = await self._semantic_scores(
+                bound, records
+            )
+            warnings.extend(semantic_warnings)
         for scope in bound.scopes:
-            records.extend(await self._read_scope(scope))
             conflict_records.extend(await self._read_conflicts(scope))
-        semantic_scores, semantic_warnings = await self._semantic_scores(bound, records)
         matched: list[tuple[MemoryRecord, float, float, datetime, list[str]]] = []
-        warnings = list(semantic_warnings)
         if (
             bound.as_of is not None
             and bound.as_of > bound.now
@@ -535,16 +509,20 @@ class PersonalMemoryQueryEngine:
                 continue
             effective_at, reasons = structural
             lexical_score = _lexical_score(bound.search_text, record)
-            semantic_score = semantic_scores.get(record.memory_id, 0.0)
+            semantic_score = semantic_scores.get(
+                (record.scope.scope_key, record.memory_id), 0.0
+            )
+            if semantic_score < self.config.minimum_semantic_score:
+                semantic_score = 0.0
             if (
                 bound.search_text
                 and lexical_score < self.config.minimum_lexical_score
-                and semantic_score <= 0.0
+                and semantic_score < self.config.minimum_semantic_score
             ):
                 continue
             if lexical_score >= self.config.minimum_lexical_score:
                 reasons.append("lexical_match")
-            if semantic_score > 0.0:
+            if semantic_score >= self.config.minimum_semantic_score:
                 reasons.append("semantic_match")
             matched.append(
                 (record, lexical_score, semantic_score, effective_at, reasons)
@@ -599,6 +577,7 @@ class PersonalMemoryQueryEngine:
             count=count,
             ambiguous=ambiguous,
             warnings=list(dict.fromkeys(warnings)),
+            complete=complete,
         )
 
     async def query(
@@ -679,6 +658,99 @@ class PersonalMemoryQueryEngine:
                     f"max_records_per_scope {self.config.max_records_per_scope}"
                 )
 
+    async def _read_candidates(
+        self, plan: PersonalMemoryQueryPlan
+    ) -> tuple[
+        list[MemoryRecord], dict[tuple[str, str], float], list[str]
+    ] | None:
+        """Load a bounded authorized union of lexical and semantic candidates.
+
+        Returning ``None`` requests the exhaustive lexical fallback. Exact counts
+        intentionally never enter this top-k path.
+        """
+        assert self._semantic_index is not None
+        filters = MemoryFilter(
+            tags={"personal-memory"}, states=set(ACTIVE_MEMORY_STATES)
+        )
+        lexical_result, semantic_result = await asyncio.gather(
+            self._store.search(
+                plan.search_text,
+                list(plan.scopes),
+                filters=filters,
+                limit=self.config.semantic_candidate_limit,
+            ),
+            self._semantic_index.search(
+                plan.search_text,
+                plan.scopes,
+                filters=filters,
+                limit=self.config.semantic_candidate_limit,
+            ),
+            return_exceptions=True,
+        )
+        if isinstance(lexical_result, BaseException):
+            raise lexical_result
+        if isinstance(semantic_result, BaseException):
+            if not self.config.semantic_fallback_to_lexical:
+                raise semantic_result
+            return None
+
+        allowed_scopes = {scope.scope_key: scope for scope in plan.scopes}
+        candidates: dict[tuple[str, str], MemoryScope] = {}
+        semantic_scores: dict[tuple[str, str], float] = {}
+        for candidate in [*lexical_result, *semantic_result]:
+            scope = candidate.scope
+            memory_id = str(candidate.memory_id or "").strip()
+            if (
+                scope is None
+                or scope.scope_key not in allowed_scopes
+                or not memory_id
+            ):
+                continue
+            candidates.setdefault(
+                (scope.scope_key, memory_id), allowed_scopes[scope.scope_key]
+            )
+        for candidate in semantic_result:
+            scope = candidate.scope
+            memory_id = str(candidate.memory_id or "").strip()
+            if (
+                scope is None
+                or scope.scope_key not in allowed_scopes
+                or not memory_id
+            ):
+                continue
+            key = (scope.scope_key, memory_id)
+            semantic_scores[key] = max(
+                semantic_scores.get(key, 0.0),
+                min(max(float(candidate.similarity), 0.0), 1.0),
+            )
+
+        loaded = await asyncio.gather(
+            *(
+                self._store.get(scope, memory_id)
+                for (_, memory_id), scope in candidates.items()
+            )
+        )
+        records = [
+            record
+            for record in loaded
+            if record is not None
+            and record.state in ACTIVE_MEMORY_STATES
+            and "personal-memory" in record.tags
+            and record.scope.scope_key in allowed_scopes
+        ]
+        known_ids = {
+            (record.scope.scope_key, record.memory_id) for record in records
+        }
+        semantic_scores = {
+            key: score for key, score in semantic_scores.items() if key in known_ids
+        }
+        return records, semantic_scores, [
+            (
+                "used bounded index-first lexical and semantic candidates; "
+                "result is not an exhaustive scope snapshot"
+            )
+        ]
+
     def _validate_plan(self, plan: PersonalMemoryQueryPlan) -> None:
         if plan.schema_version != 1:
             raise PersonalMemoryQueryPlanningError("unsupported query plan schema")
@@ -697,7 +769,7 @@ class PersonalMemoryQueryEngine:
         self,
         plan: PersonalMemoryQueryPlan,
         records: Sequence[MemoryRecord],
-    ) -> tuple[dict[str, float], list[str]]:
+    ) -> tuple[dict[tuple[str, str], float], list[str]]:
         if self._semantic_index is None or not plan.search_text:
             return {}, []
         try:
@@ -716,19 +788,25 @@ class PersonalMemoryQueryEngine:
                 f"semantic index unavailable; used lexical fallback: {type(exc).__name__}"
             ]
         allowed_scopes = {scope.scope_key for scope in plan.scopes}
-        known_ids = {record.memory_id for record in records}
-        scores: dict[str, float] = {}
+        known_ids = {
+            (record.scope.scope_key, record.memory_id) for record in records
+        }
+        scores: dict[tuple[str, str], float] = {}
         for candidate in candidates:
+            memory_id = str(candidate.memory_id or "").strip()
+            candidate_key = (
+                candidate.scope.scope_key if candidate.scope is not None else "",
+                memory_id,
+            )
             if (
                 candidate.scope is None
                 or candidate.scope.scope_key not in allowed_scopes
-                or candidate.memory_id not in known_ids
+                or not memory_id
+                or candidate_key not in known_ids
             ):
                 continue
             score = min(max(float(candidate.similarity), 0.0), 1.0)
-            scores[candidate.memory_id] = max(
-                scores.get(candidate.memory_id, 0.0), score
-            )
+            scores[candidate_key] = max(scores.get(candidate_key, 0.0), score)
         return scores, []
 
 
@@ -1026,6 +1104,7 @@ def _lexical_score(query: str, record: MemoryRecord) -> float:
         sum(document_terms.values())
     )
     score = overlap / denominator if denominator else 0.0
+    score = max(score, _focused_query_coverage(normalized_query, document))
     if normalized_query in document:
         score = min(1.0, score + 0.25)
     return round(min(max(score, 0.0), 1.0), 6)
@@ -1040,10 +1119,33 @@ def _character_ngrams(text: str) -> dict[str, int]:
     return dict(counts)
 
 
+def _focused_query_coverage(query: str, document: str) -> float:
+    """Reward compact phrase coverage without letting generic single chars dominate."""
+    query_text = re.sub(r"[^0-9a-z\u3400-\u9fff]+", "", query)
+    document_text = re.sub(r"[^0-9a-z\u3400-\u9fff]+", "", document)
+    size = 1 if len(query_text) <= 2 else 2
+    query_terms = _fixed_ngrams(query_text, size)
+    document_terms = _fixed_ngrams(document_text, size)
+    if not query_terms:
+        return 0.0
+    overlap = sum(
+        min(count, document_terms.get(term, 0))
+        for term, count in query_terms.items()
+    )
+    return overlap / sum(query_terms.values())
+
+
+def _fixed_ngrams(text: str, size: int) -> dict[str, int]:
+    counts: dict[str, int] = defaultdict(int)
+    for index in range(max(0, len(text) - size + 1)):
+        counts[text[index : index + size]] += 1
+    return dict(counts)
+
+
 def _detect_intent(query: str) -> QueryIntent:
-    if re.search(r"几次|多少次|次数|一共.*(?:旅行|旅游|去过)", query):
+    if re.search(r"几次|多少次|次数", query):
         return PersonalMemoryQueryIntent.COUNT
-    if _contains_any(query, ("哪些", "列出", "去过哪", "都去过", "经历过")):
+    if _contains_any(query, ("哪些", "列出")):
         return PersonalMemoryQueryIntent.LIST
     if _contains_any(query, ("计划", "打算", "准备", "将要", "将来")):
         return PersonalMemoryQueryIntent.PLANNED
@@ -1056,6 +1158,9 @@ def _detect_intent(query: str) -> QueryIntent:
 
 def _search_text(query: str) -> str:
     cleaned = unicodedata.normalize("NFKC", query).lower()
+    cleaned = re.sub(
+        r"20\d{2}(?:[-/年]\d{1,2})?(?:[-/月]\d{1,2})?日?", "", cleaned
+    )
     for phrase in (
         "我",
         "用户",
@@ -1076,6 +1181,11 @@ def _search_text(query: str) -> str:
         "叫什么",
         "叫啥",
         "是什么",
+        "为什么",
+        "什么",
+        "怎么",
+        "为何",
+        "多少",
         "的记忆",
         "相关记忆",
         "关于",
@@ -1083,6 +1193,7 @@ def _search_text(query: str) -> str:
         "回忆",
         "吗",
         "呢",
+        "了",
         "的",
     ):
         cleaned = cleaned.replace(phrase, "")
@@ -1127,7 +1238,6 @@ def _metadata_time(record: MemoryRecord, key: str) -> datetime | None:
 
 def _normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", str(value or "")).lower().strip()
-    normalized = normalized.replace("旅游", "旅行").replace("之旅", "旅行")
     return re.sub(r"[\s，。！？；：、,.!?;:]+", "", normalized)
 
 

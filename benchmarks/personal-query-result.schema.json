@@ -10,12 +10,13 @@
     "generated_at",
     "dataset",
     "environment",
+    "retrieval",
     "metrics",
     "cases",
     "correctness"
   ],
   "properties": {
-    "result_schema_version": { "const": 1 },
+    "result_schema_version": { "const": 2 },
     "doppel_version": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "dataset": {
@@ -46,6 +47,17 @@
         "python": { "type": "string", "minLength": 1 },
         "implementation": { "type": "string", "minLength": 1 },
         "platform": { "type": "string", "minLength": 1 }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "semantic_index", "planner", "planner_version"],
+      "properties": {
+        "mode": { "const": "lexical-domain-neutral" },
+        "semantic_index": { "const": false },
+        "planner": { "type": "string", "minLength": 1 },
+        "planner_version": { "type": "string", "minLength": 1 }
       }
     },
     "metrics": {

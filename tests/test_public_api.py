@@ -358,6 +358,7 @@ MODEL_FIELDS = {
         "limit",
         "minimum_planner_confidence",
         "minimum_lexical_score",
+        "minimum_semantic_score",
         "semantic_candidate_limit",
         "lexical_weight",
         "semantic_weight",

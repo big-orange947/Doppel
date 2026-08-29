@@ -580,14 +580,17 @@ for hit in result.hits:
     print(hit.record.content, hit.reasons)
 ~~~
 
-默认 DeterministicPersonalMemoryQueryPlanner 提供透明的中文常见意图规则；需要更开放的自然语言时，
+默认 DeterministicPersonalMemoryQueryPlanner 只提供透明的时间、统计与查询形态规则，不包含饮食、
+工作、居住、宠物等领域词典；需要更开放的结构规划时，
 注入 ReferencePersonalMemoryQueryPlanner(MyStructuredModel())。planner 只能输出 scope-free draft，
 不能选择读哪些用户、memory ID、Store 操作或最终答案。engine 会把它重新绑定到 host 明确传入的
 exact scopes 和可信 subject，同一次查询禁止跨 user_id。
 
 执行顺序是结构化门禁优先：subject → personal memory type → topic → temporal status →
-valid_from/valid_to，之后才进行中文字符词法和可选语义评分。语义索引返回的未知 ID 或越权 scope
-不会进入结果：
+valid_from/valid_to，之后才进行中文字符词法和可选语义评分。配置 SemanticIndex 的普通查询使用
+index-first：先取有界 lexical/semantic 候选，再从 authoritative Store 的 exact scope 逐条重载和
+验证；未知 ID、非 active personal-memory 或越权 scope 不会进入结果。精确 count 则仍完整扫描，
+绝不以 top-k 估算总数：
 
 ~~~python
 result = await memory.query_personal_memory(
@@ -1155,10 +1158,15 @@ supported candidate precision、subject/scope accuracy、噪声写入和跨用�
 被当作内容语义已经正确。
 
 v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
-计数、歧义和 scope leakage 做硬门禁：
+计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，
+当前保留 3 个 missing evidence hit 和 1 个 over-broad hit，不用特判抹平；CI 只冻结不回退上限，
+语义能力在独立 hybrid E2E 中评估：
 
 ~~~bash
-uv run python -m benchmarks.personal_query_quality --output benchmarks/results/personal-query-quality.json
+uv run python -m benchmarks.personal_query_quality \
+  --max-missing-hits 3 \
+  --max-forbidden-hits 1 \
+  --output benchmarks/results/personal-query-quality.json
 ~~~
 
 v0.7.3 的独立 consolidation fixture 运行真实 Store/runner 路径，对重复、显式纠正和四类误合并陷阱

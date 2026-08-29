@@ -748,13 +748,16 @@ temporal status、validity interval 或 event identity。v0.8.0 因此以组合�
             │
             ▼
     PersonalMemoryQueryPlanner
-      ├─ deterministic Chinese baseline
+      ├─ domain-neutral temporal/count baseline
       └─ reference planner over StructuredOutputModel
             │ scope-free draft
             ▼ trusted binding
     explicit exact scopes · one user_id · authorized subject · config fingerprint
             │
-            ▼ complete bounded active personal-memory snapshot
+            ▼
+    lookup: bounded index-first candidates + authoritative exact-scope reload
+    count: complete bounded active personal-memory snapshot
+            │
     subject/type/topic/temporal/validity hard gates
             │
             ├─ deterministic Chinese lexical score
@@ -767,10 +770,17 @@ ID、生命周期或答案；plan 绑定提问时刻、全部 exact scopes、sub
 执行前验证 pmq_ fingerprint。多个 scope 可以属于同一个人，但一个 query 不允许跨 user ID。
 contact/custom subject ID 必须由 host 显式授权。
 
-engine 使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
-“一共几次”。结构化条件是硬门禁，lexical/semantic 只能排序或补充候选。SemanticIndex 的结果必须
-同时满足 scope 在 plan 中、memory ID 已从 authoritative Store 读到；未知、孤儿和越权 candidate
-直接丢弃。可配置 provider failure 是否回退 lexical，warning 会进入结果。
+默认 deterministic planner 只识别 current/history/planned/as_of/list/count 等封闭结构，不维护
+饮食、工作、居住、宠物、颜色等领域关键词到 topic_key 的映射。领域概念留在 search_text，由
+lexical/semantic retrieval 处理；固定 benchmark 文本不得反向进入查询代码。
+
+普通查询在 SemanticIndex 可用时先并行获取有界 lexical/semantic candidates，再按 candidate 提供的
+exact scope 和 memory ID 从 authoritative Store 重载；未知、孤儿、非 active personal-memory 和越权
+candidate 直接丢弃，因此不需要先扫描 2,000 条才能使用向量索引。结果 complete=false，明确表示
+top-k 不是完整 snapshot。semantic provider 失败时可配置回退完整 lexical scan，warning 会进入结果。
+
+count 始终使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
+“一共几次”。结构化条件是硬门禁，lexical/semantic 只能筛选或排序候选。
 
 as_of 使用 valid_from/valid_to，无区间的 historical/planned 不被猜测为当时有效。planned 默认
 不会因为查询日期落在计划区间就被当成实际状态；只有明确 planned intent/过滤才返回计划。current 或
@@ -781,8 +791,10 @@ key；任一匹配 episode 没有 key 时 count 为 indeterminate。这里的 ex
 key 的精确 distinct count，event key 本身的真实语义仍依赖 evidence-bound analyzer 与质量评测。
 
 repository-only query benchmark 固定 10 条记忆和 9 个中文问题，报告 missing/forbidden hits、intent、
-count、ambiguity、scope leakage 和 latency；所有正确性计数必须为零。它验证确定性 planner/engine
-合同，不代表任意 embedding 或模型 provider 已达到同等质量。
+count、ambiguity、scope leakage 和 latency。它明确标记为 `lexical-domain-neutral`：planner 不包含
+场景词典，当前 3 个 missing evidence hit 和 1 个 over-broad hit 原样进入报告，`correctness.passed`
+保持 false。CI 用显式上限冻结“不能变差”，不会把这个词法基线包装成语义质量；embedding/模型
+provider 必须在独立 hybrid E2E 上验证。
 
 ## v0.8.1 个人记忆治理
 

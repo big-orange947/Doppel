@@ -152,7 +152,7 @@ async def test_current_residence_excludes_planned_and_historical_records() -> No
     )
 
     assert result.plan.intent == PersonalMemoryQueryIntent.CURRENT
-    assert result.plan.topic_keys == ["residence.primary"]
+    assert result.plan.topic_keys == []
     assert [hit.record.memory_id for hit in result.hits] == ["home-shanghai"]
     assert result.ambiguous is False
 
@@ -520,8 +520,20 @@ async def test_pet_name_question_reduces_to_retrievable_entity_text() -> None:
     assert draft.search_text == "猫"
 
 
-@pytest.mark.parametrize("query", ["我不吃什么东西？", "我有什么忌口？"])
-async def test_food_preference_questions_bind_stable_topic_aliases(query: str) -> None:
+@pytest.mark.parametrize(
+    "query",
+    [
+        "我不吃什么东西？",
+        "我有什么忌口？",
+        "我在哪里工作？",
+        "我下周要去哪开会？",
+        "我最喜欢什么颜色？",
+        "我的猫叫什么？",
+    ],
+)
+async def test_domain_questions_do_not_create_hard_coded_topic_filters(
+    query: str,
+) -> None:
     draft = await DeterministicPersonalMemoryQueryPlanner().plan(
         PersonalMemoryQueryRequest(
             query=query,
@@ -530,44 +542,9 @@ async def test_food_preference_questions_bind_stable_topic_aliases(query: str) -
         )
     )
 
-    assert draft.search_text == ""
-    assert draft.topic_keys == [
-        "preference.food-dislike",
-        "preference.food-like",
-    ]
-
-
-async def test_work_location_question_binds_known_reference_topic_aliases() -> None:
-    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
-        PersonalMemoryQueryRequest(
-            query="我在哪里工作？",
-            now=NOW,
-            default_subject_id="owner",
-        )
-    )
-
-    assert draft.search_text == ""
-    assert draft.memory_types == ["state", "fact"]
-    assert draft.topic_keys == [
-        "work.location",
-        "work.current",
-        "career.current",
-        "residence.primary",
-    ]
-
-
-async def test_meeting_question_binds_plan_topic_aliases() -> None:
-    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
-        PersonalMemoryQueryRequest(
-            query="我下周要去哪开会？",
-            now=NOW,
-            default_subject_id="owner",
-        )
-    )
-
-    assert draft.search_text == ""
-    assert draft.memory_types == ["plan"]
-    assert draft.topic_keys == ["meeting.plan", "travel.plan"]
+    assert draft.search_text
+    assert draft.memory_types == []
+    assert draft.topic_keys == []
 
 
 async def test_current_conflicts_are_returned_as_ambiguous_evidence() -> None:
@@ -748,6 +725,47 @@ class _SemanticIndex:
         ]
 
 
+class _LowSemanticIndex:
+    async def search(self, query, scopes, *, filters=None, limit=10):
+        del query, filters, limit
+        return [
+            RecallResult(
+                fact="weak unrelated candidate",
+                memory_id="weak-candidate",
+                scope=scopes[0],
+                similarity=0.2,
+            )
+        ]
+
+
+async def test_low_semantic_similarity_does_not_turn_every_candidate_into_a_hit() -> (
+    None
+):
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "weak-candidate",
+            "用户喜欢听古典音乐。",
+            memory_type="preference",
+            temporal_status="current",
+            day=1,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(
+        store, semantic_index=_LowSemanticIndex()
+    ).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "我住在哪个城市？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.hits == []
+    assert result.complete is False
+
+
 async def test_semantic_candidates_only_score_known_authorized_records() -> None:
     store = InMemoryStore()
     await _put(
@@ -769,10 +787,19 @@ async def test_semantic_candidates_only_score_known_authorized_records() -> None
             day=2,
             scope=OTHER_SCOPE,
         ),
+        _record(
+            "same-scope-distractor",
+            "用户喜欢听古典音乐。",
+            memory_type="preference",
+            temporal_status="current",
+            day=3,
+        ),
     )
 
     result = await PersonalMemoryQueryEngine(
-        store, semantic_index=_SemanticIndex()
+        store,
+        PersonalMemoryQueryConfig(page_size=1, max_records_per_scope=1),
+        semantic_index=_SemanticIndex(),
     ).query(
         DeterministicPersonalMemoryQueryPlanner(),
         "蓉城之旅",
@@ -783,6 +810,8 @@ async def test_semantic_candidates_only_score_known_authorized_records() -> None
     assert [hit.record.memory_id for hit in result.hits] == ["semantic-chengdu"]
     assert result.hits[0].semantic_score == 0.91
     assert "semantic_match" in result.hits[0].reasons
+    assert result.scanned_record_count == 1
+    assert result.complete is False
 
 
 async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> None:
