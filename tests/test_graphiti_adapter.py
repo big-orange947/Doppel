@@ -93,6 +93,30 @@ class FakeGraphiti:
         self.episodes.pop(episode_id, None)
 
 
+class _EpisodeSlotOperations:
+    def __init__(self, graphiti: FakeGraphiti) -> None:
+        self.graphiti = graphiti
+        self.saved: list[object] = []
+
+    async def episodic_node_save(self, node, driver):
+        self.saved.append(node)
+        self.graphiti.episodes[node.uuid] = SimpleNamespace(
+            uuid=node.uuid,
+            name=node.name,
+            group_id=node.group_id,
+        )
+
+
+class _EpisodeSlotDriver:
+    def __init__(self, graphiti: FakeGraphiti) -> None:
+        self.graphiti = graphiti
+        self.graph_operations_interface = _EpisodeSlotOperations(graphiti)
+
+    async def execute_query(self, query: str):
+        self.graphiti.query_calls.append(query)
+        return []
+
+
 async def test_graphiti_029_adapter_constructs_without_connecting() -> None:
     with pytest.warns(DeprecationWarning, match="GraphitiSemanticIndex"):
         store = GraphitiMemoryStore(llm_api_key="test-key")
@@ -152,6 +176,81 @@ async def test_semantic_index_uses_stable_episode_and_exact_scope_group() -> Non
     assert "untrusted caller content" not in str(fake.add_calls[0]["episode_body"])
     assert (await index.health())["ok"] is True
     assert fake.query_calls == ["RETURN 1 AS doppel_health"]
+
+
+async def test_graphiti_first_index_precreates_stable_episode_slot() -> None:
+    fake = FakeGraphiti()
+    fake.driver = _EpisodeSlotDriver(fake)
+    original_add = fake.add_episode
+
+    async def require_existing_episode(**kwargs):
+        assert kwargs["uuid"] in fake.episodes
+        return await original_add(**kwargs)
+
+    fake.add_episode = require_existing_episode
+    store = InMemoryStore()
+    index = GraphitiSemanticIndex(store, graphiti_client=fake)
+    scope = MemoryScope(user_id="slot", agent_id="bot")
+    record = MemoryRecord(memory_id="stable", scope=scope, content="stable slot")
+    assert (await store.put(record)).accepted
+
+    indexed = await index.index_record(record)
+
+    saved = fake.driver.graph_operations_interface.saved
+    assert len(saved) == 1
+    assert saved[0].uuid == indexed.episode_id
+    assert fake.add_calls[0]["uuid"] == indexed.episode_id
+    assert await index.inspect(scope, record.memory_id) is not None
+
+
+async def test_graphiti_failed_first_index_removes_incomplete_episode_slot() -> None:
+    fake = FakeGraphiti()
+    fake.driver = _EpisodeSlotDriver(fake)
+
+    async def fail_after_precreation(**kwargs):
+        assert kwargs["uuid"] in fake.episodes
+        raise RuntimeError("synthetic extraction failure")
+
+    fake.add_episode = fail_after_precreation
+    store = InMemoryStore()
+    index = GraphitiSemanticIndex(store, graphiti_client=fake)
+    scope = MemoryScope(user_id="failed-slot", agent_id="bot")
+    record = MemoryRecord(memory_id="retryable", scope=scope, content="retry me")
+    assert (await store.put(record)).accepted
+
+    with pytest.raises(GraphitiIndexUnavailableError, match="extraction failure"):
+        await index.index_record(record)
+
+    saved = fake.driver.graph_operations_interface.saved
+    assert len(saved) == 1
+    assert fake.remove_calls == [saved[0].uuid]
+    assert saved[0].uuid not in fake.episodes
+    assert await index.inspect(scope, record.memory_id) is None
+
+
+async def test_graphiti_failed_slot_precreation_removes_partial_episode() -> None:
+    fake = FakeGraphiti()
+    fake.driver = _EpisodeSlotDriver(fake)
+    operations = fake.driver.graph_operations_interface
+
+    async def fail_after_saving(node, driver):
+        operations.saved.append(node)
+        fake.episodes[node.uuid] = SimpleNamespace(uuid=node.uuid)
+        raise RuntimeError("synthetic slot save failure")
+
+    operations.episodic_node_save = fail_after_saving
+    store = InMemoryStore()
+    index = GraphitiSemanticIndex(store, graphiti_client=fake)
+    scope = MemoryScope(user_id="partial-slot", agent_id="bot")
+    record = MemoryRecord(memory_id="partial", scope=scope, content="retry me")
+    assert (await store.put(record)).accepted
+
+    with pytest.raises(GraphitiIndexUnavailableError, match="slot save failure"):
+        await index.index_record(record)
+
+    assert len(operations.saved) == 1
+    assert fake.remove_calls == [operations.saved[0].uuid]
+    assert operations.saved[0].uuid not in fake.episodes
 
 
 async def test_graphiti_writer_reconciles_transition_and_hard_delete() -> None:

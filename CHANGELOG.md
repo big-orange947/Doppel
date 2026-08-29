@@ -12,6 +12,10 @@
   edge UUID. All `MemoryFilter` fields are proven against the recovered Store record,
   so Graphiti can participate in personal-memory hybrid retrieval without weakening
   exact-scope, lifecycle, provenance, or temporal gates.
+- Graphiti 0.29 stable-UUID indexing now pre-creates the deterministic Episode slot
+  required by upstream's ``add_episode(uuid=...)`` update path. Failed extraction
+  removes that incomplete slot so reconciliation can retry instead of mistaking a
+  header-only Episode for a completed graph projection.
 
 - OpenAI-compatible structured output can optionally send a provider thinking-mode
   toggle. This supports low-cost non-thinking extraction on compatible providers while

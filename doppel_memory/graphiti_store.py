@@ -25,7 +25,7 @@ from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.embedder.client import EmbedderClient, EmbedderConfig
 from graphiti_core.llm_client import OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig
-from graphiti_core.nodes import EpisodicNode
+from graphiti_core.nodes import EpisodeType, EpisodicNode
 from graphiti_core.search.search_filters import (
     ComparisonOperator,
     DateFilter,
@@ -212,10 +212,25 @@ class GraphitiSemanticIndex:
                 source_version=record.version,
             )
         body = _graphiti_episode_body(record, fingerprint)
+        graphiti: Any | None = None
+        managed_episode_slot = False
         try:
             graphiti = await self._ensure_graphiti()
             if current is not None:
                 await graphiti.remove_episode(episode_id)
+            managed_episode_slot = _can_precreate_graphiti_episode_slot(graphiti)
+            if managed_episode_slot:
+                await _precreate_graphiti_episode_slot(
+                    graphiti,
+                    episode_id=episode_id,
+                    name=_graphiti_episode_name(
+                        record.memory_id, fingerprint, record.version
+                    ),
+                    group_id=record.scope.scope_key,
+                    content=body,
+                    source_description=record.extractor or "doppel",
+                    reference_time=_graphiti_reference_time(record),
+                )
             result = await graphiti.add_episode(
                 name=_graphiti_episode_name(
                     record.memory_id, fingerprint, record.version
@@ -229,15 +244,26 @@ class GraphitiSemanticIndex:
                     GRAPHITI_TEMPORAL_EXTRACTION_INSTRUCTIONS
                 ),
             )
+            actual_episode_id = str(
+                getattr(result.episode, "uuid", "") or episode_id
+            )
+            if actual_episode_id != episode_id:
+                raise RuntimeError(
+                    "Graphiti returned an episode UUID different from the requested ID"
+                )
         except Exception as exc:
+            if managed_episode_slot and graphiti is not None:
+                try:
+                    await graphiti.remove_episode(episode_id)
+                except Exception:
+                    logger.warning(
+                        "Graphiti failed to clean incomplete episode %s",
+                        episode_id,
+                        exc_info=True,
+                    )
             raise GraphitiIndexUnavailableError(
                 f"Graphiti episode indexing failed: {exc}"
             ) from exc
-        actual_episode_id = str(getattr(result.episode, "uuid", "") or episode_id)
-        if actual_episode_id != episode_id:
-            raise GraphitiIndexUnavailableError(
-                "Graphiti returned an episode UUID different from the requested ID"
-            )
         return IndexOperationResult(
             index_identity=self.identity,
             status=IndexOperationStatus.INDEXED,
@@ -807,6 +833,46 @@ def _build_graphiti_client(
         embedder=FastEmbedderClient(),
         cross_encoder=NoOpCrossEncoder(),
     )
+
+
+def _can_precreate_graphiti_episode_slot(graphiti: Any) -> bool:
+    driver = getattr(graphiti, "driver", None)
+    return driver is not None and driver is not graphiti
+
+
+async def _precreate_graphiti_episode_slot(
+    graphiti: Any,
+    *,
+    episode_id: str,
+    name: str,
+    group_id: str,
+    content: str,
+    source_description: str,
+    reference_time: datetime,
+) -> None:
+    """Create the deterministic Episode expected by Graphiti 0.29's UUID path.
+
+    ``Graphiti.add_episode(uuid=...)`` loads that UUID as an existing Episode; it
+    does not create a missing node. Doppel therefore creates the empty stable slot
+    first and lets ``add_episode`` hydrate its entities and edges. Lightweight
+    injected test clients that act as their own driver retain their legacy direct-
+    create behavior and never call this helper.
+    """
+    driver = getattr(graphiti, "driver", None)
+    if driver is None or driver is graphiti:
+        raise RuntimeError("Graphiti client does not expose a separate graph driver")
+    episode = EpisodicNode(
+        uuid=episode_id,
+        name=name,
+        group_id=group_id,
+        labels=[],
+        created_at=datetime.now(UTC),
+        source=EpisodeType.message,
+        source_description=source_description,
+        content=content,
+        valid_at=reference_time,
+    )
+    await episode.save(driver)
 
 
 async def _load_graphiti_episodes(
