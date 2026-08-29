@@ -413,4 +413,4 @@ async def test_reference_analyzer_runs_through_real_provider_boundary() -> None:
     assert captured_schema["title"] == "PersonalMemoryAnalysis"
     assert analyzer.version.startswith("8.")
     assert planner.version.startswith("2.")
-    assert consolidator.version.startswith("3.")
+    assert consolidator.version.startswith("4.")

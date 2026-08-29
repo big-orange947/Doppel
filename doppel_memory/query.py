@@ -200,7 +200,7 @@ class DeterministicPersonalMemoryQueryPlanner:
     """Transparent Chinese baseline for common owner-memory questions."""
 
     name = "doppel.deterministic-personal-memory-query-planner"
-    version = "1"
+    version = "2"
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
@@ -224,9 +224,54 @@ class DeterministicPersonalMemoryQueryPlanner:
                 PersonalMemoryQueryIntent.LIST,
             }:
                 search_text = ""
+        elif _contains_any(query, ("开会", "会议", "参会")):
+            memory_types = [PersonalMemoryType.PLAN]
+            topic_keys = ["meeting.plan", "travel.plan"]
+            search_text = ""
         elif re.search(r"(?:最)?喜欢.*(?:颜色|色)", query):
             memory_types = [PersonalMemoryType.PREFERENCE]
             topic_keys = ["preference.favorite-color"]
+            search_text = ""
+        elif _contains_any(
+            query,
+            (
+                "不吃什么",
+                "不喜欢吃",
+                "讨厌吃",
+                "忌口",
+                "不能吃",
+                "喜欢吃",
+                "爱吃",
+                "口味",
+            ),
+        ):
+            # Topic keys are more stable than an analyzer's open memory_type
+            # choice. Some providers reasonably model a repeated dislike as a
+            # current state while others use preference.
+            topic_keys = ["preference.food-dislike", "preference.food-like"]
+            search_text = ""
+        elif _contains_any(
+            query,
+            (
+                "在哪里工作",
+                "在哪工作",
+                "工作地点",
+                "在哪上班",
+                "在哪里上班",
+                "做什么工作",
+                "什么职业",
+            ),
+        ):
+            memory_types = [PersonalMemoryType.STATE, PersonalMemoryType.FACT]
+            # Reference providers do not yet agree on one work-location slot.
+            # Bind the known conservative aliases instead of scanning every
+            # personal state or depending on accidental lexical overlap.
+            topic_keys = [
+                "work.location",
+                "work.current",
+                "career.current",
+                "residence.primary",
+            ]
             search_text = ""
 
         if intent == PersonalMemoryQueryIntent.CURRENT:

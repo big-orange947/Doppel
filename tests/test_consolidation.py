@@ -300,6 +300,87 @@ async def test_current_and_planned_claims_coexist_in_one_topic_slot() -> None:
     assert result.committable_checkpoint is not None
 
 
+@pytest.mark.parametrize("revision_kind", ["correction", "retraction"])
+async def test_historical_revision_retires_one_active_planned_slot(
+    revision_kind: str,
+) -> None:
+    store = InMemoryStore()
+    planned = _record(
+        "planned-beijing-meeting",
+        "用户下周三去北京开会。",
+        day=1,
+        topic_key="travel.plan",
+        memory_type="plan",
+        temporal_status="planned",
+    )
+    cancelled = _record(
+        "cancelled-beijing-meeting",
+        "下周的会取消了，改成线上。",
+        day=3,
+        topic_key="travel.plan",
+        memory_type="plan",
+        temporal_status="historical",
+        revision_kind=revision_kind,
+    )
+    await _put(store, planned, cancelled)
+
+    result = await ConsolidationRunner(store).run_once(
+        DeterministicMemoryConsolidator(),
+        SCOPE,
+        run_id=f"revise-planned-meeting:{revision_kind}",
+    )
+
+    assert not result.errors
+    assert len(result.actions) == 1
+    action = result.actions[0]
+    assert action.operation == "correct"
+    assert action.canonical_write.record is not None
+    assert action.canonical_write.record.content == cancelled.content
+    assert (await store.get(SCOPE, planned.memory_id)).state is MemoryState.SUPERSEDED
+    assert (
+        await store.get(SCOPE, cancelled.memory_id)
+    ).state is MemoryState.SUPERSEDED
+
+
+async def test_historical_retraction_does_not_guess_between_current_and_planned() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "current-plan-slot",
+            "用户当前在线参会。",
+            day=1,
+            topic_key="meeting.mode",
+            memory_type="plan",
+            temporal_status="current",
+        ),
+        _record(
+            "planned-plan-slot",
+            "用户下周线下参会。",
+            day=2,
+            topic_key="meeting.mode",
+            memory_type="plan",
+            temporal_status="planned",
+        ),
+        _record(
+            "historical-retraction",
+            "线下参会计划已取消。",
+            day=3,
+            topic_key="meeting.mode",
+            memory_type="plan",
+            temporal_status="historical",
+            revision_kind="retraction",
+        ),
+    )
+
+    result = await ConsolidationRunner(store).run_once(
+        DeterministicMemoryConsolidator(), SCOPE, run_id="ambiguous-retraction"
+    )
+
+    assert not result.errors
+    assert result.plan.actions == []
+
+
 async def test_equal_text_current_and_historical_claims_do_not_merge() -> None:
     store = InMemoryStore()
     await _put(

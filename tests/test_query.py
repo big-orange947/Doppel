@@ -520,6 +520,56 @@ async def test_pet_name_question_reduces_to_retrievable_entity_text() -> None:
     assert draft.search_text == "猫"
 
 
+@pytest.mark.parametrize("query", ["我不吃什么东西？", "我有什么忌口？"])
+async def test_food_preference_questions_bind_stable_topic_aliases(query: str) -> None:
+    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
+        PersonalMemoryQueryRequest(
+            query=query,
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.search_text == ""
+    assert draft.topic_keys == [
+        "preference.food-dislike",
+        "preference.food-like",
+    ]
+
+
+async def test_work_location_question_binds_known_reference_topic_aliases() -> None:
+    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
+        PersonalMemoryQueryRequest(
+            query="我在哪里工作？",
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.search_text == ""
+    assert draft.memory_types == ["state", "fact"]
+    assert draft.topic_keys == [
+        "work.location",
+        "work.current",
+        "career.current",
+        "residence.primary",
+    ]
+
+
+async def test_meeting_question_binds_plan_topic_aliases() -> None:
+    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
+        PersonalMemoryQueryRequest(
+            query="我下周要去哪开会？",
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.search_text == ""
+    assert draft.memory_types == ["plan"]
+    assert draft.topic_keys == ["meeting.plan", "travel.plan"]
+
+
 async def test_current_conflicts_are_returned_as_ambiguous_evidence() -> None:
     store = InMemoryStore()
     await _put(

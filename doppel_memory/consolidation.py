@@ -148,6 +148,9 @@ Conflict sources remain active. Current and planned claims may coexist and must 
 replace one another. Do not generate replacement scope, authority, state, IDs,
 or deletion actions. Do not generate replacement content. Do not merge separate episodes merely
 because they are similar. Do not infer that a plan happened or expire temporary state.
+An explicitly newer historical correction or retraction may correct one active
+current or planned slot with the same topic_key; it retires the cancelled active
+value but preserves unrelated historical records.
 Prefer no decision when evidence is insufficient.
 """
 
@@ -156,7 +159,7 @@ class ReferenceMemoryConsolidator:
     """Schema-constrained semantic consolidator using a host-owned model provider."""
 
     name = "doppel.reference-memory-consolidator"
-    version = "3"
+    version = "4"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -246,7 +249,7 @@ class DeterministicMemoryConsolidator:
     """Merge exact claims and require explicit revision evidence for correction."""
 
     name = "doppel.deterministic-memory-consolidator"
-    version = "2"
+    version = "3"
 
     def __init__(self, config: DeterministicConsolidatorConfig | None = None) -> None:
         self.config = config or DeterministicConsolidatorConfig()
@@ -276,19 +279,44 @@ class DeterministicMemoryConsolidator:
         for group in topic_groups.values():
             if len(group) < 2:
                 continue
+            historical_revision = _historical_revision(group)
+            if historical_revision is not None:
+                canonical, active_sources = historical_revision
+                source_ids = [
+                    record.memory_id for record in [*active_sources, canonical]
+                ]
+                decisions.append(
+                    ConsolidationDecision(
+                        operation=ConsolidationOperation.CORRECT,
+                        source_memory_ids=source_ids,
+                        canonical_source_memory_id=canonical.memory_id,
+                        explanation=(
+                            "explicit historical revision retires the active "
+                            f"{_metadata_text(active_sources[0], 'temporal_status')} "
+                            "value in topic "
+                            f"{_metadata_text(canonical, 'topic_key')}"
+                        ),
+                    )
+                )
+                used.update(source_ids)
+            available_group = [
+                record for record in group if record.memory_id not in used
+            ]
+            if len(available_group) < 2:
+                continue
             content_groups: dict[tuple[str, str], list[MemoryRecord]] = defaultdict(
                 list
             )
-            for record in group:
+            for record in available_group:
                 content_groups[
                     (
                         _normalize_content(record.content),
                         _metadata_text(record, "temporal_status"),
                     )
                 ].append(record)
-            memory_type = _metadata_text(group[0], "personal_memory_type")
+            memory_type = _metadata_text(available_group[0], "personal_memory_type")
             temporal_groups: dict[str, list[MemoryRecord]] = defaultdict(list)
-            for record in group:
+            for record in available_group:
                 temporal_status = _metadata_text(record, "temporal_status")
                 if temporal_status in {
                     MemoryTemporalStatus.CURRENT,
@@ -809,15 +837,50 @@ class ConsolidationRunner:
             temporal_statuses = {
                 _metadata_text(record, "temporal_status") for record in sources
             }
-            if len(temporal_statuses) != 1 or not temporal_statuses.issubset(
-                {
-                    MemoryTemporalStatus.CURRENT,
-                    MemoryTemporalStatus.PLANNED,
-                }
+            canonical = (
+                next(
+                    record
+                    for record in sources
+                    if record.memory_id == decision.canonical_source_memory_id
+                )
+                if decision.canonical_source_memory_id
+                else None
+            )
+            historical_revision = (
+                decision.operation == ConsolidationOperation.CORRECT
+                and canonical is not None
+                and _metadata_text(canonical, "temporal_status")
+                == MemoryTemporalStatus.HISTORICAL
+                and _metadata_text(canonical, "revision_kind")
+                in {"correction", "retraction"}
+                and len(
+                    {
+                        _metadata_text(record, "temporal_status")
+                        for record in sources
+                        if record.memory_id != canonical.memory_id
+                    }
+                )
+                == 1
+                and all(
+                    _metadata_text(record, "temporal_status")
+                    in {MemoryTemporalStatus.CURRENT, MemoryTemporalStatus.PLANNED}
+                    for record in sources
+                    if record.memory_id != canonical.memory_id
+                )
+            )
+            if not historical_revision and (
+                len(temporal_statuses) != 1
+                or not temporal_statuses.issubset(
+                    {
+                        MemoryTemporalStatus.CURRENT,
+                        MemoryTemporalStatus.PLANNED,
+                    }
+                )
             ):
                 raise ConsolidationPlanningError(
                     f"{decision.operation} requires one shared current or planned "
-                    "temporal_status"
+                    "temporal_status, except for a strictly newer historical "
+                    "correction or retraction"
                 )
         if decision.operation == ConsolidationOperation.CORRECT:
             canonical = next(
@@ -1208,6 +1271,34 @@ def _content_groups(records: Sequence[MemoryRecord]) -> dict[str, list[MemoryRec
     for record in records:
         groups[_normalize_content(record.content)].append(record)
     return groups
+
+
+def _historical_revision(
+    records: Sequence[MemoryRecord],
+) -> tuple[MemoryRecord, list[MemoryRecord]] | None:
+    """Bind one unambiguous historical revision to the active value it retires."""
+    active_by_status: dict[str, list[MemoryRecord]] = defaultdict(list)
+    for record in records:
+        status = _metadata_text(record, "temporal_status")
+        if status in {MemoryTemporalStatus.CURRENT, MemoryTemporalStatus.PLANNED}:
+            active_by_status[status].append(record)
+    nonempty_active = [group for group in active_by_status.values() if group]
+    if len(nonempty_active) != 1:
+        return None
+    active = nonempty_active[0]
+    revisions = [
+        record
+        for record in records
+        if _metadata_text(record, "temporal_status")
+        == MemoryTemporalStatus.HISTORICAL
+        and _metadata_text(record, "revision_kind") in {"correction", "retraction"}
+    ]
+    if not revisions:
+        return None
+    canonical = _strictly_latest_record([*active, *revisions])
+    if canonical is None or canonical not in revisions:
+        return None
+    return canonical, active
 
 
 def _plan_identity_payload(plan: ConsolidationPlan) -> dict[str, Any]:
