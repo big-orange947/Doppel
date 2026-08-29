@@ -53,6 +53,11 @@ provisional root APIs. They are additive beside the unchanged stable generic
 optional `SemanticIndex` may score only already-authorized records; exact-scope,
 subject, temporal, and metadata gates remain engine responsibilities.
 
+`TemporalSemanticIndex` is an additive provisional extension of `SemanticIndex` for
+current/as-of candidate search. Implementations receive one trusted valid-at instant,
+but their results remain non-authoritative and must be reloaded from the exact-scope
+Store. Implementing ordinary `SemanticIndex` alone remains valid.
+
 The v0.8.1 governance policy, decision, plan, checkpoint, result, and runner types are
 provisional root APIs. Governance is additive to the stable Store lifecycle: every
 reinforcement, opt-in decay, archive, or restore writes an auditable replacement

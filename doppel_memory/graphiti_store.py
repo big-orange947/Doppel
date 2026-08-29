@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 import warnings
 from collections import deque
@@ -25,6 +26,11 @@ from graphiti_core.embedder.client import EmbedderClient, EmbedderConfig
 from graphiti_core.llm_client import OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.nodes import EpisodicNode
+from graphiti_core.search.search_filters import (
+    ComparisonOperator,
+    DateFilter,
+    SearchFilters,
+)
 
 from doppel_memory.indexing import (
     IndexEntry,
@@ -48,13 +54,20 @@ from doppel_memory.models import (
     StoreCapabilities,
     WriteResult,
     WriteStatus,
-    utc_now,
 )
 from doppel_memory.store import MemoryStore
 from doppel_memory.vector import SemanticIndexUnavailableError
 
 logger = logging.getLogger(__name__)
 LOCAL_EMBEDDING_DIM = 512
+GRAPHITI_PROJECTION_VERSION = 3
+GRAPHITI_TEMPORAL_EXTRACTION_INSTRUCTIONS = """\
+The DOPPEL_TEMPORAL JSON line is trusted temporal metadata from the authoritative
+Store. Use observed_at as the episode reference time. When valid_from is present,
+map it to the fact's valid_at. When valid_to is present, map it to invalid_at.
+Keep planned, historical, current, timeless, and unknown distinct. Do not invalidate
+a fact merely because another fact uses a non-overlapping validity interval.
+"""
 
 
 class FastEmbedderClient(EmbedderClient):
@@ -106,7 +119,11 @@ class GraphitiIndexUnavailableError(SemanticIndexUnavailableError):
 
 
 class GraphitiFilterUnsupportedError(SemanticIndexUnavailableError):
-    """A query requested filters Graphiti cannot represent without inventing data."""
+    """Legacy compatibility error retained for pre-v3 Graphiti integrations.
+
+    Projection v3 proves MemoryFilter fields against authoritative source records
+    instead of asking Graphiti edges to represent Doppel metadata.
+    """
 
 
 @dataclass(frozen=True)
@@ -156,7 +173,7 @@ class GraphitiSemanticIndex:
 
     @property
     def identity(self) -> str:
-        return "graphiti:0.29:doppel-v2"
+        return f"graphiti:0.29:doppel-v{GRAPHITI_PROJECTION_VERSION}"
 
     async def index_record(self, record: MemoryRecord) -> GraphitiIndexResult:
         operation = await self.upsert(record)
@@ -194,12 +211,7 @@ class GraphitiSemanticIndex:
                 fingerprint=fingerprint,
                 source_version=record.version,
             )
-        body = (
-            f"[DOPPEL memory_id={record.memory_id} version={record.version} "
-            f"fingerprint={fingerprint} kind={record.kind} "
-            f"actor={record.actor or '-'} authority={record.authority.value} "
-            f"state={record.state.value}] {record.content}"
-        )
+        body = _graphiti_episode_body(record, fingerprint)
         try:
             graphiti = await self._ensure_graphiti()
             if current is not None:
@@ -210,9 +222,12 @@ class GraphitiSemanticIndex:
                 ),
                 episode_body=body,
                 source_description=record.extractor or "doppel",
-                reference_time=record.created_at,
+                reference_time=_graphiti_reference_time(record),
                 group_id=record.scope.scope_key,
                 uuid=episode_id,
+                custom_extraction_instructions=(
+                    GRAPHITI_TEMPORAL_EXTRACTION_INSTRUCTIONS
+                ),
             )
         except Exception as exc:
             raise GraphitiIndexUnavailableError(
@@ -344,6 +359,38 @@ class GraphitiSemanticIndex:
         filters: MemoryFilter | None = None,
         limit: int = 10,
     ) -> Sequence[RecallResult]:
+        return await self._search(
+            query, scopes, filters=filters, limit=limit, graph_valid_at=None
+        )
+
+    async def search_at(
+        self,
+        query: str,
+        scopes: Sequence[MemoryScope],
+        *,
+        valid_at: datetime,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> Sequence[RecallResult]:
+        if valid_at.tzinfo is None:
+            raise ValueError("Graphiti valid_at must include a timezone")
+        return await self._search(
+            query,
+            scopes,
+            filters=filters,
+            limit=limit,
+            graph_valid_at=valid_at.astimezone(UTC),
+        )
+
+    async def _search(
+        self,
+        query: str,
+        scopes: Sequence[MemoryScope],
+        *,
+        filters: MemoryFilter | None,
+        limit: int,
+        graph_valid_at: datetime | None,
+    ) -> Sequence[RecallResult]:
         if not scopes:
             raise MemoryIsolationError(
                 "Graphiti semantic search requires at least one exact scope"
@@ -353,12 +400,6 @@ class GraphitiSemanticIndex:
         if limit <= 0 or not str(query or "").strip():
             return []
         filter_obj = filters or MemoryFilter()
-        unsupported = _unsupported_graphiti_filters(filter_obj)
-        if unsupported:
-            raise GraphitiFilterUnsupportedError(
-                "Graphiti semantic search cannot honor filters: "
-                + ", ".join(unsupported)
-            )
         scope_by_key = {scope.scope_key: scope for scope in scopes}
         try:
             graphiti = await self._ensure_graphiti()
@@ -366,6 +407,7 @@ class GraphitiSemanticIndex:
                 query=query.strip(),
                 group_ids=list(scope_by_key),
                 num_results=limit * 2,
+                search_filter=_graphiti_search_filter(graph_valid_at),
             )
         except Exception as exc:
             raise GraphitiIndexUnavailableError(
@@ -406,44 +448,62 @@ class GraphitiSemanticIndex:
         )
         record_by_source = dict(zip(source_keys, source_records, strict=True))
 
-        results: list[RecallResult] = []
-        for edge in edges:
+        results: dict[tuple[str, str], RecallResult] = {}
+        for rank, edge in enumerate(edges):
             fact = str(getattr(edge, "fact", "") or "").strip()
             group_id = str(getattr(edge, "group_id", "") or "")
             scope = scope_by_key.get(group_id)
             if not fact or scope is None:
                 continue
-            episodes = getattr(edge, "episodes", None) or []
-            authoritative_sources = [
-                record_by_source.get(source_by_episode.get(str(episode_id), ("", "")))
-                for episode_id in episodes
+            episode_ids = [
+                str(value) for value in (getattr(edge, "episodes", None) or [])
             ]
-            if not any(
-                source is not None
-                and source.scope.scope_key == group_id
-                and _core_record_visible(source, filter_obj)
-                for source in authoritative_sources
-            ):
-                continue
-            item = RecallResult(
-                fact=fact,
-                scope=scope,
-                memory_id=str(getattr(edge, "uuid", "") or ""),
-                source_episode=",".join(str(value) for value in episodes),
-                extractor="graphiti",
-                extracted_at=_optional_datetime(getattr(edge, "created_at", None)),
-                valid_at=_optional_datetime(
-                    getattr(edge, "valid_at", None)
-                    or getattr(edge, "reference_time", None)
-                ),
-                state=_graphiti_edge_state(edge),
-                derived_chain=["graphiti:0.29"],
-            )
-            if _matches_filter(item, filter_obj):
-                results.append(item)
-            if len(results) >= limit:
-                break
-        return results
+            for episode_id in episode_ids:
+                source_key = source_by_episode.get(episode_id, ("", ""))
+                source = record_by_source.get(source_key)
+                if (
+                    source is None
+                    or source_key[0] != group_id
+                    or source.scope.scope_key != group_id
+                    or not _core_record_matches_filter(source, filter_obj)
+                    or not _core_record_valid_at(source, graph_valid_at)
+                ):
+                    continue
+                key = (group_id, source.memory_id)
+                if key in results:
+                    continue
+                source_chain = source.metadata.get("derived_chain", [])
+                if not isinstance(source_chain, list):
+                    source_chain = []
+                results[key] = RecallResult(
+                    fact=source.content,
+                    kind=source.kind,
+                    scope=scope,
+                    memory_id=source.memory_id,
+                    actor=source.actor,
+                    authority=source.authority,
+                    source_event_id=source.source_event_id,
+                    source_message_id=source.source_message_id,
+                    source_episode=",".join(episode_ids),
+                    extractor="graphiti",
+                    extracted_at=source.updated_at,
+                    raw_text=fact,
+                    derived_chain=[
+                        *(str(value) for value in source_chain),
+                        "graphiti:0.29",
+                        f"graphiti-edge:{getattr(edge, 'uuid', '')}",
+                    ],
+                    valid_at=(
+                        _record_valid_from(source)
+                        or _optional_datetime(getattr(edge, "valid_at", None))
+                        or _graphiti_reference_time(source)
+                    ),
+                    similarity=_graphiti_rank_score(rank, len(edges)),
+                    state=source.state,
+                )
+                if len(results) >= limit:
+                    return list(results.values())
+        return list(results.values())
 
     async def health(self) -> dict[str, Any]:
         if not self._enabled:
@@ -810,14 +870,106 @@ def _graphiti_episode_id(scope: MemoryScope, memory_id: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"doppel:{scope.scope_key}:{memory_id}"))
 
 
+def _graphiti_reference_time(record: MemoryRecord) -> datetime:
+    evidence = record.metadata.get("evidence", [])
+    evidence_times = [
+        parsed
+        for item in evidence if isinstance(evidence, list) and isinstance(item, dict)
+        if (parsed := _optional_datetime(item.get("at"))) is not None
+    ]
+    return max(evidence_times, default=record.created_at)
+
+
+def _record_valid_from(record: MemoryRecord) -> datetime | None:
+    return _optional_datetime(record.metadata.get("valid_from"))
+
+
+def _record_valid_to(record: MemoryRecord) -> datetime | None:
+    return _optional_datetime(record.metadata.get("valid_to"))
+
+
+def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
+    reference_time = _graphiti_reference_time(record)
+    valid_from = _record_valid_from(record)
+    valid_to = _record_valid_to(record)
+    temporal = {
+        "observed_at": reference_time.isoformat(),
+        "temporal_status": str(
+            record.metadata.get("temporal_status", "unknown") or "unknown"
+        ).strip().lower(),
+        "valid_from": valid_from.isoformat() if valid_from is not None else None,
+        "valid_to": valid_to.isoformat() if valid_to is not None else None,
+    }
+    header = (
+        f"[DOPPEL memory_id={record.memory_id} version={record.version} "
+        f"fingerprint={fingerprint} kind={record.kind} "
+        f"actor={record.actor or '-'} authority={record.authority.value} "
+        f"state={record.state.value}]"
+    )
+    return "\n".join(
+        (
+            header,
+            "DOPPEL_TEMPORAL "
+            + json.dumps(temporal, ensure_ascii=False, sort_keys=True),
+            record.content,
+        )
+    )
+
+
+def _graphiti_search_filter(valid_at: datetime | None) -> SearchFilters | None:
+    if valid_at is None:
+        return None
+    at_or_before = DateFilter(
+        date=valid_at,
+        comparison_operator=ComparisonOperator.less_than_equal,
+    )
+    after = DateFilter(
+        date=valid_at,
+        comparison_operator=ComparisonOperator.greater_than,
+    )
+    missing = DateFilter(comparison_operator=ComparisonOperator.is_null)
+    return SearchFilters(
+        valid_at=[[at_or_before], [missing]],
+        invalid_at=[[after], [missing]],
+        expired_at=[[after], [missing]],
+    )
+
+
+def _graphiti_rank_score(rank: int, result_count: int) -> float:
+    if result_count <= 0:
+        return 0.0
+    # Graphiti's basic search exposes RRF order rather than raw BM25/cosine scores.
+    # Preserve that ordering in the SemanticIndex score range without inventing a
+    # cosine value; every accepted top-k candidate remains above the default gate.
+    return round(1.0 - (max(rank, 0) / (2.0 * result_count)), 6)
+
+
 def _graphiti_episode_name(
     memory_id: str, fingerprint: str, source_version: int
 ) -> str:
     encoded = base64.urlsafe_b64encode(memory_id.encode()).decode().rstrip("=")
-    return f"DoppelMemory:v2:{encoded}:{fingerprint}:{source_version}"
+    return f"DoppelMemory:v3:{encoded}:{fingerprint}:{source_version}"
 
 
 def _episode_index_metadata(name: str) -> tuple[str, str, int]:
+    prefix_v3 = "DoppelMemory:v3:"
+    if name.startswith(prefix_v3):
+        parts = name[len(prefix_v3) :].split(":")
+        if len(parts) != 3:
+            return "", "", 1
+        encoded, fingerprint, raw_version = parts
+        try:
+            source_version = int(raw_version)
+        except ValueError:
+            return "", "", 1
+        if (
+            source_version < 1
+            or len(fingerprint) != 64
+            or any(value not in "0123456789abcdef" for value in fingerprint)
+        ):
+            return "", "", 1
+        return _decode_memory_id(encoded), fingerprint, source_version
+
     prefix_v2 = "DoppelMemory:v2:"
     if name.startswith(prefix_v2):
         parts = name[len(prefix_v2) :].split(":")
@@ -834,7 +986,9 @@ def _episode_index_metadata(name: str) -> tuple[str, str, int]:
             or any(value not in "0123456789abcdef" for value in fingerprint)
         ):
             return "", "", 1
-        return _decode_memory_id(encoded), fingerprint, source_version
+        # v2 did not project explicit temporal coordinates. Preserve the source
+        # identity but expose an empty fingerprint so reconciliation upgrades it.
+        return _decode_memory_id(encoded), "", source_version
 
     prefix_v1 = "DoppelMemory:v1:"
     if name.startswith(prefix_v1):
@@ -854,35 +1008,51 @@ def _decode_memory_id(encoded: str) -> str:
         return ""
 
 
-def _core_record_visible(record: MemoryRecord, filters: MemoryFilter) -> bool:
+def _core_record_matches_filter(
+    record: MemoryRecord, filters: MemoryFilter
+) -> bool:
     if filters.states is not None:
-        return record.state in filters.states
-    return filters.include_inactive or record.state in ACTIVE_MEMORY_STATES
-
-
-def _unsupported_graphiti_filters(filters: MemoryFilter) -> list[str]:
-    unsupported: list[str] = []
-    for name in (
-        "kinds",
-        "actors",
-        "authorities",
-        "exclude_authorities",
-        "exclude_actors",
-        "tags",
-        "importance_min",
+        if record.state not in filters.states:
+            return False
+    elif not filters.include_inactive and record.state not in ACTIVE_MEMORY_STATES:
+        return False
+    if filters.kinds is not None and record.kind not in filters.kinds:
+        return False
+    if filters.actors is not None and record.actor not in filters.actors:
+        return False
+    if filters.exclude_actors is not None and record.actor in filters.exclude_actors:
+        return False
+    if filters.authorities is not None and record.authority not in filters.authorities:
+        return False
+    if (
+        filters.exclude_authorities is not None
+        and record.authority in filters.exclude_authorities
     ):
-        if getattr(filters, name) is not None:
-            unsupported.append(name)
-    return unsupported
+        return False
+    if filters.tags is not None and not filters.tags.issubset(record.tags):
+        return False
+    if (
+        filters.importance_min is not None
+        and record.importance < filters.importance_min
+    ):
+        return False
+    if filters.time_from is not None and record.created_at < filters.time_from:
+        return False
+    return not (
+        filters.time_to is not None and record.created_at > filters.time_to
+    )
 
 
-def _graphiti_edge_state(edge: Any) -> MemoryState:
-    now = utc_now()
-    for name in ("invalid_at", "expired_at"):
-        value = _optional_datetime(getattr(edge, name, None))
-        if value is not None and value <= now:
-            return MemoryState.EXPIRED
-    return MemoryState.CONFIRMED
+def _core_record_valid_at(
+    record: MemoryRecord, valid_at: datetime | None
+) -> bool:
+    if valid_at is None:
+        return True
+    valid_from = _record_valid_from(record)
+    valid_to = _record_valid_to(record)
+    if valid_from is not None and valid_from > valid_at:
+        return False
+    return not (valid_to is not None and valid_to < valid_at)
 
 
 def _matches_filter(record: RecallResult, filters: MemoryFilter) -> bool:

@@ -4,6 +4,15 @@
 
 ### Changed
 
+- Graphiti temporal projection v3 now carries authoritative evidence observation time,
+  temporal status, and valid-from/valid-to coordinates into each episode. Current and
+  as-of personal queries use the additive `TemporalSemanticIndex.search_at()` path;
+  source records are reloaded and revalidated after Graphiti BM25/cosine/RRF recall.
+- Graphiti candidates now return the authoritative source memory ID rather than an
+  edge UUID. All `MemoryFilter` fields are proven against the recovered Store record,
+  so Graphiti can participate in personal-memory hybrid retrieval without weakening
+  exact-scope, lifecycle, provenance, or temporal gates.
+
 - OpenAI-compatible structured output can optionally send a provider thinking-mode
   toggle. This supports low-cost non-thinking extraction on compatible providers while
   leaving the existing request shape unchanged by default.

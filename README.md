@@ -600,6 +600,12 @@ result = await memory.query_personal_memory(
 )
 ~~~
 
+这是广义 RAG 的 retrieval 层，但不是单一的“切块 + 向量”算法。纯 Store 路径使用中文字符
+unigram/bigram；`PostgreSQLVectorIndex` 使用 cosine，通用 `HybridRetrievalStrategy` 用 weighted RRF
+融合词法与向量排名；`GraphitiSemanticIndex` 的默认 Graphiti 0.29 路径使用 edge BM25 + cosine，再用
+RRF 融合。若索引实现 `TemporalSemanticIndex`，current/as_of 查询还会把准确时点传给索引。无论候选
+来自哪种算法，都必须回源 Store 通过 scope、subject、状态和有效区间验证；答案生成始终留给上层 Agent。
+
 返回值不是一段不可审计的自然语言，而是 PersonalMemoryQueryPlan、带完整 MemoryRecord provenance
 的 hits、透明分数/原因、结构化 conflicts、warning 和可选 count。上层 Agent 根据这些材料组织回答：
 
@@ -1079,15 +1085,18 @@ InMemory、SQLite 与 PostgreSQL 运行同一套 Store conformance suite。
 
 语义能力是显式 sidecar，不改变核心 Store 的能力声明：
 
-| 语义索引 | 状态 | 权威记录来源 | exact scope | 可组合 hybrid | 图派生 |
-|---|---|---|---:|---:|---:|
-| `PostgreSQLVectorIndex` | provisional | `PostgreSQLStore` | ✅ | ✅ | — |
-| `GraphitiSemanticIndex` | module-only experimental | 任意合规 Store | ✅ | ✅ | ✅ |
+| 语义索引 | 状态 | 权威记录来源 | exact scope | 可组合 hybrid | 时点查询 | 图派生 |
+|---|---|---|---:|---:|---:|---:|
+| `PostgreSQLVectorIndex` | provisional | `PostgreSQLStore` | ✅ | ✅ | — | — |
+| `GraphitiSemanticIndex` | module-only experimental | 任意合规 Store | ✅ | ✅ | ✅ | ✅ |
 
 Graphiti 的正确组合方式是先把 `MemoryRecord` 提交给合规 Store，再显式调用
 `GraphitiSemanticIndex.index_record()`；检索结果是 Graphiti 派生候选，不拥有核心记录的状态和删除
-语义。Graphiti 不能可靠证明的 kind/actor/authority/tag/importance 过滤会明确报错，配置了
-`HybridRetrievalStrategy(fallback_to_lexical=True)` 时才回退到 Store。旧
+语义。v3 projection 会把 evidence observation time、temporal status、`valid_from` 和 `valid_to`
+显式提交给 Graphiti；current/as_of 使用 Graphiti 的 valid/invalid/expired date filters。edge 命中后
+按 source episode 恢复权威 `(scope, memory_id)`，重新从 Store 验证 kind/actor/authority/tag/
+importance/state/time filters。配置了 `HybridRetrievalStrategy(fallback_to_lexical=True)` 时，Graphiti
+不可用才回退到 Store。旧
 `GraphitiMemoryStore` 暂时保留并发出弃用警告，供迁移使用。
 
 ```python
@@ -1137,7 +1146,7 @@ checkpoint；已经成功的 `upsert`/`delete` 是幂等的，可以从旧 check
 
 `PostgreSQLVectorIndex` 和 `GraphitiSemanticIndex` 已实现该协议。索引条目保存完整
 `MemoryRecord` 指纹和 source version；pgvector 对仅生命周期/元数据变化只更新 manifest，不重复调用
-embedding provider。Graphiti 会把旧 v1 episode 视为 stale 并在维护时升级，硬删除后遗留的 episode
+embedding provider。Graphiti 会把旧 v1/v2 episode 视为 stale 并在维护时升级，硬删除后遗留的 episode
 会在 entries 阶段清除。
 
 ## Benchmark

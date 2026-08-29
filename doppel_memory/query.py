@@ -30,7 +30,7 @@ from doppel_memory.models import (
     MemoryScope,
 )
 from doppel_memory.store import MemoryStore
-from doppel_memory.vector import SemanticIndex
+from doppel_memory.vector import SemanticIndex, TemporalSemanticIndex
 
 QueryIntent = Literal[
     "lookup", "current", "history", "planned", "list", "count", "as_of"
@@ -683,12 +683,7 @@ class PersonalMemoryQueryEngine:
                 filters=filters,
                 limit=self.config.semantic_candidate_limit,
             ),
-            self._semantic_index.search(
-                plan.search_text,
-                plan.scopes,
-                filters=filters,
-                limit=self.config.semantic_candidate_limit,
-            ),
+            self._search_semantic_candidates(plan, filters),
             return_exceptions=True,
         )
         if isinstance(lexical_result, BaseException):
@@ -755,6 +750,30 @@ class PersonalMemoryQueryEngine:
             )
         ]
 
+    async def _search_semantic_candidates(
+        self, plan: PersonalMemoryQueryPlan, filters: MemoryFilter
+    ) -> Sequence[Any]:
+        assert self._semantic_index is not None
+        valid_at = plan.as_of
+        if valid_at is None and plan.intent == PersonalMemoryQueryIntent.CURRENT:
+            valid_at = plan.now
+        if valid_at is not None and isinstance(
+            self._semantic_index, TemporalSemanticIndex
+        ):
+            return await self._semantic_index.search_at(
+                plan.search_text,
+                plan.scopes,
+                valid_at=valid_at,
+                filters=filters,
+                limit=self.config.semantic_candidate_limit,
+            )
+        return await self._semantic_index.search(
+            plan.search_text,
+            plan.scopes,
+            filters=filters,
+            limit=self.config.semantic_candidate_limit,
+        )
+
     def _validate_plan(self, plan: PersonalMemoryQueryPlan) -> None:
         if plan.schema_version != 1:
             raise PersonalMemoryQueryPlanningError("unsupported query plan schema")
@@ -777,13 +796,11 @@ class PersonalMemoryQueryEngine:
         if self._semantic_index is None or not plan.search_text:
             return {}, []
         try:
-            candidates = await self._semantic_index.search(
-                plan.search_text,
-                plan.scopes,
-                filters=MemoryFilter(
+            candidates = await self._search_semantic_candidates(
+                plan,
+                MemoryFilter(
                     tags={"personal-memory"}, states=set(ACTIVE_MEMORY_STATES)
                 ),
-                limit=self.config.semantic_candidate_limit,
             )
         except Exception as exc:
             if not self.config.semantic_fallback_to_lexical:

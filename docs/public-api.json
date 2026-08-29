@@ -181,6 +181,7 @@
       "StructuredGenerationRequest",
       "StructuredOutputModel",
       "StructuredOutputProviderError",
+      "TemporalSemanticIndex",
       "VectorBackfillResult",
       "VectorIndexConfig",
       "VectorIndexFailure",

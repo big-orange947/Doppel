@@ -23,7 +23,6 @@ from doppel_memory import (
     SemanticIndex,
 )
 from doppel_memory.graphiti_store import (
-    GraphitiFilterUnsupportedError,
     GraphitiIndexUnavailableError,
     GraphitiMemoryStore,
     GraphitiSemanticIndex,
@@ -187,7 +186,7 @@ async def test_graphiti_writer_reconciles_transition_and_hard_delete() -> None:
     assert await index.inspect(scope, orphan.memory_id) is None
 
 
-async def test_graphiti_upsert_replaces_legacy_fingerprintless_episode() -> None:
+async def test_graphiti_upsert_replaces_pre_temporal_projection_episode() -> None:
     fake = FakeGraphiti()
     store = InMemoryStore()
     index = GraphitiSemanticIndex(store, graphiti_client=fake)
@@ -195,7 +194,9 @@ async def test_graphiti_upsert_replaces_legacy_fingerprintless_episode() -> None
     record = MemoryRecord(memory_id="legacy", scope=scope, content="upgrade me")
     assert (await store.put(record)).accepted
     created = await index.index_record(record)
-    fake.episodes[created.episode_id].name = "DoppelMemory:v1:bGVnYWN5"
+    fake.episodes[created.episode_id].name = (
+        f"DoppelMemory:v2:bGVnYWN5:{created.fingerprint}:1"
+    )
 
     upgraded = await index.index_record(record)
 
@@ -302,20 +303,131 @@ async def test_semantic_search_drops_unknown_scopes_and_maps_provenance() -> Non
 
     hits = await index.search("outdoor activity", [scope])
 
-    assert [hit.memory_id for hit in hits] == ["edge-1"]
+    assert [hit.memory_id for hit in hits] == ["source-active"]
     assert hits[0].scope == scope
+    assert hits[0].fact == active.content
+    assert hits[0].raw_text == "The owner enjoys hiking"
     assert hits[0].source_episode == active_episode.episode_id
     assert hits[0].extractor == "graphiti"
-    assert hits[0].derived_chain == ["graphiti:0.29"]
+    assert hits[0].derived_chain == [
+        "graphiti:0.29",
+        "graphiti-edge:edge-1",
+    ]
+    assert hits[0].similarity == 1.0
     assert fake.search_calls[0]["group_ids"] == [scope.scope_key]
 
 
-async def test_semantic_index_rejects_filters_it_cannot_prove() -> None:
+async def test_semantic_index_revalidates_all_filters_against_core_records() -> None:
     scope = MemoryScope(user_id="u", agent_id="bot")
-    index = GraphitiSemanticIndex(InMemoryStore(), graphiti_client=FakeGraphiti())
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    index = GraphitiSemanticIndex(store, graphiti_client=fake)
+    private = MemoryRecord(
+        memory_id="private",
+        scope=scope,
+        content="private source",
+        tags=["private"],
+        importance=0.9,
+    )
+    public = MemoryRecord(
+        memory_id="public",
+        scope=scope,
+        content="public source",
+        tags=["public"],
+        importance=0.2,
+    )
+    for record in (private, public):
+        assert (await store.put(record)).accepted
+    private_episode = await index.index_record(private)
+    public_episode = await index.index_record(public)
+    fake.edges = [
+        SimpleNamespace(
+            fact="private graph fact",
+            group_id=scope.scope_key,
+            uuid="private-edge",
+            episodes=[private_episode.episode_id],
+        ),
+        SimpleNamespace(
+            fact="public graph fact",
+            group_id=scope.scope_key,
+            uuid="public-edge",
+            episodes=[public_episode.episode_id],
+        ),
+    ]
 
-    with pytest.raises(GraphitiFilterUnsupportedError, match="tags"):
-        await index.search("query", [scope], filters=MemoryFilter(tags={"private"}))
+    hits = await index.search(
+        "query",
+        [scope],
+        filters=MemoryFilter(tags={"private"}, importance_min=0.8),
+    )
+
+    assert [hit.memory_id for hit in hits] == ["private"]
+
+
+async def test_graphiti_projection_and_search_at_preserve_temporal_coordinates() -> (
+    None
+):
+    scope = MemoryScope(user_id="temporal", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    index = GraphitiSemanticIndex(store, graphiti_client=fake)
+    observed_at = datetime(2026, 3, 1, 8, tzinfo=UTC)
+    valid_from = datetime(2026, 3, 2, tzinfo=UTC)
+    valid_to = datetime(2026, 5, 2, tzinfo=UTC)
+    record = MemoryRecord(
+        memory_id="temporary-state",
+        scope=scope,
+        content="用户临时在异地居住两个月。",
+        tags=["personal-memory", "state"],
+        created_at=observed_at,
+        updated_at=observed_at,
+        metadata={
+            "temporal_status": "current",
+            "valid_from": valid_from.isoformat(),
+            "valid_to": valid_to.isoformat(),
+            "evidence": [{"evidence_id": "m1", "at": observed_at.isoformat()}],
+        },
+    )
+    assert (await store.put(record)).accepted
+
+    indexed = await index.index_record(record)
+
+    call = fake.add_calls[0]
+    assert call["reference_time"] == observed_at
+    assert '"temporal_status": "current"' in str(call["episode_body"])
+    assert f'"valid_from": "{valid_from.isoformat()}"' in str(
+        call["episode_body"]
+    )
+    assert f'"valid_to": "{valid_to.isoformat()}"' in str(call["episode_body"])
+    assert "trusted temporal metadata" in str(
+        call["custom_extraction_instructions"]
+    )
+
+    fake.edges = [
+        SimpleNamespace(
+            fact="temporary graph fact",
+            group_id=scope.scope_key,
+            uuid="temporal-edge",
+            episodes=[indexed.episode_id],
+            valid_at=valid_from,
+        )
+    ]
+    as_of = datetime(2026, 4, 1, tzinfo=UTC)
+    hits = await index.search_at("当时住哪", [scope], valid_at=as_of)
+
+    assert [hit.memory_id for hit in hits] == [record.memory_id]
+    assert hits[0].valid_at == valid_from
+    search_filter = fake.search_calls[0]["search_filter"]
+    assert search_filter.valid_at[0][0].date == as_of
+    assert search_filter.invalid_at[0][0].date == as_of
+    assert search_filter.expired_at[0][0].date == as_of
+
+    expired_hits = await index.search_at(
+        "后来还住那里吗",
+        [scope],
+        valid_at=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    assert expired_hits == []
 
 
 async def test_graphiti_outage_can_explicitly_fall_back_to_core_store() -> None:

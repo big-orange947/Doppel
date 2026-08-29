@@ -535,13 +535,16 @@ Graphiti episode 使用 exact `scope_key` 作为 group ID，并由 scope + core 
 UUID；episode name 保存可逆的 core memory ID 编码。查询同时把允许的 group IDs 交给 Graphiti，批量
 解析 fact 的 source episodes，并用 exact scope 重新读取权威 Store。未知 group、无法恢复来源、已硬删
 或默认 inactive 的核心记录都会让候选被丢弃，避免上游过滤错误或图中陈旧 fact 变成跨会话/生命周期
-泄漏。edge UUID 是派生候选身份，episode、created/valid time、scope 与 derived chain 进入
-`RecallResult`；它不会冒充 core memory ID。
+泄漏。返回候选使用 source core memory ID，而不是 edge UUID；edge fact 保存在 raw_text/derived chain，
+使 PersonalMemoryQueryEngine 能按 `(scope, memory_id)` 回源。Graphiti edge 没有 Doppel kind、actor、
+authority、tag 或 importance 的可靠一对一来源，因此这些条件全部在恢复出的 authoritative source
+record 上验证，不使用模型默认值伪造匹配。
 
-Graphiti edge 没有 Doppel kind、actor、authority、tag 或 importance 的可靠一对一来源。适配器对这些
-过滤条件抛出 `GraphitiFilterUnsupportedError`，不以模型默认值伪造匹配。state 与时间可从 edge 的
-invalid/expired/valid/reference timestamps 后过滤。外部服务不可用和无法满足的过滤统一属于
-`SemanticIndexUnavailableError`，只有调用方显式允许时 hybrid 才回退到 lexical Store。
+v3 temporal projection 把 evidence 中最新 observation time 作为 Graphiti reference_time，并在 episode
+中显式编码 temporal status、valid_from 与 valid_to；固定 extraction instruction 要求分别映射为
+valid_at/invalid_at。`TemporalSemanticIndex.search_at()` 对 current/as_of 使用 Graphiti valid_at <= T、
+invalid_at > T or null、expired_at > T or null 的图过滤。Graphiti 仍只是候选层：最终时点有效性由
+Store record 的区间再次判断，图中陈旧或错误的时间边不能提升事实权威。
 
 旧 `GraphitiMemoryStore` 在迁移窗口内保留并发出 `DeprecationWarning`；移除仍需未来 minor 版本和
 迁移说明。新 Graphiti 对象继续是 optional-extra、module-only experimental，不扩大默认依赖或稳定
@@ -587,8 +590,8 @@ tombstone，由 index catalog 反向发现并清除。检索路径仍执行 Stor
 
 `PostgreSQLVectorIndex` profile table schema v2 增加 scope、完整 fingerprint 和 source version。向量
 外键继续 `ON DELETE CASCADE`；fingerprint 变化但 content hash 不变时只更新 manifest，避免状态变化
-触发无意义 embedding。`GraphitiSemanticIndex` 使用 v2 episode name 编码 fingerprint/version，稳定
-episode UUID 仍由 scope + core memory ID 生成；v1 episode 可恢复 memory ID 但没有 fingerprint，因而
+触发无意义 embedding。`GraphitiSemanticIndex` 使用 v3 episode name 编码 fingerprint/version，稳定
+episode UUID 仍由 scope + core memory ID 生成；v1/v2 episode 会被视为旧 temporal projection，
 下一次 reconciliation 会判定 stale、删除旧 episode 并重建。
 
 ## v0.7.1 中文 IM 记忆质量基线

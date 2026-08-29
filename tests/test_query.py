@@ -748,6 +748,95 @@ class _CountingSemanticIndex:
         return []
 
 
+class _TemporalSemanticIndex:
+    def __init__(self) -> None:
+        self.search_calls = 0
+        self.search_at_calls: list[datetime] = []
+
+    async def search(self, query, scopes, *, filters=None, limit=10):
+        del query, scopes, filters, limit
+        self.search_calls += 1
+        return []
+
+    async def search_at(
+        self, query, scopes, *, valid_at, filters=None, limit=10
+    ):
+        del query, filters, limit
+        self.search_at_calls.append(valid_at)
+        return [
+            RecallResult(
+                fact="temporal graph candidate",
+                memory_id="temporal-candidate",
+                scope=scopes[0],
+                similarity=0.9,
+            )
+        ]
+
+
+async def test_current_query_uses_temporal_semantic_index_at_bound_now() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "temporal-candidate",
+            "用户临时住在另一个城市。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="location.current",
+            valid_from=datetime(2026, 7, 1, tzinfo=UTC),
+            valid_to=datetime(2026, 9, 1, tzinfo=UTC),
+            day=1,
+        ),
+    )
+    semantic_index = _TemporalSemanticIndex()
+
+    result = await PersonalMemoryQueryEngine(
+        store, semantic_index=semantic_index
+    ).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "我现在身处何地？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert semantic_index.search_calls == 0
+    assert semantic_index.search_at_calls == [NOW]
+    assert [hit.record.memory_id for hit in result.hits] == ["temporal-candidate"]
+
+
+async def test_as_of_query_passes_the_requested_instant_to_temporal_index() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "temporal-candidate",
+            "用户当时住在另一个城市。",
+            memory_type="state",
+            temporal_status="historical",
+            topic_key="location.current",
+            valid_from=datetime(2024, 1, 1, tzinfo=UTC),
+            valid_to=datetime(2024, 12, 31, 23, 59, tzinfo=UTC),
+            day=1,
+        ),
+    )
+    semantic_index = _TemporalSemanticIndex()
+
+    result = await PersonalMemoryQueryEngine(
+        store, semantic_index=semantic_index
+    ).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "我在2024年06月01日身处何地？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    expected = datetime(2024, 6, 1, 12, tzinfo=UTC)
+    assert semantic_index.search_calls == 0
+    assert semantic_index.search_at_calls == [expected]
+    assert result.plan.intent == PersonalMemoryQueryIntent.AS_OF
+    assert [hit.record.memory_id for hit in result.hits] == ["temporal-candidate"]
+
+
 async def test_exact_count_never_depends_on_bounded_semantic_top_k() -> None:
     store = InMemoryStore()
     await _put(

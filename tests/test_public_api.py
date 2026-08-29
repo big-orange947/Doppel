@@ -898,6 +898,13 @@ SIGNATURES = {
         ("filters", "KEYWORD_ONLY"),
         ("limit", "KEYWORD_ONLY"),
     ),
+    "TemporalSemanticIndex.search_at": (
+        ("query", "POSITIONAL_OR_KEYWORD"),
+        ("scopes", "POSITIONAL_OR_KEYWORD"),
+        ("valid_at", "KEYWORD_ONLY"),
+        ("filters", "KEYWORD_ONLY"),
+        ("limit", "KEYWORD_ONLY"),
+    ),
     "StyleAnalyzer.analyze": (
         ("messages", "POSITIONAL_OR_KEYWORD"),
         ("config", "KEYWORD_ONLY"),

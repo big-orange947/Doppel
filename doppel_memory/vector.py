@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, model_validator
@@ -70,6 +71,25 @@ class SemanticIndex(Protocol):
         query: str,
         scopes: Sequence[MemoryScope],
         *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> Sequence[RecallResult]: ...
+
+
+@runtime_checkable
+class TemporalSemanticIndex(SemanticIndex, Protocol):
+    """Optional semantic index extension for facts valid at one exact instant.
+
+    Candidate sources remain non-authoritative. The query engine always reloads
+    their Store records and applies Doppel's own temporal interval checks.
+    """
+
+    async def search_at(
+        self,
+        query: str,
+        scopes: Sequence[MemoryScope],
+        *,
+        valid_at: datetime,
         filters: MemoryFilter | None = None,
         limit: int = 10,
     ) -> Sequence[RecallResult]: ...
