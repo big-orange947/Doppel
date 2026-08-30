@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import warnings
@@ -978,10 +979,14 @@ def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
     subject_role = str(
         record.metadata.get("subject") or record.actor or ""
     ).strip() or "owner"
+    subject_ref = hashlib.sha256(
+        f"{record.scope.scope_key}:{subject_id}".encode()
+    ).hexdigest()[:24]
+    subject_entity_name = f"DoppelSubject-{subject_ref}"
     subject = {
-        "entity_name": subject_id,
+        "entity_name": subject_entity_name,
         "role": subject_role,
-        "subject_id": subject_id,
+        "stable_ref": subject_ref,
     }
     header = (
         f"[DOPPEL memory_id={record.memory_id} version={record.version} "

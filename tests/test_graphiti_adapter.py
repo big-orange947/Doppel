@@ -172,7 +172,9 @@ async def test_semantic_index_uses_stable_episode_and_exact_scope_group() -> Non
     assert second.status == IndexOperationStatus.SKIPPED
     assert fake.add_calls[0]["group_id"] == scope.scope_key
     assert "memory_id=memory-1" in str(fake.add_calls[0]["episode_body"])
-    assert '"entity_name": "u"' in str(fake.add_calls[0]["episode_body"])
+    assert '"entity_name": "DoppelSubject-' in str(
+        fake.add_calls[0]["episode_body"]
+    )
     assert "The owner likes mountain hiking" in str(fake.add_calls[0]["episode_body"])
     assert "untrusted caller content" not in str(fake.add_calls[0]["episode_body"])
     assert (await index.health())["ok"] is True
@@ -504,8 +506,9 @@ async def test_graphiti_projection_and_search_at_preserve_temporal_coordinates()
         call["episode_body"]
     )
     assert f'"valid_to": "{valid_to.isoformat()}"' in str(call["episode_body"])
-    assert '"entity_name": "person-temporal"' in str(call["episode_body"])
+    assert '"entity_name": "DoppelSubject-' in str(call["episode_body"])
     assert '"role": "owner"' in str(call["episode_body"])
+    assert "person-temporal" not in str(call["episode_body"])
     assert "trusted temporal metadata" in str(
         call["custom_extraction_instructions"]
     )
