@@ -23,9 +23,11 @@ from doppel_memory import (
     SemanticIndex,
 )
 from doppel_memory.graphiti_store import (
+    GRAPHITI_FALLBACK_EDGE_NAME,
     GraphitiIndexUnavailableError,
     GraphitiMemoryStore,
     GraphitiSemanticIndex,
+    _ensure_graphiti_fallback_edge,
 )
 
 
@@ -115,6 +117,23 @@ class _EpisodeSlotDriver:
     async def execute_query(self, query: str):
         self.graphiti.query_calls.append(query)
         return []
+
+
+class _FallbackEmbedder:
+    async def create(self, value):
+        return [float(len(str(value)))]
+
+
+class _FallbackDriver:
+    def __init__(self, *, existing_edges: int = 0) -> None:
+        self.existing_edges = existing_edges
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def execute_query(self, query: str, **params):
+        self.calls.append((query, params))
+        if "RETURN count(edge) AS edges" in query:
+            return SimpleNamespace(records=[{"edges": self.existing_edges}])
+        return SimpleNamespace(records=[{"edge_uuid": params["edge_uuid"]}])
 
 
 async def test_graphiti_029_adapter_constructs_without_connecting() -> None:
@@ -256,6 +275,63 @@ async def test_graphiti_failed_slot_precreation_removes_partial_episode() -> Non
     assert operations.saved[0].uuid not in fake.episodes
 
 
+async def test_graphiti_empty_extraction_gets_temporal_provenance_fallback() -> None:
+    driver = _FallbackDriver()
+    graphiti = SimpleNamespace(driver=driver, embedder=_FallbackEmbedder())
+    scope = MemoryScope(user_id="private-platform-id", agent_id="bot")
+    valid_from = datetime(2025, 4, 1, tzinfo=UTC)
+    valid_to = datetime(2025, 4, 30, 23, 59, 59, tzinfo=UTC)
+    record = MemoryRecord(
+        memory_id="fallback",
+        scope=scope,
+        content="A confirmed memory that the provider did not relate",
+        metadata={
+            "subject": "owner",
+            "subject_id": scope.user_id,
+            "valid_from": valid_from.isoformat(),
+            "valid_to": valid_to.isoformat(),
+        },
+    )
+
+    created = await _ensure_graphiti_fallback_edge(
+        graphiti,
+        record=record,
+        episode_id="episode-id",
+        fingerprint="a" * 64,
+    )
+
+    assert created is True
+    assert len(driver.calls) == 2
+    create_query, params = driver.calls[1]
+    assert "episode.entity_edges" in create_query
+    assert params["edge_name"] == GRAPHITI_FALLBACK_EDGE_NAME
+    assert params["valid_at"] == valid_from
+    assert params["invalid_at"] == valid_to
+    assert str(params["subject_name"]).startswith("DoppelSubject-")
+    assert scope.user_id not in str(params)
+    assert params["reference_time"] is not None
+
+
+async def test_graphiti_existing_episode_edge_skips_fallback() -> None:
+    driver = _FallbackDriver(existing_edges=1)
+    graphiti = SimpleNamespace(driver=driver, embedder=_FallbackEmbedder())
+    record = MemoryRecord(
+        memory_id="rich",
+        scope=MemoryScope(user_id="u", agent_id="bot"),
+        content="The provider already produced a rich relation",
+    )
+
+    created = await _ensure_graphiti_fallback_edge(
+        graphiti,
+        record=record,
+        episode_id="episode-id",
+        fingerprint="b" * 64,
+    )
+
+    assert created is False
+    assert len(driver.calls) == 1
+
+
 async def test_graphiti_writer_reconciles_transition_and_hard_delete() -> None:
     fake = FakeGraphiti()
     store = InMemoryStore()
@@ -288,7 +364,7 @@ async def test_graphiti_writer_reconciles_transition_and_hard_delete() -> None:
     assert await index.inspect(scope, orphan.memory_id) is None
 
 
-@pytest.mark.parametrize("legacy_version", [2, 3])
+@pytest.mark.parametrize("legacy_version", [2, 3, 4])
 async def test_graphiti_upsert_replaces_legacy_projection_episode(
     legacy_version: int,
 ) -> None:
@@ -516,6 +592,12 @@ async def test_graphiti_projection_and_search_at_preserve_temporal_coordinates()
         call["custom_extraction_instructions"]
     )
     assert "never replace a subject-object relation with a self-loop" in str(
+        call["custom_extraction_instructions"]
+    )
+    assert "For every episode, always include its entity_name" in str(
+        call["custom_extraction_instructions"]
+    )
+    assert "negation, cancellation, retraction" in str(
         call["custom_extraction_instructions"]
     )
 

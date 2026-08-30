@@ -20,6 +20,11 @@
   extraction using a scope-salted stable pseudonym rather than a raw platform subject
   ID. First-person facts are connected to that subject entity instead of collapsing
   into object self-loops, while v2/v3 projections are marked for additive upgrades.
+- Graphiti projection v5 requires the authoritative pseudonymous subject in every
+  Episode's entity set. If a provider still accepts an Episode without producing a
+  usable relationship, Doppel adds one explicitly named deterministic fallback edge
+  with the Store's fact, validity interval, Episode provenance, and deletion links.
+  Rich extracted relations remain preferred; v2-v4 projections reconcile additively.
 
 - OpenAI-compatible structured output can optionally send a provider thinking-mode
   toggle. This supports low-cost non-thinking extraction on compatible providers while

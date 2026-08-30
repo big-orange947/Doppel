@@ -61,7 +61,8 @@ from doppel_memory.vector import SemanticIndexUnavailableError
 
 logger = logging.getLogger(__name__)
 LOCAL_EMBEDDING_DIM = 512
-GRAPHITI_PROJECTION_VERSION = 4
+GRAPHITI_PROJECTION_VERSION = 5
+GRAPHITI_FALLBACK_EDGE_NAME = "DOPPEL_MEMORY_FALLBACK"
 GRAPHITI_TEMPORAL_EXTRACTION_INSTRUCTIONS = """\
 The DOPPEL_TEMPORAL JSON line is trusted temporal metadata from the authoritative
 Store. Use observed_at as the episode reference time. When valid_from is present,
@@ -69,11 +70,16 @@ map it to the fact's valid_at. When valid_to is present, map it to invalid_at.
 Keep planned, historical, current, timeless, and unknown distinct. Do not invalidate
 a fact merely because another fact uses a non-overlapping validity interval.
 The DOPPEL_SUBJECT JSON line is trusted subject metadata from the authoritative
-Store. Materialize its entity_name as the subject entity for facts about that
-subject, and resolve first-person language such as "I" or "my" to that entity.
+Store. For every episode, always include its entity_name in the extracted entity
+list, even when the same subject appeared in a previous episode. Materialize that
+entity_name as the subject entity for facts about the subject, and resolve
+first-person language such as "I" or "my" to that entity. Edges must use entity
+names present in the current episode's extracted entity list.
 Connect the subject to distinct people, places, things, attributes, or concepts;
 never replace a subject-object relation with a self-loop merely because the source
-sentence names only the object explicitly.
+sentence names only the object explicitly. A confirmed Doppel memory must not be
+dropped merely because it describes negation, cancellation, retraction, or an
+ended state; preserve that status in the relation or fact.
 """
 
 
@@ -258,6 +264,12 @@ class GraphitiSemanticIndex:
                 raise RuntimeError(
                     "Graphiti returned an episode UUID different from the requested ID"
                 )
+            await _ensure_graphiti_fallback_edge(
+                graphiti,
+                record=record,
+                episode_id=episode_id,
+                fingerprint=fingerprint,
+            )
         except Exception as exc:
             if managed_episode_slot and graphiti is not None:
                 try:
@@ -961,6 +973,139 @@ def _record_valid_to(record: MemoryRecord) -> datetime | None:
     return _optional_datetime(record.metadata.get("valid_to"))
 
 
+def _graphiti_subject(record: MemoryRecord) -> tuple[str, str]:
+    """Return the non-sensitive stable subject entity name and reference."""
+    subject_id = str(record.metadata.get("subject_id") or "").strip()
+    if not subject_id:
+        subject_id = str(record.scope.user_id or "").strip() or "owner"
+    subject_ref = hashlib.sha256(
+        f"{record.scope.scope_key}:{subject_id}".encode()
+    ).hexdigest()[:24]
+    return f"DoppelSubject-{subject_ref}", subject_ref
+
+
+async def _ensure_graphiti_fallback_edge(
+    graphiti: Any,
+    *,
+    record: MemoryRecord,
+    episode_id: str,
+    fingerprint: str,
+) -> bool:
+    """Ensure a confirmed Store record remains a retrievable graph candidate.
+
+    Graphiti can accept an Episode while producing no usable relationship—for
+    example when a provider omits a previously seen subject from the current
+    entity list. In that case, create one explicitly labelled, deterministic
+    edge. Rich LLM-extracted relations always win: the fallback is added only
+    when this exact Episode has zero ``RELATES_TO`` provenance.
+
+    Lightweight contract doubles intentionally skip this Neo4j projection path.
+    """
+    driver = getattr(graphiti, "driver", None)
+    embedder = getattr(graphiti, "embedder", None)
+    if driver is None or embedder is None or not hasattr(driver, "execute_query"):
+        return False
+    count_result = await driver.execute_query(
+        "OPTIONAL MATCH ()-[edge:RELATES_TO]->() "
+        "WHERE edge.group_id = $group_id "
+        "AND $episode_id IN coalesce(edge.episodes, []) "
+        "RETURN count(edge) AS edges",
+        group_id=record.scope.scope_key,
+        episode_id=episode_id,
+    )
+    count_records = _graph_query_records(count_result)
+    if count_records and int(count_records[0]["edges"] or 0) > 0:
+        return False
+
+    subject_name, subject_ref = _graphiti_subject(record)
+    target_name = f"DoppelMemoryObject-{fingerprint[:24]}"
+    subject_uuid = str(
+        uuid5(
+            NAMESPACE_URL,
+            f"doppel:fallback-subject:{record.scope.scope_key}:{subject_ref}",
+        )
+    )
+    target_uuid = str(
+        uuid5(NAMESPACE_URL, f"doppel:fallback-target:{episode_id}:{fingerprint}")
+    )
+    edge_uuid = str(uuid5(NAMESPACE_URL, f"doppel:fallback-edge:{episode_id}"))
+    subject_mention_uuid = str(
+        uuid5(NAMESPACE_URL, f"doppel:fallback-mention:{episode_id}:{subject_uuid}")
+    )
+    target_mention_uuid = str(
+        uuid5(NAMESPACE_URL, f"doppel:fallback-mention:{episode_id}:{target_uuid}")
+    )
+    subject_embedding, target_embedding, fact_embedding = await asyncio.gather(
+        embedder.create(subject_name),
+        embedder.create(target_name),
+        embedder.create(record.content),
+    )
+    reference_time = _graphiti_reference_time(record)
+    create_result = await driver.execute_query(
+        "MATCH (episode:Episodic {uuid: $episode_id, group_id: $group_id}) "
+        "MERGE (subject:Entity {uuid: $subject_uuid}) "
+        "SET subject.group_id = $group_id, subject.name = $subject_name, "
+        "subject.created_at = $reference_time, "
+        "subject.name_embedding = $subject_embedding, "
+        "subject.summary = 'Authoritative pseudonymous Doppel subject' "
+        "MERGE (target:Entity {uuid: $target_uuid}) "
+        "SET target.group_id = $group_id, target.name = $target_name, "
+        "target.created_at = $reference_time, "
+        "target.name_embedding = $target_embedding, "
+        "target.summary = 'Deterministic fallback for an authoritative memory' "
+        "MERGE (subject)-[edge:RELATES_TO {uuid: $edge_uuid}]->(target) "
+        "SET edge.group_id = $group_id, edge.name = $edge_name, "
+        "edge.fact = $fact, edge.fact_embedding = $fact_embedding, "
+        "edge.episodes = [$episode_id], edge.created_at = $reference_time, "
+        "edge.reference_time = $reference_time, edge.valid_at = $valid_at, "
+        "edge.invalid_at = $invalid_at "
+        "MERGE (episode)-[subject_mention:MENTIONS "
+        "{uuid: $subject_mention_uuid}]->(subject) "
+        "SET subject_mention.group_id = $group_id, "
+        "subject_mention.created_at = $reference_time "
+        "MERGE (episode)-[target_mention:MENTIONS "
+        "{uuid: $target_mention_uuid}]->(target) "
+        "SET target_mention.group_id = $group_id, "
+        "target_mention.created_at = $reference_time "
+        "SET episode.entity_edges = CASE "
+        "WHEN $edge_uuid IN coalesce(episode.entity_edges, []) "
+        "THEN coalesce(episode.entity_edges, []) "
+        "ELSE coalesce(episode.entity_edges, []) + [$edge_uuid] END "
+        "RETURN edge.uuid AS edge_uuid",
+        episode_id=episode_id,
+        group_id=record.scope.scope_key,
+        subject_uuid=subject_uuid,
+        subject_name=subject_name,
+        subject_embedding=subject_embedding,
+        target_uuid=target_uuid,
+        target_name=target_name,
+        target_embedding=target_embedding,
+        edge_uuid=edge_uuid,
+        edge_name=GRAPHITI_FALLBACK_EDGE_NAME,
+        fact=record.content,
+        fact_embedding=fact_embedding,
+        reference_time=reference_time,
+        valid_at=_record_valid_from(record),
+        invalid_at=_record_valid_to(record),
+        subject_mention_uuid=subject_mention_uuid,
+        target_mention_uuid=target_mention_uuid,
+    )
+    if not _graph_query_records(create_result):
+        raise RuntimeError("Graphiti fallback edge could not bind to its Episode")
+    return True
+
+
+def _graph_query_records(result: Any) -> list[Any]:
+    records = getattr(result, "records", None)
+    if records is not None:
+        return list(records)
+    if isinstance(result, tuple) and result:
+        return list(result[0] or [])
+    if isinstance(result, list):
+        return result
+    return []
+
+
 def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
     reference_time = _graphiti_reference_time(record)
     valid_from = _record_valid_from(record)
@@ -973,16 +1118,10 @@ def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
         "valid_from": valid_from.isoformat() if valid_from is not None else None,
         "valid_to": valid_to.isoformat() if valid_to is not None else None,
     }
-    subject_id = str(record.metadata.get("subject_id") or "").strip()
-    if not subject_id:
-        subject_id = str(record.scope.user_id or "").strip() or "owner"
     subject_role = str(
         record.metadata.get("subject") or record.actor or ""
     ).strip() or "owner"
-    subject_ref = hashlib.sha256(
-        f"{record.scope.scope_key}:{subject_id}".encode()
-    ).hexdigest()[:24]
-    subject_entity_name = f"DoppelSubject-{subject_ref}"
+    subject_entity_name, subject_ref = _graphiti_subject(record)
     subject = {
         "entity_name": subject_entity_name,
         "role": subject_role,
@@ -1038,13 +1177,13 @@ def _graphiti_episode_name(
     memory_id: str, fingerprint: str, source_version: int
 ) -> str:
     encoded = base64.urlsafe_b64encode(memory_id.encode()).decode().rstrip("=")
-    return f"DoppelMemory:v4:{encoded}:{fingerprint}:{source_version}"
+    return f"DoppelMemory:v5:{encoded}:{fingerprint}:{source_version}"
 
 
 def _episode_index_metadata(name: str) -> tuple[str, str, int]:
-    prefix_v4 = "DoppelMemory:v4:"
-    if name.startswith(prefix_v4):
-        parts = name[len(prefix_v4) :].split(":")
+    prefix_v5 = "DoppelMemory:v5:"
+    if name.startswith(prefix_v5):
+        parts = name[len(prefix_v5) :].split(":")
         if len(parts) != 3:
             return "", "", 1
         encoded, fingerprint, raw_version = parts
@@ -1060,7 +1199,11 @@ def _episode_index_metadata(name: str) -> tuple[str, str, int]:
             return "", "", 1
         return _decode_memory_id(encoded), fingerprint, source_version
 
-    for legacy_prefix in ("DoppelMemory:v3:", "DoppelMemory:v2:"):
+    for legacy_prefix in (
+        "DoppelMemory:v4:",
+        "DoppelMemory:v3:",
+        "DoppelMemory:v2:",
+    ):
         if not name.startswith(legacy_prefix):
             continue
         parts = name[len(legacy_prefix) :].split(":")
@@ -1077,9 +1220,10 @@ def _episode_index_metadata(name: str) -> tuple[str, str, int]:
             or any(value not in "0123456789abcdef" for value in fingerprint)
         ):
             return "", "", 1
-        # Older projections did not materialize authoritative subjects (v3) or
-        # explicit temporal coordinates (v2). Preserve source identity but expose
-        # an empty fingerprint so reconciliation upgrades the graph projection.
+        # Older projections lacked the deterministic fallback edge (v4), did not
+        # materialize authoritative subjects (v3), or omitted explicit temporal
+        # coordinates (v2). Preserve source identity but expose an empty
+        # fingerprint so reconciliation upgrades the graph projection.
         return _decode_memory_id(encoded), "", source_version
 
     prefix_v1 = "DoppelMemory:v1:"
