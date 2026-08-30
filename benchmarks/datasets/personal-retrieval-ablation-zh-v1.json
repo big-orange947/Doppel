@@ -119,7 +119,7 @@
       "authority": "human_self", "personal_memory_type": "plan",
       "temporal_status": "planned", "state": "confirmed",
       "valid_from": "2026-10-15T00:00:00Z", "valid_to": "2026-10-22T23:59:59Z",
-      "topic_key": "trip-hongkong", "event_key": "evt-hk-plan",
+      "topic_key": "trip-hongkong", "event_key": "",
       "tags": ["personal-memory", "travel", "plan"],
       "evidence": [{"message_id": "e-m9", "at": "2026-07-01T11:00:00Z"}]
     },
@@ -141,7 +141,7 @@
       "authority": "human_self", "personal_memory_type": "plan",
       "temporal_status": "historical", "state": "superseded",
       "valid_from": "2026-08-01T00:00:00Z", "valid_to": null,
-      "topic_key": "trip-sanya", "event_key": "evt-sanya",
+      "topic_key": "trip-sanya", "event_key": "",
       "revision_kind": "retraction",
       "tags": ["personal-memory", "travel"],
       "evidence": [{"message_id": "e-m11", "at": "2026-07-20T14:00:00Z"}]
@@ -166,6 +166,7 @@
       "valid_from": "2020-09-01T00:00:00Z", "valid_to": null,
       "topic_key": "friend", "event_key": "",
       "tags": ["personal-memory", "relationship"],
+      "authorization": {"available": true, "note": "u1 视角的 contact 主体关系声明"},
       "evidence": [{"message_id": "e-m13", "at": "2026-04-18T15:00:00Z"}]
     },
     {
@@ -188,6 +189,7 @@
       "valid_from": "2026-07-01T00:00:00Z", "valid_to": null,
       "topic_key": "item-camera", "event_key": "",
       "tags": ["personal-memory", "possession"],
+      "authorization": {"available": true, "note": "u4 视角声明借入林舟的相机"},
       "evidence": [{"message_id": "e-m15", "at": "2026-07-02T16:00:00Z"}]
     },
     {
@@ -235,37 +237,15 @@
       "evidence": [{"message_id": "e-m18", "at": "2026-08-10T12:00:00Z"}]
     },
     {
-      "memory_id": "m-hk-mention-a", "scope": "u1",
-      "content": "这周我说过两次想去香港：一次是周二说想去香港",
+      "memory_id": "m-trip-hk-done2", "scope": "u1",
+      "content": "我 2025 年 12 月圣诞节去过香港，看了维港灯光秀",
       "subject": "owner", "subject_id": "user-linz",
       "authority": "human_self", "personal_memory_type": "episode",
       "temporal_status": "historical", "state": "confirmed",
-      "valid_from": "2026-08-18T00:00:00Z", "valid_to": null,
-      "topic_key": "trip-hongkong", "event_key": "evt-hk-mention-week",
+      "valid_from": "2025-12-24T00:00:00Z", "valid_to": "2025-12-27T23:59:59Z",
+      "topic_key": "trip-hongkong", "event_key": "evt-hk-done2",
       "tags": ["personal-memory", "travel"],
-      "evidence": [{"message_id": "e-m19a", "at": "2026-08-18T10:00:00Z"}]
-    },
-    {
-      "memory_id": "m-hk-mention-b", "scope": "u1",
-      "content": "同一次聊天里我又提了一次想去香港，还提到想看夜景",
-      "subject": "owner", "subject_id": "user-linz",
-      "authority": "human_self", "personal_memory_type": "episode",
-      "temporal_status": "historical", "state": "confirmed",
-      "valid_from": "2026-08-18T00:00:00Z", "valid_to": null,
-      "topic_key": "trip-hongkong", "event_key": "evt-hk-mention-week",
-      "tags": ["personal-memory", "travel"],
-      "evidence": [{"message_id": "e-m19b", "at": "2026-08-18T10:05:00Z"}]
-    },
-    {
-      "memory_id": "m-hk-mention-c", "scope": "u1",
-      "content": "这周另一次聊天我提到想去香港买相机配件",
-      "subject": "owner", "subject_id": "user-linz",
-      "authority": "human_self", "personal_memory_type": "episode",
-      "temporal_status": "historical", "state": "confirmed",
-      "valid_from": "2026-08-19T00:00:00Z", "valid_to": null,
-      "topic_key": "trip-hongkong", "event_key": "evt-hk-mention-week-c",
-      "tags": ["personal-memory", "travel"],
-      "evidence": [{"message_id": "e-m19c", "at": "2026-08-19T09:00:00Z"}]
+      "evidence": [{"message_id": "e-m19c", "at": "2025-12-28T09:00:00Z"}]
     },
     {
       "memory_id": "m-zhou-work", "scope": "u3",
@@ -296,7 +276,7 @@
       "authority": "human_self", "personal_memory_type": "plan",
       "temporal_status": "planned", "state": "confirmed",
       "valid_from": "2026-11-01T00:00:00Z", "valid_to": null,
-      "topic_key": "travel", "event_key": "evt-wang-sh",
+      "topic_key": "travel", "event_key": "",
       "tags": ["personal-memory", "travel", "plan"],
       "evidence": [{"message_id": "e-m22", "at": "2026-08-15T09:00:00Z"}]
     },
@@ -320,6 +300,7 @@
       "valid_from": "2021-05-01T00:00:00Z", "valid_to": null,
       "topic_key": "friend", "event_key": "",
       "tags": ["personal-memory", "relationship"],
+      "authorization": {"available": true, "note": "u1 视角的 contact 主体关系声明"},
       "evidence": [{"message_id": "e-m24", "at": "2026-06-20T15:00:00Z"}]
     },
     {
@@ -375,6 +356,7 @@
       "valid_from": "2024-09-01T00:00:00Z", "valid_to": null,
       "topic_key": "contact", "event_key": "",
       "tags": ["personal-memory", "relationship"],
+      "authorization": {"available": true, "note": "u5 视角的 contact 主体关系声明"},
       "evidence": [{"message_id": "e-m29", "at": "2026-07-05T10:00:00Z"}]
     },
     {
@@ -412,13 +394,14 @@
     },
     {
       "query_id": "q-dev-residence-asof-2024",
-      "query": "2024 年 6 月的时候我住在哪里？",
+      "query": "2024 年 6 月 15 日的时候我住在哪里？",
       "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
       "intent": "as_of", "as_of": "2024-06-15T00:00:00Z",
-      "required_memory_ids": ["m-residence-old"],
-      "forbidden_memory_ids": ["m-residence-current"],
+      "required_memory_ids": ["m-residence-current"],
+      "forbidden_memory_ids": ["m-residence-old", "m-wang-residence", "m-zhao-similar"],
       "expected_abstain": false, "expected_ambiguous": false,
-      "category": "as-of", "partition": "dev"
+      "category": "as-of", "partition": "dev",
+      "note": "2024-06-01 起上海生效，6 月 15 日时点已搬至上海；南京区间 2024-05-31 结束"
     },
     {
       "query_id": "q-dev-job-current",
@@ -432,7 +415,7 @@
     },
     {
       "query_id": "q-dev-job-before-correction",
-      "query": "2026 年 5 月之前我在星河做什么工作？",
+      "query": "2026 年 5 月 14 日我在星河做什么工作？",
       "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
       "intent": "as_of", "as_of": "2026-05-14T12:00:00Z",
       "required_memory_ids": ["m-job-v1"],
@@ -552,15 +535,15 @@
       "category": "negation", "partition": "dev"
     },
     {
-      "query_id": "q-dev-count-hk-mentions",
-      "query": "这周我说过几次想去香港？",
+      "query_id": "q-dev-count-hk-trips",
+      "query": "我去过几次香港？",
       "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
       "intent": "count", "as_of": null,
       "required_memory_ids": [],
       "forbidden_memory_ids": [],
       "expected_count": 2, "expected_abstain": false, "expected_ambiguous": false,
       "category": "exact-count", "partition": "dev",
-      "count_episode_context": "m-hk-mention-a 与 m-hk-mention-b 同 event_key 计 1 次，m-hk-mention-c 计 1 次"
+      "count_episode_context": "两次真实旅行 episode：evt-hk-done（2026-06）与 evt-hk-done2（2025-12）"
     },
     {
       "query_id": "q-dev-count-hk-plans",
@@ -569,9 +552,10 @@
       "intent": "count", "as_of": null,
       "required_memory_ids": [],
       "forbidden_memory_ids": [],
-      "expected_count": 1, "expected_abstain": false, "expected_ambiguous": false,
+      "expected_count": null, "expected_count_status": "indeterminate",
+      "expected_abstain": false, "expected_ambiguous": false,
       "category": "exact-count", "partition": "dev",
-      "count_episode_context": "仅 m-trip-hk-planned 是 plan；m-trip-hk-done 是已发生事件不计数"
+      "count_episode_context": "计划不携带 event_key，episode 计数应为 indeterminate"
     },
     {
       "query_id": "q-dev-abstain-visa",
@@ -672,13 +656,14 @@
     },
     {
       "query_id": "q-hold-residence-future-asof",
-      "query": "2027 年 1 月我住在哪里？",
+      "query": "2027 年 1 月 15 日我住在哪里？",
       "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
       "intent": "as_of", "as_of": "2027-01-15T00:00:00Z",
-      "required_memory_ids": ["m-residence-current"],
+      "required_memory_ids": [],
       "forbidden_memory_ids": [],
       "expected_abstain": false, "expected_ambiguous": false,
-      "category": "as-of", "partition": "heldout"
+      "category": "as-of", "partition": "heldout",
+      "note": "未来 as-of：只允许 present-evidence-only + future-unknown；不要求断言未来状态"
     },
     {
       "query_id": "q-hold-reading-rephrase",
@@ -692,7 +677,7 @@
     },
     {
       "query_id": "q-hold-job-asof-during",
-      "query": "2025 年 8 月我在星河是什么岗位？",
+      "query": "2025 年 8 月 1 日我在星河是什么岗位？",
       "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
       "intent": "as_of", "as_of": "2025-08-01T00:00:00Z",
       "required_memory_ids": ["m-job-v1"],
@@ -708,7 +693,8 @@
       "required_memory_ids": ["m-chen-borrow-camera"],
       "forbidden_memory_ids": ["m-item-camera"],
       "expected_abstain": false, "expected_ambiguous": false,
-      "category": "relation", "partition": "heldout"
+      "category": "relation", "partition": "deferred_cross_subject",
+      "note": "u4 查询对他人（林舟）主体的事实：本轮不做 owner-wide 授权域，延后不参与主指标"
     },
     {
       "query_id": "q-hold-abstain-future-plan",
@@ -723,14 +709,14 @@
     },
     {
       "query_id": "q-hold-count-dup",
-      "query": "我总共说过几次要去香港？",
+      "query": "2025 年我去过几次香港？",
       "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
       "intent": "count", "as_of": null,
       "required_memory_ids": [],
       "forbidden_memory_ids": [],
-      "expected_count": 3, "expected_abstain": false, "expected_ambiguous": false,
+      "expected_count": 1, "expected_abstain": false, "expected_ambiguous": false,
       "category": "exact-count", "partition": "heldout",
-      "count_episode_context": "计划 1 次(event 不同) + 本周提及按 event_key 计 2 次 = 3"
+      "count_episode_context": "时间区间 2025 年内仅 evt-hk-done2；evt-hk-done 在 2026 不计"
     },
     {
       "query_id": "q-hold-shared-python-u3",

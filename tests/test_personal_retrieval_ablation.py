@@ -21,6 +21,8 @@ from unittest.mock import patch
 
 from benchmarks.personal_retrieval_ablation import (
     ALL_PROFILES,
+    PLANNER_MODE_ORACLE,
+    PROFILE_DIRECT,
     PROFILE_MAIN,
     SOURCE_GRAPH,
     SOURCE_VECTOR,
@@ -135,7 +137,7 @@ class DatasetTest(unittest.TestCase):
         self.assertGreaterEqual(len(dataset.scopes), 5)
         partition_counts = {
             name: sum(1 for item in dataset.queries if item.partition == name)
-            for name in ("dev", "heldout", "adversarial")
+            for name in ("dev", "heldout", "adversarial", "deferred_cross_subject")
         }
         for name in ("dev", "heldout", "adversarial"):
             self.assertGreater(partition_counts[name], 0, name)
@@ -161,7 +163,10 @@ class DatasetTest(unittest.TestCase):
             self.assertTrue(item.query)
             self.assertTrue(item.scopes)
             self.assertTrue(item.intent)
-            self.assertIn(item.partition, ("dev", "heldout", "adversarial"))
+            self.assertIn(
+                item.partition,
+                ("dev", "heldout", "adversarial", "deferred_cross_subject"),
+            )
             self.assertTrue(not item.expected_abstain or not item.required_memory_ids)
 
     def test_fingerprint_is_stable(self) -> None:
@@ -169,7 +174,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(dataset.fingerprint, _dataset().fingerprint)
 
     def test_profile_names_are_exact(self) -> None:
-        from benchmarks.personal_retrieval_ablation import PROFILE_DIRECT
 
         self.assertEqual(
             PROFILE_MAIN,
@@ -193,7 +197,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(
             schema["properties"]["runner"]["const"], report["runner"]
         )
-        report_keys = set(report["profiles"]["lexical"])
+        report_keys = set(report["profiles"]["deterministic"]["lexical"])
         schema_required = set(schema["$defs"]["profile"]["required"])
         self.assertTrue(schema_required.issubset(report_keys), schema_required - report_keys)
         pydantic.TypeAdapter(dict).validate_python(report)
@@ -211,7 +215,12 @@ class DatasetTest(unittest.TestCase):
                 "fingerprint": "f" * 64,
                 "memory_count": 1,
                 "query_count": 1,
-                "partition_counts": {"dev": 1, "heldout": 1, "adversarial": 1},
+                "partition_counts": {
+                    "dev": 1,
+                    "heldout": 1,
+                    "adversarial": 1,
+                    "deferred_cross_subject": 1,
+                },
             },
             "environment": {"python": "3", "platform": "p"},
             "runtime": {
@@ -219,29 +228,58 @@ class DatasetTest(unittest.TestCase):
                 "vector": {"available": False, "reason": "x"},
                 "graph": {"available": False, "reason": "x"},
             },
+            "planner_modes": ["deterministic", "oracle"],
             "profiles": {
-                "lexical": {
-                    "query_count": 1,
-                    "error_count": 0,
-                    "recall_at_1": 0.0,
-                    "recall_at_5": 0.0,
-                    "mrr": 0.0,
-                    "required_evidence_recall": 0.0,
-                    "forbidden_hit_count": 0,
-                    "scope_leakage_count": 0,
-                    "temporal_violation_count": 0,
-                    "provenance_failure_count": 0,
-                    "abstention_accuracy": 1.0,
-                    "ambiguity_accuracy": 1.0,
-                    "count_accuracy": 1.0,
-                    "latency_ms": {"p50": 1, "p95": 2, "max": 3},
-                    "contribution": {"vector": 0, "graph": 0, "both": 0},
+                "deterministic": {
+                    "lexical": {
+                        "query_count": 1,
+                        "error_count": 0,
+                        "recall_at_1": 0.0,
+                        "recall_at_5": 0.0,
+                        "mrr": 0.0,
+                        "required_evidence_recall": 0.0,
+                        "forbidden_hit_count": 0,
+                        "scope_leakage_count": 0,
+                        "temporal_violation_count": 0,
+                        "provenance_failure_count": 0,
+                        "abstention_accuracy": 1.0,
+                        "ambiguity_accuracy": 1.0,
+                        "count_accuracy": 1.0,
+                        "latency_ms": {"p50": 1, "p95": 2, "max": 3},
+                        "contribution": {"vector": 0, "graph": 0, "both": 0},
+                    }
+                },
+                "oracle": {
+                    "lexical": {
+                        "query_count": 1,
+                        "error_count": 0,
+                        "recall_at_1": 0.0,
+                        "recall_at_5": 0.0,
+                        "mrr": 0.0,
+                        "required_evidence_recall": 0.0,
+                        "forbidden_hit_count": 0,
+                        "scope_leakage_count": 0,
+                        "temporal_violation_count": 0,
+                        "provenance_failure_count": 0,
+                        "abstention_accuracy": 1.0,
+                        "ambiguity_accuracy": 1.0,
+                        "count_accuracy": 1.0,
+                        "latency_ms": {"p50": 1, "p95": 2, "max": 3},
+                        "contribution": {"vector": 0, "graph": 0, "both": 0},
+                    }
                 }
             },
             "diagnostics": {},
             "comparisons": {},
-            "hard_gate_failures": [],
+            "hard_gates": {
+                "planner_failures": [],
+                "retrieval_failures": [],
+                "security_failures": [],
+                "fixture_validation_failures": [],
+            },
             "cases": [],
+            "deferred_queries": [],
+            "graph_final_hit_attribution": {"available": False},
             "metamorphic": {},
             "elapsed_seconds": 1.0,
             "doppel_version": "0.9",
@@ -359,6 +397,7 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
             "lexical",
             1.0,
             allowed_scope_keys={scope.scope_key},
+            mode=PLANNER_MODE_ORACLE,
         )
         self.assertEqual(case["temporal_violations"], 1)
 
@@ -413,7 +452,9 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
             )
         self.assertFalse(report["runtime"]["graph"]["available"])
         self.assertTrue(report["runtime"]["graph"]["reason"])
-        self.assertTrue(report["profiles"]["lexical_graph"]["unavailable"])
+        self.assertTrue(
+            report["profiles"]["deterministic"]["lexical_graph"]["unavailable"]
+        )
 
     async def test_pgvector_unavailable_is_structured(self) -> None:
         dataset = _dataset()
@@ -434,7 +475,9 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
                 dataset, profiles=("lexical_vector",), run_metamorphic=False
             )
         self.assertFalse(report["runtime"]["vector"]["available"])
-        self.assertTrue(report["profiles"]["lexical_vector"]["unavailable"])
+        self.assertTrue(
+            report["profiles"]["deterministic"]["lexical_vector"]["unavailable"]
+        )
 
     async def test_unexpected_errors_are_not_swallowed(self) -> None:
         dataset = _dataset()
@@ -566,6 +609,251 @@ class DirectScanTest(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(report["scope_leak_candidate_count"], 1)
         self.assertGreaterEqual(report["orphan_candidate_count"], 1)
         self.assertGreaterEqual(report["inactive_candidate_count"], 1)
+
+
+class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
+    async def test_oracle_plan_injects_intent_and_as_of(self) -> None:
+        from benchmarks.personal_retrieval_ablation import BenchmarkOraclePlanner
+        from doppel_memory.query import PersonalMemoryQueryRequest
+
+        dataset = _dataset()
+        planner = BenchmarkOraclePlanner(dataset.queries)
+        fixture = next(
+            item
+            for item in dataset.queries
+            if item.query_id == "q-dev-residence-asof-2024"
+        )
+        draft = await planner.plan(
+            PersonalMemoryQueryRequest(query=fixture.query, now=fixture.now)
+        )
+        self.assertEqual(draft.intent, "as_of")
+        self.assertEqual(draft.as_of, fixture.as_of)
+        self.assertEqual(draft.topic_keys, [])
+        self.assertEqual(draft.memory_types, [])
+
+    async def test_oracle_planner_rejects_unknown_query(self) -> None:
+        from datetime import UTC
+
+        from benchmarks.personal_retrieval_ablation import BenchmarkOraclePlanner
+        from doppel_memory.query import PersonalMemoryQueryRequest
+
+        planner = BenchmarkOraclePlanner(_dataset().queries)
+        with self.assertRaises(ValueError):
+            await planner.plan(
+                PersonalMemoryQueryRequest(
+                    query="不在数据集里的查询", now=datetime(2026, 1, 1, tzinfo=UTC)
+                )
+            )
+
+    async def test_deterministic_planner_failure_is_not_retrieval_temporal(
+        self,
+    ) -> None:
+        from benchmarks.personal_retrieval_ablation import (
+            PLANNER_MODE_DETERMINISTIC,
+        )
+
+        scope = MemoryScope(user_id="user-linz", agent_id="echo")
+        hit = _hit("m-future", scope=scope, valid_from="2027-01-01T00:00:00Z")
+        result = SimpleNamespace(
+            plan=SimpleNamespace(
+                intent="lookup",
+                as_of=None,
+                time_from=None,
+                time_to=None,
+            ),
+            hits=[hit],
+            conflicts=[],
+            matched_record_count=1,
+            scanned_record_count=1,
+            scanned_conflict_count=0,
+            count=SimpleNamespace(status="not_requested", value=None),
+            ambiguous=False,
+            warnings=[],
+        )
+        case = _evaluate_result(
+            result,
+            _query(as_of="2026-06-15T00:00:00Z"),
+            "lexical",
+            1.0,
+            allowed_scope_keys={scope.scope_key},
+            mode=PLANNER_MODE_DETERMINISTIC,
+        )
+        # Planner did not recognize as_of -> planner_temporal_miss, NOT a
+        # retrieval temporal failure under the deterministic mode.
+        self.assertIn("planner_temporal_miss", case["planner_failures"])
+        self.assertNotIn(
+            "retrieval_temporal_failure", case["retrieval_failures"]
+        )
+        self.assertEqual(case["temporal_violations"], 0)
+
+
+@unittest.skipUnless(
+    NEO4J_PASSWORD,
+    "requires live Neo4j (NEO4J_PASSWORD) so lexical_graph executes while vector is missing",
+)
+class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
+    async def test_vector_missing_makes_full_hybrid_unavailable(self) -> None:
+        dataset = _dataset()
+
+        async def probe_pg_fail(*args: Any, **kwargs: Any) -> str:
+            return "structured-unavailable: test"
+
+        with patch(
+            "benchmarks.personal_retrieval_ablation._probe_postgres",
+            new=probe_pg_fail,
+        ):
+            from benchmarks.personal_retrieval_ablation import run_ablation
+
+            report = await run_ablation(
+                dataset,
+                profiles=(
+                    "lexical_graph",
+                    "lexical_vector",
+                    "lexical_vector_graph",
+                ),
+                planner_modes=("oracle",),
+                run_metamorphic=False,
+            )
+        oracle = report["profiles"]["oracle"]
+        self.assertFalse(oracle["lexical_graph"].get("unavailable", False))
+        self.assertTrue(oracle["lexical_vector"]["unavailable"])
+        self.assertTrue(oracle["lexical_vector_graph"]["unavailable"])
+        self.assertEqual(report["comparisons"], {})
+        degradation = report["diagnostics"].get(
+            "composite_graph_only_degradation"
+        )
+        self.assertIsNotNone(degradation)
+        self.assertEqual(
+            degradation["execution_profile"],
+            "composite_graph_only_degradation",
+        )
+
+    def test_graph_only_degradation_never_named_full_hybrid(self) -> None:
+        for name in PROFILE_MAIN:
+            self.assertNotIn("degradation", name)
+        self.assertNotIn("composite_graph_only_degradation", PROFILE_MAIN)
+
+    def test_fixture_validator_rejects_plan_with_event_key(self) -> None:
+        from benchmarks.personal_retrieval_ablation import validate_dataset_semantics
+
+        dataset = _dataset()
+        bad_fixture = dataset.fixtures[0].model_copy(
+            update={"event_key": "evt-bad", "personal_memory_type": "plan"}
+        )
+        bad_dataset = dataset.model_copy(
+            update={"fixtures": [bad_fixture, *dataset.fixtures[1:]]}
+        )
+        failures = validate_dataset_semantics(bad_dataset)
+        self.assertTrue(
+            any("event_key" in item and "plan" in item for item in failures)
+        )
+
+    def test_fixture_validator_rejects_invalid_required_at_asof(self) -> None:
+        from benchmarks.personal_retrieval_ablation import validate_dataset_semantics
+
+        dataset = _dataset()
+        bad_query = dataset.queries[0].model_copy(
+            update={
+                "query_id": "q-invalid-asof",
+                "as_of": datetime(2023, 1, 1, tzinfo=UTC),
+                "partition": "dev",
+                "required_memory_ids": ["m-residence-current"],
+            }
+        )
+        bad_dataset = dataset.model_copy(update={"queries": [bad_query]})
+        failures = validate_dataset_semantics(bad_dataset)
+        self.assertTrue(any("not yet" in item for item in failures))
+
+    def test_fixture_validator_rejects_owner_subject_mismatch(self) -> None:
+        from benchmarks.personal_retrieval_ablation import validate_dataset_semantics
+
+        dataset = _dataset()
+        bad_fixture = dataset.fixtures[0].model_copy(
+            update={"subject_id": "somebody-else"}
+        )
+        bad_dataset = dataset.model_copy(
+            update={"fixtures": [bad_fixture, *dataset.fixtures[1:]]}
+        )
+        failures = validate_dataset_semantics(bad_dataset)
+        self.assertTrue(
+            any("does not match scope user" in item for item in failures)
+        )
+
+    def test_future_asof_without_required_is_legal(self) -> None:
+        dataset = _dataset()
+        query = next(
+            item
+            for item in dataset.queries
+            if item.query_id == "q-hold-residence-future-asof"
+        )
+        self.assertIsNotNone(query.as_of)
+        self.assertGreater(query.as_of, query.now)
+        self.assertEqual(query.required_memory_ids, [])
+
+    def test_returned_edge_counts_not_passed_as_final_hit(self) -> None:
+        from benchmarks.personal_retrieval_ablation import _build_final_hit_attribution
+
+        report = {
+            "diagnostics": {"graph_direct": {"edge_attribution_by_query": {}}},
+            "cases": [],
+        }
+        attribution = _build_final_hit_attribution(
+            report=report,
+            dataset=_dataset(),
+            per_mode={"oracle": {"lexical_graph": {}}},
+        )
+        self.assertFalse(attribution["available"])
+
+    def test_reproducibility_cli_args_exist(self) -> None:
+        from benchmarks.personal_retrieval_ablation import _parser
+
+        args = _parser().parse_args(
+            [
+                "--no-metamorphic",
+                "--planner-modes",
+                "oracle",
+                "--profiles",
+                "lexical",
+            ]
+        )
+        self.assertEqual(args.planner_modes, "oracle")
+        self.assertTrue(args.no_metamorphic)
+
+    def test_benchmark_has_no_http_client_import(self) -> None:
+        src = (
+            Path(__file__).resolve().parents[1]
+            / "benchmarks"
+            / "personal_retrieval_ablation.py"
+        )
+        text = src.read_text(encoding="utf-8")
+        for forbidden in (
+            "import httpx",
+            "import requests",
+            "from httpx",
+            "from requests",
+        ):
+            self.assertNotIn(forbidden, text)
+
+    def test_uv_lock_not_staged(self) -> None:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(__file__).resolve().parents[1],
+        )
+        staged = [
+            line[3:]
+            for line in result.stdout.splitlines()
+            if len(line) > 3 and line[0] in "MA" and "uv.lock" in line
+        ]
+        self.assertEqual(staged, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":

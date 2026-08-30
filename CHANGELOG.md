@@ -21,6 +21,17 @@
   metamorphic safety checks, and a threshold sweep. The candidate dataset
   (`personal-retrieval-ablation-zh-v1.json`, 37 queries / 5 users / three
   partitions) remains a draft and is not publication-ready.
+- Ablation semantics v2: planner modes (`oracle` fixture-grounded plan vs the
+  real deterministic planner) split planner failures from retrieval failures;
+  `lexical_vector_graph` executes only when both indexes are live and single-source
+  composites are reported as degradation diagnostics; temporal violations are
+  attributed to retrieval only under an oracle plan; fixtures carry semantic
+  validation (event_key on episodes only, plans without event_key, owner subject
+  consistency, as-of reachability, explicit cross-subject authorization,
+  deferred_cross_subject partition); Graphiti edge counts are renamed to
+  `returned_edge_counts` and true final-hit attribution is computed from engine
+  accepted hits crossed with edge->episode->memory mappings; reports embed
+  reproducibility fields (command, commit, dataset fingerprint, report SHA-256).
 
 ### Changed
 

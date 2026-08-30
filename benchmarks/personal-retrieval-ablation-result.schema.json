@@ -4,10 +4,10 @@
   "title": "Doppel personal retrieval ablation result",
   "type": "object",
   "required": [
-    "runner", "dataset", "environment", "runtime", "profiles",
-    "diagnostics", "comparisons", "hard_gate_failures", "cases",
-    "metamorphic", "elapsed_seconds", "doppel_version", "generated_at",
-    "suite_fingerprint"
+    "runner", "dataset", "environment", "runtime", "planner_modes",
+    "profiles", "diagnostics", "comparisons", "hard_gates", "cases",
+    "deferred_queries", "graph_final_hit_attribution", "metamorphic",
+    "elapsed_seconds", "doppel_version", "generated_at", "suite_fingerprint"
   ],
   "properties": {
     "runner": {"const": "doppel.personal-retrieval-ablation.v1"},
@@ -21,7 +21,7 @@
         "query_count": {"type": "integer", "minimum": 1},
         "partition_counts": {
           "type": "object",
-          "required": ["dev", "heldout", "adversarial"]
+          "required": ["dev", "heldout", "adversarial", "deferred_cross_subject"]
         }
       }
     },
@@ -34,23 +34,39 @@
         "graph": {"$ref": "#/$defs/source"}
       }
     },
+    "planner_modes": {"type": "array", "items": {"enum": ["oracle", "deterministic"]}},
     "profiles": {
       "type": "object",
-      "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph"]},
-      "additionalProperties": {"$ref": "#/$defs/profile"}
+      "propertyNames": {"enum": ["oracle", "deterministic"]},
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph"]},
+        "additionalProperties": {"$ref": "#/$defs/profile"}
+      }
     },
     "diagnostics": {
       "type": "object",
-      "propertyNames": {"enum": ["vector_direct", "graph_direct", "composite_direct"]}
+      "propertyNames": {"enum": ["vector_direct", "graph_direct", "composite_direct", "composite_graph_only_degradation", "composite_vector_only_degradation"]}
     },
-    "comparisons": {
+    "comparisons": {"type": "object"},
+    "hard_gates": {
       "type": "object",
-      "propertyNames": {"enum": ["full_vs_lexical", "full_vs_lexical_vector", "full_vs_lexical_graph"]}
+      "required": ["planner_failures", "retrieval_failures", "security_failures", "fixture_validation_failures"],
+      "properties": {
+        "planner_failures": {"type": "array", "items": {"type": "string"}},
+        "retrieval_failures": {"type": "array", "items": {"type": "string"}},
+        "security_failures": {"type": "array", "items": {"type": "string"}},
+        "fixture_validation_failures": {"type": "array", "items": {"type": "string"}}
+      }
     },
-    "hard_gate_failures": {"type": "array", "items": {"type": "string"}},
+    "graph_final_hit_attribution": {"type": "object"},
     "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}},
     "metamorphic": {"type": "object"},
     "threshold_sweep": {"type": "object"},
+    "reproducibility": {
+      "type": "object",
+      "required": ["output_path", "command", "commit_hash", "planner_modes", "requested_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "report_sha256"]
+    },
     "elapsed_seconds": {"type": "number"},
     "doppel_version": {"type": "string"},
     "generated_at": {"type": "string", "format": "date-time"},
@@ -94,7 +110,7 @@
     },
     "case": {
       "type": "object",
-      "required": ["query_id", "profile", "partition", "category", "error", "latency_ms", "hits", "missing", "forbidden", "scope_leakage", "temporal_violations", "provenance_failures", "abstention_ok", "ambiguity_ok", "count_ok", "hit_top1_ok", "recall_at_1", "recall_at_5", "mrr", "evidence_recall", "intent_ok", "required_evidence", "expected_abstain", "as_of_recognized"],
+      "required": ["query_id", "profile", "mode", "partition", "category", "error", "latency_ms", "hits", "missing", "forbidden", "scope_leakage", "temporal_violations", "provenance_failures", "abstention_ok", "ambiguity_ok", "count_ok", "hit_top1_ok", "recall_at_1", "recall_at_5", "mrr", "evidence_recall", "intent_ok", "required_evidence", "expected_abstain", "as_of_recognized", "planner_failures", "retrieval_failures", "security_failures"],
       "properties": {
         "error": {"type": "string"},
         "scope_leakage": {"type": "integer", "minimum": 0},

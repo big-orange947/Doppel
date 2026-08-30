@@ -60,7 +60,9 @@ from doppel_memory import (
 from doppel_memory.intelligence import MemoryTemporalStatus, PersonalMemoryType
 from doppel_memory.models import WriteStatus, utc_now
 from doppel_memory.query import (
+    PersonalMemoryQueryDraft,
     PersonalMemoryQueryHit,
+    PersonalMemoryQueryRequest,
     PersonalMemoryQueryResult,
 )
 
@@ -128,6 +130,7 @@ class AblationMemory(BaseModel):
     revision_kind: str = ""
     tags: list[str] = Field(default_factory=list)
     evidence: list[AblationEvidence] = Field(default_factory=list)
+    authorization: dict[str, Any] | None = None
 
 
 class AblationQuery(BaseModel):
@@ -141,6 +144,8 @@ class AblationQuery(BaseModel):
     now: datetime
     intent: str
     as_of: datetime | None = None
+    time_from: datetime | None = None
+    time_to: datetime | None = None
     required_memory_ids: list[str] = Field(default_factory=list)
     forbidden_memory_ids: list[str] = Field(default_factory=list)
     expected_abstain: bool = False
@@ -148,10 +153,13 @@ class AblationQuery(BaseModel):
     expected_count: int | None = None
     expected_count_status: str = "not_requested"
     category: str = "general"
-    partition: Literal["dev", "heldout", "adversarial"] = "dev"
+    partition: Literal["dev", "heldout", "adversarial", "deferred_cross_subject"] = (
+        "dev"
+    )
     abstain_reason: str = ""
     adversarial_note: str = ""
     count_episode_context: str = ""
+    note: str = ""
 
 
 class MetamorphicVariant(BaseModel):
@@ -205,7 +213,174 @@ class AblationDataset(BaseModel):
 
 def load_ablation_dataset(path: Path) -> AblationDataset:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    return AblationDataset.model_validate(raw)
+    dataset = AblationDataset.model_validate(raw)
+    fixture_validation_failures = validate_dataset_semantics(dataset)
+    if fixture_validation_failures:
+        raise ValueError(
+            "ablation dataset fixture validation failed:\n"
+            + "\n".join(f"  - {item}" for item in fixture_validation_failures)
+        )
+    return dataset
+
+
+# --------------------------------------------------------------------------- #
+# fixture semantic validation (dataset-level, not product code)
+# --------------------------------------------------------------------------- #
+
+
+def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
+    """Return fixture-level semantic violations; empty means the dataset is valid.
+
+    These checks make the fixture set itself trustworthy so that query failures
+    can be attributed to planner/retrieval rather than to malformed gold data.
+    """
+    failures: list[str] = []
+    scope_ids = {name: item.user_id for name, item in dataset.scopes.items()}
+    for item in dataset.fixtures:
+        scope_user = scope_ids.get(item.scope, "")
+        if item.event_key and item.personal_memory_type != "episode":
+            failures.append(
+                f"{item.memory_id}: event_key present but memory_type is not episode"
+            )
+        if item.personal_memory_type == "plan" and item.event_key:
+            failures.append(f"{item.memory_id}: plan must not carry event_key")
+        if item.subject == "owner" and item.subject_id not in (scope_user, ""):
+            failures.append(
+                f"{item.memory_id}: owner subject_id {item.subject_id!r} does not "
+                f"match scope user {scope_user!r}"
+            )
+        if item.subject != "owner" and not item.authorization:
+            failures.append(
+                f"{item.memory_id}: cross-subject fixture requires explicit "
+                "authorization declaration"
+            )
+    for query in dataset.queries:
+        if query.partition == "deferred_cross_subject":
+            continue
+        for memory_id in query.required_memory_ids:
+            fixture = next(
+                (item for item in dataset.fixtures if item.memory_id == memory_id),
+                None,
+            )
+            if fixture is None:
+                failures.append(
+                    f"{query.query_id}: required memory {memory_id} not in fixtures"
+                )
+                continue
+            query_scope_users = {
+                scope_ids[name] for name in query.scopes if name in scope_ids
+            }
+            if (
+                fixture.subject == "owner"
+                and fixture.scope not in query.scopes
+                and fixture.subject_id not in query_scope_users
+            ):
+                failures.append(
+                    f"{query.query_id}: required memory {memory_id} is structurally "
+                    f"unreachable from scopes {query.scopes}"
+                )
+            if query.as_of is not None:
+                if fixture.valid_from is not None and fixture.valid_from > query.as_of:
+                    failures.append(
+                        f"{query.query_id}: required memory {memory_id} is not yet "
+                        f"valid at as_of {query.as_of.isoformat()}"
+                    )
+                if (
+                    fixture.valid_to is not None
+                    and fixture.valid_to < query.as_of
+                ):
+                    failures.append(
+                        f"{query.query_id}: required memory {memory_id} already "
+                        f"expired at as_of {query.as_of.isoformat()}"
+                    )
+        if (
+            query.as_of is not None
+            and query.as_of > query.now
+            and query.required_memory_ids
+        ):
+            failures.append(
+                f"{query.query_id}: future as_of must not require asserting "
+                "future state"
+            )
+        if query.expected_count is not None and query.expected_count_status not in (
+            "exact",
+            "not_requested",
+        ):
+            failures.append(
+                f"{query.query_id}: expected_count with status "
+                f"{query.expected_count_status!r} is contradictory"
+            )
+    return failures
+
+
+# --------------------------------------------------------------------------- #
+# oracle planner (repository-only, never part of doppel_memory)
+# --------------------------------------------------------------------------- #
+
+PLANNER_MODE_ORACLE = "oracle"
+PLANNER_MODE_DETERMINISTIC = "deterministic"
+PLANNER_MODES = (PLANNER_MODE_ORACLE, PLANNER_MODE_DETERMINISTIC)
+
+
+class BenchmarkOraclePlanner:
+    """Fixture-grounded planner: injects only the dataset's labeled structure.
+
+    Deliberately does not choose scopes, memory IDs, topic keys, or any retrieval
+    hint beyond intent/as_of/time interval. It maps the exact fixture query text
+    back to its labeled plan so retrieval/index/Store layers can be measured
+    independently of natural-language planning.
+    """
+
+    name = "doppel.benchmark-oracle-planner"
+    version = "1"
+
+    def __init__(self, queries: Sequence[AblationQuery]) -> None:
+        self._by_text: dict[str, AblationQuery] = {}
+        duplicate_texts = set()
+        for query in queries:
+            key = str(query.query or "").strip()
+            if key in self._by_text:
+                duplicate_texts.add(key)
+            self._by_text[key] = query
+        if duplicate_texts:
+            raise ValueError(
+                f"oracle planner requires unique query texts: {sorted(duplicate_texts)}"
+            )
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryQueryDraft:
+        fixture = self._by_text.get(str(request.query or "").strip())
+        if fixture is None:
+            raise ValueError(
+                "oracle planner received a query not present in the dataset: "
+                f"{request.query!r}"
+            )
+        intent = str(fixture.intent or "").strip().lower()
+        if intent not in _INTENT_VALUES:
+            raise ValueError(f"oracle planner does not know intent {intent!r}")
+        return PersonalMemoryQueryDraft(
+            intent=intent,
+            search_text=str(request.query or "").strip(),
+            as_of=fixture.as_of,
+            time_from=fixture.time_from,
+            time_to=fixture.time_to,
+            explanation=(
+                "benchmark oracle: fixture-labeled plan; no scope, memory ID, "
+                "topic key, or retrieval hint injected"
+            ),
+        )
+
+
+_INTENT_VALUES = {
+    "lookup",
+    "current",
+    "history",
+    "planned",
+    "as_of",
+    "list",
+    "count",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -550,11 +725,12 @@ INTENT_ALIASES = {
 
 async def _run_case(
     engine: PersonalMemoryQueryEngine,
-    planner: DeterministicPersonalMemoryQueryPlanner,
+    planner: Any,
     query: AblationQuery,
     scopes: dict[str, MemoryScope],
     *,
     profile: str,
+    mode: str = PLANNER_MODE_DETERMINISTIC,
 ) -> dict[str, Any]:
     started = perf_counter()
     bound_scopes = [scopes[name] for name in query.scopes]
@@ -565,6 +741,7 @@ async def _run_case(
         return {
             "query_id": query.query_id,
             "profile": profile,
+            "mode": mode,
             "partition": query.partition,
             "category": query.category,
             "error": f"{type(exc).__name__}: {exc}",
@@ -576,6 +753,7 @@ async def _run_case(
             "temporal_violations": 0,
             "provenance_failures": 0,
             "inactive_rejections": 0,
+            "agent_output_hits": 0,
             "abstention_ok": False,
             "ambiguity_ok": False,
             "count_ok": False,
@@ -588,17 +766,26 @@ async def _run_case(
             "required_evidence": bool(query.required_memory_ids),
             "expected_abstain": query.expected_abstain,
             "as_of_recognized": False,
+            "planner_temporal_miss": False,
+            "planner_intent_miss": False,
+            "planner_interval_miss": False,
+            "planner_failures": [],
+            "retrieval_failures": [],
+            "security_failures": [],
             "contribution": {
                 "vector": 0,
                 "graph": 0,
                 "both": 0,
-                "fallback_edge": 0,
-                "rich_relation_edge": 0,
             },
         }
     latency_ms = round((perf_counter() - started) * 1_000, 3)
     return _evaluate_result(
-        result, query, profile, latency_ms, allowed_scope_keys=allowed_scope_keys
+        result,
+        query,
+        profile,
+        latency_ms,
+        allowed_scope_keys=allowed_scope_keys,
+        mode=mode,
     )
 
 
@@ -614,6 +801,7 @@ def _evaluate_result(
     latency_ms: float,
     *,
     allowed_scope_keys: set[str],
+    mode: str = PLANNER_MODE_DETERMINISTIC,
 ) -> dict[str, Any]:
     hits: list[PersonalMemoryQueryHit] = list(result.hits)
     hit_set = {hit.record.memory_id for hit in hits}
@@ -623,18 +811,20 @@ def _evaluate_result(
     temporal_violations = 0
     provenance_failures = 0
     inactive_rejections = 0
+    agent_output_hits = 0
     plan_as_of = result.plan.as_of
     as_of_recognized = plan_as_of is not None
     for hit in hits:
         record = hit.record
         if record.scope.scope_key not in allowed_scope_keys:
             scope_leakage += 1
-        if query.as_of is not None:
+        if query.as_of is not None and mode == PLANNER_MODE_ORACLE:
+            # Temporal failure is attributed to retrieval only under an oracle
+            # plan (correct as_of was injected). Deterministic misses are
+            # planner failures and are never counted here.
             record_valid_from = _optional_time(record.metadata.get("valid_from"))
             record_valid_to = _optional_time(record.metadata.get("valid_to"))
-            if record_valid_from is not None and record_valid_from > query.as_of or (
-                record_valid_to is not None and record_valid_to < query.as_of
-            ):
+            if record_valid_from is not None and record_valid_from > query.as_of or record_valid_to is not None and record_valid_to < query.as_of:
                 temporal_violations += 1
         if not record.metadata.get("evidence"):
             provenance_failures += 1
@@ -644,6 +834,8 @@ def _evaluate_result(
             MemoryState.REJECTED,
         }:
             inactive_rejections += 1
+        if str(getattr(record.authority, "value", "")) == "agent_output":
+            agent_output_hits += 1
 
     abstention_ok = (not hit_set) if query.expected_abstain else bool(hit_set)
     ambiguity_ok = bool(result.ambiguous) == bool(query.expected_ambiguous)
@@ -656,6 +848,44 @@ def _evaluate_result(
     else:
         count_ok = result.count.status in {"not_requested", "exact"}
     intent_ok = _expected_intent_ok(result, query)
+
+    # ---- planner-mode attribution --------------------------------------- #
+    planner_temporal_miss = bool(
+        mode == PLANNER_MODE_DETERMINISTIC
+        and query.as_of is not None
+        and not as_of_recognized
+    )
+    planner_interval_miss = bool(
+        mode == PLANNER_MODE_DETERMINISTIC
+        and (
+            (query.time_from is not None and result.plan.time_from is None)
+            or (query.time_to is not None and result.plan.time_to is None)
+        )
+    )
+    planner_intent_miss = bool(mode == PLANNER_MODE_DETERMINISTIC and not intent_ok)
+    planner_failures: list[str] = []
+    if planner_temporal_miss:
+        planner_failures.append("planner_temporal_miss")
+    if planner_interval_miss:
+        planner_failures.append("planner_interval_miss")
+    if planner_intent_miss:
+        planner_failures.append("planner_intent_miss")
+    retrieval_failures: list[str] = []
+    if mode == PLANNER_MODE_ORACLE and temporal_violations:
+        retrieval_failures.append("retrieval_temporal_failure")
+    if forbidden:
+        retrieval_failures.append("forbidden_hit")
+    if missing and not query.expected_abstain:
+        retrieval_failures.append("missing_required_hit")
+    security_failures: list[str] = []
+    if scope_leakage:
+        security_failures.append("scope_leakage")
+    if provenance_failures:
+        security_failures.append("invalid_provenance_accepted")
+    if inactive_rejections:
+        security_failures.append("inactive_record_accepted")
+    if agent_output_hits:
+        security_failures.append("agent_output_accepted_as_owner_fact")
 
     required_set = set(query.required_memory_ids)
     hit_top1_ok = bool(hits and hits[0].record.memory_id in required_set)
@@ -693,6 +923,7 @@ def _evaluate_result(
     return {
         "query_id": query.query_id,
         "profile": profile,
+        "mode": mode,
         "partition": query.partition,
         "category": query.category,
         "error": "",
@@ -715,6 +946,7 @@ def _evaluate_result(
         "temporal_violations": temporal_violations,
         "provenance_failures": provenance_failures,
         "inactive_rejections": inactive_rejections,
+        "agent_output_hits": agent_output_hits,
         "abstention_ok": abstention_ok,
         "ambiguity_ok": ambiguity_ok,
         "count_ok": count_ok,
@@ -729,6 +961,12 @@ def _evaluate_result(
         "required_evidence": bool(query.required_memory_ids),
         "expected_abstain": query.expected_abstain,
         "as_of_recognized": as_of_recognized,
+        "planner_temporal_miss": planner_temporal_miss,
+        "planner_intent_miss": planner_intent_miss,
+        "planner_interval_miss": planner_interval_miss,
+        "planner_failures": planner_failures,
+        "retrieval_failures": retrieval_failures,
+        "security_failures": security_failures,
         "ambiguous": bool(result.ambiguous),
         "contribution": contribution,
         "warnings": list(result.warnings),
@@ -946,6 +1184,7 @@ async def _direct_scan(
     total_errors = 0
     fallback_edges = 0
     rich_edges = 0
+    attribution_by_query: dict[str, list[dict[str, Any]]] = {}
     for query in dataset.queries:
         bound_scopes = [scopes[name] for name in query.scopes]
         allowed = {scope.scope_key for scope in bound_scopes}
@@ -1012,6 +1251,10 @@ async def _direct_scan(
         )
     if graph is not None and source_name == SOURCE_GRAPH:
         try:
+            from graphiti_core.nodes import EpisodicNode
+
+            from doppel_memory.graphiti_store import _memory_id_from_episode_name
+
             for query in dataset.queries:
                 bound_scopes = [scopes[name] for name in query.scopes]
                 group_ids = [scope.scope_key for scope in bound_scopes]
@@ -1020,12 +1263,38 @@ async def _direct_scan(
                     group_ids=group_ids,
                     num_results=10,
                 )
+                rows: list[dict[str, Any]] = []
                 for edge in edges:
                     name = str(getattr(edge, "name", "") or "")
-                    if name == FALLBACK_EDGE_NAME:
+                    edge_uuid = str(getattr(edge, "uuid", "") or "")
+                    is_fallback = name == FALLBACK_EDGE_NAME
+                    if is_fallback:
                         fallback_edges += 1
                     elif name:
                         rich_edges += 1
+                    for episode_uuid in getattr(edge, "episodes", None) or []:
+                        memory_id = ""
+                        try:
+                            episode = await EpisodicNode.get_by_uuid(
+                                graph.driver, str(episode_uuid)
+                            )
+                            memory_id = _memory_id_from_episode_name(
+                                str(getattr(episode, "name", "") or "")
+                            )
+                        except Exception:  # noqa: BLE001 - attribution best effort
+                            memory_id = ""
+                        rows.append(
+                            {
+                                "edge_name": name,
+                                "edge_uuid": edge_uuid,
+                                "episode_uuid": str(episode_uuid),
+                                "memory_id": memory_id,
+                                "edge_kind": (
+                                    "fallback" if is_fallback else "rich"
+                                ),
+                            }
+                        )
+                attribution_by_query[query.query_id] = rows
         except Exception as exc:  # noqa: BLE001 - diagnostic best effort
             per_query.append(
                 {
@@ -1043,15 +1312,19 @@ async def _direct_scan(
         "inactive_candidate_count": total_inactive_candidates,
         "store_reload_ok_count": total_store_reload_ok,
         "error_count": total_errors,
-        "graph_edge_classification": {
-            "fallback_edges": fallback_edges,
-            "rich_relation_edges": rich_edges,
+        "returned_edge_counts": {
+            "returned_fallback_edges": fallback_edges,
+            "returned_rich_edges": rich_edges,
         },
+        "edge_attribution_by_query": attribution_by_query,
         "cases": per_query,
         "note": (
             "index-direct diagnostics bypass the query engine; they do not "
             "measure end-to-end correctness and their counts are not comparable "
-            "across queries"
+            "across queries. returned_edge_counts are raw search edge counts and "
+            "must not be called final-hit contributions; final-hit attribution "
+            "lives in report.graph_final_hit_attribution and requires the full "
+            "engine chain (accepted hit after Store revalidation)."
         ),
     }
 
@@ -1065,6 +1338,7 @@ async def run_ablation(
     dataset: AblationDataset,
     *,
     profiles: Sequence[str] = PROFILE_MAIN,
+    planner_modes: Sequence[str] = PLANNER_MODES,
     require_live_postgres: bool = False,
     require_live_neo4j: bool = False,
     run_metamorphic: bool = True,
@@ -1072,6 +1346,9 @@ async def run_ablation(
     unknown = set(profiles).difference(ALL_PROFILES)
     if unknown:
         raise ValueError(f"unknown profiles: {sorted(unknown)}")
+    unknown_modes = set(planner_modes).difference(PLANNER_MODES)
+    if unknown_modes:
+        raise ValueError(f"unknown planner modes: {sorted(unknown_modes)}")
     started = perf_counter()
     store_dir = tempfile.mkdtemp(prefix="doppel-ablation-store-")
     store_path = Path(store_dir) / "store.sqlite3"
@@ -1142,6 +1419,7 @@ async def run_ablation(
             profiles=profiles,
             semantic_by_source=semantic_by_source,
             graph=graph,
+            planner_modes=planner_modes,
         )
         report["runtime"] = {
             "store": {
@@ -1206,52 +1484,69 @@ async def _run_profiles(
     profiles: Sequence[str],
     semantic_by_source: dict[str, Any],
     graph: Any | None,
+    planner_modes: Sequence[str] = PLANNER_MODES,
 ) -> dict[str, Any]:
+    unknown_modes = set(planner_modes).difference(PLANNER_MODES)
+    if unknown_modes:
+        raise ValueError(f"unknown planner modes: {sorted(unknown_modes)}")
+    vector_available = SOURCE_VECTOR in semantic_by_source
+    graph_available = SOURCE_GRAPH in semantic_by_source
+    vector_source = semantic_by_source.get(SOURCE_VECTOR)
+    graph_source = semantic_by_source.get(SOURCE_GRAPH)
     composite = (
-        await _build_composite_index(
-            semantic_by_source.get(SOURCE_VECTOR),
-            semantic_by_source.get(SOURCE_GRAPH),
-        )
-        if semantic_by_source
+        await _build_composite_index(vector_source, graph_source)
+        if vector_available and graph_available
         else None
     )
     profile_to_semantic: dict[str, Any | None] = {
         "lexical": None,
-        "lexical_vector": semantic_by_source.get(SOURCE_VECTOR),
-        "lexical_graph": semantic_by_source.get(SOURCE_GRAPH),
+        "lexical_vector": vector_source if vector_available else None,
+        "lexical_graph": graph_source if graph_available else None,
+        # full hybrid executes only when BOTH indexes are available.
         "lexical_vector_graph": composite,
     }
-    planner = DeterministicPersonalMemoryQueryPlanner()
-    per_profile: dict[str, dict[str, Any]] = {}
+    planners: dict[str, Any] = {
+        PLANNER_MODE_DETERMINISTIC: DeterministicPersonalMemoryQueryPlanner(),
+        PLANNER_MODE_ORACLE: BenchmarkOraclePlanner(dataset.queries),
+    }
+    per_mode: dict[str, dict[str, dict[str, Any]]] = {}
     all_cases: list[dict[str, Any]] = []
-    for profile in PROFILE_MAIN:
-        if profile not in profiles:
-            continue
-        semantic = profile_to_semantic[profile]
-        if semantic is None and profile != "lexical":
-            per_profile[profile] = {
-                "query_count": len(dataset.queries),
-                "error_count": len(dataset.queries),
-                "unavailable": True,
-                "reason": "semantic source unavailable (see runtime)",
-            }
-            continue
-        engine = _engines(store, semantic)
-        cases: list[dict[str, Any]] = []
-        for query in dataset.queries:
-            cases.append(
-                await _run_case(engine, planner, query, scopes, profile=profile)
-            )
-        per_profile[profile] = _aggregate(cases)
-        all_cases.extend(cases)
+    deferred_queries: list[str] = []
+    for mode in planner_modes:
+        planner = planners[mode]
+        per_profile: dict[str, dict[str, Any]] = {}
+        for profile in PROFILE_MAIN:
+            if profile not in profiles:
+                continue
+            semantic = profile_to_semantic[profile]
+            if semantic is None and profile != "lexical":
+                per_profile[profile] = {
+                    "query_count": len(dataset.queries),
+                    "error_count": len(dataset.queries),
+                    "unavailable": True,
+                    "reason": "semantic source unavailable (see runtime)",
+                }
+                continue
+            engine = _engines(store, semantic)
+            cases: list[dict[str, Any]] = []
+            for query in dataset.queries:
+                if query.partition == "deferred_cross_subject":
+                    deferred_queries.append(query.query_id)
+                    continue
+                cases.append(
+                    await _run_case(
+                        engine, planner, query, scopes, profile=profile, mode=mode
+                    )
+                )
+            per_profile[profile] = _aggregate(cases)
+            all_cases.extend(cases)
+        per_mode[mode] = per_profile
 
     diagnostics: dict[str, dict[str, Any]] = {}
-    vector_source = semantic_by_source.get(SOURCE_VECTOR)
     if "vector_direct" in profiles and vector_source is not None:
         diagnostics["vector_direct"] = await _direct_scan(
             vector_source, store, dataset, scopes, SOURCE_VECTOR
         )
-    graph_source = semantic_by_source.get(SOURCE_GRAPH)
     if "graph_direct" in profiles and graph_source is not None:
         diagnostics["graph_direct"] = await _direct_scan(
             graph_source, store, dataset, scopes, SOURCE_GRAPH, graph=graph
@@ -1260,6 +1555,29 @@ async def _run_profiles(
         diagnostics["composite_direct"] = await _direct_scan(
             composite, store, dataset, scopes, "composite"
         )
+    # A single-source composite is a degradation diagnostic, never full hybrid.
+    if not vector_available and graph_available:
+        single = await _build_composite_index(None, graph_source)
+        degraded = await _direct_scan(
+            single, store, dataset, scopes, "composite_graph_only"
+        )
+        degraded["execution_profile"] = "composite_graph_only_degradation"
+        degraded["note"] = (
+            "single-source composite degradation diagnostic (graph only); "
+            "this is NOT the full hybrid profile"
+        )
+        diagnostics["composite_graph_only_degradation"] = degraded
+    if vector_available and not graph_available:
+        single = await _build_composite_index(vector_source, None)
+        degraded = await _direct_scan(
+            single, store, dataset, scopes, "composite_vector_only"
+        )
+        degraded["execution_profile"] = "composite_vector_only_degradation"
+        degraded["note"] = (
+            "single-source composite degradation diagnostic (vector only); "
+            "this is NOT the full hybrid profile"
+        )
+        diagnostics["composite_vector_only_degradation"] = degraded
 
     report: dict[str, Any] = {
         "runner": "doppel.personal-retrieval-ablation.v1",
@@ -1274,42 +1592,131 @@ async def _run_profiles(
             "query_count": len(dataset.queries),
             "partition_counts": {
                 name: sum(1 for query in dataset.queries if query.partition == name)
-                for name in ("dev", "heldout", "adversarial")
+                for name in ("dev", "heldout", "adversarial", "deferred_cross_subject")
             },
         },
         "environment": {
             "python": platform.python_version(),
             "platform": platform.platform(),
         },
-        "profiles": per_profile,
+        "planner_modes": list(planner_modes),
+        "profiles": per_mode,
         "diagnostics": diagnostics,
         "comparisons": {},
-        "hard_gate_failures": [],
+        "hard_gates": {
+            "planner_failures": [],
+            "retrieval_failures": [],
+            "security_failures": [],
+            "fixture_validation_failures": [],
+        },
         "cases": all_cases,
+        "deferred_queries": sorted(set(deferred_queries)),
         "metamorphic": {},
     }
-    full = per_profile.get("lexical_vector_graph")
-    for base_name in ("lexical", "lexical_vector", "lexical_graph"):
-        base = per_profile.get(base_name)
-        if (
-            full is not None
-            and base is not None
-            and not base.get("unavailable", False)
-            and not full.get("unavailable", False)
-        ):
-            report["comparisons"][f"full_vs_{base_name}"] = _delta(full, base)
+    comparisons: dict[str, dict[str, Any]] = {}
+    for mode in planner_modes:
+        full = per_mode[mode].get("lexical_vector_graph")
+        for base_name in ("lexical", "lexical_vector", "lexical_graph"):
+            base = per_mode[mode].get(base_name)
+            if (
+                full is not None
+                and base is not None
+                and not base.get("unavailable", False)
+                and not full.get("unavailable", False)
+            ):
+                comparisons[f"{mode}_full_vs_{base_name}"] = _delta(full, base)
+    report["comparisons"] = comparisons
 
-    failures: list[str] = []
+    layered: dict[str, list[str]] = {
+        "planner_failures": [],
+        "retrieval_failures": [],
+        "security_failures": [],
+        "fixture_validation_failures": [],
+    }
     for case in all_cases:
         if case["error"]:
+            layered["retrieval_failures"].append(
+                f"{case['query_id']}:execution_error:{case['error'][:120]}"
+            )
             continue
-        for key in HARD_GATES_KEYS:
-            value = case[key]
-            count = len(value) if isinstance(value, list) else int(value or 0)
-            if count:
-                failures.append(f"{case['query_id']}:{key}")
-    report["hard_gate_failures"] = sorted(set(failures))
+        for failure in case["planner_failures"]:
+            layered["planner_failures"].append(f"{case['query_id']}:{failure}")
+        for failure in case["retrieval_failures"]:
+            layered["retrieval_failures"].append(f"{case['query_id']}:{failure}")
+        for failure in case["security_failures"]:
+            layered["security_failures"].append(f"{case['query_id']}:{failure}")
+    report["hard_gates"] = {
+        key: sorted(set(items)) for key, items in layered.items()
+    }
+    report["graph_final_hit_attribution"] = _build_final_hit_attribution(
+        report=report,
+        dataset=dataset,
+        per_mode=per_mode,
+    )
     return report
+
+
+def _build_final_hit_attribution(
+    *,
+    report: dict[str, Any],
+    dataset: AblationDataset,
+    per_mode: dict[str, dict[str, dict[str, Any]]],
+) -> dict[str, Any]:
+    """Cross the engine's accepted final hits with per-edge graph mapping.
+
+    Only a candidate that survived Store revalidation and appears in the query
+    engine's final hit list counts as a final-hit contribution. Requires the
+    oracle mode so the plan is not itself a confound.
+    """
+    graph_direct = report.get("diagnostics", {}).get("graph_direct")
+    attribution_by_query = (
+        graph_direct.get("edge_attribution_by_query", {}) if graph_direct else {}
+    )
+    if not attribution_by_query:
+        return {
+            "available": False,
+            "reason": "graph_direct diagnostic did not produce per-edge mapping",
+            "fallback_final_hit_contribution": None,
+            "rich_relation_final_hit_contribution": None,
+        }
+    oracle_cases = [
+        case
+        for case in report.get("cases", [])
+        if case.get("mode") == PLANNER_MODE_ORACLE
+        and case.get("profile") == "lexical_graph"
+        and not case.get("error")
+    ]
+    by_query = {case["query_id"]: case for case in oracle_cases}
+    fallback_contribution = 0
+    rich_contribution = 0
+    mapped_queries = 0
+    for query in dataset.queries:
+        case = by_query.get(query.query_id)
+        if case is None:
+            continue
+        final_hits = set(case.get("hits", []))
+        rows = attribution_by_query.get(query.query_id, [])
+        if not rows:
+            continue
+        mapped_queries += 1
+        for row in rows:
+            memory_id = str(row.get("memory_id") or "")
+            if not memory_id or memory_id not in final_hits:
+                continue
+            if row.get("edge_kind") == "fallback":
+                fallback_contribution += 1
+            else:
+                rich_contribution += 1
+    return {
+        "available": True,
+        "method": (
+            "edge_attribution_by_query refined by oracle lexical_graph final "
+            "accepted hits (Store revalidation + ranking)"
+        ),
+        "fallback_final_hit_contribution": fallback_contribution,
+        "rich_relation_final_hit_contribution": rich_contribution,
+        "queries_with_mapping": mapped_queries,
+    }
 
 
 def _engines(store: Any, semantic: Any | None) -> PersonalMemoryQueryEngine:
@@ -1325,7 +1732,9 @@ async def _run_metamorphic_safety(
     dataset: AblationDataset,
     scopes: dict[str, MemoryScope],
     store: Any,
-    planner: DeterministicPersonalMemoryQueryPlanner,
+    planner: Any,
+    *,
+    mode: str = PLANNER_MODE_DETERMINISTIC,
 ) -> dict[str, Any]:
     """Run the lexical profile on each substituted variant and compare safety."""
     from doppel_memory.sqlite_store import SQLiteStore
@@ -1333,7 +1742,9 @@ async def _run_metamorphic_safety(
     results: dict[str, Any] = {}
     base_engine = _engines(store, None)
     base_cases = [
-        await _run_case(base_engine, planner, query, scopes, profile="lexical")
+        await _run_case(
+            base_engine, planner, query, scopes, profile="lexical", mode=mode
+        )
         for query in dataset.queries
     ]
     for variant in dataset.metamorphic_variants:
@@ -1354,7 +1765,9 @@ async def _run_metamorphic_safety(
                     )
             engine = _engines(variant_store, None)
             variant_cases = [
-                await _run_case(engine, planner, query, scopes, profile="lexical")
+                await _run_case(
+                    engine, planner, query, scopes, profile="lexical", mode=mode
+                )
                 for query in variant_dataset.queries
             ]
             results[variant.name] = _safety_metrics(base_cases, variant_cases)
@@ -1451,6 +1864,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", type=Path, default=None, help="report JSON path")
     parser.add_argument(
+        "--planner-modes",
+        default=",".join(PLANNER_MODES),
+        help="comma-separated planner modes: oracle,deterministic",
+    )
+    parser.add_argument(
         "--require-live-postgres",
         action="store_true",
         help="exit non-zero when pgvector is unavailable",
@@ -1482,38 +1900,59 @@ def _validate_report(
         failures.append("required live PostgreSQL/pgvector but it is unavailable")
     if args.require_live_neo4j and not runtime.get("graph", {}).get("available"):
         failures.append("required live Neo4j but it is unavailable")
+    modes = [mode for mode in (args.planner_modes or "").split(",") if mode.strip()]
     if args.require_all_profiles:
         for profile in (args.profiles or "").split(","):
             profile = profile.strip()
-            if not profile:
+            if not profile or profile in PROFILE_DIRECT:
                 continue
-            item = report.get("profiles", {}).get(profile)
-            error_count = (item or {}).get("error_count", 0)
-            query_count = (item or {}).get("query_count", 0)
-            if (item or {}).get("unavailable") or (
-                query_count and error_count == query_count
-            ):
-                failures.append(f"profile {profile} did not execute")
-    hard = report.get("hard_gate_failures", [])
-    if hard:
-        failures.append(f"hard gate failures: {hard[:5]}")
-    if runtime.get("vector", {}).get("available") and report.get("profiles", {}).get(
-        "lexical_vector_graph", {}
-    ).get("scope_leakage_count", 0) > args.max_scope_leakage:
-        failures.append("scope leakage exceeds --max-scope-leakage")
-    if report.get("profiles", {}).get("lexical_vector_graph", {}).get(
-        "temporal_violation_count", 0
-    ) > args.max_temporal_violations:
-        failures.append("temporal violations exceed --max-temporal-violations")
+            for mode in modes:
+                item = (report.get("profiles", {}).get(mode) or {}).get(profile)
+                error_count = (item or {}).get("error_count", 0)
+                query_count = (item or {}).get("query_count", 0)
+                if (item or {}).get("unavailable") or (
+                    query_count and error_count == query_count
+                ):
+                    failures.append(f"profile {profile} ({mode}) did not execute")
+    hard_gates = report.get("hard_gates", {})
+    for group, items in hard_gates.items():
+        if items:
+            failures.append(f"{group}: {items[:5]}")
+    for mode in modes:
+        full = (report.get("profiles", {}).get(mode) or {}).get(
+            "lexical_vector_graph"
+        )
+        if (full or {}).get("scope_leakage_count", 0) > args.max_scope_leakage:
+            failures.append("scope leakage exceeds --max-scope-leakage")
+        if (full or {}).get("temporal_violation_count", 0) > args.max_temporal_violations:
+            failures.append("temporal violations exceed --max-temporal-violations")
     return failures
+
+
+def _git_commit_hash() -> str:
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        return result.stdout.strip() or ""
+    except Exception:  # noqa: BLE001 - best effort
+        return ""
 
 
 async def _async_main(args: argparse.Namespace) -> int:
     dataset = load_ablation_dataset(args.dataset)
     profiles = tuple(name.strip() for name in args.profiles.split(",") if name.strip())
+    modes = tuple(name.strip() for name in args.planner_modes.split(",") if name.strip())
     report = await run_ablation(
         dataset,
         profiles=profiles,
+        planner_modes=modes,
         require_live_postgres=args.require_live_postgres,
         require_live_neo4j=args.require_live_neo4j,
         run_metamorphic=not args.no_metamorphic,
@@ -1531,13 +1970,50 @@ async def _async_main(args: argparse.Namespace) -> int:
                 record = _memory_record(item, scopes[item.scope], since)
                 await meta_store.put(record)
             report["metamorphic"] = await _run_metamorphic_safety(
-                dataset, scopes, meta_store, planner
+                dataset,
+                scopes,
+                meta_store,
+                planner,
+                mode=PLANNER_MODE_DETERMINISTIC,
             )
         finally:
             await meta_store.close()
     cases = report.get("cases", [])
     if cases:
         report["threshold_sweep"] = build_threshold_sweep(cases)
+    executed = sorted(
+        {
+            f"{mode}:{profile}"
+            for mode, profiles_by_mode in report.get("profiles", {}).items()
+            for profile in profiles_by_mode
+            if not profiles_by_mode[profile].get("unavailable", False)
+        }
+    )
+    unavailable = sorted(
+        {
+            f"{mode}:{profile}"
+            for mode, profiles_by_mode in report.get("profiles", {}).items()
+            for profile in profiles_by_mode
+            if profiles_by_mode[profile].get("unavailable", False)
+        }
+    )
+    report["reproducibility"] = {
+        "output_path": (
+            str(Path(args.output).resolve()) if args.output is not None else ""
+        ),
+        "command": " ".join(sys.argv),
+        "commit_hash": _git_commit_hash(),
+        "planner_modes": list(modes),
+        "requested_profiles": list(profiles),
+        "executed_profiles": executed,
+        "unavailable_profiles": unavailable,
+        "dataset_fingerprint": report.get("suite_fingerprint", ""),
+        "report_sha256": "",
+    }
+    canonical = json.dumps(
+        report, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    report["reproducibility"]["report_sha256"] = hashlib.sha256(canonical).hexdigest()
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(
@@ -1547,9 +2023,14 @@ async def _async_main(args: argparse.Namespace) -> int:
     print(
         json.dumps(
             {
+                "planner_modes": modes,
                 "profiles": report.get("profiles", {}),
                 "comparisons": report.get("comparisons", {}),
-                "hard_gate_failures": report.get("hard_gate_failures", []),
+                "hard_gates": report.get("hard_gates", {}),
+                "graph_final_hit_attribution": report.get(
+                    "graph_final_hit_attribution", {}
+                ),
+                "reproducibility": report.get("reproducibility", {}),
                 "runtime": report.get("runtime", {}),
                 "metamorphic_safe": all(
                     item.get("safe", False)
