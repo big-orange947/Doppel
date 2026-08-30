@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/doppel-memory/doppel/schemas/personal-retrieval-ablation-result.schema.json",
+  "title": "Doppel personal retrieval ablation result",
+  "type": "object",
+  "required": [
+    "runner", "dataset", "environment", "runtime", "profiles",
+    "diagnostics", "comparisons", "hard_gate_failures", "cases",
+    "metamorphic", "elapsed_seconds", "doppel_version", "generated_at",
+    "suite_fingerprint"
+  ],
+  "properties": {
+    "runner": {"const": "doppel.personal-retrieval-ablation.v1"},
+    "dataset": {
+      "type": "object",
+      "required": ["name", "version", "status", "frozen", "publication_ready", "fingerprint", "memory_count", "query_count", "partition_counts"],
+      "properties": {
+        "frozen": {"type": "boolean"},
+        "publication_ready": {"type": "boolean"},
+        "memory_count": {"type": "integer", "minimum": 1},
+        "query_count": {"type": "integer", "minimum": 1},
+        "partition_counts": {
+          "type": "object",
+          "required": ["dev", "heldout", "adversarial"]
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["store", "vector", "graph"],
+      "properties": {
+        "store": {"$ref": "#/$defs/source"},
+        "vector": {"$ref": "#/$defs/source"},
+        "graph": {"$ref": "#/$defs/source"}
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph"]},
+      "additionalProperties": {"$ref": "#/$defs/profile"}
+    },
+    "diagnostics": {
+      "type": "object",
+      "propertyNames": {"enum": ["vector_direct", "graph_direct", "composite_direct"]}
+    },
+    "comparisons": {
+      "type": "object",
+      "propertyNames": {"enum": ["full_vs_lexical", "full_vs_lexical_vector", "full_vs_lexical_graph"]}
+    },
+    "hard_gate_failures": {"type": "array", "items": {"type": "string"}},
+    "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}},
+    "metamorphic": {"type": "object"},
+    "threshold_sweep": {"type": "object"},
+    "elapsed_seconds": {"type": "number"},
+    "doppel_version": {"type": "string"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "suite_fingerprint": {"type": "string"}
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["available"],
+      "properties": {
+        "kind": {"type": "string"},
+        "available": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "metadata": {"type": "object"}
+      }
+    },
+    "profile": {
+      "type": "object",
+      "required": ["query_count", "error_count", "recall_at_1", "recall_at_5", "mrr", "required_evidence_recall", "forbidden_hit_count", "scope_leakage_count", "temporal_violation_count", "provenance_failure_count", "abstention_accuracy", "ambiguity_accuracy", "count_accuracy", "latency_ms"],
+      "properties": {
+        "query_count": {"type": "integer"},
+        "error_count": {"type": "integer", "minimum": 0},
+        "unavailable": {"type": "boolean"},
+        "recall_at_1": {"type": "number", "minimum": 0, "maximum": 1},
+        "recall_at_5": {"type": "number", "minimum": 0, "maximum": 1},
+        "mrr": {"type": "number", "minimum": 0, "maximum": 1},
+        "required_evidence_recall": {"type": "number", "minimum": 0, "maximum": 1},
+        "forbidden_hit_count": {"type": "integer", "minimum": 0},
+        "scope_leakage_count": {"type": "integer", "minimum": 0},
+        "temporal_violation_count": {"type": "integer", "minimum": 0},
+        "provenance_failure_count": {"type": "integer", "minimum": 0},
+        "abstention_accuracy": {"type": "number", "minimum": 0, "maximum": 1},
+        "ambiguity_accuracy": {"type": "number", "minimum": 0, "maximum": 1},
+        "count_accuracy": {"type": "number", "minimum": 0, "maximum": 1},
+        "latency_ms": {"type": "object", "required": ["p50", "p95", "max"]},
+        "contribution": {
+          "type": "object",
+          "required": ["vector", "graph", "both"]
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "required": ["query_id", "profile", "partition", "category", "error", "latency_ms", "hits", "missing", "forbidden", "scope_leakage", "temporal_violations", "provenance_failures", "abstention_ok", "ambiguity_ok", "count_ok", "hit_top1_ok", "recall_at_1", "recall_at_5", "mrr", "evidence_recall", "intent_ok", "required_evidence", "expected_abstain", "as_of_recognized"],
+      "properties": {
+        "error": {"type": "string"},
+        "scope_leakage": {"type": "integer", "minimum": 0},
+        "forbidden": {"type": "array", "items": {"type": "string"}},
+        "hits": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

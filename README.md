@@ -1193,6 +1193,23 @@ v0.7.2 另提供可注入真实 `PersonalMemoryAnalyzer` 的抽取层评测，�
 supported candidate precision、subject/scope accuracy、噪声写入和跨用户泄漏；仅仅引用正确证据不会
 被当作内容语义已经正确。
 
+v0.9 新增混合检索消融评测（repository-only，零外部 LLM 调用、零付费 token）：
+
+```bash
+uv run python -m benchmarks.personal_retrieval_ablation \
+  --dataset benchmarks/datasets/personal-retrieval-ablation-zh-v1.json \
+  --profiles lexical,lexical_vector,lexical_graph,lexical_vector_graph \
+  --output data/doppel/personal-retrieval-ablation.json
+```
+
+四个主 profile 都走真实 `PersonalMemoryQueryEngine`（planner → 词法/语义候选 →
+exact-scope Store 重载 → 主体/权威/生命周期/时间硬门 → 排序命中）。Graphiti 关系为
+预置图（本地 bge-small-zh 向量），pgvector 使用同一本地 embedding provider；
+Neo4j/PostgreSQL 不可用时相应 profile 结构化标记 `unavailable`。报告区分
+fallback vs rich 图边、按 `semantic_source:` 统计 vector/graph/both 贡献，并对
+planner 的时间/意图识别能力如实标注（`as_of_recognized`）。数据集为候选草案，
+未冻结、非 publication-ready。
+
 v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
 计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，
 当前保留 3 个 missing evidence hit 和 1 个 over-broad hit，不用特判抹平；CI 只冻结不回退上限，

@@ -27,3 +27,6 @@ Thumbs.db
 .env
 .env.*
 *.local
+
+# benchmark run artifacts
+data/

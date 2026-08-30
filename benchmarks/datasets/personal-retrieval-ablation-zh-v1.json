@@ -1,0 +1,789 @@
+{
+  "suite": "doppel.personal-retrieval-ablation-zh-v1",
+  "suite_version": "1",
+  "language": "zh",
+  "status": "draft",
+  "frozen": false,
+  "publication_ready": false,
+  "description": "Candidate ablation dataset for v0.9 hybrid retrieval evaluation. Pre-extracted structured MemoryRecords isolate retrieval quality from extractor quality. Synthetic; no real personal data.",
+  "scopes": {
+    "u1": {"user_id": "user-linz", "agent_id": "echo", "display_name": "林舟"},
+    "u2": {"user_id": "user-wangv", "agent_id": "echo", "display_name": "王薇"},
+    "u3": {"user_id": "user-zhouk", "agent_id": "echo", "display_name": "周凯"},
+    "u4": {"user_id": "user-chenj", "agent_id": "echo", "display_name": "陈静"},
+    "u5": {"user_id": "user-zhaom", "agent_id": "echo", "display_name": "赵敏"}
+  },
+  "metamorphic_variants": [
+    {
+      "name": "same-domain-word-swap",
+      "description": "Same-domain entity substitutions keep scope/actor/subject/timestamps/IDs/intent/count/temporal behavior.",
+      "substitutions": [
+        ["上海", "澜州"], ["北京", "雾城"], ["小王", "林舟"],
+        ["《三体》", "《远岸》"], ["香菜", "茴香"], ["咖啡", "果茶"]
+      ]
+    },
+    {
+      "name": "cross-domain-word-swap",
+      "description": "Cross-domain substitutions swap the entire topic area while preserving structure.",
+      "substitutions": [
+        ["书", "钥匙"], ["朋友家", "公司前台"], ["旅行", "医疗复诊"], ["居住地", "工作地点"]
+      ]
+    }
+  ],
+  "fixtures": [
+    {
+      "memory_id": "m-residence-current", "scope": "u1",
+      "content": "我现在住在上海浦东新区",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2024-06-01T00:00:00Z", "valid_to": null,
+      "topic_key": "residence", "event_key": "",
+      "tags": ["personal-memory", "residence"],
+      "evidence": [{"message_id": "e-m1", "at": "2026-06-10T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-residence-old", "scope": "u1",
+      "content": "我曾住在南京鼓楼区，2024 年 5 月搬到上海",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "historical", "state": "superseded",
+      "valid_from": "2019-03-01T00:00:00Z", "valid_to": "2024-05-31T23:59:59Z",
+      "topic_key": "residence", "event_key": "",
+      "tags": ["personal-memory", "residence"],
+      "evidence": [{"message_id": "e-m2", "at": "2024-05-31T12:00:00Z"}]
+    },
+    {
+      "memory_id": "m-job-v1", "scope": "u1",
+      "content": "我在星河公司担任设计总监",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "historical", "state": "superseded",
+      "valid_from": "2025-01-01T00:00:00Z", "valid_to": "2026-05-14T23:59:59Z",
+      "topic_key": "employment", "event_key": "",
+      "tags": ["personal-memory", "employment"],
+      "evidence": [{"message_id": "e-m3", "at": "2025-01-05T09:00:00Z"}]
+    },
+    {
+      "memory_id": "m-job-v2", "scope": "u1",
+      "content": "我目前在星河公司做产品经理，之前说设计总监是记错了",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-05-15T00:00:00Z", "valid_to": null,
+      "topic_key": "employment", "event_key": "",
+      "revision_kind": "correction",
+      "tags": ["personal-memory", "employment"],
+      "evidence": [
+        {"message_id": "e-m4", "at": "2026-05-15T08:30:00Z"},
+        {"message_id": "e-m5", "at": "2026-05-15T08:32:00Z"}
+      ]
+    },
+    {
+      "memory_id": "m-plate-pref", "scope": "u1",
+      "content": "我口味偏清淡，不太能接受香菜和辛辣",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "preference",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2024-01-15T00:00:00Z", "valid_to": null,
+      "topic_key": "diet", "event_key": "",
+      "tags": ["personal-memory", "diet", "preference"],
+      "evidence": [{"message_id": "e-m6", "at": "2024-01-15T20:00:00Z"}]
+    },
+    {
+      "memory_id": "m-drink-pref", "scope": "u1",
+      "content": "我习惯每天一杯咖啡，晚上喝果茶",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "preference",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-03-01T00:00:00Z", "valid_to": null,
+      "topic_key": "diet", "event_key": "",
+      "tags": ["personal-memory", "diet", "preference"],
+      "evidence": [{"message_id": "e-m7", "at": "2026-03-02T09:00:00Z"}]
+    },
+    {
+      "memory_id": "m-passport", "scope": "u1",
+      "content": "我的护照有效期至 2027 年 3 月 20 日",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2024-03-20T00:00:00Z", "valid_to": "2027-03-20T23:59:59Z",
+      "topic_key": "identity-document", "event_key": "",
+      "tags": ["personal-memory", "identity-document"],
+      "evidence": [{"message_id": "e-m8", "at": "2024-03-20T18:00:00Z"}]
+    },
+    {
+      "memory_id": "m-trip-hk-planned", "scope": "u1",
+      "content": "我计划 2026 年 10 月 15 日去香港出差一周",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "plan",
+      "temporal_status": "planned", "state": "confirmed",
+      "valid_from": "2026-10-15T00:00:00Z", "valid_to": "2026-10-22T23:59:59Z",
+      "topic_key": "trip-hongkong", "event_key": "evt-hk-plan",
+      "tags": ["personal-memory", "travel", "plan"],
+      "evidence": [{"message_id": "e-m9", "at": "2026-07-01T11:00:00Z"}]
+    },
+    {
+      "memory_id": "m-trip-hk-done", "scope": "u1",
+      "content": "我 2026 年 6 月去过香港旅行，住在尖沙咀",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "episode",
+      "temporal_status": "historical", "state": "confirmed",
+      "valid_from": "2026-06-05T00:00:00Z", "valid_to": "2026-06-12T23:59:59Z",
+      "topic_key": "trip-hongkong", "event_key": "evt-hk-done",
+      "tags": ["personal-memory", "travel"],
+      "evidence": [{"message_id": "e-m10", "at": "2026-06-12T20:00:00Z"}]
+    },
+    {
+      "memory_id": "m-trip-sanya", "scope": "u1",
+      "content": "原计划 2026 年 8 月去三亚度假，已经取消了",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "plan",
+      "temporal_status": "historical", "state": "superseded",
+      "valid_from": "2026-08-01T00:00:00Z", "valid_to": null,
+      "topic_key": "trip-sanya", "event_key": "evt-sanya",
+      "revision_kind": "retraction",
+      "tags": ["personal-memory", "travel"],
+      "evidence": [{"message_id": "e-m11", "at": "2026-07-20T14:00:00Z"}]
+    },
+    {
+      "memory_id": "m-reading-3body", "scope": "u1",
+      "content": "我最近在读《三体》第三部",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-07-10T00:00:00Z", "valid_to": null,
+      "topic_key": "reading", "event_key": "",
+      "tags": ["personal-memory", "reading"],
+      "evidence": [{"message_id": "e-m12", "at": "2026-07-10T21:00:00Z"}]
+    },
+    {
+      "memory_id": "m-friend-wang", "scope": "u1",
+      "content": "小王是我的大学同学，现在在北京工作",
+      "subject": "小王", "subject_id": "contact-wang",
+      "authority": "human_self", "personal_memory_type": "relationship",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2020-09-01T00:00:00Z", "valid_to": null,
+      "topic_key": "friend", "event_key": "",
+      "tags": ["personal-memory", "relationship"],
+      "evidence": [{"message_id": "e-m13", "at": "2026-04-18T15:00:00Z"}]
+    },
+    {
+      "memory_id": "m-item-camera", "scope": "u1",
+      "content": "我的单反相机放在我房间的柜子里",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-05-01T00:00:00Z", "valid_to": null,
+      "topic_key": "item-camera", "event_key": "",
+      "tags": ["personal-memory", "possession"],
+      "evidence": [{"message_id": "e-m14", "at": "2026-05-02T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-chen-borrow-camera", "scope": "u4",
+      "content": "我借了林舟的单反相机，目前由我保管",
+      "subject": "林舟", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-07-01T00:00:00Z", "valid_to": null,
+      "topic_key": "item-camera", "event_key": "",
+      "tags": ["personal-memory", "possession"],
+      "evidence": [{"message_id": "e-m15", "at": "2026-07-02T16:00:00Z"}]
+    },
+    {
+      "memory_id": "m-item-camera-borrowed", "scope": "u1",
+      "content": "我的单反相机上周借给了陈静，现在在她那里",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-08-20T00:00:00Z", "valid_to": null,
+      "topic_key": "item-camera", "event_key": "",
+      "tags": ["personal-memory", "possession"],
+      "evidence": [{"message_id": "e-m15b", "at": "2026-08-20T18:00:00Z"}]
+    },
+    {
+      "memory_id": "m-pet-denial", "scope": "u1",
+      "content": "我没有养任何宠物",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "fact",
+      "temporal_status": "timeless", "state": "confirmed",
+      "valid_from": null, "valid_to": null,
+      "topic_key": "pet", "event_key": "",
+      "tags": ["personal-memory", "pet"],
+      "evidence": [{"message_id": "e-m16", "at": "2026-02-11T09:00:00Z"}]
+    },
+    {
+      "memory_id": "m-dog-possibility", "scope": "u1",
+      "content": "用户考虑过养狗，但还没有决定",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "agent_output", "personal_memory_type": "fact",
+      "temporal_status": "unknown", "state": "candidate",
+      "valid_from": null, "valid_to": null,
+      "topic_key": "pet", "event_key": "",
+      "tags": ["personal-memory", "pet"],
+      "evidence": [{"message_id": "e-m17", "at": "2026-08-01T18:00:00Z"}]
+    },
+    {
+      "memory_id": "m-visa-note", "scope": "u1",
+      "content": "用户提到过办签证的事，细节未确认",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "derived_summary", "personal_memory_type": "fact",
+      "temporal_status": "unknown", "state": "candidate",
+      "valid_from": null, "valid_to": null,
+      "topic_key": "visa", "event_key": "",
+      "tags": ["personal-memory", "visa"],
+      "evidence": [{"message_id": "e-m18", "at": "2026-08-10T12:00:00Z"}]
+    },
+    {
+      "memory_id": "m-hk-mention-a", "scope": "u1",
+      "content": "这周我说过两次想去香港：一次是周二说想去香港",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "episode",
+      "temporal_status": "historical", "state": "confirmed",
+      "valid_from": "2026-08-18T00:00:00Z", "valid_to": null,
+      "topic_key": "trip-hongkong", "event_key": "evt-hk-mention-week",
+      "tags": ["personal-memory", "travel"],
+      "evidence": [{"message_id": "e-m19a", "at": "2026-08-18T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-hk-mention-b", "scope": "u1",
+      "content": "同一次聊天里我又提了一次想去香港，还提到想看夜景",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "episode",
+      "temporal_status": "historical", "state": "confirmed",
+      "valid_from": "2026-08-18T00:00:00Z", "valid_to": null,
+      "topic_key": "trip-hongkong", "event_key": "evt-hk-mention-week",
+      "tags": ["personal-memory", "travel"],
+      "evidence": [{"message_id": "e-m19b", "at": "2026-08-18T10:05:00Z"}]
+    },
+    {
+      "memory_id": "m-hk-mention-c", "scope": "u1",
+      "content": "这周另一次聊天我提到想去香港买相机配件",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "episode",
+      "temporal_status": "historical", "state": "confirmed",
+      "valid_from": "2026-08-19T00:00:00Z", "valid_to": null,
+      "topic_key": "trip-hongkong", "event_key": "evt-hk-mention-week-c",
+      "tags": ["personal-memory", "travel"],
+      "evidence": [{"message_id": "e-m19c", "at": "2026-08-19T09:00:00Z"}]
+    },
+    {
+      "memory_id": "m-zhou-work", "scope": "u3",
+      "content": "我在北京的一家科技公司工作",
+      "subject": "owner", "subject_id": "user-zhouk",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2023-07-01T00:00:00Z", "valid_to": null,
+      "topic_key": "employment", "event_key": "",
+      "tags": ["personal-memory", "employment"],
+      "evidence": [{"message_id": "e-m20", "at": "2026-05-01T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-wang-residence", "scope": "u2",
+      "content": "我住在北京朝阳区，离公司很近",
+      "subject": "owner", "subject_id": "user-wangv",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2022-01-01T00:00:00Z", "valid_to": null,
+      "topic_key": "residence", "event_key": "",
+      "tags": ["personal-memory", "residence"],
+      "evidence": [{"message_id": "e-m21", "at": "2026-03-01T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-wang-trip-sh", "scope": "u2",
+      "content": "我计划 2026 年 11 月去上海出差",
+      "subject": "owner", "subject_id": "user-wangv",
+      "authority": "human_self", "personal_memory_type": "plan",
+      "temporal_status": "planned", "state": "confirmed",
+      "valid_from": "2026-11-01T00:00:00Z", "valid_to": null,
+      "topic_key": "travel", "event_key": "evt-wang-sh",
+      "tags": ["personal-memory", "travel", "plan"],
+      "evidence": [{"message_id": "e-m22", "at": "2026-08-15T09:00:00Z"}]
+    },
+    {
+      "memory_id": "m-zhao-similar", "scope": "u5",
+      "content": "我住在上海徐汇区",
+      "subject": "owner", "subject_id": "user-zhaom",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2025-10-01T00:00:00Z", "valid_to": null,
+      "topic_key": "residence", "event_key": "",
+      "tags": ["personal-memory", "residence"],
+      "evidence": [{"message_id": "e-m23", "at": "2026-01-01T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-u1-contact-chen", "scope": "u1",
+      "content": "我的朋友陈静在杭州工作",
+      "subject": "陈静", "subject_id": "contact-chen",
+      "authority": "human_self", "personal_memory_type": "relationship",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2021-05-01T00:00:00Z", "valid_to": null,
+      "topic_key": "friend", "event_key": "",
+      "tags": ["personal-memory", "relationship"],
+      "evidence": [{"message_id": "e-m24", "at": "2026-06-20T15:00:00Z"}]
+    },
+    {
+      "memory_id": "m-chen-residence", "scope": "u4",
+      "content": "我住在深圳南山区",
+      "subject": "owner", "subject_id": "user-chenj",
+      "authority": "human_self", "personal_memory_type": "state",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2023-03-01T00:00:00Z", "valid_to": null,
+      "topic_key": "residence", "event_key": "",
+      "tags": ["personal-memory", "residence"],
+      "evidence": [{"message_id": "e-m25", "at": "2026-02-01T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-skill-python-u1", "scope": "u1",
+      "content": "我会 Python，主要做数据处理",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "fact",
+      "temporal_status": "timeless", "state": "confirmed",
+      "valid_from": null, "valid_to": null,
+      "topic_key": "skill", "event_key": "",
+      "tags": ["personal-memory", "skill"],
+      "evidence": [{"message_id": "e-m26", "at": "2025-11-01T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-skill-python-u3", "scope": "u3",
+      "content": "我会 Python，主要做爬虫和自动化",
+      "subject": "owner", "subject_id": "user-zhouk",
+      "authority": "human_self", "personal_memory_type": "fact",
+      "temporal_status": "timeless", "state": "confirmed",
+      "valid_from": null, "valid_to": null,
+      "topic_key": "skill", "event_key": "",
+      "tags": ["personal-memory", "skill"],
+      "evidence": [{"message_id": "e-m27", "at": "2025-12-01T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-expired-taste", "scope": "u1",
+      "content": "用户之前说爱吃榴莲，后来明确说不再吃了",
+      "subject": "owner", "subject_id": "user-linz",
+      "authority": "human_self", "personal_memory_type": "preference",
+      "temporal_status": "historical", "state": "expired",
+      "valid_from": "2023-01-01T00:00:00Z", "valid_to": "2025-12-31T23:59:59Z",
+      "topic_key": "diet", "event_key": "",
+      "tags": ["personal-memory", "diet"],
+      "evidence": [{"message_id": "e-m28", "at": "2025-12-31T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-zhao-caller-linz", "scope": "u5",
+      "content": "联系人林舟是我的同事",
+      "subject": "林舟", "subject_id": "contact-linz",
+      "authority": "human_self", "personal_memory_type": "relationship",
+      "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2024-09-01T00:00:00Z", "valid_to": null,
+      "topic_key": "contact", "event_key": "",
+      "tags": ["personal-memory", "relationship"],
+      "evidence": [{"message_id": "e-m29", "at": "2026-07-05T10:00:00Z"}]
+    },
+    {
+      "memory_id": "m-chen-skill-design", "scope": "u4",
+      "content": "我能做平面设计",
+      "subject": "owner", "subject_id": "user-chenj",
+      "authority": "human_self", "personal_memory_type": "fact",
+      "temporal_status": "timeless", "state": "confirmed",
+      "valid_from": null, "valid_to": null,
+      "topic_key": "skill", "event_key": "",
+      "tags": ["personal-memory", "skill"],
+      "evidence": [{"message_id": "e-m30", "at": "2026-04-01T10:00:00Z"}]
+    }
+  ],
+  "queries": [
+    {
+      "query_id": "q-dev-residence-current",
+      "query": "我现在住在哪个城市？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-residence-current"],
+      "forbidden_memory_ids": ["m-residence-old", "m-wang-residence", "m-zhao-similar"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "current-state", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-residence-history",
+      "query": "我以前住在哪里？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "history", "as_of": null,
+      "required_memory_ids": ["m-residence-old"],
+      "forbidden_memory_ids": ["m-residence-current"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "history", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-residence-asof-2024",
+      "query": "2024 年 6 月的时候我住在哪里？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "as_of", "as_of": "2024-06-15T00:00:00Z",
+      "required_memory_ids": ["m-residence-old"],
+      "forbidden_memory_ids": ["m-residence-current"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "as-of", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-job-current",
+      "query": "我现在在星河公司做什么？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-job-v2"],
+      "forbidden_memory_ids": ["m-job-v1"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "correction", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-job-before-correction",
+      "query": "2026 年 5 月之前我在星河做什么工作？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "as_of", "as_of": "2026-05-14T12:00:00Z",
+      "required_memory_ids": ["m-job-v1"],
+      "forbidden_memory_ids": ["m-job-v2"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "as-of", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-diet-rewrite-1",
+      "query": "有什么需要帮我避开的口味？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-plate-pref"],
+      "forbidden_memory_ids": ["m-expired-taste"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "semantic-rewrite", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-diet-rewrite-2",
+      "query": "我吃饭有什么忌口吗？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-plate-pref"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "semantic-rewrite", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-drink-pref",
+      "query": "我晚上习惯喝什么？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-drink-pref"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "semantic-rewrite", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-passport-expiry",
+      "query": "我的护照什么时候到期？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-passport"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "current-state", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-planned-trip",
+      "query": "我接下来有什么出行计划？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "planned", "as_of": null,
+      "required_memory_ids": ["m-trip-hk-planned"],
+      "forbidden_memory_ids": ["m-trip-hk-done", "m-trip-sanya"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "plan-vs-fact", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-went-hongkong",
+      "query": "我去过香港吗？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "history", "as_of": null,
+      "required_memory_ids": ["m-trip-hk-done"],
+      "forbidden_memory_ids": ["m-trip-hk-planned"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "plan-vs-fact", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-trip-cancelled",
+      "query": "我的三亚行程取消了吗？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "history", "as_of": null,
+      "required_memory_ids": ["m-trip-sanya"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "plan-vs-fact", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-relation-wang",
+      "query": "小王是我什么人？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-friend-wang"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "relation", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-relation-camera-conflict",
+      "query": "我的单反相机现在在谁那里？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": true,
+      "category": "open-conflict", "partition": "dev",
+      "adversarial_note": "u1 内两条 current 相反陈述：相机在自己柜子 vs 借给了陈静"
+    },
+    {
+      "query_id": "q-dev-reading",
+      "query": "我最近在追什么书？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-reading-3body"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "semantic-rewrite", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-pet-denial",
+      "query": "我养猫吗？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-pet-denial"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "negation", "partition": "dev"
+    },
+    {
+      "query_id": "q-dev-count-hk-mentions",
+      "query": "这周我说过几次想去香港？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "count", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_count": 2, "expected_abstain": false, "expected_ambiguous": false,
+      "category": "exact-count", "partition": "dev",
+      "count_episode_context": "m-hk-mention-a 与 m-hk-mention-b 同 event_key 计 1 次，m-hk-mention-c 计 1 次"
+    },
+    {
+      "query_id": "q-dev-count-hk-plans",
+      "query": "我提过几次去香港的计划？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "count", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_count": 1, "expected_abstain": false, "expected_ambiguous": false,
+      "category": "exact-count", "partition": "dev",
+      "count_episode_context": "仅 m-trip-hk-planned 是 plan；m-trip-hk-done 是已发生事件不计数"
+    },
+    {
+      "query_id": "q-dev-abstain-visa",
+      "query": "我的签证什么时候到期？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_abstain": true, "expected_ambiguous": false,
+      "category": "abstain", "partition": "dev",
+      "abstain_reason": "m-visa-note 是 candidate/unknown，无到期日"
+    },
+    {
+      "query_id": "q-dev-abstain-dog",
+      "query": "我养狗了吗？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": ["m-dog-possibility"],
+      "expected_abstain": true, "expected_ambiguous": false,
+      "category": "abstain", "partition": "dev",
+      "abstain_reason": "只有 agent_output candidate，无 owner 确认"
+    },
+    {
+      "query_id": "q-dev-abstain-guangzhou",
+      "query": "我之前在广州住过吗？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "history", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_abstain": true, "expected_ambiguous": false,
+      "category": "abstain", "partition": "dev",
+      "abstain_reason": "只有南京/上海，无广州记录"
+    },
+    {
+      "query_id": "q-dev-abstain-wang-passport",
+      "query": "王薇的护照什么时候到期？",
+      "scopes": ["u2"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": ["m-passport"],
+      "expected_abstain": true, "expected_ambiguous": false,
+      "category": "abstain", "partition": "dev",
+      "abstain_reason": "护照属于 user-linz，不在 user-wangv scope；跨用户拒答"
+    },
+    {
+      "query_id": "q-dev-adversarial-wang-residence",
+      "query": "王薇住在哪个城市？",
+      "scopes": ["u2"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-wang-residence"],
+      "forbidden_memory_ids": ["m-residence-current", "m-zhao-similar"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "adversarial-isolation", "partition": "adversarial"
+    },
+    {
+      "query_id": "q-dev-adversarial-similar-content",
+      "query": "我住在上海的哪个区？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-residence-current"],
+      "forbidden_memory_ids": ["m-wang-residence", "m-zhao-similar"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "adversarial-isolation", "partition": "adversarial"
+    },
+    {
+      "query_id": "q-dev-adversarial-same-id-different-scope",
+      "query": "我的 Python 技能主要用来做什么？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-skill-python-u1"],
+      "forbidden_memory_ids": ["m-skill-python-u3"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "adversarial-isolation", "partition": "adversarial",
+      "adversarial_note": "相同 memory_id 前缀、不同 exact scope 不得混用"
+    },
+    {
+      "query_id": "q-dev-adversarial-same-name-contact",
+      "query": "陈静在哪个城市工作？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-u1-contact-chen"],
+      "forbidden_memory_ids": ["m-chen-residence"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "adversarial-isolation", "partition": "adversarial",
+      "adversarial_note": "u1 的联系人陈静 vs u4 用户本人陈静"
+    },
+    {
+      "query_id": "q-dev-adversarial-expired-indexed",
+      "query": "我还爱吃榴莲吗？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": ["m-expired-taste"],
+      "expected_abstain": true, "expected_ambiguous": false,
+      "category": "adversarial-isolation", "partition": "adversarial",
+      "adversarial_note": "语义/图索引可能仍含该记录，Store state=expired 必须拦截"
+    },
+    {
+      "query_id": "q-hold-residence-future-asof",
+      "query": "2027 年 1 月我住在哪里？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "as_of", "as_of": "2027-01-15T00:00:00Z",
+      "required_memory_ids": ["m-residence-current"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "as-of", "partition": "heldout"
+    },
+    {
+      "query_id": "q-hold-reading-rephrase",
+      "query": "我最近在看什么科幻小说？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-reading-3body"],
+      "forbidden_memory_ids": [],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "semantic-rewrite", "partition": "heldout"
+    },
+    {
+      "query_id": "q-hold-job-asof-during",
+      "query": "2025 年 8 月我在星河是什么岗位？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "as_of", "as_of": "2025-08-01T00:00:00Z",
+      "required_memory_ids": ["m-job-v1"],
+      "forbidden_memory_ids": ["m-job-v2"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "as-of", "partition": "heldout"
+    },
+    {
+      "query_id": "q-hold-relation-camera-owner",
+      "query": "林舟的相机是借给谁了？",
+      "scopes": ["u4"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-chen-borrow-camera"],
+      "forbidden_memory_ids": ["m-item-camera"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "relation", "partition": "heldout"
+    },
+    {
+      "query_id": "q-hold-abstain-future-plan",
+      "query": "我十一假期有什么安排？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "planned", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": ["m-trip-hk-planned"],
+      "expected_abstain": true, "expected_ambiguous": false,
+      "category": "abstain", "partition": "heldout",
+      "abstain_reason": "国庆假期无计划；10 月香港出差在国庆后"
+    },
+    {
+      "query_id": "q-hold-count-dup",
+      "query": "我总共说过几次要去香港？",
+      "scopes": ["u1"], "now": "2026-08-30T12:00:00Z",
+      "intent": "count", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_count": 3, "expected_abstain": false, "expected_ambiguous": false,
+      "category": "exact-count", "partition": "heldout",
+      "count_episode_context": "计划 1 次(event 不同) + 本周提及按 event_key 计 2 次 = 3"
+    },
+    {
+      "query_id": "q-hold-shared-python-u3",
+      "query": "周凯会用什么技术栈？",
+      "scopes": ["u3"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-skill-python-u3"],
+      "forbidden_memory_ids": ["m-skill-python-u1"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "adversarial-isolation", "partition": "heldout"
+    },
+    {
+      "query_id": "q-hold-adversarial-zhao",
+      "query": "赵敏住在哪个城市？",
+      "scopes": ["u5"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-zhao-similar"],
+      "forbidden_memory_ids": ["m-residence-current"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "adversarial-isolation", "partition": "heldout"
+    },
+    {
+      "query_id": "q-hold-adversarial-zhao-contact",
+      "query": "林舟是我的同事吗？",
+      "scopes": ["u5"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": ["m-zhao-caller-linz"],
+      "forbidden_memory_ids": ["m-friend-wang", "m-item-camera"],
+      "expected_abstain": false, "expected_ambiguous": false,
+      "category": "adversarial-isolation", "partition": "heldout",
+      "adversarial_note": "同名词林舟在 u5 是同事关系（contact），不得误用 u1 自己的记忆"
+    },
+    {
+      "query_id": "q-hold-abstain-chen-skill",
+      "query": "陈静会写 Python 吗？",
+      "scopes": ["u4"], "now": "2026-08-30T12:00:00Z",
+      "intent": "current", "as_of": null,
+      "required_memory_ids": [],
+      "forbidden_memory_ids": ["m-skill-python-u1", "m-skill-python-u3"],
+      "expected_abstain": true, "expected_ambiguous": false,
+      "category": "abstain", "partition": "heldout",
+      "abstain_reason": "u4 只有 m-chen-skill-design；Python 属于 u1/u3"
+    }
+  ],
+  "requirements": {
+    "query_count_gate": 30,
+    "user_count_gate": 5,
+    "partitions_non_empty": ["dev", "heldout", "adversarial"],
+    "publication_gates": {
+      "cases": 150,
+      "messages": 1500,
+      "queries": 150,
+      "users": 10
+    }
+  }
+}

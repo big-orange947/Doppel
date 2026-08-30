@@ -75,6 +75,60 @@ against product code recognizing Shanghai, Beijing, cilantro, coffee, or other f
 vocabulary. Runtime modules are also statically prohibited from importing the
 repository-only `benchmarks` package.
 
+## v0.9 personal hybrid retrieval ablation
+
+`personal_retrieval_ablation.py` compares the same pre-extracted fixture set across
+four main execution profiles and three index-direct diagnostics. Every main profile
+runs the real `PersonalMemoryQueryEngine` end-to-end (planner -> lexical/semantic
+candidates -> exact-scope Store reload -> subject/authority/lifecycle/temporal
+gates -> ranked hits); results never compare raw index memory IDs.
+
+```bash
+uv run python -m benchmarks.personal_retrieval_ablation `
+  --dataset benchmarks/datasets/personal-retrieval-ablation-zh-v1.json `
+  --profiles lexical,lexical_vector,lexical_graph,lexical_vector_graph `
+  --output data/doppel/personal-retrieval-ablation.json
+
+# strict gates for CI
+uv run python -m benchmarks.personal_retrieval_ablation `
+  --require-live-postgres --require-live-neo4j --require-all-profiles `
+  --max-scope-leakage 0 --max-temporal-violations 0
+```
+
+Profiles are named by what actually executes: `lexical`, `lexical_vector`,
+`lexical_graph`, `lexical_vector_graph`; diagnostics are `vector_direct`,
+`graph_direct`, `composite_direct`. The dataset is a candidate draft (37 queries,
+5 users, dev/heldout/adversarial partitions) and is **not** frozen or
+publication-ready.
+
+Budget discipline: the runner performs **zero** external LLM calls and **zero** paid
+tokens. Graphiti relations are preseeded directly into Neo4j (local
+`BAAI/bge-small-zh-v1.5` embeddings via fastembed); pgvector uses the same local
+provider in a profile-specific table; the extractor is not involved. When Neo4j or
+PostgreSQL is unreachable the affected profiles report structured `unavailable` and
+only `--require-live-*` turns that into a non-zero exit.
+
+Metric definitions and hard gates:
+
+- hard gates (must be zero or the command exits non-zero): scope leakage,
+  cross-user hits, unauthorized-subject hits, Store-revalidation bypass, invalid
+  provenance accepted, temporal leakage (expired/current), future plan treated as
+  completed episode, candidate accepted without a Store record, same memory ID
+  across scopes incorrectly deduplicated;
+- quality metrics (reported honestly, failures allowed): recall@1/5, hit@1, MRR,
+  required-evidence recall, forbidden hits, abstention/ambiguity/count accuracy,
+  latency p50/p95/max, per-source contribution (vector/graph/both) from
+  `semantic_source:` reasons;
+- Graphiti edges are classified `fallback` (`DOPPEL_MEMORY_FALLBACK`) vs `rich`
+  (`HAS_PERSONAL_MEMORY`) in the `graph_direct` diagnostic; a fallback edge only
+  proves discoverability and provenance, never relation understanding;
+- the planner's ability to recognize explicit dates and intents is reported per
+  query (`as_of_recognized`, `actual_intent`). This benchmark does not claim a
+  planner capability it does not have;
+- metamorphic variants re-run the lexical profile and compare
+  leakage/forbidden/abstention/count/evidence behaviour before and after
+  substitution.
+
 The extraction report measures:
 
 - gold memories whose labeled evidence is covered by a correctly attributed,

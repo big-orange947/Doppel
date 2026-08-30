@@ -11,6 +11,16 @@
 - Reframe v0.9 around held-out high-quality personal retrieval. PostgreSQL remains
   authoritative while pgvector and Graphiti provide derived candidates that must pass
   exact-scope Store revalidation; ease of minimal configuration is not the v0.9 target.
+- Add a repository-only personal hybrid retrieval ablation benchmark
+  (`benchmarks/personal_retrieval_ablation.py`) that compares lexical /
+  lexical+pgvector / lexical+Graphiti / full hybrid over the same pre-extracted
+  fixture set through the real `PersonalMemoryQueryEngine`. It runs with zero
+  external LLM calls, preseeded Graphiti relations, local bge-small-zh embeddings,
+  structured unavailable handling, hard gates (scope/provenance/temporal/reload),
+  per-source contribution counts, graph fallback-vs-rich edge classification,
+  metamorphic safety checks, and a threshold sweep. The candidate dataset
+  (`personal-retrieval-ablation-zh-v1.json`, 37 queries / 5 users / three
+  partitions) remains a draft and is not publication-ready.
 
 ### Changed
 
