@@ -172,6 +172,7 @@ async def test_semantic_index_uses_stable_episode_and_exact_scope_group() -> Non
     assert second.status == IndexOperationStatus.SKIPPED
     assert fake.add_calls[0]["group_id"] == scope.scope_key
     assert "memory_id=memory-1" in str(fake.add_calls[0]["episode_body"])
+    assert '"entity_name": "u"' in str(fake.add_calls[0]["episode_body"])
     assert "The owner likes mountain hiking" in str(fake.add_calls[0]["episode_body"])
     assert "untrusted caller content" not in str(fake.add_calls[0]["episode_body"])
     assert (await index.health())["ok"] is True
@@ -285,7 +286,10 @@ async def test_graphiti_writer_reconciles_transition_and_hard_delete() -> None:
     assert await index.inspect(scope, orphan.memory_id) is None
 
 
-async def test_graphiti_upsert_replaces_pre_temporal_projection_episode() -> None:
+@pytest.mark.parametrize("legacy_version", [2, 3])
+async def test_graphiti_upsert_replaces_legacy_projection_episode(
+    legacy_version: int,
+) -> None:
     fake = FakeGraphiti()
     store = InMemoryStore()
     index = GraphitiSemanticIndex(store, graphiti_client=fake)
@@ -294,7 +298,7 @@ async def test_graphiti_upsert_replaces_pre_temporal_projection_episode() -> Non
     assert (await store.put(record)).accepted
     created = await index.index_record(record)
     fake.episodes[created.episode_id].name = (
-        f"DoppelMemory:v2:bGVnYWN5:{created.fingerprint}:1"
+        f"DoppelMemory:v{legacy_version}:bGVnYWN5:{created.fingerprint}:1"
     )
 
     upgraded = await index.index_record(record)
@@ -481,6 +485,8 @@ async def test_graphiti_projection_and_search_at_preserve_temporal_coordinates()
         created_at=observed_at,
         updated_at=observed_at,
         metadata={
+            "subject": "owner",
+            "subject_id": "person-temporal",
             "temporal_status": "current",
             "valid_from": valid_from.isoformat(),
             "valid_to": valid_to.isoformat(),
@@ -498,7 +504,15 @@ async def test_graphiti_projection_and_search_at_preserve_temporal_coordinates()
         call["episode_body"]
     )
     assert f'"valid_to": "{valid_to.isoformat()}"' in str(call["episode_body"])
+    assert '"entity_name": "person-temporal"' in str(call["episode_body"])
+    assert '"role": "owner"' in str(call["episode_body"])
     assert "trusted temporal metadata" in str(
+        call["custom_extraction_instructions"]
+    )
+    assert "trusted subject metadata" in str(
+        call["custom_extraction_instructions"]
+    )
+    assert "never replace a subject-object relation with a self-loop" in str(
         call["custom_extraction_instructions"]
     )
 

@@ -60,13 +60,19 @@ from doppel_memory.vector import SemanticIndexUnavailableError
 
 logger = logging.getLogger(__name__)
 LOCAL_EMBEDDING_DIM = 512
-GRAPHITI_PROJECTION_VERSION = 3
+GRAPHITI_PROJECTION_VERSION = 4
 GRAPHITI_TEMPORAL_EXTRACTION_INSTRUCTIONS = """\
 The DOPPEL_TEMPORAL JSON line is trusted temporal metadata from the authoritative
 Store. Use observed_at as the episode reference time. When valid_from is present,
 map it to the fact's valid_at. When valid_to is present, map it to invalid_at.
 Keep planned, historical, current, timeless, and unknown distinct. Do not invalidate
 a fact merely because another fact uses a non-overlapping validity interval.
+The DOPPEL_SUBJECT JSON line is trusted subject metadata from the authoritative
+Store. Materialize its entity_name as the subject entity for facts about that
+subject, and resolve first-person language such as "I" or "my" to that entity.
+Connect the subject to distinct people, places, things, attributes, or concepts;
+never replace a subject-object relation with a self-loop merely because the source
+sentence names only the object explicitly.
 """
 
 
@@ -966,6 +972,17 @@ def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
         "valid_from": valid_from.isoformat() if valid_from is not None else None,
         "valid_to": valid_to.isoformat() if valid_to is not None else None,
     }
+    subject_id = str(record.metadata.get("subject_id") or "").strip()
+    if not subject_id:
+        subject_id = str(record.scope.user_id or "").strip() or "owner"
+    subject_role = str(
+        record.metadata.get("subject") or record.actor or ""
+    ).strip() or "owner"
+    subject = {
+        "entity_name": subject_id,
+        "role": subject_role,
+        "subject_id": subject_id,
+    }
     header = (
         f"[DOPPEL memory_id={record.memory_id} version={record.version} "
         f"fingerprint={fingerprint} kind={record.kind} "
@@ -977,6 +994,8 @@ def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
             header,
             "DOPPEL_TEMPORAL "
             + json.dumps(temporal, ensure_ascii=False, sort_keys=True),
+            "DOPPEL_SUBJECT "
+            + json.dumps(subject, ensure_ascii=False, sort_keys=True),
             record.content,
         )
     )
@@ -1014,13 +1033,13 @@ def _graphiti_episode_name(
     memory_id: str, fingerprint: str, source_version: int
 ) -> str:
     encoded = base64.urlsafe_b64encode(memory_id.encode()).decode().rstrip("=")
-    return f"DoppelMemory:v3:{encoded}:{fingerprint}:{source_version}"
+    return f"DoppelMemory:v4:{encoded}:{fingerprint}:{source_version}"
 
 
 def _episode_index_metadata(name: str) -> tuple[str, str, int]:
-    prefix_v3 = "DoppelMemory:v3:"
-    if name.startswith(prefix_v3):
-        parts = name[len(prefix_v3) :].split(":")
+    prefix_v4 = "DoppelMemory:v4:"
+    if name.startswith(prefix_v4):
+        parts = name[len(prefix_v4) :].split(":")
         if len(parts) != 3:
             return "", "", 1
         encoded, fingerprint, raw_version = parts
@@ -1036,9 +1055,10 @@ def _episode_index_metadata(name: str) -> tuple[str, str, int]:
             return "", "", 1
         return _decode_memory_id(encoded), fingerprint, source_version
 
-    prefix_v2 = "DoppelMemory:v2:"
-    if name.startswith(prefix_v2):
-        parts = name[len(prefix_v2) :].split(":")
+    for legacy_prefix in ("DoppelMemory:v3:", "DoppelMemory:v2:"):
+        if not name.startswith(legacy_prefix):
+            continue
+        parts = name[len(legacy_prefix) :].split(":")
         if len(parts) != 3:
             return "", "", 1
         encoded, fingerprint, raw_version = parts
@@ -1052,8 +1072,9 @@ def _episode_index_metadata(name: str) -> tuple[str, str, int]:
             or any(value not in "0123456789abcdef" for value in fingerprint)
         ):
             return "", "", 1
-        # v2 did not project explicit temporal coordinates. Preserve the source
-        # identity but expose an empty fingerprint so reconciliation upgrades it.
+        # Older projections did not materialize authoritative subjects (v3) or
+        # explicit temporal coordinates (v2). Preserve source identity but expose
+        # an empty fingerprint so reconciliation upgrades the graph projection.
         return _decode_memory_id(encoded), "", source_version
 
     prefix_v1 = "DoppelMemory:v1:"

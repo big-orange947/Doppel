@@ -16,6 +16,10 @@
   required by upstream's ``add_episode(uuid=...)`` update path. Failed extraction
   removes that incomplete slot so reconciliation can retry instead of mistaking a
   header-only Episode for a completed graph projection.
+- Graphiti projection v4 now carries authoritative ``DOPPEL_SUBJECT`` metadata into
+  extraction. First-person facts are connected to a stable subject entity instead of
+  collapsing into object self-loops, while v2/v3 projections are marked for additive
+  reconciliation upgrades.
 
 - OpenAI-compatible structured output can optionally send a provider thinking-mode
   toggle. This supports low-cost non-thinking extraction on compatible providers while
