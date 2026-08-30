@@ -1,0 +1,33 @@
+# Isolation PostgreSQL + pgvector for the personal retrieval ablation benchmark.
+#
+# No secrets are stored in this file. The database password is read from the
+# current shell environment; starting the stack without DOPPEL_ABLATION_PG_PASSWORD
+# fails fast.
+#
+#   $env:DOPPEL_ABLATION_PG_PASSWORD = "<local-only test password>"
+#   docker compose -f scripts/docker-compose.ablation.yml up -d
+#
+# The volume keeps benchmark schema across reruns; tear down with
+# `docker compose -f scripts/docker-compose.ablation.yml down` (without -v so the
+# volume survives) or `down -v` when a clean re-init is intended.
+
+services:
+  pgvector:
+    image: pgvector/pgvector:pg15
+    container_name: doppel-ablation-pgvector
+    environment:
+      POSTGRES_DB: doppel_ablation
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DOPPEL_ABLATION_PG_PASSWORD:?required}
+    ports:
+      - "5432:5432"
+    volumes:
+      - doppel-ablation-pgvector-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d doppel_ablation"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  doppel-ablation-pgvector-data:

@@ -445,6 +445,7 @@ class _LocalEmbeddingProvider:
     def __init__(self, dimensions: int = 512) -> None:
         self._dimensions = dimensions
         self._model: Any = None
+        self.version = _fastembed_version()
 
     @property
     def dimensions(self) -> int:
@@ -459,6 +460,15 @@ class _LocalEmbeddingProvider:
             self._model = TextEmbedding("BAAI/bge-small-zh-v1.5")
         vectors = await asyncio.to_thread(list, self._model.embed(list(texts)))
         return [[float(value) for value in vector] for vector in vectors]
+
+
+def _fastembed_version() -> str:
+    try:
+        import fastembed
+
+        return str(getattr(fastembed, "__version__", "") or "unknown")
+    except Exception:  # noqa: BLE001 - version is best effort
+        return "unknown"
 
 
 # --------------------------------------------------------------------------- #
@@ -663,17 +673,47 @@ async def _probe_postgres(
 async def _build_vector_index(
     *, host: str, port: int, database: str, user: str, password: str
 ) -> Any:
+    from urllib.parse import quote
+
     from doppel_memory.postgres_store import PostgreSQLStore
 
-    pg_store = PostgreSQLStore(
+    dsn = (
+        f"postgresql://{quote(user)}:{quote(password)}@"
+        f"{host}:{port}/{quote(database)}"
+    )
+    # DSN carries credentials internally; the report only ever records
+    # host/port/database/user, never the password.
+    pg_store = PostgreSQLStore(dsn)
+    # PostgreSQLStore migrates lazily on first connection; there is no public
+    # initialize() method, so trigger the pool+schemas explicitly.
+    await pg_store._ensure_pool()
+    return pg_store
+
+
+async def _reset_ablation_postgres(
+    *, host: str, port: int, database: str, user: str, password: str
+) -> None:
+    """Wipe the dedicated ablation database before a run.
+
+    ``doppel_ablation`` is a benchmark-only database (nothing but fixture rows
+    and vector projections live there), so dropping and recreating the public
+    schema is a safe, deterministic reset for repeatable runs.
+    """
+    import asyncpg
+
+    conn = await asyncpg.connect(
         host=host,
         port=port,
         database=database,
         user=user,
         password=password,
+        timeout=5,
     )
-    await pg_store.ensure_schema()
-    return pg_store
+    try:
+        await conn.execute("DROP SCHEMA public CASCADE")
+        await conn.execute("CREATE SCHEMA public")
+    finally:
+        await conn.close()
 
 
 async def _build_vector_candidates(
@@ -1183,6 +1223,7 @@ async def _direct_scan(
     fallback_edges = 0
     rich_edges = 0
     attribution_by_query: dict[str, list[dict[str, Any]]] = {}
+    candidate_memory_ids_by_query: dict[str, list[str]] = {}
     for query in dataset.queries:
         bound_scopes = [scopes[name] for name in query.scopes]
         allowed = {scope.scope_key for scope in bound_scopes}
@@ -1208,6 +1249,7 @@ async def _direct_scan(
         inactive = 0
         reload_ok = 0
         seen: set[tuple[str, str]] = set()
+        raw_ids: list[str] = []
         for candidate in candidates:
             scope = candidate.scope
             memory_id = str(candidate.memory_id or "").strip()
@@ -1217,6 +1259,7 @@ async def _direct_scan(
             if key in seen:
                 continue
             seen.add(key)
+            raw_ids.append(memory_id)
             total_candidates += 1
             if scope.scope_key not in allowed:
                 scope_leak += 1
@@ -1237,6 +1280,7 @@ async def _direct_scan(
         total_orphan_candidates += orphan
         total_inactive_candidates += inactive
         total_store_reload_ok += reload_ok
+        candidate_memory_ids_by_query[query.query_id] = raw_ids
         per_query.append(
             {
                 "query_id": query.query_id,
@@ -1315,6 +1359,7 @@ async def _direct_scan(
             "returned_rich_edges": rich_edges,
         },
         "edge_attribution_by_query": attribution_by_query,
+        "candidate_memory_ids_by_query": candidate_memory_ids_by_query,
         "cases": per_query,
         "note": (
             "index-direct diagnostics bypass the query engine; they do not "
@@ -1353,18 +1398,48 @@ async def run_ablation(
     scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
     group_ids = [scope.scope_key for scope in scopes.values()]
 
-    from doppel_memory.sqlite_store import SQLiteStore
+    # v0.9 keeps PostgreSQL authoritative when it is live; SQLite is the
+    # degradation path. The same authoritative store backs the pgvector
+    # projection so index_records can re-load records it indexes (orphan
+    # protection) instead of duplicating another authority.
+    pg_password = os.environ.get("DOPPEL_ABLATION_PG_PASSWORD", "")
+    vector_reason = await _probe_postgres(
+        host=PG_HOST,
+        port=PG_PORT,
+        database=PG_DATABASE,
+        user=PG_USER,
+        password=pg_password,
+    )
+    store: Any = None
+    pg_store: Any | None = None
+    if not vector_reason:
+        await _reset_ablation_postgres(
+            host=PG_HOST,
+            port=PG_PORT,
+            database=PG_DATABASE,
+            user=PG_USER,
+            password=pg_password,
+        )
+        pg_store = await _build_vector_index(
+            host=PG_HOST,
+            port=PG_PORT,
+            database=PG_DATABASE,
+            user=PG_USER,
+            password=pg_password,
+        )
+        store = pg_store
+    else:
+        from doppel_memory.sqlite_store import SQLiteStore
 
-    store = SQLiteStore(database=str(store_path))
+        store = SQLiteStore(database=str(store_path))
+    store_kind = "postgresql" if pg_store is not None else "sqlite"
     since = utc_now()
     records = [
         _memory_record(item, scopes[item.scope], since) for item in dataset.fixtures
     ]
     graph: Any | None = None
     graph_index: Any | None = None
-    pg_store: Any | None = None
     vector_index: Any | None = None
-    vector_reason = ""
     graph_reason = ""
     graph_seed_stats: dict[str, Any] = {}
     try:
@@ -1375,23 +1450,8 @@ async def run_ablation(
                     f"fixture memory was not created: {record.memory_id}: {written}"
                 )
 
-        # --- vector availability ------------------------------------------- #
-        pg_password = os.environ.get("DOPPEL_ABLATION_PG_PASSWORD", "")
-        vector_reason = await _probe_postgres(
-            host=PG_HOST,
-            port=PG_PORT,
-            database=PG_DATABASE,
-            user=PG_USER,
-            password=pg_password,
-        )
+        # --- vector index (same authoritative store) ------------------------ #
         if not vector_reason:
-            pg_store = await _build_vector_index(
-                host=PG_HOST,
-                port=PG_PORT,
-                database=PG_DATABASE,
-                user=PG_USER,
-                password=pg_password,
-            )
             vector_index = await _build_vector_candidates(pg_store, records)
 
         # --- graph availability ------------------------------------------- #
@@ -1421,9 +1481,11 @@ async def run_ablation(
         )
         report["runtime"] = {
             "store": {
-                "kind": "sqlite",
+                "kind": store_kind,
                 "available": True,
-                "path_shape": "tempfile(sqlite3)",
+                "path_shape": (
+                    "postgresql(doppel_ablation)" if pg_store is not None else "tempfile(sqlite3)"
+                ),
             },
             "vector": {
                 "kind": "postgresql_pgvector",
@@ -1673,12 +1735,8 @@ def _build_final_hit_attribution(
         return {
             "available": False,
             "reason": "graph_direct diagnostic did not produce per-edge mapping",
-            "fallback_edge_final_hit_links": None,
-            "rich_edge_final_hit_links": None,
-            "unique_final_hits_with_fallback": None,
-            "unique_final_hits_with_rich": None,
-            "unique_queries_with_fallback": None,
-            "unique_queries_with_rich": None,
+            "graph": None,
+            "vector": None,
         }
     oracle_cases = [
         case
@@ -1722,7 +1780,7 @@ def _build_final_hit_attribution(
                 rich_links.add(link)
                 rich_hits.add((query.query_id, memory_id))
                 rich_queries.add(query.query_id)
-    return {
+    graph_result = {
         "available": True,
         "method": (
             "unique edge/episode-to-hit links refined by oracle lexical_graph "
@@ -1736,6 +1794,56 @@ def _build_final_hit_attribution(
         "unique_queries_with_fallback": len(fallback_queries),
         "unique_queries_with_rich": len(rich_queries),
         "queries_with_mapping": mapped_queries,
+    }
+    # ---- vector final-hit attribution ------------------------------------ #
+    vector_direct = report.get("diagnostics", {}).get("vector_direct")
+    vector_candidates_by_query = (
+        vector_direct.get("candidate_memory_ids_by_query", {})
+        if vector_direct
+        else {}
+    )
+    vector_result = None
+    if vector_candidates_by_query:
+        oracle_vector_cases = [
+            case
+            for case in report.get("cases", [])
+            if case.get("mode") == PLANNER_MODE_ORACLE
+            and case.get("profile") == "lexical_vector"
+            and not case.get("error")
+        ]
+        vector_by_query = {
+            case["query_id"]: case for case in oracle_vector_cases
+        }
+        vector_contribution = 0
+        vector_queries: set[str] = set()
+        vector_mapped_queries = 0
+        for query in dataset.queries:
+            case = vector_by_query.get(query.query_id)
+            if case is None:
+                continue
+            final_hits = set(case.get("hits", []))
+            candidates = vector_candidates_by_query.get(query.query_id, [])
+            if not candidates:
+                continue
+            vector_mapped_queries += 1
+            for memory_id in candidates:
+                if memory_id in final_hits:
+                    vector_contribution += 1
+                    vector_queries.add(query.query_id)
+        vector_result = {
+            "available": True,
+            "method": (
+                "oracle lexical_vector final accepted hits intersected with "
+                "vector_direct candidate memory IDs per query"
+            ),
+            "vector_final_hit_links": vector_contribution,
+            "unique_queries_with_vector": len(vector_queries),
+            "queries_with_mapping": vector_mapped_queries,
+        }
+    return {
+        "available": True,
+        "graph": graph_result,
+        "vector": vector_result,
     }
 
 

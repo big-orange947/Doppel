@@ -865,12 +865,13 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertTrue(attribution["available"])
-        self.assertEqual(attribution["fallback_edge_final_hit_links"], 2)
-        self.assertEqual(attribution["rich_edge_final_hit_links"], 1)
-        self.assertEqual(attribution["unique_final_hits_with_fallback"], 1)
-        self.assertEqual(attribution["unique_final_hits_with_rich"], 1)
-        self.assertEqual(attribution["unique_queries_with_fallback"], 1)
-        self.assertEqual(attribution["unique_queries_with_rich"], 1)
+        graph_att = attribution["graph"]
+        self.assertEqual(graph_att["fallback_edge_final_hit_links"], 2)
+        self.assertEqual(graph_att["rich_edge_final_hit_links"], 1)
+        self.assertEqual(graph_att["unique_final_hits_with_fallback"], 1)
+        self.assertEqual(graph_att["unique_final_hits_with_rich"], 1)
+        self.assertEqual(graph_att["unique_queries_with_fallback"], 1)
+        self.assertEqual(graph_att["unique_queries_with_rich"], 1)
 
     def test_reproducibility_cli_args_exist(self) -> None:
         from benchmarks.personal_retrieval_ablation import _parser
