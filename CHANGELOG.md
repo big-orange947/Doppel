@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Direction
+
+- Freeze Doppel's ownership boundary as the authoritative long-term memory core for
+  information about a person. Chat remains the first mature adapter rather than the
+  domain definition; Agent workflow state, procedural execution memory, complete
+  document stores, and live source-system state stay outside the core.
+- Reframe v0.9 around held-out high-quality personal retrieval. PostgreSQL remains
+  authoritative while pgvector and Graphiti provide derived candidates that must pass
+  exact-scope Store revalidation; ease of minimal configuration is not the v0.9 target.
+
 ### Changed
 
 - Graphiti temporal projection v3 now carries authoritative evidence observation time,

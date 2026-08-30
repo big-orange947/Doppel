@@ -13,7 +13,8 @@ import sys
 import unicodedata
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -521,6 +522,86 @@ def load_memory_quality_dataset(
 ) -> MemoryQualityDataset:
     with Path(path).open(encoding="utf-8") as source:
         return MemoryQualityDataset.model_validate(json.load(source))
+
+
+def build_metamorphic_memory_quality_dataset(
+    dataset: MemoryQualityDataset,
+    replacements: Mapping[str, str],
+    *,
+    variant: str,
+) -> MemoryQualityDataset:
+    """Build an evidence-equivalent dataset with substituted domain entities.
+
+    The replacement is deliberately limited to natural-language inputs and gold
+    renderings. Scope names, actors, timestamps, message IDs, evidence groups, and
+    forbidden evidence remain byte-for-byte equivalent. This makes the variant useful
+    for catching retrieval logic that recognizes fixture vocabulary instead of general
+    query structure.
+
+    Replacements are simultaneous rather than sequential, so a target can never be
+    processed again during the same transformation. Every requested source term must
+    occur at least once; a miss is treated as a stale or invalid quality fixture.
+    """
+
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", variant):
+        raise ValueError("metamorphic variant must be a lowercase stable identifier")
+    normalized = dict(replacements)
+    if not normalized:
+        raise ValueError("metamorphic replacements must not be empty")
+    if any(not source or not target for source, target in normalized.items()):
+        raise ValueError("metamorphic replacement terms must not be empty")
+    if any(source == target for source, target in normalized.items()):
+        raise ValueError("metamorphic replacement must change every source term")
+    if len(set(normalized.values())) != len(normalized):
+        raise ValueError("metamorphic replacement targets must be unique")
+
+    pattern = re.compile(
+        "|".join(re.escape(source) for source in sorted(normalized, key=len, reverse=True))
+    )
+    occurrences: Counter[str] = Counter()
+
+    def replace_text(value: str) -> str:
+        def substitute(match: re.Match[str]) -> str:
+            source = match.group(0)
+            occurrences[source] += 1
+            return normalized[source]
+
+        return pattern.sub(substitute, value)
+
+    original = dataset.model_dump(mode="json")
+    transformed = deepcopy(original)
+    for case in transformed["cases"]:
+        for message in case["messages"]:
+            message["text"] = replace_text(message["text"])
+        for memory in case["gold_memories"]:
+            memory["content"] = replace_text(memory["content"])
+        for query in case["queries"]:
+            query["text"] = replace_text(query["text"])
+
+    missing = sorted(set(normalized).difference(occurrences))
+    if missing:
+        raise ValueError(
+            f"metamorphic source terms are absent from quality text: {missing}"
+        )
+
+    if _without_quality_language(original) != _without_quality_language(transformed):
+        raise AssertionError("metamorphic transformation changed the evidence graph")
+    transformed["name"] = f"{dataset.name}.metamorphic.{variant}"
+    return MemoryQualityDataset.model_validate(transformed)
+
+
+def _without_quality_language(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a structural copy suitable for evidence-graph comparison."""
+
+    stripped = deepcopy(payload)
+    for case in stripped["cases"]:
+        for message in case["messages"]:
+            message["text"] = ""
+        for memory in case["gold_memories"]:
+            memory["content"] = ""
+        for query in case["queries"]:
+            query["text"] = ""
+    return stripped
 
 
 async def run_memory_extraction_quality_benchmark(

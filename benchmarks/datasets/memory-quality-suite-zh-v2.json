@@ -1,0 +1,39 @@
+{
+  "suite_version": 2,
+  "name": "doppel.personal-memory-retrieval.zh.v2",
+  "language": "zh-CN",
+  "status": "draft",
+  "members": [
+    {
+      "member_id": "legacy-v1-dev",
+      "partition": "dev",
+      "dataset": "memory-quality-zh-v1.json",
+      "frozen": false
+    }
+  ],
+  "metamorphic_variants": [
+    {
+      "variant_id": "fictional-entities-v1",
+      "source_member_id": "legacy-v1-dev",
+      "replacements": {
+        "香菜": "茴香",
+        "蓝色": "紫色",
+        "绿色": "黄色",
+        "花生": "芒果",
+        "年糕": "团子",
+        "豆包": "麻薯",
+        "上海": "澜州",
+        "北京": "雾城",
+        "咖啡": "可乐",
+        "AB型": "MN型"
+      }
+    }
+  ],
+  "requirements": {
+    "required_partitions": ["dev", "heldout", "adversarial"],
+    "min_case_count": 150,
+    "min_message_count": 1500,
+    "min_query_count": 150,
+    "min_user_count": 10
+  }
+}

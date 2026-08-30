@@ -46,6 +46,12 @@ Doppel 不负责：
 - 确认 UI、模型/账号选择、API key 托管或强制 prompt 模板；
 - 替开发者决定哪些记忆应该参与当前回复。
 
+这里的“个人记忆与上下文中枢”有明确的所有权边界：Doppel 作为关于个人的长期事实、状态、
+经历、关系与证据的权威核心，不接管 Agent 的工作流 checkpoint、程序性任务经验、完整文档库或
+日历/邮件等实时业务事实源。聊天是当前最成熟的输入适配器，不是领域边界。Graphiti 与 pgvector
+始终是权威 Store 的派生候选索引。完整约束见
+[`docs/personal-memory-boundary.md`](docs/personal-memory-boundary.md)。
+
 ## 安装
 
 核心包依赖 Pydantic 和异步 HTTP 客户端 httpx，默认包含 InMemory、SQLite 后端以及

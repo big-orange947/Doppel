@@ -49,6 +49,32 @@ an injected `PersonalMemoryAnalyzer` to the real exact-scope history, periodic m
 proposal, and Store path, so a local or hosted model can be evaluated without changing
 the dataset or granting it direct write access.
 
+## v0.9 personal-retrieval quality suite
+
+`memory-quality-suite-zh-v2.json` is the draft manifest for the next held-out personal
+retrieval evaluation. The suite deliberately keeps the existing v1 fixture as a
+development member; it does **not** relabel those 10 cases as a new, larger benchmark.
+The manifest declares publication gates of 150 cases, 1,500 messages, 150 queries, 10
+users, and non-empty dev/heldout/adversarial partitions. Until all gates pass and the
+manifest is marked frozen, its audit reports `publication_ready=false`:
+
+```bash
+uv run python -m benchmarks.quality_suite
+uv run python -m benchmarks.quality_suite --require-publication-ready
+```
+
+The second command intentionally exits non-zero while the suite remains a draft. A
+content-addressed suite fingerprint binds the manifest, every member dataset, and every
+metamorphic variant.
+
+The first generalization variant simultaneously substitutes fixture entities and
+domain words while preserving message IDs, scopes, actors, timestamps, required
+evidence, and forbidden evidence. Deterministic baselines must keep the same evidence
+recall, ranking, abstention, and isolation metrics after substitution. This is a guard
+against product code recognizing Shanghai, Beijing, cilantro, coffee, or other fixture
+vocabulary. Runtime modules are also statically prohibited from importing the
+repository-only `benchmarks` package.
+
 The extraction report measures:
 
 - gold memories whose labeled evidence is covered by a correctly attributed,

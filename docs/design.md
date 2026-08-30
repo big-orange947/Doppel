@@ -950,5 +950,6 @@ provenance 保存在 `raw.doppel_import`。
 - v0.8.1：类型感知的强化、衰减、归档和恢复（已完成）；
 - v0.8.2：显式纠正证据、开放冲突标记和 query provenance（已完成）；
 - v0.8.3：OpenAI-compatible reference provider 与配置/错误边界（已完成）；
-- v0.9.0：MemoEcho shadow mode、长期 dogfooding 和端到端质量报告；
+- v0.9.0：最高质量个人检索、held-out/对抗评测、Graphiti 消融、通用 reranking 与拒答校准；
+- v0.9.1：非破坏式 PersonalEvent envelope、跨来源个人证据和可审计 scope promotion；
 - v0.10.0：Agent tools、Server/CLI/Inspector 与 PyPI 发布准备。
