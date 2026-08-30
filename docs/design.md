@@ -770,7 +770,9 @@ temporal status、validity interval 或 event identity。v0.8.0 因此以组合�
 
 planner intent 是 lookup/current/history/planned/list/count/as_of。模型不能选择 scope、Store、memory
 ID、生命周期或答案；plan 绑定提问时刻、全部 exact scopes、subject、过滤条件、planner identity 和 config，
-执行前验证 pmq_ fingerprint。多个 scope 可以属于同一个人，但一个 query 不允许跨 user ID。
+执行前验证 pmq_ fingerprint。current/history/planned intent 在 planner 未提供 temporal statuses 时会
+分别绑定到 current+timeless/historical/planned 硬门，避免 intent 只是标签而检索集合仍然宽泛。
+多个 scope 可以属于同一个人，但一个 query 不允许跨 user ID。
 contact/custom subject ID 必须由 host 显式授权。
 
 默认 deterministic planner 只识别 current/history/planned/as_of/list/count 等封闭结构，不维护
@@ -778,15 +780,19 @@ contact/custom subject ID 必须由 host 显式授权。
 lexical/semantic retrieval 处理；固定 benchmark 文本不得反向进入查询代码。
 
 普通查询在 SemanticIndex 可用时先并行获取有界 lexical/semantic candidates，再按 candidate 提供的
-exact scope 和 memory ID 从 authoritative Store 重载；未知、孤儿、非 active personal-memory 和越权
-candidate 直接丢弃，因此不需要先扫描 2,000 条才能使用向量索引。结果 complete=false，明确表示
+exact scope 和 memory ID 从 authoritative Store 重载；未知、孤儿、越权以及不满足当前 plan 证据资格
+的 candidate 直接丢弃，因此不需要先扫描 2,000 条才能使用向量索引。owner/contact 查询在粗过滤和
+最终结构门两层拒绝 agent_output；这不等于拒绝有真实人类或派生证据的 candidate。结果
+complete=false，明确表示
 top-k 不是完整 snapshot。semantic provider 失败时可配置回退完整 lexical scan，warning 会进入结果。
 
 count 始终使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
 “一共几次”。SemanticIndex 是 top-k 协议，因此不参与 exact count 的集合定义；计数只使用完整
 结构/词法扫描。普通查询中，结构化条件仍是硬门禁，lexical/semantic 只能筛选或排序候选。
 
-as_of 使用 valid_from/valid_to，无区间的 historical/planned 不被猜测为当时有效。planned 默认
+history/as_of 可以读取 confirmed 以及带明确有效区间的 superseded/expired 历史记录；rejected 在任何
+个人事实查询中都不可见，current/lookup 不会把 inactive lifecycle 当成当前事实。as_of 使用
+valid_from/valid_to，无区间的 inactive/historical/planned 不被猜测为当时有效。planned 默认
 不会因为查询日期落在计划区间就被当成实际状态；只有明确 planned intent/过滤才返回计划。current 或
 as-of 同 topic 出现多个不同 active 内容时全部返回并标记 ambiguous，不以 recency 掩盖未整理冲突。
 

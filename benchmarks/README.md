@@ -101,6 +101,14 @@ Profiles are named by what actually executes: `lexical`, `lexical_vector`,
 5 users, dev/heldout/adversarial partitions) and is **not** frozen or
 publication-ready.
 
+The runner executes both a fixture-bound `oracle` planner mode (retrieval isolation)
+and the real domain-neutral deterministic planner (planner + retrieval baseline).
+Full hybrid is unavailable unless both vector and graph sources are live. Graph
+attribution reports unique edge/episode-to-final-hit links separately from unique
+accepted hits and unique queries; direct returned-edge counts do not prove a final-hit
+contribution. Reproducibility records a canonical payload hash in the report and a
+SHA-256 sidecar for the final serialized JSON, avoiding a self-referential file hash.
+
 Budget discipline: the runner performs **zero** external LLM calls and **zero** paid
 tokens. Graphiti relations are preseeded directly into Neo4j (local
 `BAAI/bge-small-zh-v1.5` embeddings via fastembed); pgvector uses the same local

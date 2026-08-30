@@ -641,22 +641,20 @@ async def _probe_postgres(
     *, host: str, port: int, database: str, user: str, password: str
 ) -> str:
     try:
-        import psycopg
+        import asyncpg
 
-        conn = psycopg.connect(
+        conn = await asyncpg.connect(
             host=host,
             port=port,
-            dbname=database,
+            database=database,
             user=user,
             password=password,
-            connect_timeout=3,
+            timeout=3,
         )
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
+            await conn.fetchval("SELECT 1")
         finally:
-            conn.close()
+            await conn.close()
         return ""
     except Exception as exc:  # noqa: BLE001 - structured unavailability
         return f"{type(exc).__name__}: {exc}"
@@ -828,11 +826,11 @@ def _evaluate_result(
                 temporal_violations += 1
         if not record.metadata.get("evidence"):
             provenance_failures += 1
-        if record.state in {
-            MemoryState.EXPIRED,
-            MemoryState.SUPERSEDED,
-            MemoryState.REJECTED,
-        }:
+        inactive_is_invalid = record.state == MemoryState.REJECTED or (
+            record.state in {MemoryState.EXPIRED, MemoryState.SUPERSEDED}
+            and result.plan.intent not in {"history", "as_of"}
+        )
+        if inactive_is_invalid:
             inactive_rejections += 1
         if str(getattr(record.authority, "value", "")) == "agent_output":
             agent_output_hits += 1
@@ -1454,7 +1452,6 @@ async def run_ablation(
                 },
             },
         }
-        report["hard_gate_failures"] = report.get("hard_gate_failures", [])
         report["elapsed_seconds"] = round(perf_counter() - started, 3)
         report["doppel_version"] = __version__
         report["generated_at"] = utc_now().isoformat()
@@ -1676,8 +1673,12 @@ def _build_final_hit_attribution(
         return {
             "available": False,
             "reason": "graph_direct diagnostic did not produce per-edge mapping",
-            "fallback_final_hit_contribution": None,
-            "rich_relation_final_hit_contribution": None,
+            "fallback_edge_final_hit_links": None,
+            "rich_edge_final_hit_links": None,
+            "unique_final_hits_with_fallback": None,
+            "unique_final_hits_with_rich": None,
+            "unique_queries_with_fallback": None,
+            "unique_queries_with_rich": None,
         }
     oracle_cases = [
         case
@@ -1687,8 +1688,12 @@ def _build_final_hit_attribution(
         and not case.get("error")
     ]
     by_query = {case["query_id"]: case for case in oracle_cases}
-    fallback_contribution = 0
-    rich_contribution = 0
+    fallback_links: set[tuple[str, str, str, str]] = set()
+    rich_links: set[tuple[str, str, str, str]] = set()
+    fallback_hits: set[tuple[str, str]] = set()
+    rich_hits: set[tuple[str, str]] = set()
+    fallback_queries: set[str] = set()
+    rich_queries: set[str] = set()
     mapped_queries = 0
     for query in dataset.queries:
         case = by_query.get(query.query_id)
@@ -1703,18 +1708,33 @@ def _build_final_hit_attribution(
             memory_id = str(row.get("memory_id") or "")
             if not memory_id or memory_id not in final_hits:
                 continue
+            link = (
+                query.query_id,
+                memory_id,
+                str(row.get("edge_uuid") or ""),
+                str(row.get("episode_uuid") or ""),
+            )
             if row.get("edge_kind") == "fallback":
-                fallback_contribution += 1
+                fallback_links.add(link)
+                fallback_hits.add((query.query_id, memory_id))
+                fallback_queries.add(query.query_id)
             else:
-                rich_contribution += 1
+                rich_links.add(link)
+                rich_hits.add((query.query_id, memory_id))
+                rich_queries.add(query.query_id)
     return {
         "available": True,
         "method": (
-            "edge_attribution_by_query refined by oracle lexical_graph final "
-            "accepted hits (Store revalidation + ranking)"
+            "unique edge/episode-to-hit links refined by oracle lexical_graph "
+            "final accepted hits (Store revalidation + ranking); link counts are "
+            "not unique hit counts"
         ),
-        "fallback_final_hit_contribution": fallback_contribution,
-        "rich_relation_final_hit_contribution": rich_contribution,
+        "fallback_edge_final_hit_links": len(fallback_links),
+        "rich_edge_final_hit_links": len(rich_links),
+        "unique_final_hits_with_fallback": len(fallback_hits),
+        "unique_final_hits_with_rich": len(rich_hits),
+        "unique_queries_with_fallback": len(fallback_queries),
+        "unique_queries_with_rich": len(rich_queries),
         "queries_with_mapping": mapped_queries,
     }
 
@@ -2008,16 +2028,29 @@ async def _async_main(args: argparse.Namespace) -> int:
         "executed_profiles": executed,
         "unavailable_profiles": unavailable,
         "dataset_fingerprint": report.get("suite_fingerprint", ""),
-        "report_sha256": "",
+        "canonical_payload_sha256": "",
+        "file_sha256_sidecar": (
+            str(Path(f"{args.output}.sha256").resolve())
+            if args.output is not None
+            else ""
+        ),
     }
     canonical = json.dumps(
         report, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
-    report["reproducibility"]["report_sha256"] = hashlib.sha256(canonical).hexdigest()
+    report["reproducibility"]["canonical_payload_sha256"] = hashlib.sha256(
+        canonical
+    ).hexdigest()
+    file_sha256 = ""
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+        report_bytes = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+        args.output.write_bytes(report_bytes)
+        file_sha256 = hashlib.sha256(report_bytes).hexdigest()
+        sidecar = Path(f"{args.output}.sha256")
+        sidecar.write_text(
+            f"{file_sha256}  {args.output.name}\n",
+            encoding="utf-8",
         )
     failures = _validate_report(report, args=args)
     print(
@@ -2031,6 +2064,7 @@ async def _async_main(args: argparse.Namespace) -> int:
                     "graph_final_hit_attribution", {}
                 ),
                 "reproducibility": report.get("reproducibility", {}),
+                "file_sha256": file_sha256,
                 "runtime": report.get("runtime", {}),
                 "metamorphic_safe": all(
                     item.get("safe", False)

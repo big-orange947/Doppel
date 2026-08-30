@@ -169,7 +169,7 @@ async def test_personal_query_quality_reports_lexical_gaps_without_hiding_them()
         "mode": "lexical-domain-neutral",
         "semantic_index": False,
         "planner": "doppel.deterministic-personal-memory-query-planner",
-        "planner_version": "3",
+        "planner_version": "4",
     }
     assert set(result["metrics"]) == {
         "missing_hit_count",

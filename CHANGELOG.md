@@ -31,9 +31,20 @@
   deferred_cross_subject partition); Graphiti edge counts are renamed to
   `returned_edge_counts` and true final-hit attribution is computed from engine
   accepted hits crossed with edge->episode->memory mappings; reports embed
-  reproducibility fields (command, commit, dataset fingerprint, report SHA-256).
+  reproducibility fields (command, commit, dataset fingerprint, canonical payload
+  hash, and a sidecar hash of the final report file).
 
 ### Changed
+
+- Personal-memory queries now derive one evidence-eligibility filter from the trusted
+  plan for full scans, lexical candidates, semantic candidates, and final Store
+  revalidation. Agent-authored output cannot become an owner/contact fact; human and
+  derived active candidates remain available. Current/history/planned intents supply
+  their domain-neutral temporal filter when a planner omits it. History/as-of queries
+  may recover superseded or expired records only with explicit validity evidence,
+  while current queries and all queries over rejected records remain closed. The
+  deterministic planner also accepts whitespace around explicit Chinese
+  year/month/day separators without guessing incomplete dates.
 
 - Add provisional `CompositeSemanticIndex` for parallel pgvector/Graphiti candidate
   retrieval. It performs exact-scope weighted RRF, forwards current/as-of instants only

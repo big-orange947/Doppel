@@ -24,10 +24,12 @@ from doppel_memory.intelligence import (
 from doppel_memory.models import (
     ACTIVE_MEMORY_STATES,
     Actor,
+    FactAuthority,
     MemoryFilter,
     MemoryIsolationError,
     MemoryRecord,
     MemoryScope,
+    MemoryState,
 )
 from doppel_memory.store import MemoryStore
 from doppel_memory.vector import (
@@ -207,7 +209,7 @@ class DeterministicPersonalMemoryQueryPlanner:
     """Domain-neutral baseline for temporal and aggregation structure only."""
 
     name = "doppel.deterministic-personal-memory-query-planner"
-    version = "3"
+    version = "4"
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
@@ -439,6 +441,9 @@ class PersonalMemoryQueryEngine:
             bound_scopes,
             allowed_subject_ids=allowed_subject_ids,
         )
+        temporal_statuses = _bind_temporal_statuses(
+            draft.intent, draft.temporal_statuses
+        )
         plan = PersonalMemoryQueryPlan(
             plan_id="",
             query=request.query,
@@ -448,7 +453,7 @@ class PersonalMemoryQueryEngine:
             search_text=draft.search_text,
             memory_types=draft.memory_types,
             topic_keys=draft.topic_keys,
-            temporal_statuses=draft.temporal_statuses,
+            temporal_statuses=temporal_statuses,
             subject=draft.subject,
             subject_id=subject_id,
             as_of=draft.as_of,
@@ -481,7 +486,7 @@ class PersonalMemoryQueryEngine:
             candidate_result = await self._read_candidates(bound)
             if candidate_result is None:
                 for scope in bound.scopes:
-                    records.extend(await self._read_scope(scope))
+                    records.extend(await self._read_scope(scope, bound))
                 (
                     semantic_scores,
                     semantic_sources,
@@ -499,7 +504,7 @@ class PersonalMemoryQueryEngine:
                 complete = False
         else:
             for scope in bound.scopes:
-                records.extend(await self._read_scope(scope))
+                records.extend(await self._read_scope(scope, bound))
             # A SemanticIndex is a bounded top-k interface. It may improve lookup
             # recall, but it cannot define an exhaustive set for an exact count.
             # Counts therefore use only the complete structural/lexical scan.
@@ -625,9 +630,12 @@ class PersonalMemoryQueryEngine:
         )
         return await self.execute(plan)
 
-    async def _read_scope(self, scope: MemoryScope) -> list[MemoryRecord]:
+    async def _read_scope(
+        self, scope: MemoryScope, plan: PersonalMemoryQueryPlan
+    ) -> list[MemoryRecord]:
         records: list[MemoryRecord] = []
         cursor = ""
+        filters = _query_memory_filter(plan)
         while True:
             remaining = self.config.max_records_per_scope - len(records)
             if remaining <= 0:
@@ -637,9 +645,7 @@ class PersonalMemoryQueryEngine:
                 )
             page = await self._store.scan(
                 scope,
-                filters=MemoryFilter(
-                    tags={"personal-memory"}, states=set(ACTIVE_MEMORY_STATES)
-                ),
+                filters=filters,
                 cursor=cursor,
                 limit=min(self.config.page_size, remaining),
             )
@@ -695,9 +701,7 @@ class PersonalMemoryQueryEngine:
         intentionally never enter this top-k path.
         """
         assert self._semantic_index is not None
-        filters = MemoryFilter(
-            tags={"personal-memory"}, states=set(ACTIVE_MEMORY_STATES)
-        )
+        filters = _query_memory_filter(plan)
         lexical_result, semantic_result = await asyncio.gather(
             self._store.search(
                 plan.search_text,
@@ -760,9 +764,9 @@ class PersonalMemoryQueryEngine:
             record
             for record in loaded
             if record is not None
-            and record.state in ACTIVE_MEMORY_STATES
             and "personal-memory" in record.tags
             and record.scope.scope_key in allowed_scopes
+            and _is_query_record_eligible(record, plan)
         ]
         known_ids = {
             (record.scope.scope_key, record.memory_id) for record in records
@@ -834,9 +838,7 @@ class PersonalMemoryQueryEngine:
         try:
             candidates = await self._search_semantic_candidates(
                 plan,
-                MemoryFilter(
-                    tags={"personal-memory"}, states=set(ACTIVE_MEMORY_STATES)
-                ),
+                _query_memory_filter(plan),
             )
         except Exception as exc:
             if not self.config.semantic_fallback_to_lexical:
@@ -925,6 +927,8 @@ def _bind_subject_id(
 def _structural_match(
     record: MemoryRecord, plan: PersonalMemoryQueryPlan
 ) -> tuple[datetime, list[str]] | None:
+    if not _is_query_record_eligible(record, plan):
+        return None
     if _metadata_text(record, "subject") != plan.subject:
         return None
     if _metadata_text(record, "subject_id") != plan.subject_id.lower():
@@ -987,6 +991,102 @@ def _structural_match(
     ):
         reasons.append("valid_at_now")
     return effective_at, reasons
+
+
+def _visible_memory_states(plan: PersonalMemoryQueryPlan) -> frozenset[MemoryState]:
+    """Return lifecycle states that may supply evidence for this query intent.
+
+    Lifecycle and temporal validity are deliberately separate. Current/ordinary
+    queries keep the established active-state behavior. Historical point-in-time
+    queries may inspect inactive, previously authoritative records, but the final
+    eligibility gate below requires an explicit validity interval and never admits
+    rejected records.
+    """
+
+    if plan.intent in {
+        PersonalMemoryQueryIntent.HISTORY,
+        PersonalMemoryQueryIntent.AS_OF,
+    } or plan.as_of is not None:
+        return frozenset(
+            {
+                MemoryState.CANDIDATE,
+                MemoryState.CONFIRMED,
+                MemoryState.SUPERSEDED,
+                MemoryState.EXPIRED,
+            }
+        )
+    return ACTIVE_MEMORY_STATES
+
+
+def _bind_temporal_statuses(
+    intent: str, temporal_statuses: Sequence[str]
+) -> list[str]:
+    """Apply intent semantics when a planner omits the equivalent hard filter.
+
+    An intent must not merely decorate a query plan: ``current``, ``history``, and
+    ``planned`` each imply a safe temporal evidence class. Explicit planner filters
+    remain authoritative, while an omitted list receives the domain-neutral default.
+    """
+
+    if temporal_statuses:
+        return list(temporal_statuses)
+    if intent == PersonalMemoryQueryIntent.CURRENT:
+        return [MemoryTemporalStatus.CURRENT, MemoryTemporalStatus.TIMELESS]
+    if intent == PersonalMemoryQueryIntent.HISTORY:
+        return [MemoryTemporalStatus.HISTORICAL]
+    if intent == PersonalMemoryQueryIntent.PLANNED:
+        return [MemoryTemporalStatus.PLANNED]
+    return []
+
+
+def _query_memory_filter(plan: PersonalMemoryQueryPlan) -> MemoryFilter:
+    """Build the same coarse eligibility filter for every candidate path."""
+
+    excluded_authorities = (
+        None
+        if plan.subject == Actor.AGENT
+        else {FactAuthority.AGENT_OUTPUT}
+    )
+    return MemoryFilter(
+        tags={"personal-memory"},
+        states=set(_visible_memory_states(plan)),
+        exclude_authorities=excluded_authorities,
+    )
+
+
+def _is_query_record_eligible(
+    record: MemoryRecord, plan: PersonalMemoryQueryPlan
+) -> bool:
+    """Final defense-in-depth gate for lifecycle and factual authority.
+
+    Stores and indexes are expected to honor ``MemoryFilter``, but a custom or stale
+    implementation must not be able to turn Agent output into a human fact or make an
+    inactive record current merely by returning it as a candidate.
+    """
+
+    if record.state not in _visible_memory_states(plan):
+        return False
+    if (
+        record.authority == FactAuthority.AGENT_OUTPUT
+        and plan.subject != Actor.AGENT
+    ):
+        return False
+    if record.state not in {MemoryState.SUPERSEDED, MemoryState.EXPIRED}:
+        return True
+
+    valid_from = _metadata_time(record, "valid_from")
+    valid_to = _metadata_time(record, "valid_to")
+    if valid_from is None and valid_to is None:
+        return False
+    if plan.intent == PersonalMemoryQueryIntent.HISTORY:
+        return _metadata_text(record, "temporal_status") == (
+            MemoryTemporalStatus.HISTORICAL
+        )
+    if plan.as_of is None:
+        return False
+    if valid_from is not None and valid_from > plan.as_of:
+        return False
+    return valid_to is None or valid_to >= plan.as_of
 
 
 def _rank_score(
@@ -1270,7 +1370,9 @@ def _search_text(query: str) -> str:
 
 def _explicit_as_of(query: str) -> datetime | None:
     iso_match = re.search(
-        r"(?P<year>20\d{2})[-/年](?P<month>\d{1,2})[-/月](?P<day>\d{1,2})日?",
+        r"(?P<year>20\d{2})\s*[-/年]\s*"
+        r"(?P<month>\d{1,2})\s*[-/月]\s*"
+        r"(?P<day>\d{1,2})\s*日?",
         query,
     )
     if iso_match is None:

@@ -64,6 +64,9 @@ def _record(
     subject: str = Actor.OWNER,
     subject_id: str = "",
     revision_kind: str = "assertion",
+    actor: str = Actor.OWNER,
+    authority: FactAuthority = FactAuthority.HUMAN_SELF,
+    state: MemoryState = MemoryState.CANDIDATE,
 ) -> MemoryRecord:
     created_at = datetime(2026, 1, day, tzinfo=UTC)
     return MemoryRecord(
@@ -71,9 +74,9 @@ def _record(
         scope=scope,
         content=content,
         kind="fact",
-        actor=Actor.OWNER,
-        authority=FactAuthority.HUMAN_SELF,
-        state=MemoryState.CANDIDATE,
+        actor=actor,
+        authority=authority,
+        state=state,
         tags=["personal-memory", memory_type],
         source_message_id=f"message-{memory_id}",
         extractor="tests.personal-memory",
@@ -113,6 +116,12 @@ class _DraftPlanner:
     ) -> PersonalMemoryQueryDraft:
         self.requests.append(request)
         return PersonalMemoryQueryDraft.model_validate(self.draft)
+
+
+class _FilterIgnoringStore(InMemoryStore):
+    async def scan(self, scope, *, filters=None, cursor="", limit=100):
+        del filters
+        return await super().scan(scope, filters=None, cursor=cursor, limit=limit)
 
 
 async def test_current_residence_excludes_planned_and_historical_records() -> None:
@@ -352,6 +361,7 @@ async def test_as_of_query_uses_explicit_validity_intervals() -> None:
             day=1,
             valid_from=datetime(2024, 1, 1, tzinfo=UTC),
             valid_to=datetime(2024, 12, 31, 23, 59, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
         ),
         _record(
             "home-shanghai-2025",
@@ -361,6 +371,7 @@ async def test_as_of_query_uses_explicit_validity_intervals() -> None:
             topic_key="residence.primary",
             day=2,
             valid_from=datetime(2025, 1, 1, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
         ),
     )
 
@@ -376,6 +387,335 @@ async def test_as_of_query_uses_explicit_validity_intervals() -> None:
     assert [hit.record.memory_id for hit in result.hits] == ["home-beijing-2024"]
 
 
+async def test_history_query_can_read_superseded_record_with_explicit_interval() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "old-role",
+            "用户过去担任设计总监。",
+            memory_type="state",
+            temporal_status="historical",
+            topic_key="employment.primary",
+            day=1,
+            valid_from=datetime(2024, 1, 1, tzinfo=UTC),
+            valid_to=datetime(2025, 12, 31, tzinfo=UTC),
+            state=MemoryState.SUPERSEDED,
+        ),
+        _record(
+            "current-role",
+            "用户目前担任产品经理。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="employment.primary",
+            day=2,
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="history",
+            search_text="",
+            temporal_statuses=["historical"],
+            subject="owner",
+        ),
+        "我过去做什么工作？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["old-role"]
+
+
+async def test_intent_supplies_missing_domain_neutral_temporal_filter() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "past-trip",
+            "用户去年去过香港。",
+            memory_type="episode",
+            temporal_status="historical",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+        _record(
+            "future-trip",
+            "用户计划下个月去香港。",
+            memory_type="plan",
+            temporal_status="planned",
+            day=2,
+            state=MemoryState.CONFIRMED,
+        ),
+        _record(
+            "current-home",
+            "用户目前住在上海。",
+            memory_type="state",
+            temporal_status="current",
+            day=3,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    engine = PersonalMemoryQueryEngine(store)
+
+    history = await engine.query(
+        _DraftPlanner(intent="history", search_text="", subject="owner"),
+        "我以前去过哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+    planned = await engine.query(
+        _DraftPlanner(intent="planned", search_text="", subject="owner"),
+        "我接下来有什么计划？",
+        [SCOPE],
+        now=NOW,
+    )
+    current = await engine.query(
+        _DraftPlanner(intent="current", search_text="", subject="owner"),
+        "我现在住在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert history.plan.temporal_statuses == ["historical"]
+    assert [hit.record.memory_id for hit in history.hits] == ["past-trip"]
+    assert planned.plan.temporal_statuses == ["planned"]
+    assert [hit.record.memory_id for hit in planned.hits] == ["future-trip"]
+    assert current.plan.temporal_statuses == ["current", "timeless"]
+    assert [hit.record.memory_id for hit in current.hits] == ["current-home"]
+
+
+async def test_as_of_query_can_read_superseded_record_only_inside_interval() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "old-role",
+            "用户当时担任设计总监。",
+            memory_type="state",
+            temporal_status="historical",
+            day=1,
+            valid_from=datetime(2024, 1, 1, tzinfo=UTC),
+            valid_to=datetime(2025, 12, 31, tzinfo=UTC),
+            state=MemoryState.SUPERSEDED,
+        ),
+    )
+
+    inside = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="as_of",
+            search_text="",
+            as_of=datetime(2025, 6, 1, tzinfo=UTC),
+            subject="owner",
+        ),
+        "2025 年 6 月 1 日是什么岗位？",
+        [SCOPE],
+        now=NOW,
+    )
+    outside = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="as_of",
+            search_text="",
+            as_of=datetime(2026, 6, 1, tzinfo=UTC),
+            subject="owner",
+        ),
+        "2026 年 6 月 1 日是什么岗位？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in inside.hits] == ["old-role"]
+    assert outside.hits == []
+
+
+async def test_historical_expired_record_requires_interval_and_rejected_is_never_visible() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "archived-trip",
+            "用户曾临时住在北京。",
+            memory_type="state",
+            temporal_status="historical",
+            day=1,
+            valid_from=datetime(2025, 3, 1, tzinfo=UTC),
+            valid_to=datetime(2025, 5, 1, tzinfo=UTC),
+            state=MemoryState.EXPIRED,
+        ),
+        _record(
+            "interval-free-archive",
+            "用户可能曾住在别处。",
+            memory_type="state",
+            temporal_status="historical",
+            day=2,
+            state=MemoryState.EXPIRED,
+        ),
+        _record(
+            "rejected-history",
+            "已经否定的历史说法。",
+            memory_type="state",
+            temporal_status="historical",
+            day=3,
+            valid_from=datetime(2025, 3, 1, tzinfo=UTC),
+            valid_to=datetime(2025, 5, 1, tzinfo=UTC),
+            state=MemoryState.REJECTED,
+        ),
+    )
+
+    history = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="history",
+            search_text="",
+            temporal_statuses=["historical"],
+            subject="owner",
+        ),
+        "我以前住过哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+    current = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="",
+            temporal_statuses=["current", "timeless"],
+            subject="owner",
+        ),
+        "我现在住哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in history.hits] == ["archived-trip"]
+    assert current.hits == []
+
+
+async def test_human_candidates_remain_visible_but_agent_output_cannot_be_owner_fact() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "human-candidate",
+            "用户现在偏好安静的环境。",
+            memory_type="preference",
+            temporal_status="current",
+            day=1,
+        ),
+        _record(
+            "derived-candidate",
+            "有证据摘要显示用户当前偏好短回复。",
+            memory_type="preference",
+            temporal_status="current",
+            day=2,
+            authority=FactAuthority.DERIVED_SUMMARY,
+        ),
+        _record(
+            "agent-candidate",
+            "Agent 猜测用户可能喜欢养狗。",
+            memory_type="fact",
+            temporal_status="current",
+            day=3,
+            actor=Actor.AGENT,
+            authority=FactAuthority.AGENT_OUTPUT,
+        ),
+        _record(
+            "agent-confirmed",
+            "Agent 声称用户会搬家。",
+            memory_type="fact",
+            temporal_status="current",
+            day=4,
+            actor=Actor.AGENT,
+            authority=FactAuthority.AGENT_OUTPUT,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="",
+            temporal_statuses=["current", "timeless"],
+            subject="owner",
+        ),
+        "关于我有什么当前记忆？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert {hit.record.memory_id for hit in result.hits} == {
+        "human-candidate",
+        "derived-candidate",
+    }
+
+
+async def test_agent_output_is_eligible_only_for_agent_subject_query() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "agent-own-output",
+            "Agent 当前采用简短回答策略。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            subject=Actor.AGENT,
+            subject_id=SCOPE.agent_id,
+            actor=Actor.AGENT,
+            authority=FactAuthority.AGENT_OUTPUT,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="",
+            temporal_statuses=["current"],
+            subject="agent",
+        ),
+        "Agent 当前采用什么回答策略？",
+        [SCOPE],
+        now=NOW,
+        default_subject=Actor.AGENT,
+        default_subject_id=SCOPE.agent_id,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["agent-own-output"]
+
+
+async def test_final_gate_rejects_agent_output_when_store_ignores_filters() -> None:
+    store = _FilterIgnoringStore()
+    await _put(
+        store,
+        _record(
+            "ignored-filter-agent-output",
+            "Agent 声称用户当前住在错误地点。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            actor=Actor.AGENT,
+            authority=FactAuthority.AGENT_OUTPUT,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="",
+            temporal_statuses=["current"],
+            subject="owner",
+        ),
+        "我现在住在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.scanned_record_count == 1
+    assert result.hits == []
+
+
 async def test_as_of_query_does_not_treat_an_unfulfilled_plan_as_actual() -> None:
     store = InMemoryStore()
     await _put(
@@ -388,6 +728,7 @@ async def test_as_of_query_does_not_treat_an_unfulfilled_plan_as_actual() -> Non
             topic_key="residence.primary",
             day=1,
             valid_from=datetime(2025, 1, 1, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
         ),
         _record(
             "planned-beijing",
@@ -398,6 +739,7 @@ async def test_as_of_query_does_not_treat_an_unfulfilled_plan_as_actual() -> Non
             day=2,
             valid_from=datetime(2026, 9, 1, tzinfo=UTC),
             valid_to=datetime(2026, 10, 31, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
         ),
     )
 
@@ -519,6 +861,52 @@ async def test_pet_name_question_reduces_to_retrievable_entity_text() -> None:
     )
 
     assert draft.search_text == "猫"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "我在2024年6月15日住在哪里？",
+        "我在 2024 年 6 月 15 日住在哪里？",
+        "我在2024-06-15住在哪里？",
+        "我在2024/06/15住在哪里？",
+    ],
+)
+async def test_deterministic_planner_parses_explicit_complete_dates(
+    query: str,
+) -> None:
+    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
+        PersonalMemoryQueryRequest(
+            query=query,
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.intent == PersonalMemoryQueryIntent.AS_OF
+    assert draft.as_of == datetime(2024, 6, 15, 12, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "2024 年 6 月我住在哪里？",
+        "2024 年 2 月 30 日我住在哪里？",
+    ],
+)
+async def test_deterministic_planner_does_not_guess_incomplete_or_invalid_dates(
+    query: str,
+) -> None:
+    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
+        PersonalMemoryQueryRequest(
+            query=query,
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.intent != PersonalMemoryQueryIntent.AS_OF
+    assert draft.as_of is None
 
 
 @pytest.mark.parametrize(
@@ -749,6 +1137,21 @@ class _CountingSemanticIndex:
         return []
 
 
+class _AgentOutputSemanticIndex:
+    """Ignores filters to exercise the engine's final authority gate."""
+
+    async def search(self, query, scopes, *, filters=None, limit=10):
+        del query, filters, limit
+        return [
+            RecallResult(
+                fact="malicious Agent-authored owner candidate",
+                memory_id="semantic-agent-output",
+                scope=scopes[0],
+                similarity=1.0,
+            )
+        ]
+
+
 class _TemporalSemanticIndex:
     def __init__(self) -> None:
         self.search_calls = 0
@@ -818,6 +1221,7 @@ async def test_as_of_query_passes_the_requested_instant_to_temporal_index() -> N
             valid_from=datetime(2024, 1, 1, tzinfo=UTC),
             valid_to=datetime(2024, 12, 31, 23, 59, tzinfo=UTC),
             day=1,
+            state=MemoryState.CONFIRMED,
         ),
     )
     semantic_index = _TemporalSemanticIndex()
@@ -894,6 +1298,35 @@ async def test_low_semantic_similarity_does_not_turn_every_candidate_into_a_hit(
 
     assert result.hits == []
     assert result.complete is False
+
+
+async def test_semantic_candidate_cannot_bypass_agent_output_authority_gate() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "semantic-agent-output",
+            "Agent 猜测用户现在住在某个城市。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            actor=Actor.AGENT,
+            authority=FactAuthority.AGENT_OUTPUT,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(
+        store, semantic_index=_AgentOutputSemanticIndex()
+    ).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "我现在住在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.hits == []
+    assert result.matched_record_count == 0
 
 
 async def test_semantic_candidates_only_score_known_authorized_records() -> None:

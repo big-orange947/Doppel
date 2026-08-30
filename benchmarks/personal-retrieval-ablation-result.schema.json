@@ -7,7 +7,8 @@
     "runner", "dataset", "environment", "runtime", "planner_modes",
     "profiles", "diagnostics", "comparisons", "hard_gates", "cases",
     "deferred_queries", "graph_final_hit_attribution", "metamorphic",
-    "elapsed_seconds", "doppel_version", "generated_at", "suite_fingerprint"
+    "reproducibility", "elapsed_seconds", "doppel_version", "generated_at",
+    "suite_fingerprint"
   ],
   "properties": {
     "runner": {"const": "doppel.personal-retrieval-ablation.v1"},
@@ -65,7 +66,7 @@
     "threshold_sweep": {"type": "object"},
     "reproducibility": {
       "type": "object",
-      "required": ["output_path", "command", "commit_hash", "planner_modes", "requested_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "report_sha256"]
+      "required": ["output_path", "command", "commit_hash", "planner_modes", "requested_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "canonical_payload_sha256", "file_sha256_sidecar"]
     },
     "elapsed_seconds": {"type": "number"},
     "doppel_version": {"type": "string"},

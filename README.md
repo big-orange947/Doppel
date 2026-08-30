@@ -1210,6 +1210,12 @@ fallback vs rich 图边、按 `semantic_source:` 统计 vector/graph/both 贡献
 planner 的时间/意图识别能力如实标注（`as_of_recognized`）。数据集为候选草案，
 未冻结、非 publication-ready。
 
+评测同时运行 fixture-bound `oracle` plan 和真实 deterministic plan：前者隔离检索/索引质量，后者单独
+暴露自然语言规划缺口。`lexical_vector_graph` 只有在 vector 与 graph 同时可用时才执行，单源 Composite
+降级不会冒充 full hybrid。普通 owner/contact 事实查询会在 Store filter 与最终重载门同时拒绝
+`agent_output`；current/history/planned intent 会在 planner 漏填时补上对应的领域无关时间硬门；
+history/as-of 可读取带明确有效区间的 superseded/expired 记录，current 不可读取。
+
 v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
 计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，
 当前保留 3 个 missing evidence hit 和 1 个 over-broad hit，不用特判抹平；CI 只冻结不回退上限，

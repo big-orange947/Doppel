@@ -281,6 +281,18 @@ class DatasetTest(unittest.TestCase):
             "deferred_queries": [],
             "graph_final_hit_attribution": {"available": False},
             "metamorphic": {},
+            "reproducibility": {
+                "output_path": "report.json",
+                "command": "python -m benchmark",
+                "commit_hash": "a" * 40,
+                "planner_modes": ["oracle", "deterministic"],
+                "requested_profiles": ["lexical"],
+                "executed_profiles": ["oracle:lexical"],
+                "unavailable_profiles": [],
+                "dataset_fingerprint": "f" * 64,
+                "canonical_payload_sha256": "c" * 64,
+                "file_sha256_sidecar": "report.json.sha256",
+            },
             "elapsed_seconds": 1.0,
             "doppel_version": "0.9",
             "generated_at": "2026-08-30T00:00:00Z",
@@ -803,6 +815,62 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
             per_mode={"oracle": {"lexical_graph": {}}},
         )
         self.assertFalse(attribution["available"])
+
+    def test_graph_attribution_separates_links_hits_and_queries(self) -> None:
+        from benchmarks.personal_retrieval_ablation import _build_final_hit_attribution
+
+        dataset = _dataset()
+        query_id = dataset.queries[0].query_id
+        report = {
+            "diagnostics": {
+                "graph_direct": {
+                    "edge_attribution_by_query": {
+                        query_id: [
+                            {
+                                "memory_id": "m-residence-current",
+                                "edge_uuid": "edge-fallback-1",
+                                "episode_uuid": "episode-1",
+                                "edge_kind": "fallback",
+                            },
+                            {
+                                "memory_id": "m-residence-current",
+                                "edge_uuid": "edge-fallback-2",
+                                "episode_uuid": "episode-1",
+                                "edge_kind": "fallback",
+                            },
+                            {
+                                "memory_id": "m-item-camera",
+                                "edge_uuid": "edge-rich-1",
+                                "episode_uuid": "episode-2",
+                                "edge_kind": "rich",
+                            },
+                        ]
+                    }
+                }
+            },
+            "cases": [
+                {
+                    "query_id": query_id,
+                    "mode": "oracle",
+                    "profile": "lexical_graph",
+                    "error": "",
+                    "hits": ["m-residence-current", "m-item-camera"],
+                }
+            ],
+        }
+        attribution = _build_final_hit_attribution(
+            report=report,
+            dataset=dataset,
+            per_mode={"oracle": {"lexical_graph": {}}},
+        )
+
+        self.assertTrue(attribution["available"])
+        self.assertEqual(attribution["fallback_edge_final_hit_links"], 2)
+        self.assertEqual(attribution["rich_edge_final_hit_links"], 1)
+        self.assertEqual(attribution["unique_final_hits_with_fallback"], 1)
+        self.assertEqual(attribution["unique_final_hits_with_rich"], 1)
+        self.assertEqual(attribution["unique_queries_with_fallback"], 1)
+        self.assertEqual(attribution["unique_queries_with_rich"], 1)
 
     def test_reproducibility_cli_args_exist(self) -> None:
         from benchmarks.personal_retrieval_ablation import _parser
