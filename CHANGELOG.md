@@ -14,6 +14,15 @@
 
 ### Changed
 
+- Add provisional `CompositeSemanticIndex` for parallel pgvector/Graphiti candidate
+  retrieval. It performs exact-scope weighted RRF, forwards current/as-of instants only
+  to temporal-capable sources, degrades per known unavailable source, and exposes the
+  contributing source names in personal-query hit reasons after authoritative Store
+  reload.
+- Candidate deduplication now keys memory IDs by exact scope as well as ID, so two
+  explicitly authorized scopes cannot hide each other when a custom Store reuses an
+  ID namespace.
+
 - Graphiti temporal projection v3 now carries authoritative evidence observation time,
   temporal status, and valid-from/valid-to coordinates into each episode. Current and
   as-of personal queries use the additive `TemporalSemanticIndex.search_at()` path;

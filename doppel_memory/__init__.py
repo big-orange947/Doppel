@@ -202,6 +202,7 @@ from doppel_memory.style import (
     StyleQualityReport,
 )
 from doppel_memory.vector import (
+    CompositeSemanticIndex,
     EmbeddingProvider,
     EmbeddingProviderError,
     HybridRetrievalStrategy,
@@ -231,6 +232,7 @@ __all__ = [
     "BatchTaskContext",
     "BatchTaskRunner",
     "ChatMessage",
+    "CompositeSemanticIndex",
     "ConformanceError",
     "ConformanceIssue",
     "ConsolidationAction",

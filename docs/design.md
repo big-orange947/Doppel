@@ -953,3 +953,15 @@ provenance 保存在 `raw.doppel_import`。
 - v0.9.0：最高质量个人检索、held-out/对抗评测、Graphiti 消融、通用 reranking 与拒答校准；
 - v0.9.1：非破坏式 PersonalEvent envelope、跨来源个人证据和可审计 scope promotion；
 - v0.10.0：Agent tools、Server/CLI/Inspector 与 PyPI 发布准备。
+
+### v0.9 highest-quality personal retrieval
+
+v0.9 的完整配置允许 PostgreSQL、pgvector 和 Graphiti 同时工作。`CompositeSemanticIndex` 并行调用
+多个语义/时间索引，以 exact `(scope, memory_id)` 为候选身份执行 weighted RRF，并保留来源、原始
+排名、来源 similarity、权重和 RRF contribution。只有已知的 provider/index unavailable 错误可以按
+来源降级；意外数据库或程序错误继续抛出。所有融合候选仍由 `PersonalMemoryQueryEngine` 从权威 Store
+重载，Graphiti 或 pgvector 都不能单独证明 subject、authority、lifecycle、validity 或 provenance。
+
+current/as-of 查询通过 `TemporalSemanticIndex.search_at()` 把有效时点传给支持时间查询的来源；普通
+向量来源仍执行普通 search。返回的 query hit 用 `semantic_source:<name>` reasons 暴露实际贡献来源，
+使后续消融、reranking 和诊断不必把一个归一化 RRF 分数误认为跨查询可比较的语义置信度。

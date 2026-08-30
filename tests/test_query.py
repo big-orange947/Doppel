@@ -35,6 +35,7 @@ from doppel_memory.query import (
     PersonalMemoryQueryRequest,
     ReferencePersonalMemoryQueryPlanner,
 )
+from doppel_memory.vector import CompositeSemanticIndex
 
 SCOPE = MemoryScope(user_id="owner", agent_id="personal-agent")
 CONVERSATION_SCOPE = MemoryScope(
@@ -941,6 +942,37 @@ async def test_semantic_candidates_only_score_known_authorized_records() -> None
     assert "semantic_match" in result.hits[0].reasons
     assert result.scanned_record_count == 1
     assert result.complete is False
+
+
+async def test_composite_semantic_sources_are_exposed_as_query_reasons() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "semantic-chengdu",
+            "用户去成都旅行。",
+            memory_type="episode",
+            temporal_status="historical",
+            event_key="trip:chengdu",
+            day=1,
+        ),
+    )
+    composite = CompositeSemanticIndex(
+        {"vector": _SemanticIndex(), "graph": _SemanticIndex()}, rrf_k=10
+    )
+
+    result = await PersonalMemoryQueryEngine(
+        store, semantic_index=composite
+    ).query(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "蓉城之旅",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["semantic-chengdu"]
+    assert "semantic_source:vector" in result.hits[0].reasons
+    assert "semantic_source:graph" in result.hits[0].reasons
 
 
 async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> None:

@@ -30,7 +30,11 @@ from doppel_memory.models import (
     MemoryScope,
 )
 from doppel_memory.store import MemoryStore
-from doppel_memory.vector import SemanticIndex, TemporalSemanticIndex
+from doppel_memory.vector import (
+    CompositeRecallResult,
+    SemanticIndex,
+    TemporalSemanticIndex,
+)
 
 QueryIntent = Literal[
     "lookup", "current", "history", "planned", "list", "count", "as_of"
@@ -468,6 +472,7 @@ class PersonalMemoryQueryEngine:
         warnings: list[str] = []
         complete = True
         semantic_scores: dict[tuple[str, str], float] = {}
+        semantic_sources: dict[tuple[str, str], tuple[str, ...]] = {}
         if (
             self._semantic_index is not None
             and bound.search_text
@@ -477,12 +482,19 @@ class PersonalMemoryQueryEngine:
             if candidate_result is None:
                 for scope in bound.scopes:
                     records.extend(await self._read_scope(scope))
-                semantic_scores, semantic_warnings = await self._semantic_scores(
-                    bound, records
-                )
+                (
+                    semantic_scores,
+                    semantic_sources,
+                    semantic_warnings,
+                ) = await self._semantic_scores(bound, records)
                 warnings.extend(semantic_warnings)
             else:
-                records, semantic_scores, candidate_warnings = candidate_result
+                (
+                    records,
+                    semantic_scores,
+                    semantic_sources,
+                    candidate_warnings,
+                ) = candidate_result
                 warnings.extend(candidate_warnings)
                 complete = False
         else:
@@ -492,9 +504,11 @@ class PersonalMemoryQueryEngine:
             # recall, but it cannot define an exhaustive set for an exact count.
             # Counts therefore use only the complete structural/lexical scan.
             if bound.intent != PersonalMemoryQueryIntent.COUNT:
-                semantic_scores, semantic_warnings = await self._semantic_scores(
-                    bound, records
-                )
+                (
+                    semantic_scores,
+                    semantic_sources,
+                    semantic_warnings,
+                ) = await self._semantic_scores(bound, records)
                 warnings.extend(semantic_warnings)
         for scope in bound.scopes:
             conflict_records.extend(await self._read_conflicts(scope))
@@ -516,8 +530,12 @@ class PersonalMemoryQueryEngine:
             semantic_score = semantic_scores.get(
                 (record.scope.scope_key, record.memory_id), 0.0
             )
+            source_names = semantic_sources.get(
+                (record.scope.scope_key, record.memory_id), ()
+            )
             if semantic_score < self.config.minimum_semantic_score:
                 semantic_score = 0.0
+                source_names = ()
             if (
                 bound.search_text
                 and lexical_score < self.config.minimum_lexical_score
@@ -528,6 +546,7 @@ class PersonalMemoryQueryEngine:
                 reasons.append("lexical_match")
             if semantic_score >= self.config.minimum_semantic_score:
                 reasons.append("semantic_match")
+                reasons.extend(f"semantic_source:{name}" for name in source_names)
             matched.append(
                 (record, lexical_score, semantic_score, effective_at, reasons)
             )
@@ -665,7 +684,10 @@ class PersonalMemoryQueryEngine:
     async def _read_candidates(
         self, plan: PersonalMemoryQueryPlan
     ) -> tuple[
-        list[MemoryRecord], dict[tuple[str, str], float], list[str]
+        list[MemoryRecord],
+        dict[tuple[str, str], float],
+        dict[tuple[str, str], tuple[str, ...]],
+        list[str],
     ] | None:
         """Load a bounded authorized union of lexical and semantic candidates.
 
@@ -696,6 +718,7 @@ class PersonalMemoryQueryEngine:
         allowed_scopes = {scope.scope_key: scope for scope in plan.scopes}
         candidates: dict[tuple[str, str], MemoryScope] = {}
         semantic_scores: dict[tuple[str, str], float] = {}
+        semantic_sources: dict[tuple[str, str], list[str]] = {}
         for candidate in [*lexical_result, *semantic_result]:
             scope = candidate.scope
             memory_id = str(candidate.memory_id or "").strip()
@@ -722,6 +745,10 @@ class PersonalMemoryQueryEngine:
                 semantic_scores.get(key, 0.0),
                 min(max(float(candidate.similarity), 0.0), 1.0),
             )
+            source_names = semantic_sources.setdefault(key, [])
+            for source in _composite_semantic_sources(candidate):
+                if source not in source_names:
+                    source_names.append(source)
 
         loaded = await asyncio.gather(
             *(
@@ -743,7 +770,12 @@ class PersonalMemoryQueryEngine:
         semantic_scores = {
             key: score for key, score in semantic_scores.items() if key in known_ids
         }
-        return records, semantic_scores, [
+        bound_sources = {
+            key: tuple(sources)
+            for key, sources in semantic_sources.items()
+            if key in known_ids
+        }
+        return records, semantic_scores, bound_sources, [
             (
                 "used bounded index-first lexical and semantic candidates; "
                 "result is not an exhaustive scope snapshot"
@@ -792,9 +824,13 @@ class PersonalMemoryQueryEngine:
         self,
         plan: PersonalMemoryQueryPlan,
         records: Sequence[MemoryRecord],
-    ) -> tuple[dict[tuple[str, str], float], list[str]]:
+    ) -> tuple[
+        dict[tuple[str, str], float],
+        dict[tuple[str, str], tuple[str, ...]],
+        list[str],
+    ]:
         if self._semantic_index is None or not plan.search_text:
-            return {}, []
+            return {}, {}, []
         try:
             candidates = await self._search_semantic_candidates(
                 plan,
@@ -805,7 +841,7 @@ class PersonalMemoryQueryEngine:
         except Exception as exc:
             if not self.config.semantic_fallback_to_lexical:
                 raise
-            return {}, [
+            return {}, {}, [
                 f"semantic index unavailable; used lexical fallback: {type(exc).__name__}"
             ]
         allowed_scopes = {scope.scope_key for scope in plan.scopes}
@@ -813,6 +849,7 @@ class PersonalMemoryQueryEngine:
             (record.scope.scope_key, record.memory_id) for record in records
         }
         scores: dict[tuple[str, str], float] = {}
+        sources: dict[tuple[str, str], list[str]] = {}
         for candidate in candidates:
             memory_id = str(candidate.memory_id or "").strip()
             candidate_key = (
@@ -828,7 +865,11 @@ class PersonalMemoryQueryEngine:
                 continue
             score = min(max(float(candidate.similarity), 0.0), 1.0)
             scores[candidate_key] = max(scores.get(candidate_key, 0.0), score)
-        return scores, []
+            source_names = sources.setdefault(candidate_key, [])
+            for source in _composite_semantic_sources(candidate):
+                if source not in source_names:
+                    source_names.append(source)
+        return scores, {key: tuple(value) for key, value in sources.items()}, []
 
 
 def _bind_scopes(scopes: Sequence[MemoryScope]) -> list[MemoryScope]:
@@ -970,6 +1011,12 @@ def _rank_score(
         + recency_tiebreaker,
         6,
     )
+
+
+def _composite_semantic_sources(candidate: Any) -> tuple[str, ...]:
+    if not isinstance(candidate, CompositeRecallResult):
+        return ()
+    return tuple(dict.fromkeys(item.source for item in candidate.contributions))
 
 
 def _relevant_conflicts(

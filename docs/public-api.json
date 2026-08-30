@@ -76,6 +76,7 @@
       "ConsolidationRunner",
       "ConsolidationSourceSnapshot",
       "ConsolidationTransitionResult",
+      "CompositeSemanticIndex",
       "ContentPart",
       "ContentResolution",
       "ContentResolutionError",

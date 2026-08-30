@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import math
+import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
@@ -93,6 +94,177 @@ class TemporalSemanticIndex(SemanticIndex, Protocol):
         filters: MemoryFilter | None = None,
         limit: int = 10,
     ) -> Sequence[RecallResult]: ...
+
+
+class SemanticSourceContribution(BaseModel):
+    """One explainable source contribution to a fused semantic candidate."""
+
+    source: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    rank: int = Field(ge=1)
+    similarity: float = Field(ge=0.0, le=1.0)
+    weight: float = Field(gt=0.0)
+    rrf_score: float = Field(gt=0.0)
+
+
+class CompositeRecallResult(RecallResult):
+    """A RecallResult carrying per-index evidence for later query explanation."""
+
+    contributions: list[SemanticSourceContribution] = Field(min_length=1)
+
+
+class CompositeSemanticIndex:
+    """Parallel RRF over multiple semantic or temporal candidate indexes.
+
+    This composes pgvector and Graphiti without treating either as authoritative. It
+    does not query the Store itself; the PersonalMemoryQueryEngine continues to reload
+    every fused `(scope, memory_id)` before applying lifecycle and provenance gates.
+    """
+
+    def __init__(
+        self,
+        indexes: Mapping[str, SemanticIndex],
+        *,
+        weights: Mapping[str, float] | None = None,
+        rrf_k: int = 60,
+        candidate_multiplier: int = 4,
+    ) -> None:
+        self._indexes = dict(indexes)
+        if not self._indexes:
+            raise ValueError("composite semantic index requires at least one source")
+        invalid_names = sorted(
+            name
+            for name in self._indexes
+            if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", name) is None
+        )
+        if invalid_names:
+            raise ValueError(
+                f"invalid composite semantic source names: {invalid_names}"
+            )
+        configured_weights = dict(weights or {})
+        unknown_weights = sorted(set(configured_weights).difference(self._indexes))
+        if unknown_weights:
+            raise ValueError(
+                f"weights reference unknown semantic sources: {unknown_weights}"
+            )
+        self._weights = {
+            name: float(configured_weights.get(name, 1.0)) for name in self._indexes
+        }
+        if any(weight < 0 for weight in self._weights.values()):
+            raise ValueError("composite semantic weights must be non-negative")
+        if not any(weight > 0 for weight in self._weights.values()):
+            raise ValueError("at least one composite semantic weight must be positive")
+        if rrf_k < 1:
+            raise ValueError("composite semantic rrf_k must be positive")
+        if candidate_multiplier < 1:
+            raise ValueError(
+                "composite semantic candidate_multiplier must be positive"
+            )
+        self._rrf_k = rrf_k
+        self._candidate_multiplier = candidate_multiplier
+
+    async def search(
+        self,
+        query: str,
+        scopes: Sequence[MemoryScope],
+        *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> Sequence[RecallResult]:
+        return await self._search(
+            query, scopes, filters=filters, limit=limit, valid_at=None
+        )
+
+    async def search_at(
+        self,
+        query: str,
+        scopes: Sequence[MemoryScope],
+        *,
+        valid_at: datetime,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> Sequence[RecallResult]:
+        if valid_at.tzinfo is None:
+            raise ValueError("composite semantic valid_at must include a timezone")
+        return await self._search(
+            query, scopes, filters=filters, limit=limit, valid_at=valid_at
+        )
+
+    async def _search(
+        self,
+        query: str,
+        scopes: Sequence[MemoryScope],
+        *,
+        filters: MemoryFilter | None,
+        limit: int,
+        valid_at: datetime | None,
+    ) -> Sequence[RecallResult]:
+        if not scopes:
+            raise MemoryIsolationError(
+                "composite semantic search requires at least one exact scope"
+            )
+        if limit <= 0 or not str(query or "").strip():
+            return []
+        candidate_limit = limit * self._candidate_multiplier
+        active = [
+            (name, index)
+            for name, index in self._indexes.items()
+            if self._weights[name] > 0
+        ]
+        calls = [
+            self._search_source(
+                index,
+                query,
+                scopes,
+                filters=filters,
+                limit=candidate_limit,
+                valid_at=valid_at,
+            )
+            for _, index in active
+        ]
+        raw_results = await asyncio.gather(*calls, return_exceptions=True)
+        available: dict[str, Sequence[RecallResult]] = {}
+        unavailable: list[tuple[str, BaseException]] = []
+        for (name, _), result in zip(active, raw_results, strict=True):
+            if isinstance(result, (EmbeddingProviderError, SemanticIndexUnavailableError)):
+                unavailable.append((name, result))
+            elif isinstance(result, BaseException):
+                raise result
+            else:
+                available[name] = result
+        if not available:
+            detail = ", ".join(
+                f"{name}={type(error).__name__}" for name, error in unavailable
+            )
+            raise SemanticIndexUnavailableError(
+                f"all composite semantic sources are unavailable: {detail}"
+            )
+        return _semantic_rrf(
+            available,
+            scopes=scopes,
+            weights=self._weights,
+            rrf_k=self._rrf_k,
+            limit=limit,
+        )
+
+    @staticmethod
+    async def _search_source(
+        index: SemanticIndex,
+        query: str,
+        scopes: Sequence[MemoryScope],
+        *,
+        filters: MemoryFilter | None,
+        limit: int,
+        valid_at: datetime | None,
+    ) -> Sequence[RecallResult]:
+        if valid_at is not None and isinstance(index, TemporalSemanticIndex):
+            return await index.search_at(
+                query,
+                scopes,
+                valid_at=valid_at,
+                filters=filters,
+                limit=limit,
+            )
+        return await index.search(query, scopes, filters=filters, limit=limit)
 
 
 class VectorIndexConfig(BaseModel):
@@ -884,10 +1056,79 @@ def _rrf(
     ]
 
 
+def _semantic_rrf(
+    sources: Mapping[str, Sequence[RecallResult]],
+    *,
+    scopes: Sequence[MemoryScope],
+    weights: Mapping[str, float],
+    rrf_k: int,
+    limit: int,
+) -> list[CompositeRecallResult]:
+    allowed = {scope.scope_key for scope in scopes}
+    candidates: dict[tuple[str, ...], RecallResult] = {}
+    scores: dict[tuple[str, ...], float] = {}
+    best_rank: dict[tuple[str, ...], int] = {}
+    contributions: dict[tuple[str, ...], list[SemanticSourceContribution]] = {}
+    chains: dict[tuple[str, ...], list[str]] = {}
+
+    for source, items in sources.items():
+        weight = weights[source]
+        if weight <= 0:
+            continue
+        seen: set[tuple[str, ...]] = set()
+        for rank, candidate in enumerate(items, start=1):
+            if candidate.scope is None or candidate.scope.scope_key not in allowed:
+                continue
+            identity = _recall_identity(candidate)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            rrf_score = weight / (rrf_k + rank)
+            candidates.setdefault(identity, candidate)
+            scores[identity] = scores.get(identity, 0.0) + rrf_score
+            best_rank[identity] = min(best_rank.get(identity, rank), rank)
+            contributions.setdefault(identity, []).append(
+                SemanticSourceContribution(
+                    source=source,
+                    rank=rank,
+                    similarity=min(max(float(candidate.similarity), 0.0), 1.0),
+                    weight=weight,
+                    rrf_score=rrf_score,
+                )
+            )
+            chain = chains.setdefault(identity, [])
+            for item in candidate.derived_chain:
+                if item not in chain:
+                    chain.append(item)
+
+    maximum = sum(weights[source] for source in sources if weights[source] > 0) / (
+        rrf_k + 1
+    )
+    ordered = sorted(
+        candidates,
+        key=lambda identity: (
+            -scores[identity],
+            best_rank[identity],
+            identity,
+        ),
+    )
+    return [
+        CompositeRecallResult(
+            **candidates[identity].model_dump(
+                exclude={"derived_chain", "similarity", "contributions"}
+            ),
+            derived_chain=chains[identity],
+            similarity=min(scores[identity] / maximum, 1.0),
+            contributions=contributions[identity],
+        )
+        for identity in ordered[:limit]
+    ]
+
+
 def _recall_identity(candidate: RecallResult) -> tuple[str, ...]:
-    if candidate.memory_id:
-        return ("id", candidate.memory_id)
     scope_key = candidate.scope.scope_key if candidate.scope is not None else ""
+    if candidate.memory_id:
+        return ("id", scope_key, candidate.memory_id)
     return (
         "value",
         scope_key,

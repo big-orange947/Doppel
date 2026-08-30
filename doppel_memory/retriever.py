@@ -138,7 +138,7 @@ def _guard_and_deduplicate(
         if candidate.scope is None or candidate.scope.scope_key not in allowed:
             continue
         identity = (
-            ("id", candidate.memory_id)
+            ("id", candidate.scope.scope_key, candidate.memory_id)
             if candidate.memory_id
             else (
                 "value",

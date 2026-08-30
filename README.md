@@ -612,6 +612,25 @@ unigram/bigram；`PostgreSQLVectorIndex` 使用 cosine，通用 `HybridRetrieval
 RRF 融合。若索引实现 `TemporalSemanticIndex`，current/as_of 查询还会把准确时点传给索引。无论候选
 来自哪种算法，都必须回源 Store 通过 scope、subject、状态和有效区间验证；答案生成始终留给上层 Agent。
 
+最高质量配置可以用 provisional `CompositeSemanticIndex` 并行组合 pgvector 与 Graphiti。它只融合
+候选 `(scope, memory_id)`，不会把任一 sidecar 提升为权威来源；单个已知索引故障会降级到仍可用的
+来源，全部不可用时才让 query engine 执行其显式 lexical fallback。融合结果保留每个语义来源的
+贡献，query hit 的 `reasons` 会出现 `semantic_source:vector`、`semantic_source:graph` 等解释：
+
+```python
+from doppel_memory import CompositeSemanticIndex
+
+semantic = CompositeSemanticIndex(
+    {"vector": vector_index, "graph": graph_index},
+    weights={"vector": 1.0, "graph": 1.0},
+)
+result = await memory.query_personal_memory(
+    "我在 2025 年 2 月临时住在哪里？",
+    [scope.user_scope()],
+    semantic_index=semantic,
+)
+```
+
 返回值不是一段不可审计的自然语言，而是 PersonalMemoryQueryPlan、带完整 MemoryRecord provenance
 的 hits、透明分数/原因、结构化 conflicts、warning 和可选 count。上层 Agent 根据这些材料组织回答：
 

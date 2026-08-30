@@ -791,6 +791,25 @@ SIGNATURES = {
         ("candidate_multiplier", "KEYWORD_ONLY"),
         ("fallback_to_lexical", "KEYWORD_ONLY"),
     ),
+    "CompositeSemanticIndex.__init__": (
+        ("indexes", "POSITIONAL_OR_KEYWORD"),
+        ("weights", "KEYWORD_ONLY"),
+        ("rrf_k", "KEYWORD_ONLY"),
+        ("candidate_multiplier", "KEYWORD_ONLY"),
+    ),
+    "CompositeSemanticIndex.search": (
+        ("query", "POSITIONAL_OR_KEYWORD"),
+        ("scopes", "POSITIONAL_OR_KEYWORD"),
+        ("filters", "KEYWORD_ONLY"),
+        ("limit", "KEYWORD_ONLY"),
+    ),
+    "CompositeSemanticIndex.search_at": (
+        ("query", "POSITIONAL_OR_KEYWORD"),
+        ("scopes", "POSITIONAL_OR_KEYWORD"),
+        ("valid_at", "KEYWORD_ONLY"),
+        ("filters", "KEYWORD_ONLY"),
+        ("limit", "KEYWORD_ONLY"),
+    ),
     "HybridRetrievalStrategy.search": (
         ("store", "POSITIONAL_OR_KEYWORD"),
         ("query", "POSITIONAL_OR_KEYWORD"),
