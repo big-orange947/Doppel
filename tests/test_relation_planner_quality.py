@@ -13,7 +13,9 @@ from benchmarks.relation_planner_quality import (
     CachedPlanner,
     PlannerCallBudget,
     PlannerCallBudgetExceeded,
+    ReplayPlanner,
     UsageLedger,
+    _evaluate_case,
     _parser,
     _term_matches,
     run_relation_planner_quality,
@@ -100,6 +102,31 @@ async def test_relation_mismatch_is_reported_without_retrieval() -> None:
     assert report["metrics"]["structural_failure_count"] > 0
     assert report["metrics"]["exact_structure_accuracy"] < 1
     assert report["metrics"]["unexpected_relation_count"] > 0
+
+
+@pytest.mark.asyncio
+async def test_interval_covering_gold_asof_is_a_valid_temporal_plan() -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    query = next(item for item in dataset.queries if item.query_id == "rel-q03")
+    planner = _StaticPlanner(
+        PersonalMemoryQueryDraft(
+            intent="history",
+            search_text="银河帝国",
+            time_from=datetime(2026, 5, 1, tzinfo=UTC),
+            time_to=datetime(2026, 5, 31, 23, 59, tzinfo=UTC),
+            entity_mentions=["银河帝国"],
+            relation_hints=["手里"],
+        )
+    )
+
+    case = await _evaluate_case(planner, dataset, query)
+
+    assert case["intent_ok"] is False
+    assert case["intent_semantics_ok"] is True
+    assert case["as_of_date_ok"] is False
+    assert case["interval_covers_as_of"] is True
+    assert case["temporal_plan_ok"] is True
+    assert case["structure_ok"] is True
 
 
 @pytest.mark.asyncio
@@ -194,6 +221,72 @@ def test_reference_cli_is_explicit_and_budgeted() -> None:
     assert args.max_tokens_parameter == "max_tokens"
     assert args.thinking == "disabled"
     assert args.max_calls == 5
+
+
+@pytest.mark.asyncio
+async def test_prior_report_can_be_replayed_without_provider_calls(
+    tmp_path: Path,
+) -> None:
+    report_path = tmp_path / "prior.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "planner": {"name": "prior", "version": "1"},
+                "cases": [
+                    {
+                        "query": "相机在哪里？",
+                        "error": "",
+                        "actual": {
+                            "intent": "current",
+                            "entity_mentions": ["相机"],
+                            "relation_hints": ["位于"],
+                        },
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    planner = ReplayPlanner(report_path)
+
+    draft = await planner.plan(
+        PersonalMemoryQueryRequest(
+            query="相机在哪里？",
+            now=datetime(2026, 8, 31, tzinfo=UTC),
+        )
+    )
+
+    assert draft.intent == "current"
+    assert draft.entity_mentions == ["相机"]
+    assert draft.relation_hints == ["位于"]
+
+
+@pytest.mark.asyncio
+async def test_unrequested_hard_filters_fail_structure() -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    query = dataset.queries[0]
+
+    class HardFilteringPlanner:
+        name = "test.hard-filtering"
+        version = "1"
+
+        async def plan(self, request: PersonalMemoryQueryRequest) -> dict[str, object]:
+            return {
+                "intent": query.intent,
+                "as_of": query.as_of,
+                "entity_mentions": query.entity_mentions,
+                "relation_hints": query.relation_hints,
+                "memory_types": ["episode"],
+            }
+
+    report = await run_relation_planner_quality(dataset, HardFilteringPlanner())
+    case = report["cases"][0]
+
+    assert case["hard_filter_ok"] is False
+    assert case["unexpected_hard_filters"] == ["memory_type:episode"]
+    assert case["structure_ok"] is False
+    assert report["metrics"]["unexpected_hard_filter_count"] >= 1
 
 
 def test_dataset_remains_draft_and_has_all_partitions() -> None:

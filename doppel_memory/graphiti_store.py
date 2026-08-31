@@ -660,6 +660,11 @@ class GraphitiRelationIndex:
         bound = RelationQuery.model_validate(request)
         scope_by_key = {scope.scope_key: scope for scope in scopes}
         anchors = [item.casefold() for item in bound.entity_mentions]
+        if not anchors:
+            anchors = [
+                _graphiti_subject_identity(scope, bound.subject_id)[0].casefold()
+                for scope in scope_by_key.values()
+            ]
         relation_hints = [item.casefold() for item in bound.relation_hints]
         try:
             graphiti = await self._ensure_graphiti()
@@ -1229,8 +1234,19 @@ def _graphiti_subject(record: MemoryRecord) -> tuple[str, str]:
     subject_id = str(record.metadata.get("subject_id") or "").strip()
     if not subject_id:
         subject_id = str(record.scope.user_id or "").strip() or "owner"
+    return _graphiti_subject_identity(record.scope, subject_id)
+
+
+def _graphiti_subject_identity(
+    scope: MemoryScope, subject_id: str
+) -> tuple[str, str]:
+    """Bind a trusted query subject to its scope-salted Graphiti entity."""
+
+    normalized_subject = str(subject_id or "").strip()
+    if not normalized_subject:
+        normalized_subject = str(scope.user_id or "").strip() or "owner"
     subject_ref = hashlib.sha256(
-        f"{record.scope.scope_key}:{subject_id}".encode()
+        f"{scope.scope_key}:{normalized_subject}".encode()
     ).hexdigest()[:24]
     return f"DoppelSubject-{subject_ref}", subject_ref
 

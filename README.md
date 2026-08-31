@@ -1239,8 +1239,10 @@ engine = PersonalMemoryQueryEngine(
 )
 ```
 
-Reference planner 只有在问题明确提到人、地点、物品或命名概念时才填写 `entity_mentions`；
-`relation_hints` 是通用的关系相关性提示，不是领域关键词表。Graphiti edge name 或自然语言 fact
+Reference planner 只有在问题明确提到人、地点、物品或命名概念时才填写 `entity_mentions`；如果问题
+只以“我/主人”作为关系起点，则由 host 已绑定的 subject 生成 scope-salted 图锚点，不把“我”伪装成
+普通实体。只要问题明确询问关系或属性，即使目标是“谁/哪里/哪一个”这样的未知端点，也必须保留
+问句中的简短 `relation_hints`。它是通用的关系相关性提示，不是领域关键词表。Graphiti edge name 或自然语言 fact
 命中提示时保留正常关系分；只命中实体却没有回答所问关系的边会降至默认阈值以下，但不会从底层
 候选中硬删除。默认 `relation_hints_require_match=True` 会把结构化的关系提示当作事实资格门：
 pgvector/词法候选仍可在合格关系事实之间辅助排序，却不能用“实体相似”回答另一个关系；关系索引
@@ -1251,7 +1253,8 @@ Graphiti/Neo4j 从不成为事实权威。
 
 自然语言 Planner 与检索层必须分开评测。`benchmarks.relation_planner_quality` 直接复用 30 条
 relation ablation 问句，在不执行 Store/pgvector/Graphiti 的情况下测量 intent、as-of、实体锚点和
-关系提示是否正确；Reference Planner 支持内容寻址缓存、调用次数上限和 provider token 汇总。
+关系提示是否正确，并把无依据的 `memory_types/topic_keys` 硬过滤器单独记为错误；Reference Planner
+支持内容寻址缓存、调用次数上限、provider token 汇总和旧报告零付费 replay。
 这样真实模型漏掉“以前”、把日期解析错、没有识别物品名，都会归因到 Planner，而不会被记成
 Graphiti 召回缺陷。Deterministic Planner 继续保持无领域词典，不承担实体/关系抽取职责。
 

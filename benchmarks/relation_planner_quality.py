@@ -147,6 +147,29 @@ class UsageLedger:
         }
 
 
+class ReplayPlanner:
+    """Re-score successful drafts from a prior report without provider calls."""
+
+    def __init__(self, report_path: Path) -> None:
+        raw = json.loads(report_path.read_text(encoding="utf-8"))
+        planner = dict(raw.get("planner") or {})
+        self.name = str(planner.get("name") or "doppel.replay-planner")
+        self.version = str(planner.get("version") or "unknown")
+        self._drafts = {
+            str(item.get("query") or ""): item.get("actual")
+            for item in list(raw.get("cases") or [])
+            if not item.get("error") and item.get("actual") is not None
+        }
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryQueryDraft:
+        raw = self._drafts.get(request.query)
+        if raw is None:
+            raise KeyError("prior report has no successful draft for this query")
+        return PersonalMemoryQueryDraft.model_validate(raw)
+
+
 async def run_relation_planner_quality(
     dataset: AblationDataset,
     planner: Any,
@@ -207,11 +230,17 @@ async def run_relation_planner_quality(
             "intent_accuracy": _ratio(
                 sum(case["intent_ok"] for case in valid), len(cases)
             ),
+            "intent_semantics_accuracy": _ratio(
+                sum(case["intent_semantics_ok"] for case in valid), len(cases)
+            ),
             "as_of_presence_accuracy": _ratio(
                 sum(case["as_of_presence_ok"] for case in valid), len(cases)
             ),
             "as_of_date_accuracy": _ratio(
                 sum(case["as_of_date_ok"] for case in valid), len(cases)
+            ),
+            "temporal_plan_accuracy": _ratio(
+                sum(case["temporal_plan_ok"] for case in valid), len(cases)
             ),
             "entity_recall": _ratio(total_matched_entities, total_expected_entities),
             "relation_recall": _ratio(
@@ -222,6 +251,9 @@ async def run_relation_planner_quality(
             ),
             "unexpected_relation_count": sum(
                 case["unexpected_relation_count"] for case in valid
+            ),
+            "unexpected_hard_filter_count": sum(
+                case["unexpected_hard_filter_count"] for case in valid
             ),
             "latency_ms": {
                 "p50": _percentile(latencies, 0.50),
@@ -272,20 +304,26 @@ async def _evaluate_case(
             "latency_ms": round((perf_counter() - started) * 1_000, 3),
             "structure_ok": False,
             "intent_ok": False,
+            "intent_semantics_ok": False,
             "as_of_presence_ok": False,
             "as_of_date_ok": False,
+            "temporal_plan_ok": False,
             "expected_entity_count": len(query.entity_mentions),
             "matched_entity_count": 0,
             "unexpected_entity_count": 0,
             "expected_relation_count": len(query.relation_hints),
             "matched_relation_count": 0,
             "unexpected_relation_count": 0,
+            "unexpected_hard_filter_count": 0,
+            "hard_filter_ok": False,
             "actual": None,
         }
 
     expected_as_of = query.as_of
     actual_as_of = draft.as_of
     intent_ok = draft.intent == query.intent
+    accepted_intents = set(query.accepted_intents or [query.intent])
+    intent_semantics_ok = draft.intent in accepted_intents
     as_of_presence_ok = (expected_as_of is None) == (actual_as_of is None)
     as_of_date_ok = as_of_presence_ok and (
         expected_as_of is None
@@ -294,6 +332,14 @@ async def _evaluate_case(
             and actual_as_of.date() == expected_as_of.date()
         )
     )
+    interval_covers_as_of = bool(
+        query.accept_interval_covering_as_of
+        and expected_as_of is not None
+        and draft.time_from is not None
+        and draft.time_to is not None
+        and draft.time_from <= expected_as_of <= draft.time_to
+    )
+    temporal_plan_ok = as_of_date_ok or interval_covers_as_of
     matched_entities, unexpected_entities = _term_matches(
         query.entity_mentions, draft.entity_mentions
     )
@@ -304,7 +350,18 @@ async def _evaluate_case(
     relation_ok = (
         matched_relations == len(query.relation_hints) and not unexpected_relations
     )
-    structure_ok = intent_ok and as_of_date_ok and entity_ok and relation_ok
+    unexpected_hard_filters = [
+        *(f"memory_type:{item}" for item in draft.memory_types),
+        *(f"topic_key:{item}" for item in draft.topic_keys),
+    ]
+    hard_filter_ok = not unexpected_hard_filters
+    structure_ok = (
+        intent_semantics_ok
+        and temporal_plan_ok
+        and entity_ok
+        and relation_ok
+        and hard_filter_ok
+    )
     return {
         "query_id": query.query_id,
         "partition": query.partition,
@@ -315,14 +372,20 @@ async def _evaluate_case(
         "latency_ms": round((perf_counter() - started) * 1_000, 3),
         "structure_ok": structure_ok,
         "intent_ok": intent_ok,
+        "intent_semantics_ok": intent_semantics_ok,
         "as_of_presence_ok": as_of_presence_ok,
         "as_of_date_ok": as_of_date_ok,
+        "temporal_plan_ok": temporal_plan_ok,
+        "interval_covers_as_of": interval_covers_as_of,
         "expected_entity_count": len(query.entity_mentions),
         "matched_entity_count": matched_entities,
         "unexpected_entity_count": len(unexpected_entities),
         "expected_relation_count": len(query.relation_hints),
         "matched_relation_count": matched_relations,
         "unexpected_relation_count": len(unexpected_relations),
+        "unexpected_hard_filter_count": len(unexpected_hard_filters),
+        "unexpected_hard_filters": unexpected_hard_filters,
+        "hard_filter_ok": hard_filter_ok,
         "unexpected_entities": unexpected_entities,
         "unexpected_relations": unexpected_relations,
         "actual": draft.model_dump(mode="json"),
@@ -399,6 +462,11 @@ def _parser() -> argparse.ArgumentParser:
         "--planner", choices=("deterministic", "reference"), default="deterministic"
     )
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--replay-report",
+        type=Path,
+        help="re-score successful drafts from a prior report with zero provider calls",
+    )
     parser.add_argument("--cache-dir", type=Path, default=Path("data/doppel/planner-cache"))
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--max-calls", type=int, default=40)
@@ -429,7 +497,9 @@ async def _async_main(args: argparse.Namespace) -> int:
     dataset = load_ablation_dataset(args.dataset)
     usage = UsageLedger()
     provider: OpenAICompatibleStructuredOutputModel | None = None
-    if args.planner == "reference":
+    if args.replay_report is not None:
+        base_planner: Any = ReplayPlanner(args.replay_report)
+    elif args.planner == "reference":
         if not str(args.model or "").strip():
             raise RuntimeError("reference planner requires --model or DOPPEL_MODEL")
         provider = OpenAICompatibleStructuredOutputModel(
@@ -445,12 +515,21 @@ async def _async_main(args: argparse.Namespace) -> int:
             api_key=os.environ.get("DOPPEL_API_KEY", ""),
             usage_observer=usage.observe,
         )
-        base_planner: Any = ReferencePersonalMemoryQueryPlanner(provider)
+        base_planner = ReferencePersonalMemoryQueryPlanner(provider)
     else:
         base_planner = DeterministicPersonalMemoryQueryPlanner()
 
-    budget = PlannerCallBudget(base_planner, max_calls=args.max_calls)
-    cache = CachedPlanner(budget, None if args.no_cache else args.cache_dir)
+    budget = (
+        None
+        if args.replay_report is not None
+        else PlannerCallBudget(base_planner, max_calls=args.max_calls)
+    )
+    cache = CachedPlanner(
+        budget or base_planner,
+        None
+        if args.no_cache or args.replay_report is not None
+        else args.cache_dir,
+    )
     try:
         report = await run_relation_planner_quality(
             dataset,
@@ -459,6 +538,17 @@ async def _async_main(args: argparse.Namespace) -> int:
             call_budget=budget,
             usage=usage,
         )
+        if args.replay_report is not None:
+            replay_bytes = args.replay_report.read_bytes()
+            source = json.loads(replay_bytes)
+            report["replay"] = {
+                "source_path": str(args.replay_report.resolve()),
+                "source_sha256": hashlib.sha256(replay_bytes).hexdigest(),
+                "source_dataset_fingerprint": str(
+                    (source.get("dataset") or {}).get("fingerprint") or ""
+                ),
+                "provider_calls": 0,
+            }
     finally:
         if provider is not None:
             await provider.aclose()

@@ -57,12 +57,15 @@
         "structural_failure_count",
         "exact_structure_accuracy",
         "intent_accuracy",
+        "intent_semantics_accuracy",
         "as_of_presence_accuracy",
         "as_of_date_accuracy",
+        "temporal_plan_accuracy",
         "entity_recall",
         "relation_recall",
         "unexpected_entity_count",
         "unexpected_relation_count",
+        "unexpected_hard_filter_count",
         "latency_ms"
       ],
       "properties": {
@@ -72,12 +75,15 @@
         "structural_failure_count": {"type": "integer", "minimum": 0},
         "exact_structure_accuracy": {"$ref": "#/$defs/ratio"},
         "intent_accuracy": {"$ref": "#/$defs/ratio"},
+        "intent_semantics_accuracy": {"$ref": "#/$defs/ratio"},
         "as_of_presence_accuracy": {"$ref": "#/$defs/ratio"},
         "as_of_date_accuracy": {"$ref": "#/$defs/ratio"},
+        "temporal_plan_accuracy": {"$ref": "#/$defs/ratio"},
         "entity_recall": {"$ref": "#/$defs/ratio"},
         "relation_recall": {"$ref": "#/$defs/ratio"},
         "unexpected_entity_count": {"type": "integer", "minimum": 0},
         "unexpected_relation_count": {"type": "integer", "minimum": 0},
+        "unexpected_hard_filter_count": {"type": "integer", "minimum": 0},
         "latency_ms": {
           "type": "object",
           "required": ["p50", "p95", "max"]
@@ -95,6 +101,21 @@
       "type": "object",
       "required": ["enabled", "hits", "misses"]
     },
+    "replay": {
+      "type": "object",
+      "required": [
+        "source_path",
+        "source_sha256",
+        "source_dataset_fingerprint",
+        "provider_calls"
+      ],
+      "properties": {
+        "source_path": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "source_dataset_fingerprint": {"type": "string"},
+        "provider_calls": {"const": 0}
+      }
+    },
     "cases": {
       "type": "array",
       "minItems": 1,
@@ -110,14 +131,18 @@
           "latency_ms",
           "structure_ok",
           "intent_ok",
+          "intent_semantics_ok",
           "as_of_presence_ok",
           "as_of_date_ok",
+          "temporal_plan_ok",
           "expected_entity_count",
           "matched_entity_count",
           "unexpected_entity_count",
           "expected_relation_count",
           "matched_relation_count",
           "unexpected_relation_count",
+          "unexpected_hard_filter_count",
+          "hard_filter_ok",
           "actual"
         ]
       }

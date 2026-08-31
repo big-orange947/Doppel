@@ -61,6 +61,20 @@
   partition/category accuracy before retrieval executes. Reference-model runs use a
   preflight call budget and content-addressed successful-draft cache; API keys are
   environment-only and are never part of cache keys, reports, or error details.
+- Tighten the relation-planner boundary without fixture vocabulary. Explicit
+  relationship/property questions must preserve a surface-form relation hint even
+  when the requested endpoint is unknown; the trusted personal subject is bound as a
+  scope-salted Graphiti anchor and does not need to be repeated as an entity mention.
+  Ordinary state/fact/relation questions leave hard `memory_types`/`topic_keys`
+  filters empty. Planner evaluation accepts explicitly labeled, semantically
+  equivalent intent/time plans, reports unexpected hard filters, and can replay a
+  prior paid report with a source hash and zero provider calls.
+- Time-range query filtering now uses overlap with a record's authoritative
+  `valid_from`/`valid_to` interval instead of requiring its effective/start instant to
+  fall inside the query window. Common temporal-status aliases normalize at the
+  query-draft boundary. The live 30-query relation ablation covers subject-only
+  questions and continues to require zero scope, provenance, temporal, and forbidden
+  relation failures in the gated relation profiles.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and

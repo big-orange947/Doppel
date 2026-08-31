@@ -21,7 +21,7 @@ class RelationQuery(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     query_text: str
-    entity_mentions: list[str] = Field(min_length=1)
+    entity_mentions: list[str] = Field(default_factory=list)
     relation_hints: list[str] = Field(default_factory=list)
     subject: str
     subject_id: str

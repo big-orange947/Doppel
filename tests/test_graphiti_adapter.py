@@ -780,6 +780,25 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
     assert len(unrelated) == 1
     assert unrelated[0].score == 0.2
 
+    relation_driver.rows[0]["relation_hint_match"] = 1
+    subject_anchored = await relation.search_relations(
+        RelationQuery(
+            query_text="我目前在哪家公司任职？",
+            entity_mentions=[],
+            relation_hints=["employed"],
+            subject="owner",
+            subject_id=scope.user_id,
+            valid_at=valid_at,
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+        limit=5,
+    )
+    assert len(subject_anchored) == 1
+    subject_params = relation_driver.calls[-1][1]
+    assert len(subject_params["anchors"]) == 1
+    assert subject_params["anchors"][0].startswith("doppelsubject-")
+
     health = await relation.health()
     assert health["ok"] is True
     assert health["role"] == "relation_index"

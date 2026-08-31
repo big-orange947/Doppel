@@ -787,10 +787,12 @@ complete=false，明确表示
 top-k 不是完整 snapshot。semantic provider 失败时可配置回退完整 lexical scan，warning 会进入结果。
 
 关系检索不再伪装成第二个 SemanticIndex。`RelationIndex` 只在可信 plan 提供显式
-`entity_mentions` 时运行，接收 exact scopes、subject、可选 relation hints 与 valid_at，返回带
+`entity_mentions` 或 `relation_hints` 时运行，接收 exact scopes、subject、可选 relation hints 与 valid_at，返回带
 Edge/Episode provenance 的 memory candidates。`GraphitiRelationIndex` 绕过 Graphiti 的通用
 embedding/BM25/RRF 搜索，只读取非 `DOPPEL_MEMORY_FALLBACK` 的 Entity→RELATES_TO→Entity rich
-edges；自然语言 relation hints 提供软排序与分数门，不作为直接删除候选的硬 ontology 过滤。每个候选仍回
+edges。显式实体优先作为锚点；仅有关系提示时，adapter 使用 host 已授权 subject 与 exact scope
+派生的 scope-salted `DoppelSubject`，不会把跨 scope 的原始平台 ID 暴露或混用。自然语言 relation hints
+提供软排序与分数门，不作为直接删除候选的硬 ontology 过滤。每个候选仍回
 authoritative Store，并经过与 lexical/pgvector 相同的 scope、subject、authority、lifecycle、时间门。
 relation score 独立进入解释与排序，不因它同时出现在向量源中而自动获得双倍语义奖励。
 
@@ -808,6 +810,8 @@ history/as_of 可以读取 confirmed 以及带明确有效区间的 superseded/e
 valid_from/valid_to，无区间的 inactive/historical/planned 不被猜测为当时有效。planned 默认
 不会因为查询日期落在计划区间就被当成实际状态；只有明确 planned intent/过滤才返回计划。current 或
 as-of 同 topic 出现多个不同 active 内容时全部返回并标记 ambiguous，不以 recency 掩盖未整理冲突。
+范围查询用查询窗口与 `valid_from`/`valid_to` 的区间重叠判断状态是否可见，而不是要求状态的起始
+时间恰好落入窗口；因此“2026 年 6 月”可以命中 1 月开始、6 月底结束的状态。
 
 episode 计数基于 event_key 去重。同一 event 的多次提及可以保留多条 evidence record，但只计一个
 key；任一匹配 episode 没有 key 时 count 为 indeterminate。这里的 exact 表示完整授权 snapshot 上

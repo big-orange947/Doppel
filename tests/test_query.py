@@ -1492,6 +1492,95 @@ async def test_relation_index_requires_explicit_entity_anchor() -> None:
     assert result.hits == []
 
 
+async def test_relation_hint_can_use_the_trusted_subject_as_graph_anchor() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "owner-employer",
+            "我目前在星海科技任职。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    relation_index = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="owner-employer",
+                source="graphiti_relation",
+                score=0.95,
+                relation_type="EMPLOYED_BY",
+                edge_id="edge-employer",
+                episode_ids=["episode-employer"],
+            )
+        ]
+    )
+
+    result = await PersonalMemoryQueryEngine(
+        store, relation_index=relation_index
+    ).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="任职公司",
+            entity_mentions=[],
+            relation_hints=["任职"],
+        ),
+        "我目前在哪家公司任职？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["owner-employer"]
+    assert relation_index.calls[0][0].entity_mentions == []
+    assert relation_index.calls[0][0].subject_id == SCOPE.user_id
+
+
+async def test_time_range_matches_state_validity_overlap_not_only_start_time() -> None:
+    store = InMemoryStore()
+    for record in (
+        _record(
+            "state-overlapping-june",
+            "该状态在六月仍然有效。",
+            memory_type="state",
+            temporal_status="historical",
+            day=1,
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+            valid_to=datetime(2026, 6, 30, 23, 59, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
+        ),
+        _record(
+            "state-starting-july",
+            "该状态从七月开始。",
+            memory_type="state",
+            temporal_status="historical",
+            day=2,
+            valid_from=datetime(2026, 7, 1, tzinfo=UTC),
+            valid_to=datetime(2026, 7, 31, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
+        ),
+    ):
+        await _put(store, record)
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="history",
+            search_text="",
+            time_from=datetime(2026, 6, 1, tzinfo=UTC),
+            time_to=datetime(2026, 6, 30, 23, 59, tzinfo=UTC),
+        ),
+        "六月期间是什么状态？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == [
+        "state-overlapping-june"
+    ]
+
+
 async def test_relation_candidates_cannot_bypass_scope_or_authority_gate() -> None:
     store = InMemoryStore()
     await _put(
@@ -1834,5 +1923,15 @@ async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> 
     assert draft.intent == PersonalMemoryQueryIntent.CURRENT
     request = model.requests[0]
     assert "never choose read scopes" in request.instructions
+    assert "known or unknown endpoint" in request.instructions
+    assert "already bound outside entity_mentions" in request.instructions
     assert request.output_schema["title"] == "PersonalMemoryQueryDraft"
     assert "scopes" not in request.output_schema["properties"]
+
+
+def test_query_draft_normalizes_common_temporal_status_aliases() -> None:
+    draft = PersonalMemoryQueryDraft(
+        temporal_statuses=["past", "history", "present", "future"]
+    )
+
+    assert draft.temporal_statuses == ["historical", "current", "planned"]

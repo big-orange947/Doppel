@@ -146,7 +146,12 @@ class DatasetTest(unittest.TestCase):
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
         self.assertEqual(len(dataset.queries), 30)
         self.assertGreaterEqual(len(dataset.scopes), 3)
-        self.assertTrue(all(query.entity_mentions for query in dataset.queries))
+        self.assertTrue(
+            all(
+                query.entity_mentions or query.relation_hints
+                for query in dataset.queries
+            )
+        )
         self.assertGreaterEqual(
             sum(item.relation is not None for item in dataset.fixtures),
             10,
@@ -162,11 +167,13 @@ class DatasetTest(unittest.TestCase):
         from benchmarks.personal_retrieval_ablation import validate_dataset_semantics
 
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
-        broken = dataset.queries[0].model_copy(update={"entity_mentions": []})
+        broken = dataset.queries[0].model_copy(
+            update={"entity_mentions": [], "relation_hints": []}
+        )
         failures = validate_dataset_semantics(
             dataset.model_copy(update={"queries": [broken, *dataset.queries[1:]]})
         )
-        self.assertTrue(any("requires entity_mentions" in item for item in failures))
+        self.assertTrue(any("entity or relation anchor" in item for item in failures))
 
     def test_dataset_meets_first_version_gates(self) -> None:
         dataset = _dataset()

@@ -168,13 +168,25 @@ uv run python -m benchmarks.relation_planner_quality `
 ```
 
 The runner evaluates the structured draft before any Store/index call: exact intent,
-as-of presence and calendar date, entity and relation recall, unexpected terms,
-provider failures, and latency. Successful drafts use a content-addressed disk cache,
+semantically accepted intent alternatives, point-in-time or explicitly labeled
+covering intervals, entity and relation recall, unexpected terms, unrequested hard
+`memory_types`/`topic_keys` filters, provider failures, and latency. Successful drafts use a content-addressed disk cache,
 so a rerun does not spend another provider call; failed/invalid responses are never
 cached. `--max-calls` is checked before each cache miss. Provider token usage is an
 aggregate content-free ledger. The cache fingerprint includes planner/provider
 version and the complete request but never includes an API key. The result contract is
 [`relation-planner-quality-result.schema.json`](relation-planner-quality-result.schema.json).
+
+A prior paid result can be re-scored after correcting gold semantics without another
+provider request. The replay report records the source path, SHA-256, original dataset
+fingerprint, and `provider_calls=0`:
+
+```bash
+uv run python -m benchmarks.relation_planner_quality `
+  --replay-report data/doppel/relation-planner-deepseek.json --no-cache `
+  --max-structural-failures 30 `
+  --output data/doppel/relation-planner-deepseek-rescored.json
+```
 
 The deterministic planner intentionally has no domain/entity parser and therefore is
 expected to score zero exact relation structures. It remains a temporal/aggregation

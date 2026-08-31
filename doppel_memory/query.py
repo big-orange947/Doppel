@@ -98,10 +98,18 @@ class PersonalMemoryQueryDraft(BaseModel):
     def _normalize_subject(cls, value: Any) -> str:
         return Actor.normalize(value)
 
-    @field_validator("memory_types", "topic_keys", "temporal_statuses", mode="before")
+    @field_validator("memory_types", "topic_keys", mode="before")
     @classmethod
     def _normalize_namespaces(cls, value: Any) -> list[str]:
         items = [str(item or "").strip().lower() for item in list(value or [])]
+        return list(dict.fromkeys(item for item in items if item))
+
+    @field_validator("temporal_statuses", mode="before")
+    @classmethod
+    def _normalize_temporal_statuses(cls, value: Any) -> list[str]:
+        items = [
+            MemoryTemporalStatus.normalize(item) for item in list(value or [])
+        ]
         return list(dict.fromkeys(item for item in items if item))
 
     @field_validator("entity_mentions", "relation_hints", mode="before")
@@ -183,12 +191,21 @@ history for prior facts, list for episode enumeration, count for episode counts,
 as_of only with an explicit point in time. Preserve a concise semantic search_text for
 ordinary lookup/list questions. Omit topic_keys unless the host's extracted memories
 use one explicit stable slot that the question names exactly; topic_keys are hard
-filters, not guesses or synonyms. Use episode memory type for occurrence counting and
-keep search_text empty only when a complete structural set is required. Do not infer
-that a plan happened. Populate entity_mentions only for explicitly referenced people,
+filters, not guesses or synonyms. Use episode memory type only for occurrence
+enumeration/counting. For facts, states, preferences, and relationships leave
+memory_types empty unless the question explicitly names a memory class; the memory
+type is a hard filter, not a semantic-search hint. Keep search_text empty only when a
+complete structural set is required. Do not infer that a plan happened. Populate
+entity_mentions only for explicitly referenced people,
 places, objects, or named concepts that can anchor a graph relation. Populate
-relation_hints only for an explicit relationship being asked about; do not invent
-domain predicates or use relation fields as generic semantic-search keywords.
+relation_hints whenever the question explicitly asks for a relationship or property
+between an anchor and a known or unknown endpoint. An interrogative endpoint such as
+who, where, or which one is the value being requested, not a reason to omit the
+relation. Preserve one concise predicate phrase from the question instead of inventing
+a canonical ontology label or using generic semantic-search keywords. The trusted
+owner/agent subject is already bound outside entity_mentions: when the question only
+anchors on that subject, keep entity_mentions empty and still emit the explicit
+relation hint.
 Use the supplied current time to resolve relative expressions. Prefer a conservative
 draft and explain ambiguity rather than broadening the subject or time range.
 """
@@ -198,7 +215,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "4"
+    version = "5"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -517,7 +534,7 @@ class PersonalMemoryQueryEngine:
         ] | None = None
         if (
             self._relation_index is not None
-            and bound.entity_mentions
+            and (bound.entity_mentions or bound.relation_hints)
             and bound.intent != PersonalMemoryQueryIntent.COUNT
         ):
             relation_task = asyncio.create_task(self._read_relation_candidates(bound))
@@ -1208,10 +1225,17 @@ def _structural_match(
             }
         ):
             return None
-    if plan.time_from is not None and effective_at < plan.time_from:
-        return None
-    if plan.time_to is not None and effective_at > plan.time_to:
-        return None
+    if plan.time_from is not None or plan.time_to is not None:
+        interval_start = valid_from or effective_at
+        interval_end = valid_to or (effective_at if valid_from is None else None)
+        if plan.time_to is not None and interval_start > plan.time_to:
+            return None
+        if (
+            plan.time_from is not None
+            and interval_end is not None
+            and interval_end < plan.time_from
+        ):
+            return None
 
     reasons = ["exact_scope", "active_personal_memory", "subject"]
     if plan.memory_types:

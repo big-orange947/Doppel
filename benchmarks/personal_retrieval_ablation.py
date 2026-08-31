@@ -160,7 +160,9 @@ class AblationQuery(BaseModel):
     scopes: list[str] = Field(min_length=1)
     now: datetime
     intent: str
+    accepted_intents: list[str] = Field(default_factory=list)
     as_of: datetime | None = None
+    accept_interval_covering_as_of: bool = False
     time_from: datetime | None = None
     time_to: datetime | None = None
     entity_mentions: list[str] = Field(default_factory=list)
@@ -277,9 +279,20 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     for query in dataset.queries:
         if query.partition == "deferred_cross_subject":
             continue
-        if relation_benchmark and not query.entity_mentions:
+        if relation_benchmark and not (
+            query.entity_mentions or query.relation_hints
+        ):
             failures.append(
-                f"{query.query_id}: relation benchmark query requires entity_mentions"
+                f"{query.query_id}: relation benchmark query requires an entity "
+                "or relation anchor"
+            )
+        if query.accepted_intents and query.intent not in query.accepted_intents:
+            failures.append(
+                f"{query.query_id}: accepted_intents must include primary intent"
+            )
+        if query.accept_interval_covering_as_of and query.as_of is None:
+            failures.append(
+                f"{query.query_id}: interval alternative requires as_of gold"
             )
         for memory_id in query.required_memory_ids:
             fixture = next(
@@ -581,6 +594,13 @@ async def _preseed_graph(
                 raise ValueError(
                     f"invalid benchmark relation fixture: {record.memory_id}"
                 )
+            if source_name == "DOPPEL_SUBJECT":
+                from doppel_memory.graphiti_store import _graphiti_subject_identity
+
+                source_name = _graphiti_subject_identity(
+                    record.scope,
+                    str(record.metadata.get("subject_id") or record.scope.user_id),
+                )[0]
         else:
             source_name = f"owner:{record.scope.user_id}"
             target_name = str(record.metadata.get("topic_key") or "memory")
