@@ -1861,13 +1861,41 @@ async def _run_profiles(
                 )
     report["comparisons"] = comparisons
 
+    report["hard_gates"] = _collect_hard_gates(all_cases)
+    report["hard_gates_by_profile"] = {
+        mode: {
+            profile: _collect_hard_gates(
+                [
+                    case
+                    for case in all_cases
+                    if case.get("mode") == mode and case.get("profile") == profile
+                ]
+            )
+            for profile in per_mode.get(mode, {})
+        }
+        for mode in planner_modes
+    }
+    report["graph_final_hit_attribution"] = _build_final_hit_attribution(
+        report=report,
+        dataset=dataset,
+        per_mode=per_mode,
+    )
+    report["relation_final_hit_attribution"] = (
+        _build_relation_final_hit_attribution(report=report, dataset=dataset)
+    )
+    return report
+
+
+def _collect_hard_gates(cases: Sequence[dict[str, Any]]) -> dict[str, list[str]]:
+    """Layer failures for one explicitly identified set of executed cases."""
+
     layered: dict[str, list[str]] = {
         "planner_failures": [],
         "retrieval_failures": [],
         "security_failures": [],
         "fixture_validation_failures": [],
     }
-    for case in all_cases:
+    for case in cases:
         if case["error"]:
             layered["retrieval_failures"].append(
                 f"{case['query_id']}:execution_error:{case['error'][:120]}"
@@ -1879,18 +1907,7 @@ async def _run_profiles(
             layered["retrieval_failures"].append(f"{case['query_id']}:{failure}")
         for failure in case["security_failures"]:
             layered["security_failures"].append(f"{case['query_id']}:{failure}")
-    report["hard_gates"] = {
-        key: sorted(set(items)) for key, items in layered.items()
-    }
-    report["graph_final_hit_attribution"] = _build_final_hit_attribution(
-        report=report,
-        dataset=dataset,
-        per_mode=per_mode,
-    )
-    report["relation_final_hit_attribution"] = (
-        _build_relation_final_hit_attribution(report=report, dataset=dataset)
-    )
-    return report
+    return {key: sorted(set(items)) for key, items in layered.items()}
 
 
 def _build_relation_final_hit_attribution(
@@ -2253,6 +2270,14 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="exit non-zero when any requested profile could not execute",
     )
+    parser.add_argument(
+        "--gate-profiles",
+        default="",
+        help=(
+            "comma-separated execution profiles whose quality gates determine "
+            "the exit code; empty keeps the legacy all-profile aggregate gate"
+        ),
+    )
     parser.add_argument("--max-scope-leakage", type=int, default=0)
     parser.add_argument("--max-temporal-violations", type=int, default=0)
     parser.add_argument("--no-metamorphic", action="store_true")
@@ -2284,18 +2309,50 @@ def _validate_report(
                     query_count and error_count == query_count
                 ):
                     failures.append(f"profile {profile} ({mode}) did not execute")
-    hard_gates = report.get("hard_gates", {})
-    for group, items in hard_gates.items():
-        if items:
-            failures.append(f"{group}: {items[:5]}")
+    gate_profiles = [
+        item.strip()
+        for item in (args.gate_profiles or "").split(",")
+        if item.strip()
+    ]
+    if gate_profiles:
+        invalid = sorted(set(gate_profiles).difference(PROFILE_EXECUTION))
+        if invalid:
+            failures.append(f"unknown --gate-profiles: {invalid}")
+        gates_by_profile = report.get("hard_gates_by_profile", {})
+        for mode in modes:
+            for profile in gate_profiles:
+                profile_gates = (gates_by_profile.get(mode) or {}).get(profile)
+                if profile_gates is None:
+                    failures.append(f"gate profile {profile} ({mode}) did not execute")
+                    continue
+                for group, items in profile_gates.items():
+                    if items:
+                        failures.append(
+                            f"{mode}:{profile}:{group}: {items[:5]}"
+                        )
+    else:
+        hard_gates = report.get("hard_gates", {})
+        for group, items in hard_gates.items():
+            if items:
+                failures.append(f"{group}: {items[:5]}")
     for mode in modes:
-        full = (report.get("profiles", {}).get(mode) or {}).get(
-            "lexical_vector_graph"
-        )
-        if (full or {}).get("scope_leakage_count", 0) > args.max_scope_leakage:
-            failures.append("scope leakage exceeds --max-scope-leakage")
-        if (full or {}).get("temporal_violation_count", 0) > args.max_temporal_violations:
-            failures.append("temporal violations exceed --max-temporal-violations")
+        checked_profiles = gate_profiles or ["lexical_vector_graph"]
+        for profile in checked_profiles:
+            metrics = (report.get("profiles", {}).get(mode) or {}).get(profile)
+            if not metrics:
+                continue
+            if metrics.get("scope_leakage_count", 0) > args.max_scope_leakage:
+                failures.append(
+                    f"{mode}:{profile}: scope leakage exceeds --max-scope-leakage"
+                )
+            if (
+                metrics.get("temporal_violation_count", 0)
+                > args.max_temporal_violations
+            ):
+                failures.append(
+                    f"{mode}:{profile}: temporal violations exceed "
+                    "--max-temporal-violations"
+                )
     return failures
 
 
@@ -2375,6 +2432,11 @@ async def _async_main(args: argparse.Namespace) -> int:
         "commit_hash": _git_commit_hash(),
         "planner_modes": list(modes),
         "requested_profiles": list(profiles),
+        "gate_profiles": [
+            item.strip()
+            for item in (args.gate_profiles or "").split(",")
+            if item.strip()
+        ],
         "executed_profiles": executed,
         "unavailable_profiles": unavailable,
         "dataset_fingerprint": report.get("suite_fingerprint", ""),
@@ -2410,6 +2472,9 @@ async def _async_main(args: argparse.Namespace) -> int:
                 "profiles": report.get("profiles", {}),
                 "comparisons": report.get("comparisons", {}),
                 "hard_gates": report.get("hard_gates", {}),
+                "hard_gates_by_profile": report.get(
+                    "hard_gates_by_profile", {}
+                ),
                 "graph_final_hit_attribution": report.get(
                     "graph_final_hit_attribution", {}
                 ),

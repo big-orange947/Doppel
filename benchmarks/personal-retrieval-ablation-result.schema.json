@@ -5,7 +5,8 @@
   "type": "object",
   "required": [
     "runner", "dataset", "environment", "runtime", "planner_modes",
-    "profiles", "diagnostics", "comparisons", "hard_gates", "cases",
+    "profiles", "diagnostics", "comparisons", "hard_gates",
+    "hard_gates_by_profile", "cases",
     "deferred_queries", "graph_final_hit_attribution", "metamorphic",
     "reproducibility", "elapsed_seconds", "doppel_version", "generated_at",
     "suite_fingerprint"
@@ -60,13 +61,14 @@
         "fixture_validation_failures": {"type": "array", "items": {"type": "string"}}
       }
     },
+    "hard_gates_by_profile": {"type": "object"},
     "graph_final_hit_attribution": {"type": "object"},
     "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}},
     "metamorphic": {"type": "object"},
     "threshold_sweep": {"type": "object"},
     "reproducibility": {
       "type": "object",
-      "required": ["output_path", "command", "commit_hash", "planner_modes", "requested_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "canonical_payload_sha256", "file_sha256_sidecar"]
+      "required": ["output_path", "command", "commit_hash", "planner_modes", "requested_profiles", "gate_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "canonical_payload_sha256", "file_sha256_sidecar"]
     },
     "elapsed_seconds": {"type": "number"},
     "doppel_version": {"type": "string"},

@@ -121,6 +121,8 @@ uv run python -m benchmarks.personal_retrieval_ablation `
   --dataset benchmarks/datasets/personal-relation-ablation-zh-v1.json `
   --profiles lexical,lexical_vector,lexical_relation,lexical_vector_relation `
   --planner-modes oracle --no-metamorphic `
+  --gate-profiles lexical_relation,lexical_vector_relation `
+  --require-live-postgres --require-live-neo4j --require-all-profiles `
   --output data/doppel/personal-relation-ablation.json
 ```
 
@@ -132,6 +134,11 @@ Each profile executes one discarded warm-up query before latency measurement so 
 later profile cannot inherit an unfair Neo4j/provider cold-start advantage. The
 dedicated PostgreSQL schema and exact Neo4j fixture scopes are both cleared in
 `finally`; no benchmark fixture is retained after the run.
+`hard_gates_by_profile` preserves an independent verdict for every planner/profile
+pair. `--gate-profiles` selects which candidate profiles determine the process exit
+code; the aggregate `hard_gates` and all weaker control failures remain in the report
+and are never rewritten as passes. Omitting this option retains the legacy strict
+aggregate gate across every executed profile.
 The fixture remains `frozen=false` and `publication_ready=false`; it is an engineering
 baseline, not public numerical evidence yet.
 

@@ -365,6 +365,7 @@ MODEL_FIELDS = {
         "semantic_weight",
         "relation_weight",
         "minimum_relation_score",
+        "relation_hints_require_match",
         "semantic_fallback_to_lexical",
         "relation_fallback_to_nonrelation",
     ),

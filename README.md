@@ -1242,9 +1242,12 @@ engine = PersonalMemoryQueryEngine(
 Reference planner 只有在问题明确提到人、地点、物品或命名概念时才填写 `entity_mentions`；
 `relation_hints` 是通用的关系相关性提示，不是领域关键词表。Graphiti edge name 或自然语言 fact
 命中提示时保留正常关系分；只命中实体却没有回答所问关系的边会降至默认阈值以下，但不会从底层
-候选中硬删除。Deterministic planner 不猜实体，因此不会为了
-benchmark 问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回
-Store 复核，Graphiti/Neo4j 从不成为事实权威。
+候选中硬删除。默认 `relation_hints_require_match=True` 会把结构化的关系提示当作事实资格门：
+pgvector/词法候选仍可在合格关系事实之间辅助排序，却不能用“实体相似”回答另一个关系；关系索引
+正常返回“无匹配”时安全拒答，后端故障时才按照 `relation_fallback_to_nonrelation` 降级。需要保留
+旧式纯加分融合的接入方可以显式关闭该门。Deterministic planner 不猜实体，因此不会为了 benchmark
+问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回 Store 复核，
+Graphiti/Neo4j 从不成为事实权威。
 
 v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
 计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，

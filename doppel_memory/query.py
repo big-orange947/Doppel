@@ -290,6 +290,7 @@ class PersonalMemoryQueryConfig(BaseModel):
     semantic_weight: float = Field(default=1.0, ge=0.0, le=10.0)
     relation_weight: float = Field(default=1.0, ge=0.0, le=10.0)
     minimum_relation_score: float = Field(default=0.35, ge=0.0, le=1.0)
+    relation_hints_require_match: bool = True
     semantic_fallback_to_lexical: bool = True
     relation_fallback_to_nonrelation: bool = True
 
@@ -511,6 +512,7 @@ class PersonalMemoryQueryEngine:
                 list[MemoryRecord],
                 dict[tuple[str, str], tuple[float, str, str, str]],
                 list[str],
+                bool,
             ]
         ] | None = None
         if (
@@ -562,17 +564,57 @@ class PersonalMemoryQueryEngine:
                     relation_records,
                     relation_details,
                     relation_warnings,
+                    relation_available,
                 ) = await relation_task
-                records_by_key = {
-                    (record.scope.scope_key, record.memory_id): record
-                    for record in records
-                }
-                for record in relation_records:
-                    records_by_key.setdefault(
-                        (record.scope.scope_key, record.memory_id), record
-                    )
-                records = list(records_by_key.values())
                 warnings.extend(relation_warnings)
+                require_relation_match = (
+                    self.config.relation_hints_require_match
+                    and bool(bound.relation_hints)
+                    and relation_available
+                )
+                if require_relation_match:
+                    accepted_relation_keys = {
+                        key
+                        for key, detail in relation_details.items()
+                        if detail[0] >= self.config.minimum_relation_score
+                    }
+                    records = [
+                        record
+                        for record in relation_records
+                        if (record.scope.scope_key, record.memory_id)
+                        in accepted_relation_keys
+                    ]
+                    semantic_scores = {
+                        key: value
+                        for key, value in semantic_scores.items()
+                        if key in accepted_relation_keys
+                    }
+                    semantic_sources = {
+                        key: value
+                        for key, value in semantic_sources.items()
+                        if key in accepted_relation_keys
+                    }
+                    relation_details = {
+                        key: value
+                        for key, value in relation_details.items()
+                        if key in accepted_relation_keys
+                    }
+                    complete = False
+                    if not accepted_relation_keys:
+                        warnings.append(
+                            "explicit relation constraints produced no qualified "
+                            "relation evidence"
+                        )
+                else:
+                    records_by_key = {
+                        (record.scope.scope_key, record.memory_id): record
+                        for record in records
+                    }
+                    for record in relation_records:
+                        records_by_key.setdefault(
+                            (record.scope.scope_key, record.memory_id), record
+                        )
+                    records = list(records_by_key.values())
         except BaseException:
             if relation_task is not None:
                 if not relation_task.done():
@@ -924,6 +966,7 @@ class PersonalMemoryQueryEngine:
         list[MemoryRecord],
         dict[tuple[str, str], tuple[float, str, str, str]],
         list[str],
+        bool,
     ]:
         assert self._relation_index is not None
         valid_at = plan.as_of
@@ -950,9 +993,17 @@ class PersonalMemoryQueryEngine:
             error_name = type(exc).__name__
             if isinstance(exc, RelationIndexUnavailableError):
                 error_name = "RelationIndexUnavailableError"
-            return [], {}, [
-                f"relation index unavailable; used non-relation paths: {error_name}"
-            ]
+            return (
+                [],
+                {},
+                [
+                    (
+                        "relation index unavailable; used non-relation paths: "
+                        f"{error_name}"
+                    )
+                ],
+                False,
+            )
 
         allowed_scopes = {scope.scope_key: scope for scope in plan.scopes}
         candidate_scopes: dict[tuple[str, str], MemoryScope] = {}
@@ -992,6 +1043,7 @@ class PersonalMemoryQueryEngine:
             records,
             {key: value for key, value in details.items() if key in known},
             [],
+            True,
         )
 
     def _validate_plan(self, plan: PersonalMemoryQueryPlan) -> None:

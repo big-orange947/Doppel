@@ -317,6 +317,24 @@ class DatasetTest(unittest.TestCase):
                 "security_failures": [],
                 "fixture_validation_failures": [],
             },
+            "hard_gates_by_profile": {
+                "deterministic": {
+                    "lexical": {
+                        "planner_failures": [],
+                        "retrieval_failures": [],
+                        "security_failures": [],
+                        "fixture_validation_failures": [],
+                    }
+                },
+                "oracle": {
+                    "lexical": {
+                        "planner_failures": [],
+                        "retrieval_failures": [],
+                        "security_failures": [],
+                        "fixture_validation_failures": [],
+                    }
+                },
+            },
             "cases": [],
             "deferred_queries": [],
             "graph_final_hit_attribution": {"available": False},
@@ -327,6 +345,7 @@ class DatasetTest(unittest.TestCase):
                 "commit_hash": "a" * 40,
                 "planner_modes": ["oracle", "deterministic"],
                 "requested_profiles": ["lexical"],
+                "gate_profiles": [],
                 "executed_profiles": ["oracle:lexical"],
                 "unavailable_profiles": [],
                 "dataset_fingerprint": "f" * 64,
@@ -1017,10 +1036,70 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
                 "oracle",
                 "--profiles",
                 "lexical",
+                "--gate-profiles",
+                "lexical_relation,lexical_vector_relation",
             ]
         )
         self.assertEqual(args.planner_modes, "oracle")
         self.assertTrue(args.no_metamorphic)
+        self.assertEqual(
+            args.gate_profiles, "lexical_relation,lexical_vector_relation"
+        )
+
+    def test_profile_gate_is_not_failed_by_control_profile(self) -> None:
+        from benchmarks.personal_retrieval_ablation import _parser, _validate_report
+
+        empty = {
+            "planner_failures": [],
+            "retrieval_failures": [],
+            "security_failures": [],
+            "fixture_validation_failures": [],
+        }
+        control_failure = {
+            **empty,
+            "retrieval_failures": ["q-control:missing_required_hit"],
+        }
+        report = {
+            "runtime": {
+                "vector": {"available": True},
+                "graph": {"available": True},
+            },
+            "profiles": {
+                "oracle": {
+                    "lexical": {
+                        "query_count": 1,
+                        "error_count": 0,
+                        "scope_leakage_count": 0,
+                        "temporal_violation_count": 0,
+                    },
+                    "lexical_relation": {
+                        "query_count": 1,
+                        "error_count": 0,
+                        "scope_leakage_count": 0,
+                        "temporal_violation_count": 0,
+                    },
+                }
+            },
+            "hard_gates": control_failure,
+            "hard_gates_by_profile": {
+                "oracle": {
+                    "lexical": control_failure,
+                    "lexical_relation": empty,
+                }
+            },
+        }
+        args = _parser().parse_args(
+            [
+                "--planner-modes",
+                "oracle",
+                "--profiles",
+                "lexical,lexical_relation",
+                "--gate-profiles",
+                "lexical_relation",
+            ]
+        )
+
+        self.assertEqual(_validate_report(report, args=args), [])
 
     def test_benchmark_has_no_http_client_import(self) -> None:
         src = (

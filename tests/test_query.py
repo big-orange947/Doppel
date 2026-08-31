@@ -1315,6 +1315,167 @@ async def test_relation_candidates_are_separate_rank_features_and_store_reloaded
     assert "relation_type:HELD_BY" in result.hits[0].reasons
 
 
+async def test_explicit_relation_constraints_gate_semantic_and_lexical_hits() -> None:
+    store = InMemoryStore()
+    for record in (
+        _record(
+            "camera-location",
+            "相机目前放在工作室。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+        _record(
+            "camera-purchase",
+            "相机是去年购买的。",
+            memory_type="episode",
+            temporal_status="historical",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    ):
+        await _put(store, record)
+
+    class _BothSemanticCandidates:
+        async def search(self, query, scopes, *, filters=None, limit=10):
+            del query, filters, limit
+            return [
+                RecallResult(
+                    fact="semantic location",
+                    memory_id="camera-location",
+                    scope=scopes[0],
+                    similarity=0.9,
+                ),
+                RecallResult(
+                    fact="semantic purchase",
+                    memory_id="camera-purchase",
+                    scope=scopes[0],
+                    similarity=0.99,
+                ),
+            ]
+
+    relation_index = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="camera-location",
+                source="graphiti_relation",
+                score=0.95,
+                relation_type="LOCATED_AT",
+                edge_id="edge-location",
+                episode_ids=["episode-location"],
+            ),
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="camera-purchase",
+                source="graphiti_relation",
+                score=0.2,
+                relation_type="PURCHASED_AT",
+                edge_id="edge-purchase",
+                episode_ids=["episode-purchase"],
+            ),
+        ]
+    )
+    result = await PersonalMemoryQueryEngine(
+        store,
+        semantic_index=_BothSemanticCandidates(),
+        relation_index=relation_index,
+    ).query(
+        _DraftPlanner(
+            intent="lookup",
+            search_text="相机",
+            entity_mentions=["相机"],
+            relation_hints=["位于"],
+        ),
+        "相机现在位于哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["camera-location"]
+    assert result.hits[0].semantic_score == 0.9
+    assert result.hits[0].relation_score == 0.95
+    assert not result.complete
+
+
+async def test_explicit_relation_constraints_abstain_on_relation_mismatch() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "camera-location",
+            "相机目前放在工作室。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    relation_index = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="camera-location",
+                source="graphiti_relation",
+                score=0.2,
+                relation_type="LOCATED_AT",
+                edge_id="edge-location",
+                episode_ids=["episode-location"],
+            )
+        ]
+    )
+
+    result = await PersonalMemoryQueryEngine(
+        store, relation_index=relation_index
+    ).query(
+        _DraftPlanner(
+            intent="lookup",
+            search_text="相机",
+            entity_mentions=["相机"],
+            relation_hints=["购买"],
+        ),
+        "谁购买了相机？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.hits == []
+    assert any("no qualified relation evidence" in item for item in result.warnings)
+
+
+async def test_relation_match_gate_can_be_disabled_for_legacy_augmentation() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "camera-location",
+            "相机目前放在工作室。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    result = await PersonalMemoryQueryEngine(
+        store,
+        PersonalMemoryQueryConfig(relation_hints_require_match=False),
+        relation_index=_RelationIndex([]),
+    ).query(
+        _DraftPlanner(
+            intent="lookup",
+            search_text="相机",
+            entity_mentions=["相机"],
+            relation_hints=["购买"],
+        ),
+        "谁购买了相机？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["camera-location"]
+
+
 async def test_relation_index_requires_explicit_entity_anchor() -> None:
     store = InMemoryStore()
     relation_index = _RelationIndex([])
@@ -1406,6 +1567,7 @@ async def test_relation_outage_degrades_to_nonrelation_paths() -> None:
             intent="current",
             search_text="相机",
             entity_mentions=["相机"],
+            relation_hints=["位于"],
             subject="owner",
         ),
         "相机在哪里？",
