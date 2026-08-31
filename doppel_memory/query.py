@@ -201,11 +201,18 @@ places, objects, or named concepts that can anchor a graph relation. Populate
 relation_hints whenever the question explicitly asks for a relationship or property
 between an anchor and a known or unknown endpoint. An interrogative endpoint such as
 who, where, or which one is the value being requested, not a reason to omit the
-relation. Preserve one concise predicate phrase from the question instead of inventing
-a canonical ontology label or using generic semantic-search keywords. The trusted
+relation. Preserve only the shortest predicate phrase from the question: exclude the
+named entity and interrogative endpoint from the hint, do not translate it into
+another language, and do not replace it with a canonical synonym or ontology label.
+Entity mentions and relation hints are independent: every explicitly named,
+non-trusted-subject anchor must remain in entity_mentions even when it also appears
+near the predicate. The trusted
 owner/agent subject is already bound outside entity_mentions: when the question only
 anchors on that subject, keep entity_mentions empty and still emit the explicit
 relation hint.
+The input default_subject/default_subject_id are trusted host authority, not semantic
+fields for the model to reinterpret. Echo them unchanged; a person, pet, object, or
+place mentioned in the question belongs in entity_mentions, not subject.
 Use the supplied current time to resolve relative expressions. Prefer a conservative
 draft and explain ambiguity rather than broadening the subject or time range.
 """
@@ -215,7 +222,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "5"
+    version = "6"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -235,7 +242,13 @@ class ReferencePersonalMemoryQueryPlanner:
         )
         if isinstance(raw, BaseModel):
             raw = raw.model_dump(warnings=False)
-        return PersonalMemoryQueryDraft.model_validate(raw)
+        draft = PersonalMemoryQueryDraft.model_validate(raw)
+        return draft.model_copy(
+            update={
+                "subject": bound.default_subject,
+                "subject_id": bound.default_subject_id,
+            }
+        )
 
 
 class DeterministicPersonalMemoryQueryPlanner:
@@ -485,7 +498,13 @@ class PersonalMemoryQueryEngine:
             allowed_subject_ids=allowed_subject_ids,
         )
         temporal_statuses = _bind_temporal_statuses(
-            draft.intent, draft.temporal_statuses
+            draft.intent,
+            draft.temporal_statuses,
+            has_explicit_time=bool(
+                draft.as_of is not None
+                or draft.time_from is not None
+                or draft.time_to is not None
+            ),
         )
         plan = PersonalMemoryQueryPlan(
             plan_id="",
@@ -996,6 +1015,8 @@ class PersonalMemoryQueryEngine:
             subject=plan.subject,
             subject_id=plan.subject_id,
             valid_at=valid_at,
+            time_from=plan.time_from if valid_at is None else None,
+            time_to=plan.time_to if valid_at is None else None,
         )
         try:
             candidates = await self._relation_index.search_relations(
@@ -1279,7 +1300,10 @@ def _visible_memory_states(plan: PersonalMemoryQueryPlan) -> frozenset[MemorySta
 
 
 def _bind_temporal_statuses(
-    intent: str, temporal_statuses: Sequence[str]
+    intent: str,
+    temporal_statuses: Sequence[str],
+    *,
+    has_explicit_time: bool = False,
 ) -> list[str]:
     """Apply intent semantics when a planner omits the equivalent hard filter.
 
@@ -1288,6 +1312,14 @@ def _bind_temporal_statuses(
     remain authoritative, while an omitted list receives the domain-neutral default.
     """
 
+    if has_explicit_time and intent in {
+        PersonalMemoryQueryIntent.HISTORY,
+        PersonalMemoryQueryIntent.AS_OF,
+    }:
+        # A record can be valid at a historical instant while its present-day
+        # classification is still ``current``. Explicit validity coordinates are
+        # authoritative for time-scoped history; status labels must not erase them.
+        return []
     if temporal_statuses:
         return list(temporal_statuses)
     if intent == PersonalMemoryQueryIntent.CURRENT:

@@ -170,7 +170,10 @@ uv run python -m benchmarks.relation_planner_quality `
 The runner evaluates the structured draft before any Store/index call: exact intent,
 semantically accepted intent alternatives, point-in-time or explicitly labeled
 covering intervals, entity and relation recall, unexpected terms, unrequested hard
-`memory_types`/`topic_keys` filters, provider failures, and latency. Successful drafts use a content-addressed disk cache,
+`memory_types`/`topic_keys` filters, trusted-subject binding, provider failures, and
+latency. Relation hints are scored against the concise normalized surface predicate;
+an overlong phrase containing the gold term does not receive credit because it would
+not satisfy the production relation gate. Successful drafts use a content-addressed disk cache,
 so a rerun does not spend another provider call; failed/invalid responses are never
 cached. `--max-calls` is checked before each cache miss. Provider token usage is an
 aggregate content-free ledger. The cache fingerprint includes planner/provider

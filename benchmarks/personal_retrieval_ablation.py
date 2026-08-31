@@ -484,7 +484,12 @@ class BenchmarkReportPlanner:
             raise ValueError(
                 f"planner report has no draft for query: {request.query!r}"
             )
-        return draft
+        return draft.model_copy(
+            update={
+                "subject": request.default_subject,
+                "subject_id": request.default_subject_id,
+            }
+        )
 
 
 _INTENT_VALUES = {
@@ -1017,7 +1022,7 @@ def _planner_report_failures(
     if expected_entities != len(query.entity_mentions) or unexpected_entities:
         failures.append("planner_entity_miss")
     expected_relations, unexpected_relations = _planner_term_matches(
-        query.relation_hints, list(result.plan.relation_hints)
+        query.relation_hints, list(result.plan.relation_hints), exact=True
     )
     if expected_relations != len(query.relation_hints) or unexpected_relations:
         failures.append("planner_relation_miss")
@@ -1027,7 +1032,7 @@ def _planner_report_failures(
 
 
 def _planner_term_matches(
-    expected: Sequence[str], actual: Sequence[str]
+    expected: Sequence[str], actual: Sequence[str], *, exact: bool = False
 ) -> tuple[int, list[str]]:
     def normalized(value: str) -> str:
         return re.sub(
@@ -1042,9 +1047,10 @@ def _planner_term_matches(
         for actual_index, actual_term in enumerate(actual_terms):
             if actual_index in matched_actual:
                 continue
-            if expected_term and actual_term and (
+            matches = actual_term == expected_term if exact else (
                 expected_term in actual_term or actual_term in expected_term
-            ):
+            )
+            if expected_term and actual_term and matches:
                 matched_expected.add(expected_index)
                 matched_actual.add(actual_index)
                 break

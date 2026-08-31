@@ -458,6 +458,8 @@ MODEL_FIELDS = {
         "subject",
         "subject_id",
         "valid_at",
+        "time_from",
+        "time_to",
     ),
     "PersonalMemoryExtractorConfig": (
         "owner_target_scope",

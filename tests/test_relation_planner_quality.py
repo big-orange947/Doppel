@@ -116,6 +116,7 @@ async def test_interval_covering_gold_asof_is_a_valid_temporal_plan() -> None:
             time_to=datetime(2026, 5, 31, 23, 59, tzinfo=UTC),
             entity_mentions=["银河帝国"],
             relation_hints=["手里"],
+            subject_id=dataset.scopes[query.scopes[0]].user_id,
         )
     )
 

@@ -1906,7 +1906,8 @@ async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> 
             "memory_types": ["state"],
             "topic_keys": ["residence.primary"],
             "temporal_statuses": ["current"],
-            "subject": "owner",
+            "subject": "豆包",
+            "subject_id": "untrusted-pet",
             "explanation": "current primary residence",
         }
     )
@@ -1921,10 +1922,14 @@ async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> 
     )
 
     assert draft.intent == PersonalMemoryQueryIntent.CURRENT
+    assert draft.subject == "owner"
+    assert draft.subject_id == "owner"
     request = model.requests[0]
     assert "never choose read scopes" in request.instructions
     assert "known or unknown endpoint" in request.instructions
     assert "already bound outside entity_mentions" in request.instructions
+    assert "interrogative endpoint from the hint" in request.instructions
+    assert "Echo them unchanged" in request.instructions
     assert request.output_schema["title"] == "PersonalMemoryQueryDraft"
     assert "scopes" not in request.output_schema["properties"]
 
@@ -1935,3 +1940,20 @@ def test_query_draft_normalizes_common_temporal_status_aliases() -> None:
     )
 
     assert draft.temporal_statuses == ["historical", "current", "planned"]
+
+
+async def test_explicit_historical_window_uses_validity_not_status_label() -> None:
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+    plan = await engine.plan(
+        _DraftPlanner(
+            intent="history",
+            temporal_statuses=["historical"],
+            time_from=datetime(2026, 6, 1, tzinfo=UTC),
+            time_to=datetime(2026, 6, 30, 23, 59, tzinfo=UTC),
+        ),
+        "六月时是什么状态？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert plan.temporal_statuses == []

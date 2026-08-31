@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from doppel_memory.models import MemoryFilter, MemoryScope
 
@@ -26,6 +26,8 @@ class RelationQuery(BaseModel):
     subject: str
     subject_id: str
     valid_at: datetime | None = None
+    time_from: datetime | None = None
+    time_to: datetime | None = None
 
     @field_validator("query_text", "subject", "subject_id", mode="before")
     @classmethod
@@ -38,14 +40,24 @@ class RelationQuery(BaseModel):
         terms = [str(item or "").strip() for item in list(value or [])]
         return list(dict.fromkeys(item for item in terms if item))
 
-    @field_validator("valid_at")
+    @field_validator("valid_at", "time_from", "time_to")
     @classmethod
     def _normalize_time(cls, value: datetime | None) -> datetime | None:
         if value is None:
             return None
         if value.tzinfo is None:
-            raise ValueError("relation valid_at must include a timezone")
+            raise ValueError("relation query times must include a timezone")
         return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def _validate_interval(self) -> RelationQuery:
+        if self.time_from and self.time_to and self.time_to < self.time_from:
+            raise ValueError("relation time_to must not precede time_from")
+        if self.valid_at is not None and (
+            self.time_from is not None or self.time_to is not None
+        ):
+            raise ValueError("relation query cannot mix valid_at with a time range")
+        return self
 
 
 class RelationCandidate(BaseModel):

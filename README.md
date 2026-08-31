@@ -1241,8 +1241,10 @@ engine = PersonalMemoryQueryEngine(
 
 Reference planner 只有在问题明确提到人、地点、物品或命名概念时才填写 `entity_mentions`；如果问题
 只以“我/主人”作为关系起点，则由 host 已绑定的 subject 生成 scope-salted 图锚点，不把“我”伪装成
-普通实体。只要问题明确询问关系或属性，即使目标是“谁/哪里/哪一个”这样的未知端点，也必须保留
-问句中的简短 `relation_hints`。它是通用的关系相关性提示，不是领域关键词表。Graphiti edge name 或自然语言 fact
+普通实体；模型输出也不能把问题中提到的宠物、人物或物品擅自改成 memory subject。只要问题明确
+询问关系或属性，即使目标是“谁/哪里/哪一个”这样的未知端点，也必须保留问句中最短、同语言的
+谓词作为 `relation_hints`，不带实体和疑问端点，不翻译成 ontology 标签。它是通用的关系相关性
+提示，不是领域关键词表。Graphiti edge name 或自然语言 fact
 命中提示时保留正常关系分；只命中实体却没有回答所问关系的边会降至默认阈值以下，但不会从底层
 候选中硬删除。默认 `relation_hints_require_match=True` 会把结构化的关系提示当作事实资格门：
 pgvector/词法候选仍可在合格关系事实之间辅助排序，却不能用“实体相似”回答另一个关系；关系索引
@@ -1260,6 +1262,9 @@ Graphiti 召回缺陷。Deterministic Planner 继续保持无领域词典，不�
 成功的 planner report 还能作为消融评测的 `report` planner mode，按 dataset fingerprint 严格绑定后
 在多个本地检索 profile 间复用；重放不发 HTTP，也不会把模型漏掉关系提示或误加硬过滤器造成的
 失败算到 pgvector/Graphiti 头上。
+关系查询协议同时支持单点 `valid_at` 与互斥的 `time_from/time_to`。月份/年份问题会在 Neo4j rich
+edge 过滤和权威 Store 回源两处执行有效区间重叠；显式历史窗口不再用记录今天的 `historical/current`
+分类覆盖有效期，因此“当时已经生效、今天仍然有效”的 current 状态也可以被历史时点正确召回。
 
 v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
 计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，

@@ -242,6 +242,9 @@ async def run_relation_planner_quality(
             "temporal_plan_accuracy": _ratio(
                 sum(case["temporal_plan_ok"] for case in valid), len(cases)
             ),
+            "subject_binding_accuracy": _ratio(
+                sum(case["subject_binding_ok"] for case in valid), len(cases)
+            ),
             "entity_recall": _ratio(total_matched_entities, total_expected_entities),
             "relation_recall": _ratio(
                 total_matched_relations, total_expected_relations
@@ -308,6 +311,7 @@ async def _evaluate_case(
             "as_of_presence_ok": False,
             "as_of_date_ok": False,
             "temporal_plan_ok": False,
+            "subject_binding_ok": False,
             "expected_entity_count": len(query.entity_mentions),
             "matched_entity_count": 0,
             "unexpected_entity_count": 0,
@@ -340,10 +344,14 @@ async def _evaluate_case(
         and draft.time_from <= expected_as_of <= draft.time_to
     )
     temporal_plan_ok = as_of_date_ok or interval_covers_as_of
+    subject_binding_ok = (
+        draft.subject == request.default_subject
+        and draft.subject_id == request.default_subject_id
+    )
     matched_entities, unexpected_entities = _term_matches(
         query.entity_mentions, draft.entity_mentions
     )
-    matched_relations, unexpected_relations = _term_matches(
+    matched_relations, unexpected_relations = _relation_term_matches(
         query.relation_hints, draft.relation_hints
     )
     entity_ok = matched_entities == len(query.entity_mentions) and not unexpected_entities
@@ -361,6 +369,7 @@ async def _evaluate_case(
         and entity_ok
         and relation_ok
         and hard_filter_ok
+        and subject_binding_ok
     )
     return {
         "query_id": query.query_id,
@@ -376,6 +385,7 @@ async def _evaluate_case(
         "as_of_presence_ok": as_of_presence_ok,
         "as_of_date_ok": as_of_date_ok,
         "temporal_plan_ok": temporal_plan_ok,
+        "subject_binding_ok": subject_binding_ok,
         "interval_covers_as_of": interval_covers_as_of,
         "expected_entity_count": len(query.entity_mentions),
         "matched_entity_count": matched_entities,
@@ -404,6 +414,29 @@ def _term_matches(expected: list[str], actual: list[str]) -> tuple[int, list[str
             if expected_term and actual_term and (
                 expected_term in actual_term or actual_term in expected_term
             ):
+                matched_expected.add(expected_index)
+                matched_actual.add(actual_index)
+                break
+    unexpected = [
+        actual[index] for index in range(len(actual)) if index not in matched_actual
+    ]
+    return len(matched_expected), unexpected
+
+
+def _relation_term_matches(
+    expected: list[str], actual: list[str]
+) -> tuple[int, list[str]]:
+    """Require the concise surface predicate promised by the planner contract."""
+
+    expected_terms = [_normalize_term(item) for item in expected]
+    actual_terms = [_normalize_term(item) for item in actual]
+    matched_expected: set[int] = set()
+    matched_actual: set[int] = set()
+    for expected_index, expected_term in enumerate(expected_terms):
+        for actual_index, actual_term in enumerate(actual_terms):
+            if actual_index in matched_actual:
+                continue
+            if expected_term and actual_term == expected_term:
                 matched_expected.add(expected_index)
                 matched_actual.add(actual_index)
                 break

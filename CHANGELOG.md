@@ -81,6 +81,18 @@
   natural-language draft across every local retrieval profile. Planner structure
   failures are attributed before retrieval failures, preventing a missing relation
   hint or harmful hard filter from being mislabeled as a pgvector/Graphiti defect.
+- Reference planner v6 treats `default_subject/default_subject_id` as host authority:
+  model output cannot reinterpret a mentioned person, pet, object, or place as the
+  memory subject. Relation hints must preserve the shortest source-language predicate
+  without the named anchor or interrogative endpoint, while named non-subject anchors
+  remain independently present in `entity_mentions`. Planner quality now reports
+  trusted-subject binding and uses exact normalized surface-predicate agreement rather
+  than giving an overlong hint credit merely because it contains the gold term.
+- Extend the additive `RelationQuery` with mutually exclusive `valid_at` and
+  `time_from/time_to` coordinates. Graphiti rich-edge selection and authoritative
+  Store revalidation both apply interval overlap. Explicitly time-scoped history uses
+  validity coordinates rather than a present-day `historical` label, so a state that
+  was already valid then and remains current now is not incorrectly excluded.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and

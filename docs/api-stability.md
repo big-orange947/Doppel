@@ -58,6 +58,10 @@ current/as-of candidate search. Implementations receive one trusted valid-at ins
 but their results remain non-authoritative and must be reloaded from the exact-scope
 Store. Implementing ordinary `SemanticIndex` alone remains valid.
 
+The provisional `RelationQuery` accepts either one `valid_at` instant or an additive
+`time_from`/`time_to` interval. Implementations must reject a mixed point/range request
+and keep every returned relation subject to authoritative Store revalidation.
+
 The v0.8.1 governance policy, decision, plan, checkpoint, result, and runner types are
 provisional root APIs. Governance is additive to the stable Store lifecycle: every
 reinforcement, opt-in decay, archive, or restore writes an auditable replacement

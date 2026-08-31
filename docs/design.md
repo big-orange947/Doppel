@@ -787,7 +787,8 @@ complete=false，明确表示
 top-k 不是完整 snapshot。semantic provider 失败时可配置回退完整 lexical scan，warning 会进入结果。
 
 关系检索不再伪装成第二个 SemanticIndex。`RelationIndex` 只在可信 plan 提供显式
-`entity_mentions` 或 `relation_hints` 时运行，接收 exact scopes、subject、可选 relation hints 与 valid_at，返回带
+`entity_mentions` 或 `relation_hints` 时运行，接收 exact scopes、subject、可选 relation hints，以及
+互斥的 `valid_at` 或 `time_from/time_to`，返回带
 Edge/Episode provenance 的 memory candidates。`GraphitiRelationIndex` 绕过 Graphiti 的通用
 embedding/BM25/RRF 搜索，只读取非 `DOPPEL_MEMORY_FALLBACK` 的 Entity→RELATES_TO→Entity rich
 edges。显式实体优先作为锚点；仅有关系提示时，adapter 使用 host 已授权 subject 与 exact scope
@@ -795,6 +796,9 @@ edges。显式实体优先作为锚点；仅有关系提示时，adapter 使用 
 提供软排序与分数门，不作为直接删除候选的硬 ontology 过滤。每个候选仍回
 authoritative Store，并经过与 lexical/pgvector 相同的 scope、subject、authority、lifecycle、时间门。
 relation score 独立进入解释与排序，不因它同时出现在向量源中而自动获得双倍语义奖励。
+单点查询在 Neo4j edge 与 Store record 上检查时点有效性；范围查询在两层检查有效区间重叠。对于
+明确带时间坐标的 history/as_of，`valid_from/valid_to` 优先于记录今天的 temporal-status 分类，避免
+把“过去已生效且现在仍 current”的状态排除。
 
 实体相邻不等于关系相关。若 plan 提供 relation hints，Graphiti adapter 会在 edge name 与 edge fact
 中做领域无关的大小写归一化包含匹配；未命中的边仍可被观察和自定义阈值消费，但默认降为 0.2，

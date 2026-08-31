@@ -683,6 +683,10 @@ class GraphitiRelationIndex:
                 "AND ($valid_at IS NULL OR "
                 "(edge.valid_at IS NULL OR edge.valid_at <= $valid_at) AND "
                 "(edge.invalid_at IS NULL OR edge.invalid_at >= $valid_at)) "
+                "AND ($time_to IS NULL OR edge.valid_at IS NULL OR "
+                "edge.valid_at <= $time_to) "
+                "AND ($time_from IS NULL OR edge.invalid_at IS NULL OR "
+                "edge.invalid_at >= $time_from) "
                 "WITH source, edge, target, "
                 "CASE WHEN size($relation_hints) > 0 AND "
                 "any(hint IN $relation_hints WHERE "
@@ -703,6 +707,8 @@ class GraphitiRelationIndex:
                 relation_hints=relation_hints,
                 fallback_name=GRAPHITI_FALLBACK_EDGE_NAME,
                 valid_at=bound.valid_at,
+                time_from=bound.time_from,
+                time_to=bound.time_to,
                 limit=limit * 2,
             )
             rows = _graph_query_records(raw)
@@ -774,7 +780,7 @@ class GraphitiRelationIndex:
                     or source_key[0] != group_id
                     or record.scope.scope_key != group_id
                     or not _core_record_matches_filter(record, filter_obj)
-                    or not _core_record_valid_at(record, bound.valid_at)
+                    or not _core_record_valid_for_relation(record, bound)
                 ):
                     continue
                 key = (group_id, record.memory_id)
@@ -1573,6 +1579,26 @@ def _core_record_valid_at(
     if valid_from is not None and valid_from > valid_at:
         return False
     return not (valid_to is not None and valid_to < valid_at)
+
+
+def _core_record_valid_for_relation(
+    record: MemoryRecord, query: RelationQuery
+) -> bool:
+    if query.valid_at is not None:
+        return _core_record_valid_at(record, query.valid_at)
+    if query.time_from is None and query.time_to is None:
+        return True
+    valid_from = _record_valid_from(record)
+    valid_to = _record_valid_to(record)
+    interval_start = valid_from or record.created_at
+    interval_end = valid_to or (record.created_at if valid_from is None else None)
+    if query.time_to is not None and interval_start > query.time_to:
+        return False
+    return not (
+        query.time_from is not None
+        and interval_end is not None
+        and interval_end < query.time_from
+    )
 
 
 def _matches_filter(record: RecallResult, filters: MemoryFilter) -> bool:

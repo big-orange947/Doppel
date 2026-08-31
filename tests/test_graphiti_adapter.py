@@ -858,3 +858,22 @@ async def test_graphiti_relation_index_revalidates_store_time_and_filters() -> N
     )
 
     assert candidates == []
+
+    historical_window = await relation.search_relations(
+        RelationQuery(
+            query_text="一月时相机由谁保管？",
+            entity_mentions=["相机"],
+            subject="owner",
+            subject_id=scope.user_id,
+            time_from=datetime(2026, 1, 15, tzinfo=UTC),
+            time_to=datetime(2026, 1, 31, tzinfo=UTC),
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+    )
+
+    assert [item.memory_id for item in historical_window] == [record.memory_id]
+    range_params = fake.driver.calls[-1][1]
+    assert range_params["valid_at"] is None
+    assert range_params["time_from"] == datetime(2026, 1, 15, tzinfo=UTC)
+    assert range_params["time_to"] == datetime(2026, 1, 31, tzinfo=UTC)
