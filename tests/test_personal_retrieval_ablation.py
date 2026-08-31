@@ -22,6 +22,7 @@ from unittest.mock import patch
 from benchmarks.personal_retrieval_ablation import (
     ALL_PROFILES,
     PLANNER_MODE_ORACLE,
+    PLANNER_MODE_REPORT,
     PROFILE_DIRECT,
     PROFILE_EXECUTION,
     PROFILE_MAIN,
@@ -30,6 +31,7 @@ from benchmarks.personal_retrieval_ablation import (
     SOURCE_VECTOR,
     AblationDataset,
     AblationQuery,
+    BenchmarkReportPlanner,
     _aggregate,
     _direct_scan,
     _evaluate_result,
@@ -46,6 +48,7 @@ from doppel_memory import (
     InMemoryStore,
     MemoryScope,
     PersonalMemoryQueryEngine,
+    PersonalMemoryQueryRequest,
     RelationCandidate,
 )
 from doppel_memory.models import utc_now
@@ -723,6 +726,64 @@ class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
+    async def test_report_planner_replays_complete_matching_dataset(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        payload = {
+            "dataset": {"fingerprint": dataset.fingerprint},
+            "planner": {"name": "provider-planner", "version": "5"},
+            "cases": [
+                {
+                    "query": query.query,
+                    "error": "",
+                    "actual": {
+                        "intent": query.intent,
+                        "as_of": query.as_of.isoformat() if query.as_of else None,
+                        "time_from": (
+                            query.time_from.isoformat() if query.time_from else None
+                        ),
+                        "time_to": query.time_to.isoformat() if query.time_to else None,
+                        "entity_mentions": query.entity_mentions,
+                        "relation_hints": query.relation_hints,
+                    },
+                }
+                for query in dataset.queries
+                if query.partition != "deferred_cross_subject"
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "planner.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            planner = BenchmarkReportPlanner(path, dataset)
+            query = dataset.queries[0]
+            draft = await planner.plan(
+                PersonalMemoryQueryRequest(query=query.query, now=query.now)
+            )
+
+        self.assertEqual(draft.entity_mentions, query.entity_mentions)
+        self.assertEqual(draft.relation_hints, query.relation_hints)
+        self.assertEqual(planner.source["provider_calls_during_replay"], 0)
+
+    async def test_report_planner_rejects_dataset_fingerprint_mismatch(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "planner.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "dataset": {"fingerprint": "wrong"},
+                        "planner": {"name": "provider", "version": "5"},
+                        "cases": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "fingerprint"):
+                BenchmarkReportPlanner(path, dataset)
+
     async def test_deterministic_planner_failure_is_not_retrieval_temporal(
         self,
     ) -> None:
@@ -1040,14 +1101,17 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
             [
                 "--no-metamorphic",
                 "--planner-modes",
-                "oracle",
+                PLANNER_MODE_REPORT,
+                "--planner-report",
+                "data/doppel/planner.json",
                 "--profiles",
                 "lexical",
                 "--gate-profiles",
                 "lexical_relation,lexical_vector_relation",
             ]
         )
-        self.assertEqual(args.planner_modes, "oracle")
+        self.assertEqual(args.planner_modes, PLANNER_MODE_REPORT)
+        self.assertEqual(args.planner_report, Path("data/doppel/planner.json"))
         self.assertTrue(args.no_metamorphic)
         self.assertEqual(
             args.gate_profiles, "lexical_relation,lexical_vector_relation"

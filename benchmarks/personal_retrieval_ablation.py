@@ -38,6 +38,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import sys
 import tempfile
 from collections.abc import Sequence
@@ -363,7 +364,9 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
 
 PLANNER_MODE_ORACLE = "oracle"
 PLANNER_MODE_DETERMINISTIC = "deterministic"
+PLANNER_MODE_REPORT = "report"
 PLANNER_MODES = (PLANNER_MODE_ORACLE, PLANNER_MODE_DETERMINISTIC)
+ALL_PLANNER_MODES = (*PLANNER_MODES, PLANNER_MODE_REPORT)
 
 
 class BenchmarkOraclePlanner:
@@ -416,6 +419,72 @@ class BenchmarkOraclePlanner:
                 "or topic key injected"
             ),
         )
+
+
+class BenchmarkReportPlanner:
+    """Replay successful provider drafts from a planner-quality report.
+
+    The report must belong to the exact current dataset. This lets one paid planner
+    run feed every local retrieval profile without multiplying provider calls.
+    """
+
+    name = "doppel.benchmark-report-planner"
+
+    def __init__(self, path: Path, dataset: AblationDataset) -> None:
+        self.path = Path(path).resolve()
+        payload = self.path.read_bytes()
+        raw = json.loads(payload)
+        source_fingerprint = str(
+            (raw.get("dataset") or {}).get("fingerprint") or ""
+        )
+        if source_fingerprint != dataset.fingerprint:
+            raise ValueError(
+                "planner report dataset fingerprint does not match the current "
+                "ablation dataset"
+            )
+        source_planner = dict(raw.get("planner") or {})
+        self.version = (
+            f"{source_planner.get('name') or 'unknown'}@"
+            f"{source_planner.get('version') or 'unknown'}"
+        )
+        self.source = {
+            "path": str(self.path),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "dataset_fingerprint": source_fingerprint,
+            "planner": source_planner,
+            "provider_calls_during_replay": 0,
+        }
+        drafts: dict[str, PersonalMemoryQueryDraft] = {}
+        for item in list(raw.get("cases") or []):
+            query_text = str(item.get("query") or "").strip()
+            if not query_text or item.get("error") or item.get("actual") is None:
+                continue
+            if query_text in drafts:
+                raise ValueError(f"planner report repeats query text: {query_text!r}")
+            drafts[query_text] = PersonalMemoryQueryDraft.model_validate(
+                item["actual"]
+            )
+        required = {
+            query.query.strip()
+            for query in dataset.queries
+            if query.partition != "deferred_cross_subject"
+        }
+        missing = sorted(required.difference(drafts))
+        if missing:
+            raise ValueError(
+                f"planner report lacks {len(missing)} successful dataset drafts"
+            )
+        self._drafts = drafts
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryQueryDraft:
+        draft = self._drafts.get(str(request.query or "").strip())
+        if draft is None:
+            raise ValueError(
+                f"planner report has no draft for query: {request.query!r}"
+            )
+        return draft
 
 
 _INTENT_VALUES = {
@@ -909,8 +978,80 @@ async def _run_case(
 
 
 def _expected_intent_ok(result: PersonalMemoryQueryResult, query: AblationQuery) -> bool:
-    expected_aliases = INTENT_ALIASES.get(query.intent, (query.intent,))
-    return str(result.plan.intent) in expected_aliases
+    accepted = query.accepted_intents or list(
+        INTENT_ALIASES.get(query.intent, (query.intent,))
+    )
+    return str(result.plan.intent) in accepted
+
+
+def _planner_report_failures(
+    result: PersonalMemoryQueryResult, query: AblationQuery
+) -> list[str]:
+    """Compare a replayed natural-language plan with labeled query structure."""
+
+    failures: list[str] = []
+    if not _expected_intent_ok(result, query):
+        failures.append("planner_intent_miss")
+    temporal_ok = True
+    if query.as_of is not None:
+        plan_as_of = result.plan.as_of
+        point_ok = plan_as_of is not None and plan_as_of.date() == query.as_of.date()
+        interval_ok = bool(
+            query.accept_interval_covering_as_of
+            and result.plan.time_from is not None
+            and result.plan.time_to is not None
+            and result.plan.time_from <= query.as_of <= result.plan.time_to
+        )
+        temporal_ok = point_ok or interval_ok
+    elif result.plan.as_of is not None:
+        temporal_ok = False
+    if query.time_from is not None:
+        temporal_ok = temporal_ok and result.plan.time_from == query.time_from
+    if query.time_to is not None:
+        temporal_ok = temporal_ok and result.plan.time_to == query.time_to
+    if not temporal_ok:
+        failures.append("planner_temporal_miss")
+    expected_entities, unexpected_entities = _planner_term_matches(
+        query.entity_mentions, list(result.plan.entity_mentions)
+    )
+    if expected_entities != len(query.entity_mentions) or unexpected_entities:
+        failures.append("planner_entity_miss")
+    expected_relations, unexpected_relations = _planner_term_matches(
+        query.relation_hints, list(result.plan.relation_hints)
+    )
+    if expected_relations != len(query.relation_hints) or unexpected_relations:
+        failures.append("planner_relation_miss")
+    if result.plan.memory_types or result.plan.topic_keys:
+        failures.append("planner_hard_filter_miss")
+    return failures
+
+
+def _planner_term_matches(
+    expected: Sequence[str], actual: Sequence[str]
+) -> tuple[int, list[str]]:
+    def normalized(value: str) -> str:
+        return re.sub(
+            r"[^\w\u3400-\u9fff]+", "", str(value or "").casefold()
+        )
+
+    expected_terms = [normalized(item) for item in expected]
+    actual_terms = [normalized(item) for item in actual]
+    matched_expected: set[int] = set()
+    matched_actual: set[int] = set()
+    for expected_index, expected_term in enumerate(expected_terms):
+        for actual_index, actual_term in enumerate(actual_terms):
+            if actual_index in matched_actual:
+                continue
+            if expected_term and actual_term and (
+                expected_term in actual_term or actual_term in expected_term
+            ):
+                matched_expected.add(expected_index)
+                matched_actual.add(actual_index)
+                break
+    unexpected = [
+        actual[index] for index in range(len(actual)) if index not in matched_actual
+    ]
+    return len(matched_expected), unexpected
 
 
 def _evaluate_result(
@@ -933,11 +1074,20 @@ def _evaluate_result(
     agent_output_hits = 0
     plan_as_of = result.plan.as_of
     as_of_recognized = plan_as_of is not None
+    report_planner_failures = (
+        _planner_report_failures(result, query)
+        if mode == PLANNER_MODE_REPORT
+        else []
+    )
+    temporal_plan_is_trusted = mode == PLANNER_MODE_ORACLE or (
+        mode == PLANNER_MODE_REPORT
+        and "planner_temporal_miss" not in report_planner_failures
+    )
     for hit in hits:
         record = hit.record
         if record.scope.scope_key not in allowed_scope_keys:
             scope_leakage += 1
-        if query.as_of is not None and mode == PLANNER_MODE_ORACLE:
+        if query.as_of is not None and temporal_plan_is_trusted:
             # Temporal failure is attributed to retrieval only under an oracle
             # plan (correct as_of was injected). Deterministic misses are
             # planner failures and are never counted here.
@@ -989,12 +1139,18 @@ def _evaluate_result(
         planner_failures.append("planner_interval_miss")
     if planner_intent_miss:
         planner_failures.append("planner_intent_miss")
+    if mode == PLANNER_MODE_REPORT:
+        planner_failures = report_planner_failures
+        planner_temporal_miss = "planner_temporal_miss" in planner_failures
+        planner_interval_miss = False
+        planner_intent_miss = "planner_intent_miss" in planner_failures
     retrieval_failures: list[str] = []
-    if mode == PLANNER_MODE_ORACLE and temporal_violations:
+    retrieval_plan_is_trusted = mode != PLANNER_MODE_REPORT or not planner_failures
+    if temporal_plan_is_trusted and temporal_violations:
         retrieval_failures.append("retrieval_temporal_failure")
-    if forbidden:
+    if forbidden and retrieval_plan_is_trusted:
         retrieval_failures.append("forbidden_hit")
-    if missing and not query.expected_abstain:
+    if missing and not query.expected_abstain and retrieval_plan_is_trusted:
         retrieval_failures.append("missing_required_hit")
     security_failures: list[str] = []
     if scope_leakage:
@@ -1092,6 +1248,9 @@ def _evaluate_result(
         "planner_temporal_miss": planner_temporal_miss,
         "planner_intent_miss": planner_intent_miss,
         "planner_interval_miss": planner_interval_miss,
+        "planner_entity_miss": "planner_entity_miss" in planner_failures,
+        "planner_relation_miss": "planner_relation_miss" in planner_failures,
+        "planner_hard_filter_miss": "planner_hard_filter_miss" in planner_failures,
         "planner_failures": planner_failures,
         "retrieval_failures": retrieval_failures,
         "security_failures": security_failures,
@@ -1473,6 +1632,7 @@ async def run_ablation(
     *,
     profiles: Sequence[str] = PROFILE_MAIN,
     planner_modes: Sequence[str] = PLANNER_MODES,
+    planner_report: Path | None = None,
     require_live_postgres: bool = False,
     require_live_neo4j: bool = False,
     run_metamorphic: bool = True,
@@ -1480,9 +1640,11 @@ async def run_ablation(
     unknown = set(profiles).difference(ALL_PROFILES)
     if unknown:
         raise ValueError(f"unknown profiles: {sorted(unknown)}")
-    unknown_modes = set(planner_modes).difference(PLANNER_MODES)
+    unknown_modes = set(planner_modes).difference(ALL_PLANNER_MODES)
     if unknown_modes:
         raise ValueError(f"unknown planner modes: {sorted(unknown_modes)}")
+    if PLANNER_MODE_REPORT in planner_modes and planner_report is None:
+        raise ValueError("planner mode 'report' requires planner_report")
     started = perf_counter()
     store_dir = tempfile.mkdtemp(prefix="doppel-ablation-store-")
     store_path = Path(store_dir) / "store.sqlite3"
@@ -1601,6 +1763,7 @@ async def run_ablation(
             relation_index=relation_index,
             graph=graph,
             planner_modes=planner_modes,
+            planner_report=planner_report,
         )
         report["runtime"] = {
             "store": {
@@ -1683,10 +1846,13 @@ async def _run_profiles(
     relation_index: Any | None,
     graph: Any | None,
     planner_modes: Sequence[str] = PLANNER_MODES,
+    planner_report: Path | None = None,
 ) -> dict[str, Any]:
-    unknown_modes = set(planner_modes).difference(PLANNER_MODES)
+    unknown_modes = set(planner_modes).difference(ALL_PLANNER_MODES)
     if unknown_modes:
         raise ValueError(f"unknown planner modes: {sorted(unknown_modes)}")
+    if PLANNER_MODE_REPORT in planner_modes and planner_report is None:
+        raise ValueError("planner mode 'report' requires planner_report")
     vector_available = SOURCE_VECTOR in semantic_by_source
     graph_available = SOURCE_GRAPH in semantic_by_source
     vector_source = semantic_by_source.get(SOURCE_VECTOR)
@@ -1717,6 +1883,10 @@ async def _run_profiles(
         PLANNER_MODE_DETERMINISTIC: DeterministicPersonalMemoryQueryPlanner(),
         PLANNER_MODE_ORACLE: BenchmarkOraclePlanner(dataset.queries),
     }
+    if planner_report is not None:
+        planners[PLANNER_MODE_REPORT] = BenchmarkReportPlanner(
+            planner_report, dataset
+        )
     per_mode: dict[str, dict[str, dict[str, Any]]] = {}
     all_cases: list[dict[str, Any]] = []
     deferred_queries: list[str] = []
@@ -1842,6 +2012,11 @@ async def _run_profiles(
             "platform": platform.platform(),
         },
         "planner_modes": list(planner_modes),
+        "planner_sources": {
+            mode: planner.source
+            for mode, planner in planners.items()
+            if mode in planner_modes and hasattr(planner, "source")
+        },
         "profiles": per_mode,
         "diagnostics": diagnostics,
         "comparisons": {},
@@ -2273,7 +2448,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--planner-modes",
         default=",".join(PLANNER_MODES),
-        help="comma-separated planner modes: oracle,deterministic",
+        help="comma-separated planner modes: oracle,deterministic,report",
+    )
+    parser.add_argument(
+        "--planner-report",
+        type=Path,
+        help=(
+            "relation-planner quality report to replay when --planner-modes "
+            "contains report; performs zero provider calls"
+        ),
     )
     parser.add_argument(
         "--require-live-postgres",
@@ -2400,6 +2583,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         dataset,
         profiles=profiles,
         planner_modes=modes,
+        planner_report=args.planner_report,
         require_live_postgres=args.require_live_postgres,
         require_live_neo4j=args.require_live_neo4j,
         run_metamorphic=not args.no_metamorphic,

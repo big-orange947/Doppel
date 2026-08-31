@@ -75,6 +75,12 @@
   query-draft boundary. The live 30-query relation ablation covers subject-only
   questions and continues to require zero scope, provenance, temporal, and forbidden
   relation failures in the gated relation profiles.
+- The personal retrieval ablation can consume a successful planner-quality report
+  as a third `report` planner mode. It requires an exact dataset fingerprint, hashes
+  the source report, performs zero provider calls during replay, and reuses each
+  natural-language draft across every local retrieval profile. Planner structure
+  failures are attributed before retrieval failures, preventing a missing relation
+  hint or harmful hard filter from being mislabeled as a pgvector/Graphiti defect.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and

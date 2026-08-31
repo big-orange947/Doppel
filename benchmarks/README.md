@@ -188,6 +188,20 @@ uv run python -m benchmarks.relation_planner_quality `
   --output data/doppel/relation-planner-deepseek-rescored.json
 ```
 
+The same successful report can then drive the real Store + pgvector + Neo4j chain
+without repeating the paid planner call for every profile. The exact dataset
+fingerprint must match; planner failures and retrieval failures remain separate:
+
+```bash
+uv run python -m benchmarks.personal_retrieval_ablation `
+  --dataset benchmarks/datasets/personal-relation-ablation-zh-v1.json `
+  --profiles lexical_vector_relation --planner-modes report `
+  --planner-report data/doppel/relation-planner-deepseek-v5.json `
+  --gate-profiles lexical_vector_relation --no-metamorphic `
+  --require-live-postgres --require-live-neo4j --require-all-profiles `
+  --output data/doppel/personal-relation-ablation-deepseek-v5.json
+```
+
 The deterministic planner intentionally has no domain/entity parser and therefore is
 expected to score zero exact relation structures. It remains a temporal/aggregation
 baseline; these results must not be "fixed" by adding fixture vocabulary to runtime

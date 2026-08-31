@@ -1257,6 +1257,9 @@ relation ablation 问句，在不执行 Store/pgvector/Graphiti 的情况下测�
 支持内容寻址缓存、调用次数上限、provider token 汇总和旧报告零付费 replay。
 这样真实模型漏掉“以前”、把日期解析错、没有识别物品名，都会归因到 Planner，而不会被记成
 Graphiti 召回缺陷。Deterministic Planner 继续保持无领域词典，不承担实体/关系抽取职责。
+成功的 planner report 还能作为消融评测的 `report` planner mode，按 dataset fingerprint 严格绑定后
+在多个本地检索 profile 间复用；重放不发 HTTP，也不会把模型漏掉关系提示或误加硬过滤器造成的
+失败算到 pgvector/Graphiti 头上。
 
 v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
 计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，
