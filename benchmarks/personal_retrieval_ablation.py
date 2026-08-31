@@ -1628,6 +1628,20 @@ async def run_ablation(
     finally:
         if store is not None:
             await store.close()
+        if pg_store is not None:
+            try:
+                await _reset_ablation_postgres(
+                    host=PG_HOST,
+                    port=PG_PORT,
+                    database=PG_DATABASE,
+                    user=PG_USER,
+                    password=pg_password,
+                )
+            except Exception as exc:  # noqa: BLE001 - cleanup best effort
+                print(
+                    f"ablation PostgreSQL cleanup failed (best effort): {exc}",
+                    file=sys.stderr,
+                )
         if graph is not None and group_ids:
             try:
                 await _cleanup_graph_scope(graph, group_ids)
@@ -1717,6 +1731,21 @@ async def _run_profiles(
                 }
                 continue
             engine = _engines(store, semantic, relation)
+            warmup = next(
+                (
+                    query
+                    for query in dataset.queries
+                    if query.partition != "deferred_cross_subject"
+                ),
+                None,
+            )
+            if warmup is not None:
+                await engine.query(
+                    planner,
+                    warmup.query,
+                    [scopes[name] for name in warmup.scopes],
+                    now=warmup.now,
+                )
             cases: list[dict[str, Any]] = []
             for query in dataset.queries:
                 if query.partition == "deferred_cross_subject":

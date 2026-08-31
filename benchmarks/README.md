@@ -128,6 +128,10 @@ uv run python -m benchmarks.personal_retrieval_ablation `
 memory ID, target entity, or topic key. `relation_final_hit_attribution` counts only
 final Store-revalidated hits carrying `relation_match`, then checks them against
 required/forbidden gold. Raw graph adjacency does not count as a correct contribution.
+Each profile executes one discarded warm-up query before latency measurement so a
+later profile cannot inherit an unfair Neo4j/provider cold-start advantage. The
+dedicated PostgreSQL schema and exact Neo4j fixture scopes are both cleared in
+`finally`; no benchmark fixture is retained after the run.
 The fixture remains `frozen=false` and `publication_ready=false`; it is an engineering
 baseline, not public numerical evidence yet.
 

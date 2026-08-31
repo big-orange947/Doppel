@@ -48,7 +48,9 @@
   below the default relation gate. Semantic and relation candidate reads run
   concurrently. A separate 30-query Chinese relation ablation draft covers temporal
   boundaries, exact-scope name collisions, unknown entities, and wrong-relation
-  adversaries without paid LLM calls.
+  adversaries without paid LLM calls. Profile latency now uses one discarded warm-up,
+  and both dedicated PostgreSQL fixtures and exact Neo4j scopes are cleaned in
+  `finally`.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and
