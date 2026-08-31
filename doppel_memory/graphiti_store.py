@@ -62,6 +62,10 @@ from doppel_memory.relation import (
     RelationCandidate,
     RelationIndexUnavailableError,
     RelationQuery,
+    RelationReranker,
+    RelationRerankItem,
+    RelationRerankRequest,
+    RelationRerankScore,
 )
 from doppel_memory.store import MemoryStore
 from doppel_memory.vector import SemanticIndexUnavailableError
@@ -625,7 +629,21 @@ class GraphitiRelationIndex:
         llm_model: str = "",
         enabled: bool = True,
         graphiti_client: Any | None = None,
+        relation_reranker: RelationReranker | None = None,
+        minimum_reranker_score: float | None = None,
     ) -> None:
+        if relation_reranker is None and minimum_reranker_score is not None:
+            raise ValueError(
+                "minimum_reranker_score requires a relation_reranker"
+            )
+        if relation_reranker is not None and minimum_reranker_score is None:
+            raise ValueError(
+                "relation_reranker requires an explicit minimum_reranker_score"
+            )
+        if minimum_reranker_score is not None and not (
+            0.0 <= minimum_reranker_score <= 1.0
+        ):
+            raise ValueError("minimum_reranker_score must be between 0 and 1")
         self._store = store
         self._neo4j_uri = neo4j_uri
         self._neo4j_user = neo4j_user
@@ -637,6 +655,9 @@ class GraphitiRelationIndex:
         self._graphiti: Any | None = graphiti_client
         self._owns_client = graphiti_client is None
         self._init_lock = asyncio.Lock()
+        self._relation_reranker = relation_reranker
+        self._minimum_reranker_score = minimum_reranker_score
+        self._reranker_last_error: str | None = None
 
     @property
     def identity(self) -> str:
@@ -697,6 +718,7 @@ class GraphitiRelationIndex:
                 "THEN 1 ELSE 0 END AS relation_hint_match "
                 "RETURN edge.group_id AS group_id, edge.uuid AS edge_id, "
                 "edge.name AS relation_type, edge.episodes AS episode_ids, "
+                "edge.fact AS fact, "
                 "edge.valid_at AS valid_at, edge.invalid_at AS invalid_at, "
                 "source.uuid AS source_entity_id, source.name AS source_entity_name, "
                 "target.uuid AS target_entity_id, target.name AS target_entity_name, "
@@ -720,6 +742,25 @@ class GraphitiRelationIndex:
             raise RelationIndexUnavailableError(
                 f"Graphiti relation search failed: {exc}"
             ) from exc
+
+        reranker_scores = await self._rerank_rows(bound, rows)
+        if reranker_scores:
+            threshold = self._minimum_reranker_score
+            assert threshold is not None
+            indexed_rows = list(enumerate(rows))
+            indexed_rows.sort(
+                key=lambda item: (
+                    -int(
+                        bool(item[1]["relation_hint_match"] or 0)
+                        or reranker_scores.get(str(item[1]["edge_id"] or ""), -1.0)
+                        >= threshold
+                    ),
+                    -reranker_scores.get(str(item[1]["edge_id"] or ""), -1.0),
+                    -int(bool(item[1]["relation_hint_match"] or 0)),
+                    item[0],
+                )
+            )
+            rows = [row for _, row in indexed_rows]
 
         episode_ids = {
             str(episode_id)
@@ -763,7 +804,23 @@ class GraphitiRelationIndex:
             scope = scope_by_key.get(group_id)
             edge_id = str(row["edge_id"] or "")
             relation_type = str(row["relation_type"] or "")
+            fact = str(_graph_row_value(row, "fact", "") or "")
             relation_hint_match = bool(row["relation_hint_match"] or 0)
+            reranker_score = reranker_scores.get(edge_id)
+            reranker_match = bool(
+                reranker_score is not None
+                and self._minimum_reranker_score is not None
+                and reranker_score >= self._minimum_reranker_score
+            )
+            match_kind = (
+                "adjacency"
+                if not raw_relation_hints
+                else "lexical"
+                if relation_hint_match
+                else "reranker"
+                if reranker_match
+                else "none"
+            )
             row_episode_ids = [
                 str(value) for value in list(row["episode_ids"] or []) if value
             ]
@@ -796,9 +853,12 @@ class GraphitiRelationIndex:
                         rank,
                         len(rows),
                         hints_present=bool(raw_relation_hints),
-                        hint_match=relation_hint_match,
+                        hint_match=relation_hint_match or reranker_match,
                     ),
                     relation_type=relation_type,
+                    fact=fact,
+                    match_kind=match_kind,
+                    reranker_score=reranker_score,
                     source_entity_id=str(row["source_entity_id"] or ""),
                     source_entity_name=str(row["source_entity_name"] or ""),
                     target_entity_id=str(row["target_entity_id"] or ""),
@@ -811,6 +871,54 @@ class GraphitiRelationIndex:
                 if len(results) >= limit:
                     return list(results.values())
         return list(results.values())
+
+    async def _rerank_rows(
+        self, request: RelationQuery, rows: Sequence[Any]
+    ) -> dict[str, float]:
+        if self._relation_reranker is None or not rows:
+            return {}
+        items: list[RelationRerankItem] = []
+        seen: set[str] = set()
+        for row in rows:
+            edge_id = str(row["edge_id"] or "").strip()
+            relation_type = str(row["relation_type"] or "").strip()
+            if not edge_id or not relation_type or edge_id in seen:
+                continue
+            seen.add(edge_id)
+            items.append(
+                RelationRerankItem(
+                    item_id=edge_id,
+                    relation_type=relation_type,
+                    fact=str(_graph_row_value(row, "fact", "") or ""),
+                )
+            )
+        if not items:
+            return {}
+        rerank_request = RelationRerankRequest(
+            query_text=request.query_text,
+            relation_hints=request.relation_hints,
+            items=items,
+        )
+        allowed_ids = {item.item_id for item in items}
+        try:
+            raw_scores = await self._relation_reranker.rerank(rerank_request)
+            scores: dict[str, float] = {}
+            for raw_score in raw_scores:
+                score = RelationRerankScore.model_validate(raw_score)
+                if score.item_id not in allowed_ids:
+                    raise ValueError("relation reranker returned an unknown item ID")
+                if score.item_id in scores:
+                    raise ValueError("relation reranker returned a duplicate item ID")
+                scores[score.item_id] = score.score
+        except Exception as exc:  # noqa: BLE001 - optional scorer fails closed
+            self._reranker_last_error = type(exc).__name__
+            logger.warning(
+                "Relation reranker failed closed (%s); retaining lexical decisions",
+                type(exc).__name__,
+            )
+            return {}
+        self._reranker_last_error = None
+        return scores
 
     async def health(self) -> dict[str, Any]:
         if not self._enabled:
@@ -828,6 +936,7 @@ class GraphitiRelationIndex:
                 "role": "relation_index",
                 "semantic_search": False,
                 "experimental": True,
+                "relation_reranker": self._reranker_health(),
             }
         except Exception as exc:  # noqa: BLE001 - health is an observation boundary
             return {
@@ -838,7 +947,25 @@ class GraphitiRelationIndex:
                 "semantic_search": False,
                 "experimental": True,
                 "reason": str(exc),
+                "relation_reranker": self._reranker_health(),
             }
+
+    def _reranker_health(self) -> dict[str, Any]:
+        if self._relation_reranker is None:
+            return {"configured": False}
+        try:
+            name = str(self._relation_reranker.name or "").strip()
+            version = str(self._relation_reranker.version or "").strip()
+        except Exception:  # noqa: BLE001 - health remains observational
+            name = ""
+            version = ""
+        return {
+            "configured": True,
+            "name": name,
+            "version": version,
+            "minimum_score": self._minimum_reranker_score,
+            "last_error": self._reranker_last_error,
+        }
 
     async def close(self) -> None:
         if self._graphiti is not None and self._owns_client:
@@ -1379,6 +1506,15 @@ def _graph_query_records(result: Any) -> list[Any]:
     if isinstance(result, list):
         return result
     return []
+
+
+def _graph_row_value(row: Any, key: str, default: Any = None) -> Any:
+    """Read optional projections from Neo4j records and lightweight test rows."""
+
+    try:
+        return row[key]
+    except (KeyError, TypeError):
+        return default
 
 
 def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:

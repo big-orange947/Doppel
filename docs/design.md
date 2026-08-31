@@ -806,6 +806,15 @@ relation score 独立进入解释与排序，不因它同时出现在向量源�
 低于 Doppel 的 0.35 relation gate。该规则没有“书/相机/工作”等领域表，且 pgvector/lexical
 仍可独立让同一记忆入选。semantic 与 relation 候选源并发执行，避免最高配置把两段 I/O 延迟相加。
 
+关系语义扩展使用独立的 `RelationReranker`，而不是复用通用 RecallResult reranker。它只接收查询、
+关系提示和批量的 opaque edge item（edge ID、relation type、fact），不会接收 scope、主体、memory
+ID、状态或时间元数据。配置 scorer 时必须显式配置 0..1 阈值；scorer 只能提升通过该阈值的文本关系
+候选，不能降低既有词面合格边的资格。少返回 item 表示“不提升”；重复 ID、未知 ID、无效结构或
+异常会使整批 scorer 输出失效，并 fail closed 到词面决策。随后仍执行 Edge→Episode provenance、
+Store 重载以及完整安全/时间门。这个协议边界允许未来接入本地 cross-encoder，但模型选择与阈值
+必须在扩大且冻结的 held-out/adversarial fixture 上校准，当前 draft 数据不承担这项结论。协议虽不
+暴露身份字段，query/fact 文本仍可能敏感；远程 scorer 的授权、脱敏、传输与留存由 host 负责。
+
 count 始终使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
 “一共几次”。SemanticIndex 是 top-k 协议，因此不参与 exact count 的集合定义；计数只使用完整
 结构/词法扫描。普通查询中，结构化条件仍是硬门禁，lexical/semantic 只能筛选或排序候选。

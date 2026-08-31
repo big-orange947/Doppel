@@ -442,6 +442,9 @@ MODEL_FIELDS = {
         "source",
         "score",
         "relation_type",
+        "fact",
+        "match_kind",
+        "reranker_score",
         "source_entity_id",
         "source_entity_name",
         "target_entity_id",
@@ -451,6 +454,9 @@ MODEL_FIELDS = {
         "valid_at",
         "invalid_at",
     ),
+    "RelationRerankItem": ("item_id", "relation_type", "fact"),
+    "RelationRerankRequest": ("query_text", "relation_hints", "items"),
+    "RelationRerankScore": ("item_id", "score"),
     "RelationQuery": (
         "query_text",
         "entity_mentions",
@@ -958,6 +964,7 @@ SIGNATURES = {
         ("filters", "KEYWORD_ONLY"),
         ("limit", "KEYWORD_ONLY"),
     ),
+    "RelationReranker.rerank": (("request", "POSITIONAL_OR_KEYWORD"),),
     "TemporalSemanticIndex.search_at": (
         ("query", "POSITIONAL_OR_KEYWORD"),
         ("scopes", "POSITIONAL_OR_KEYWORD"),

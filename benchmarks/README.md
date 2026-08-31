@@ -149,6 +149,14 @@ while separately measuring whether the retrieval adapter can recover safely. The
 fragment expansion contains no fixture vocabulary and must retain zero forbidden hits
 on the wrong-relation adversarial partition.
 
+`RelationReranker` is now an injectable, text-only edge scoring protocol, but this
+30-query draft does not calibrate its threshold and the checked-in ablation does not
+claim cross-encoder quality. A scorer must be evaluated as a separate profile over an
+expanded frozen held-out/adversarial set: report recall gain, newly introduced
+forbidden hits, threshold sweep, latency, model identity, and failure fallback. Scope,
+time, provenance, lifecycle, and authoritative Store-reload gates remain mandatory
+regardless of the scorer result.
+
 ### Natural-language relation planner quality
 
 Retrieval ablation uses an oracle plan so graph quality is not confused with planner

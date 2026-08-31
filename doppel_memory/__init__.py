@@ -182,6 +182,10 @@ from doppel_memory.relation import (
     RelationIndex,
     RelationIndexUnavailableError,
     RelationQuery,
+    RelationReranker,
+    RelationRerankItem,
+    RelationRerankRequest,
+    RelationRerankScore,
 )
 from doppel_memory.retriever import (
     IdentityReranker,
@@ -374,6 +378,10 @@ __all__ = [
     "RelationIndex",
     "RelationIndexUnavailableError",
     "RelationQuery",
+    "RelationRerankItem",
+    "RelationRerankRequest",
+    "RelationRerankScore",
+    "RelationReranker",
     "Reranker",
     "RetrievalStrategy",
     "Retriever",

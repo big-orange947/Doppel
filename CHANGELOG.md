@@ -55,6 +55,14 @@
   discarded warm-up, both dedicated PostgreSQL fixtures and exact Neo4j scopes are
   cleaned in `finally`, and quality gates can target candidate profiles independently
   without hiding control-profile failures from the report.
+- Add a provisional, text-only `RelationReranker` protocol for Graphiti rich edges.
+  It receives opaque edge IDs plus relation type/fact in one batch, requires an
+  explicitly configured score threshold, and can only promote textual relation
+  relevance; it cannot select scopes, subjects, memory IDs, time, lifecycle, or factual
+  authority. Missing scores remain non-promoting. Duplicate/unknown IDs, invalid
+  output, and provider exceptions fail closed to the existing lexical relation
+  decision, after which Edge→Episode provenance and authoritative Store revalidation
+  still apply. No default cross-encoder or benchmark-derived threshold is claimed yet.
 - Add a separate relation-planner quality runner over the existing 30-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and

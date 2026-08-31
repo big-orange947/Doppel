@@ -1231,6 +1231,8 @@ relation_index = GraphitiRelationIndex(
     neo4j_uri="bolt://127.0.0.1:7687",
     neo4j_user="neo4j",
     neo4j_password=neo4j_password,
+    # Optional: inject a host-supplied RelationReranker together with an
+    # explicitly calibrated minimum_reranker_score.
 )
 engine = PersonalMemoryQueryEngine(
     store,
@@ -1253,6 +1255,18 @@ pgvector/词法候选仍可在合格关系事实之间辅助排序，却不能�
 旧式纯加分融合的接入方可以显式关闭该门。Deterministic planner 不猜实体，因此不会为了 benchmark
 问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回 Store 复核，
 Graphiti/Neo4j 从不成为事实权威。
+
+高配置部署可以向 `GraphitiRelationIndex` 注入 `RelationReranker`，用于弥补 Planner 输出的关系短语
+与 Graphiti edge 文本之间的同义改写。该协议一次只接收 `query_text`、`relation_hints` 以及每条边的
+不透明 `item_id + relation_type + fact`；它看不到 scope、subject ID、memory ID、生命周期或时间字段，
+也无权决定事实是否成立。调用方必须同时显式给出 `minimum_reranker_score`，Doppel 不从当前 30 条
+draft fixture 猜一个“通用阈值”。缺失分数不会被补齐，重复/未知 item ID、非法分数或 provider 异常
+均 fail closed：只保留原有 exact/2–4 字词面资格，不会因重排器故障扩大召回面。重排命中的 Edge
+仍须完成 Episode provenance 与权威 Store 二次校验。`RelationCandidate.match_kind`、`fact` 和
+`reranker_score` 用于审计这条边是 adjacency、lexical、reranker 还是未满足关系资格；当前只提供
+通用协议与安全接线，不内置 cross-encoder 模型，也不宣称已有生产阈值。虽然协议不暴露身份与
+权限字段，query 和 edge fact 本身仍可能包含私人内容；接入远程 scorer 会把这些文本发给其 provider，
+应优先使用本地模型，或由 host 明确处理授权、脱敏、留存策略和传输安全。
 
 自然语言 Planner 与检索层必须分开评测。`benchmarks.relation_planner_quality` 直接复用 30 条
 relation ablation 问句，在不执行 Store/pgvector/Graphiti 的情况下测量 intent、as-of、实体锚点和

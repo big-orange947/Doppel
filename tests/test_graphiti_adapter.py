@@ -21,6 +21,9 @@ from doppel_memory import (
     MemoryScope,
     RelationIndex,
     RelationQuery,
+    RelationReranker,
+    RelationRerankRequest,
+    RelationRerankScore,
     Retriever,
     SemanticIndex,
 )
@@ -150,6 +153,24 @@ class _RelationDriver:
         if query == "RETURN 1 AS doppel_relation_health":
             return SimpleNamespace(records=[{"doppel_relation_health": 1}])
         return SimpleNamespace(records=self.rows)
+
+
+class _RelationReranker:
+    name = "fake-relation-scorer"
+    version = "1"
+
+    def __init__(self, scores=None, *, error: Exception | None = None) -> None:
+        self.scores = list(scores or [])
+        self.error = error
+        self.requests: list[RelationRerankRequest] = []
+
+    async def rerank(
+        self, request: RelationRerankRequest
+    ) -> list[RelationRerankScore | dict[str, object]]:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        return self.scores
 
 
 def test_relation_match_terms_never_expand_single_han_characters() -> None:
@@ -827,6 +848,257 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
     assert health["ok"] is True
     assert health["role"] == "relation_index"
     assert health["semantic_search"] is False
+
+
+def test_graphiti_relation_reranker_requires_explicit_threshold() -> None:
+    store = InMemoryStore()
+    scorer = _RelationReranker()
+    assert isinstance(scorer, RelationReranker)
+
+    with pytest.raises(ValueError, match="explicit minimum_reranker_score"):
+        GraphitiRelationIndex(store, relation_reranker=scorer)
+    with pytest.raises(ValueError, match="requires a relation_reranker"):
+        GraphitiRelationIndex(store, minimum_reranker_score=0.5)
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        GraphitiRelationIndex(
+            store,
+            relation_reranker=scorer,
+            minimum_reranker_score=1.1,
+        )
+
+
+async def test_graphiti_relation_reranker_batches_and_only_promotes_scored_edges() -> None:
+    scope = MemoryScope(user_id="rerank-owner", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
+    rows: list[dict[str, object]] = []
+    for index, content in enumerate(
+        ["相机由小王保管。", "护照放在书桌抽屉。", "用户喜欢喝红茶。"],
+        start=1,
+    ):
+        record = MemoryRecord(
+            memory_id=f"rerank-memory-{index}",
+            scope=scope,
+            content=content,
+            tags=["personal-memory"],
+            metadata={"evidence": [{"evidence_id": f"message-{index}"}]},
+        )
+        assert (await store.put(record)).accepted
+        indexed = await semantic.index_record(record)
+        rows.append(
+            {
+                "group_id": scope.scope_key,
+                "edge_id": f"edge-{index}",
+                "relation_type": f"RELATION_{index}",
+                "fact": content,
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": f"source-{index}",
+                "source_entity_name": "物品",
+                "target_entity_id": f"target-{index}",
+                "target_entity_name": "位置",
+                "relation_hint_match": 0,
+            }
+        )
+    scorer = _RelationReranker(
+        [
+            RelationRerankScore(item_id="edge-1", score=0.8),
+            RelationRerankScore(item_id="edge-2", score=0.9),
+            # Missing scores are deliberately non-promoting, never inferred.
+        ]
+    )
+    fake.driver = _RelationDriver(rows)
+    relation = GraphitiRelationIndex(
+        store,
+        graphiti_client=fake,
+        relation_reranker=scorer,
+        minimum_reranker_score=0.75,
+    )
+
+    candidates = await relation.search_relations(
+        RelationQuery(
+            query_text="东西放在哪里？",
+            entity_mentions=["物品"],
+            relation_hints=["位置"],
+            subject="owner",
+            subject_id=scope.user_id,
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+        limit=5,
+    )
+
+    assert [item.memory_id for item in candidates] == [
+        "rerank-memory-2",
+        "rerank-memory-1",
+        "rerank-memory-3",
+    ]
+    assert [item.match_kind for item in candidates] == [
+        "reranker",
+        "reranker",
+        "none",
+    ]
+    assert [item.reranker_score for item in candidates] == [0.9, 0.8, None]
+    assert candidates[0].fact == "护照放在书桌抽屉。"
+    assert candidates[0].score > 0.35
+    assert candidates[-1].score == 0.2
+    assert len(scorer.requests) == 1
+    rerank_request = scorer.requests[0]
+    assert [item.item_id for item in rerank_request.items] == [
+        "edge-1",
+        "edge-2",
+        "edge-3",
+    ]
+    assert set(rerank_request.items[0].model_dump()) == {
+        "item_id",
+        "relation_type",
+        "fact",
+    }
+    assert "memory_id" not in rerank_request.model_dump_json()
+    assert "scope" not in rerank_request.model_dump_json()
+    assert "edge.fact AS fact" in fake.driver.calls[0][0]
+    health = await relation.health()
+    assert health["relation_reranker"] == {
+        "configured": True,
+        "name": "fake-relation-scorer",
+        "version": "1",
+        "minimum_score": 0.75,
+        "last_error": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("scores", "error"),
+    [
+        (
+            [
+                {"item_id": "edge-rich", "score": 0.9},
+                {"item_id": "edge-rich", "score": 0.8},
+            ],
+            None,
+        ),
+        ([{"item_id": "unknown-edge", "score": 0.9}], None),
+        ([], TimeoutError("scorer unavailable")),
+    ],
+)
+async def test_graphiti_relation_reranker_failures_retain_only_lexical_baseline(
+    scores, error
+) -> None:
+    scope = MemoryScope(user_id="rerank-failure", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
+    record = MemoryRecord(
+        memory_id="rerank-failure-memory",
+        scope=scope,
+        content="相机由小王保管。",
+        tags=["personal-memory"],
+        metadata={"evidence": [{"evidence_id": "message-rerank"}]},
+    )
+    assert (await store.put(record)).accepted
+    indexed = await semantic.index_record(record)
+    fake.driver = _RelationDriver(
+        [
+            {
+                "group_id": scope.scope_key,
+                "edge_id": "edge-rich",
+                "relation_type": "HELD_BY",
+                "fact": record.content,
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": "camera",
+                "source_entity_name": "相机",
+                "target_entity_id": "wang",
+                "target_entity_name": "小王",
+                "relation_hint_match": 1,
+            }
+        ]
+    )
+    relation = GraphitiRelationIndex(
+        store,
+        graphiti_client=fake,
+        relation_reranker=_RelationReranker(scores, error=error),
+        minimum_reranker_score=0.75,
+    )
+
+    candidates = await relation.search_relations(
+        RelationQuery(
+            query_text="相机由谁保管？",
+            entity_mentions=["相机"],
+            relation_hints=["保管"],
+            subject="owner",
+            subject_id=scope.user_id,
+        ),
+        [scope],
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].match_kind == "lexical"
+    assert candidates[0].reranker_score is None
+    assert candidates[0].score > 0.35
+    assert (await relation.health())["relation_reranker"]["last_error"] in {
+        "ValueError",
+        "TimeoutError",
+    }
+
+
+async def test_graphiti_relation_reranker_cannot_bypass_store_revalidation() -> None:
+    scope = MemoryScope(user_id="rerank-store-gate", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
+    record = MemoryRecord(
+        memory_id="rerank-private-tag",
+        scope=scope,
+        content="护照在抽屉里。",
+        tags=["private-only"],
+        metadata={"evidence": [{"evidence_id": "message-private"}]},
+    )
+    assert (await store.put(record)).accepted
+    indexed = await semantic.index_record(record)
+    fake.driver = _RelationDriver(
+        [
+            {
+                "group_id": scope.scope_key,
+                "edge_id": "edge-private",
+                "relation_type": "LOCATED_AT",
+                "fact": record.content,
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": "passport",
+                "source_entity_name": "护照",
+                "target_entity_id": "drawer",
+                "target_entity_name": "抽屉",
+                "relation_hint_match": 0,
+            }
+        ]
+    )
+    relation = GraphitiRelationIndex(
+        store,
+        graphiti_client=fake,
+        relation_reranker=_RelationReranker(
+            [RelationRerankScore(item_id="edge-private", score=1.0)]
+        ),
+        minimum_reranker_score=0.75,
+    )
+
+    candidates = await relation.search_relations(
+        RelationQuery(
+            query_text="护照在哪里？",
+            entity_mentions=["护照"],
+            relation_hints=["位置"],
+            subject="owner",
+            subject_id=scope.user_id,
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+    )
+
+    assert candidates == []
 
 
 async def test_graphiti_relation_index_revalidates_store_time_and_filters() -> None:

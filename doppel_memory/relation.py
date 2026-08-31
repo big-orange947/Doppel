@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -60,6 +60,98 @@ class RelationQuery(BaseModel):
         return self
 
 
+class RelationRerankItem(BaseModel):
+    """One opaque graph edge offered for textual relation scoring.
+
+    The item deliberately excludes scope, subject identifiers, memory identifiers,
+    lifecycle state, and time metadata. A reranker can judge whether an edge's text
+    addresses the requested relationship, but cannot become an authority for any
+    of Doppel's isolation or factual-governance decisions.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    item_id: str
+    relation_type: str
+    fact: str = ""
+
+    @field_validator("item_id", "relation_type", "fact", mode="before")
+    @classmethod
+    def _strip_text(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @field_validator("item_id", "relation_type")
+    @classmethod
+    def _require_text(cls, value: str) -> str:
+        if not value:
+            raise ValueError("relation rerank item identifiers must not be empty")
+        return value
+
+
+class RelationRerankRequest(BaseModel):
+    """Text-only batch presented to a host-supplied relation reranker."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    query_text: str
+    relation_hints: list[str] = Field(default_factory=list)
+    items: list[RelationRerankItem] = Field(default_factory=list)
+
+    @field_validator("query_text", mode="before")
+    @classmethod
+    def _normalize_query(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @field_validator("relation_hints", mode="before")
+    @classmethod
+    def _normalize_hints(cls, value: object) -> list[str]:
+        hints = [str(item or "").strip() for item in list(value or [])]
+        return list(dict.fromkeys(item for item in hints if item))
+
+    @model_validator(mode="after")
+    def _require_unique_items(self) -> RelationRerankRequest:
+        item_ids = [item.item_id for item in self.items]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("relation rerank request item IDs must be unique")
+        return self
+
+
+class RelationRerankScore(BaseModel):
+    """Normalized textual relevance returned for one opaque edge item."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    item_id: str
+    score: float = Field(ge=0.0, le=1.0)
+
+    @field_validator("item_id", mode="before")
+    @classmethod
+    def _normalize_item_id(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @field_validator("item_id")
+    @classmethod
+    def _require_item_id(cls, value: str) -> str:
+        if not value:
+            raise ValueError("relation rerank score item_id must not be empty")
+        return value
+
+
+@runtime_checkable
+class RelationReranker(Protocol):
+    """Host-supplied text scorer; never an isolation or factual authority."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def version(self) -> str: ...
+
+    async def rerank(
+        self, request: RelationRerankRequest
+    ) -> Sequence[RelationRerankScore]: ...
+
+
 class RelationCandidate(BaseModel):
     """One graph relation mapped back to an authoritative Doppel memory."""
 
@@ -70,6 +162,9 @@ class RelationCandidate(BaseModel):
     source: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]*$")
     score: float = Field(ge=0.0, le=1.0)
     relation_type: str
+    fact: str = ""
+    match_kind: Literal["adjacency", "lexical", "reranker", "none"] = "adjacency"
+    reranker_score: float | None = Field(default=None, ge=0.0, le=1.0)
     source_entity_id: str = ""
     source_entity_name: str = ""
     target_entity_id: str = ""
@@ -83,6 +178,7 @@ class RelationCandidate(BaseModel):
         "memory_id",
         "source",
         "relation_type",
+        "fact",
         "source_entity_id",
         "source_entity_name",
         "target_entity_id",
