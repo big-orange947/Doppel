@@ -27,6 +27,8 @@ from benchmarks.personal_retrieval_ablation import (
     PROFILE_EXECUTION,
     PROFILE_MAIN,
     PROFILE_RELATION,
+    PROFILE_RELATION_BASE,
+    PROFILE_RELATION_RERANKED,
     SOURCE_GRAPH,
     SOURCE_VECTOR,
     AblationDataset,
@@ -35,10 +37,12 @@ from benchmarks.personal_retrieval_ablation import (
     _aggregate,
     _direct_scan,
     _evaluate_result,
+    _FastEmbedRelationReranker,
     _memory_record,
     _run_case,
     _run_profiles,
     _safety_metrics,
+    _sigmoid,
     apply_variant,
     load_ablation_dataset,
     substitute,
@@ -50,6 +54,8 @@ from doppel_memory import (
     PersonalMemoryQueryEngine,
     PersonalMemoryQueryRequest,
     RelationCandidate,
+    RelationRerankItem,
+    RelationRerankRequest,
 )
 from doppel_memory.models import utc_now
 
@@ -129,7 +135,9 @@ def _hit(
             event_key="",
             revision_kind="",
             tags=["personal-memory"],
-            evidence=[SimpleNamespace(message_id="e1", at=datetime(2026, 1, 1, tzinfo=UTC))],
+            evidence=[
+                SimpleNamespace(message_id="e1", at=datetime(2026, 1, 1, tzinfo=UTC))
+            ],
         ),
         scope,
         utc_now(),
@@ -142,6 +150,100 @@ def _hit(
         effective_at=record.created_at,
         reasons=reasons or ["exact_scope", "lexical_match"],
     )
+
+
+class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
+    async def test_fastembed_harness_batches_text_and_normalizes_logits(self) -> None:
+        class FakeCrossEncoder:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, list[str], int]] = []
+
+            def rerank(self, query, documents, *, batch_size):
+                materialized = list(documents)
+                self.calls.append((query, materialized, batch_size))
+                return [0.0, 2.0, -2.0]
+
+        scorer = _FastEmbedRelationReranker("fixture/model", batch_size=7)
+        fake = FakeCrossEncoder()
+        scorer._model = fake
+        request = RelationRerankRequest(
+            query_text="东西在哪里？",
+            relation_hints=["位置"],
+            items=[
+                RelationRerankItem(
+                    item_id="edge-1", relation_type="LOCATED_AT", fact="在书房"
+                ),
+                RelationRerankItem(
+                    item_id="edge-2", relation_type="HELD_BY", fact="由小王保管"
+                ),
+                RelationRerankItem(
+                    item_id="edge-3", relation_type="LIKES", fact="喜欢红茶"
+                ),
+            ],
+        )
+
+        scores = await scorer.rerank(request)
+
+        self.assertEqual(
+            [item.item_id for item in scores], ["edge-1", "edge-2", "edge-3"]
+        )
+        self.assertAlmostEqual(scores[0].score, 0.5)
+        self.assertAlmostEqual(scores[1].score, _sigmoid(2.0))
+        self.assertAlmostEqual(scores[2].score, _sigmoid(-2.0))
+        self.assertEqual(
+            fake.calls,
+            [
+                (
+                    "东西在哪里？",
+                    [
+                        "LOCATED_AT\n在书房",
+                        "HELD_BY\n由小王保管",
+                        "LIKES\n喜欢红茶",
+                    ],
+                    7,
+                )
+            ],
+        )
+        self.assertEqual(scorer.name, "fastembed-cross-encoder:fixture/model")
+
+    async def test_fastembed_harness_rejects_invalid_provider_output(self) -> None:
+        class WrongLengthCrossEncoder:
+            def rerank(self, query, documents, *, batch_size):
+                del query, documents, batch_size
+                return []
+
+        scorer = _FastEmbedRelationReranker("fixture/model")
+        scorer._model = WrongLengthCrossEncoder()
+        request = RelationRerankRequest(
+            query_text="位置",
+            items=[
+                RelationRerankItem(
+                    item_id="edge-1", relation_type="LOCATED_AT", fact="在书房"
+                )
+            ],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "different number"):
+            await scorer.rerank(request)
+
+    async def test_reranked_profile_is_unavailable_without_a_real_scorer(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
+        report = await _run_profiles(
+            store=InMemoryStore(),
+            scopes=scopes,
+            dataset=dataset,
+            profiles=("lexical_relation_reranked",),
+            semantic_by_source={},
+            relation_index=None,
+            relation_reranked_index=None,
+            graph=None,
+            planner_modes=(PLANNER_MODE_ORACLE,),
+        )
+
+        profile = report["profiles"]["oracle"]["lexical_relation_reranked"]
+        self.assertTrue(profile["unavailable"])
+        self.assertIn("relation_reranker", profile["reason"])
 
 
 class DatasetTest(unittest.TestCase):
@@ -231,8 +333,19 @@ class DatasetTest(unittest.TestCase):
             ("vector_direct", "graph_direct", "composite_direct"),
         )
         self.assertEqual(
-            PROFILE_RELATION,
+            PROFILE_RELATION_BASE,
             ("lexical_relation", "lexical_vector_relation"),
+        )
+        self.assertEqual(
+            PROFILE_RELATION_RERANKED,
+            (
+                "lexical_relation_reranked",
+                "lexical_vector_relation_reranked",
+            ),
+        )
+        self.assertEqual(
+            PROFILE_RELATION,
+            (*PROFILE_RELATION_BASE, *PROFILE_RELATION_RERANKED),
         )
         self.assertEqual(PROFILE_EXECUTION, (*PROFILE_MAIN, *PROFILE_RELATION))
         self.assertEqual(tuple(ALL_PROFILES), (*PROFILE_EXECUTION, *PROFILE_DIRECT))
@@ -249,7 +362,9 @@ class DatasetTest(unittest.TestCase):
         self.assertIn(report["runner"], schema["properties"]["runner"]["enum"])
         report_keys = set(report["profiles"]["deterministic"]["lexical"])
         schema_required = set(schema["$defs"]["profile"]["required"])
-        self.assertTrue(schema_required.issubset(report_keys), schema_required - report_keys)
+        self.assertTrue(
+            schema_required.issubset(report_keys), schema_required - report_keys
+        )
         pydantic.TypeAdapter(dict).validate_python(report)
 
     @staticmethod
@@ -296,7 +411,13 @@ class DatasetTest(unittest.TestCase):
                         "ambiguity_accuracy": 1.0,
                         "count_accuracy": 1.0,
                         "latency_ms": {"p50": 1, "p95": 2, "max": 3},
-                        "contribution": {"vector": 0, "graph": 0, "both": 0, "relation": 0},
+                        "contribution": {
+                            "vector": 0,
+                            "graph": 0,
+                            "both": 0,
+                            "relation": 0,
+                            "relation_reranker": 0,
+                        },
                     }
                 },
                 "oracle": {
@@ -315,9 +436,15 @@ class DatasetTest(unittest.TestCase):
                         "ambiguity_accuracy": 1.0,
                         "count_accuracy": 1.0,
                         "latency_ms": {"p50": 1, "p95": 2, "max": 3},
-                        "contribution": {"vector": 0, "graph": 0, "both": 0, "relation": 0},
+                        "contribution": {
+                            "vector": 0,
+                            "graph": 0,
+                            "both": 0,
+                            "relation": 0,
+                            "relation_reranker": 0,
+                        },
                     }
-                }
+                },
             },
             "diagnostics": {},
             "comparisons": {},
@@ -421,9 +548,7 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
                 for item in dataset.queries
                 if item.query_id == "q-dev-adversarial-same-id-different-scope"
             )
-            case = await _run_case(
-                engine, planner, query, scopes, profile="lexical"
-            )
+            case = await _run_case(engine, planner, query, scopes, profile="lexical")
             self.assertIn("m-skill-python-u1", case["hits"])
             self.assertNotIn("m-skill-python-u3", case["hits"])
             self.assertEqual(case["scope_leakage"], 0)
@@ -462,7 +587,9 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
             valid_from="2027-01-01T00:00:00Z",
         )
         result = SimpleNamespace(
-            plan=SimpleNamespace(intent="as_of", as_of=datetime(2026, 6, 15, tzinfo=UTC)),
+            plan=SimpleNamespace(
+                intent="as_of", as_of=datetime(2026, 6, 15, tzinfo=UTC)
+            ),
             hits=[hit],
             conflicts=[],
             matched_record_count=1,
@@ -519,12 +646,15 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
         async def probe_fail(*args: Any, **kwargs: Any) -> str:
             return "structured-unavailable: test"
 
-        with patch(
-            "benchmarks.personal_retrieval_ablation._probe_neo4j",
-            new=probe_fail,
-        ), patch(
-            "benchmarks.personal_retrieval_ablation._probe_postgres",
-            new=probe_fail,
+        with (
+            patch(
+                "benchmarks.personal_retrieval_ablation._probe_neo4j",
+                new=probe_fail,
+            ),
+            patch(
+                "benchmarks.personal_retrieval_ablation._probe_postgres",
+                new=probe_fail,
+            ),
         ):
             from benchmarks.personal_retrieval_ablation import run_ablation
 
@@ -543,12 +673,15 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
         async def probe_fail(*args: Any, **kwargs: Any) -> str:
             return "structured-unavailable: test"
 
-        with patch(
-            "benchmarks.personal_retrieval_ablation._probe_postgres",
-            new=probe_fail,
-        ), patch(
-            "benchmarks.personal_retrieval_ablation._probe_neo4j",
-            new=probe_fail,
+        with (
+            patch(
+                "benchmarks.personal_retrieval_ablation._probe_postgres",
+                new=probe_fail,
+            ),
+            patch(
+                "benchmarks.personal_retrieval_ablation._probe_neo4j",
+                new=probe_fail,
+            ),
         ):
             from benchmarks.personal_retrieval_ablation import run_ablation
 
@@ -566,6 +699,7 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
         query = next(
             item for item in dataset.queries if item.query_id == "q-dev-job-current"
         )
+
         async def _boom(*args: Any, **kwargs: Any) -> None:
             raise RuntimeError("boom")
 
@@ -667,10 +801,16 @@ class DirectScanTest(unittest.IsolatedAsyncioTestCase):
         class FakeIndex:
             async def search(self, query, bound, *, filters=None, limit=10):
                 return [
-                    SimpleNamespace(scope=good_scope, memory_id="m-residence-current"),  # ok
-                    SimpleNamespace(scope=scopes["u2"], memory_id="m-wang-residence"),  # leak
+                    SimpleNamespace(
+                        scope=good_scope, memory_id="m-residence-current"
+                    ),  # ok
+                    SimpleNamespace(
+                        scope=scopes["u2"], memory_id="m-wang-residence"
+                    ),  # leak
                     SimpleNamespace(scope=good_scope, memory_id="m-ghost"),  # orphan
-                    SimpleNamespace(scope=good_scope, memory_id="m-expired-taste"),  # inactive
+                    SimpleNamespace(
+                        scope=good_scope, memory_id="m-expired-taste"
+                    ),  # inactive
                 ]
 
         store_dir = tempfile.mkdtemp(prefix="ablation-ds-")
@@ -681,9 +821,7 @@ class DirectScanTest(unittest.IsolatedAsyncioTestCase):
             for item in dataset.fixtures:
                 record = _memory_record(item, scopes[item.scope], utc_now())
                 await store.put(record)
-            report = await _direct_scan(
-                FakeIndex(), store, dataset, scopes, "vector"
-            )
+            report = await _direct_scan(FakeIndex(), store, dataset, scopes, "vector")
         finally:
             await store.close()
         self.assertGreaterEqual(report["candidate_count"], 4)
@@ -820,9 +958,7 @@ class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
         # Planner did not recognize as_of -> planner_temporal_miss, NOT a
         # retrieval temporal failure under the deterministic mode.
         self.assertIn("planner_temporal_miss", case["planner_failures"])
-        self.assertNotIn(
-            "retrieval_temporal_failure", case["retrieval_failures"]
-        )
+        self.assertNotIn("retrieval_temporal_failure", case["retrieval_failures"])
         self.assertEqual(case["temporal_violations"], 0)
 
 
@@ -839,6 +975,9 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue((await store.put(record)).accepted)
 
         class _FixtureRelationIndex:
+            def __init__(self, match_kind="lexical") -> None:
+                self.match_kind = match_kind
+
             async def search_relations(
                 self, request, requested_scopes, *, filters=None, limit=10
             ):
@@ -887,6 +1026,10 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
                             source="fixture_relation",
                             score=0.9,
                             relation_type=relation.relation_type,
+                            match_kind=self.match_kind,
+                            reranker_score=(
+                                0.9 if self.match_kind == "reranker" else None
+                            ),
                             source_entity_name=relation.source_entity,
                             target_entity_name=relation.target_entity,
                             edge_id="edge-" + record.memory_id,
@@ -901,9 +1044,14 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
             store=store,
             scopes=scopes,
             dataset=dataset,
-            profiles=("lexical", "lexical_relation"),
+            profiles=(
+                "lexical",
+                "lexical_relation",
+                "lexical_relation_reranked",
+            ),
             semantic_by_source={},
             relation_index=_FixtureRelationIndex(),
+            relation_reranked_index=_FixtureRelationIndex("reranker"),
             graph=None,
             planner_modes=(PLANNER_MODE_ORACLE,),
         )
@@ -914,6 +1062,20 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
             relation_metrics["recall_at_1"], lexical_metrics["recall_at_1"]
         )
         self.assertGreater(relation_metrics["contribution"]["relation"], 0)
+        reranked_metrics = report["profiles"]["oracle"]["lexical_relation_reranked"]
+        self.assertEqual(
+            reranked_metrics["recall_at_1"], relation_metrics["recall_at_1"]
+        )
+        self.assertGreater(
+            reranked_metrics["contribution"]["relation_reranker"], 0
+        )
+        self.assertEqual(
+            relation_metrics["contribution"]["relation_reranker"], 0
+        )
+        self.assertIn(
+            "oracle_lexical_relation_reranked_vs_lexical_relation",
+            report["comparisons"],
+        )
         attribution = report["relation_final_hit_attribution"]
         self.assertTrue(attribution["available"])
         self.assertGreater(attribution["correct_relation_final_hit_links"], 0)
@@ -952,9 +1114,7 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(oracle["lexical_vector"]["unavailable"])
         self.assertTrue(oracle["lexical_vector_graph"]["unavailable"])
         self.assertEqual(report["comparisons"], {})
-        degradation = report["diagnostics"].get(
-            "composite_graph_only_degradation"
-        )
+        degradation = report["diagnostics"].get("composite_graph_only_degradation")
         self.assertIsNotNone(degradation)
         self.assertEqual(
             degradation["execution_profile"],
@@ -1008,9 +1168,7 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
             update={"fixtures": [bad_fixture, *dataset.fixtures[1:]]}
         )
         failures = validate_dataset_semantics(bad_dataset)
-        self.assertTrue(
-            any("does not match scope user" in item for item in failures)
-        )
+        self.assertTrue(any("does not match scope user" in item for item in failures))
 
     def test_future_asof_without_required_is_legal(self) -> None:
         dataset = _dataset()
@@ -1108,14 +1266,24 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
                 "lexical",
                 "--gate-profiles",
                 "lexical_relation,lexical_vector_relation",
+                "--relation-reranker-model",
+                "BAAI/bge-reranker-base",
+                "--relation-reranker-threshold",
+                "0.75",
+                "--relation-reranker-cache-dir",
+                "data/models",
+                "--relation-reranker-batch-size",
+                "16",
             ]
         )
         self.assertEqual(args.planner_modes, PLANNER_MODE_REPORT)
         self.assertEqual(args.planner_report, Path("data/doppel/planner.json"))
         self.assertTrue(args.no_metamorphic)
-        self.assertEqual(
-            args.gate_profiles, "lexical_relation,lexical_vector_relation"
-        )
+        self.assertEqual(args.gate_profiles, "lexical_relation,lexical_vector_relation")
+        self.assertEqual(args.relation_reranker_model, "BAAI/bge-reranker-base")
+        self.assertEqual(args.relation_reranker_threshold, 0.75)
+        self.assertEqual(args.relation_reranker_cache_dir, Path("data/models"))
+        self.assertEqual(args.relation_reranker_batch_size, 16)
 
     def test_profile_gate_is_not_failed_by_control_profile(self) -> None:
         from benchmarks.personal_retrieval_ablation import _parser, _validate_report

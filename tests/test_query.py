@@ -1271,6 +1271,8 @@ async def test_relation_candidates_are_separate_rank_features_and_store_reloaded
                 source="graphiti_relation",
                 score=0.92,
                 relation_type="HELD_BY",
+                match_kind="reranker",
+                reranker_score=0.88,
                 source_entity_id="entity-camera",
                 source_entity_name="相机",
                 target_entity_id="entity-contact",
@@ -1313,6 +1315,8 @@ async def test_relation_candidates_are_separate_rank_features_and_store_reloaded
     assert result.hits[0].semantic_score == 0.0
     assert "relation_source:graphiti_relation" in result.hits[0].reasons
     assert "relation_type:HELD_BY" in result.hits[0].reasons
+    assert "relation_match_kind:reranker" in result.hits[0].reasons
+    assert "relation_reranker_score:0.880000" in result.hits[0].reasons
 
 
 async def test_explicit_relation_constraints_gate_semantic_and_lexical_hits() -> None:

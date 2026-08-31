@@ -107,9 +107,7 @@ class PersonalMemoryQueryDraft(BaseModel):
     @field_validator("temporal_statuses", mode="before")
     @classmethod
     def _normalize_temporal_statuses(cls, value: Any) -> list[str]:
-        items = [
-            MemoryTemporalStatus.normalize(item) for item in list(value or [])
-        ]
+        items = [MemoryTemporalStatus.normalize(item) for item in list(value or [])]
         return list(dict.fromkeys(item for item in items if item))
 
     @field_validator("entity_mentions", "relation_hints", mode="before")
@@ -542,15 +540,23 @@ class PersonalMemoryQueryEngine:
         complete = True
         semantic_scores: dict[tuple[str, str], float] = {}
         semantic_sources: dict[tuple[str, str], tuple[str, ...]] = {}
-        relation_details: dict[tuple[str, str], tuple[float, str, str, str]] = {}
-        relation_task: asyncio.Task[
-            tuple[
-                list[MemoryRecord],
-                dict[tuple[str, str], tuple[float, str, str, str]],
-                list[str],
-                bool,
+        relation_details: dict[
+            tuple[str, str], tuple[float, str, str, str, str, float | None]
+        ] = {}
+        relation_task: (
+            asyncio.Task[
+                tuple[
+                    list[MemoryRecord],
+                    dict[
+                        tuple[str, str],
+                        tuple[float, str, str, str, str, float | None],
+                    ],
+                    list[str],
+                    bool,
+                ]
             ]
-        ] | None = None
+            | None
+        ) = None
         if (
             self._relation_index is not None
             and (bound.entity_mentions or bound.relation_hints)
@@ -682,10 +688,16 @@ class PersonalMemoryQueryEngine:
             source_names = semantic_sources.get(
                 (record.scope.scope_key, record.memory_id), ()
             )
-            relation_score, relation_source, relation_type, relation_edge = (
-                relation_details.get(
-                    (record.scope.scope_key, record.memory_id), (0.0, "", "", "")
-                )
+            (
+                relation_score,
+                relation_source,
+                relation_type,
+                relation_edge,
+                relation_match_kind,
+                relation_reranker_score,
+            ) = relation_details.get(
+                (record.scope.scope_key, record.memory_id),
+                (0.0, "", "", "", "", None),
             )
             if semantic_score < self.config.minimum_semantic_score:
                 semantic_score = 0.0
@@ -695,6 +707,8 @@ class PersonalMemoryQueryEngine:
                 relation_source = ""
                 relation_type = ""
                 relation_edge = ""
+                relation_match_kind = ""
+                relation_reranker_score = None
             if (
                 (bound.search_text or bound.entity_mentions)
                 and lexical_score < self.config.minimum_lexical_score
@@ -716,6 +730,12 @@ class PersonalMemoryQueryEngine:
                         f"relation_edge:{relation_edge}",
                     )
                 )
+                if relation_match_kind:
+                    reasons.append(f"relation_match_kind:{relation_match_kind}")
+                if relation_reranker_score is not None:
+                    reasons.append(
+                        f"relation_reranker_score:{relation_reranker_score:.6f}"
+                    )
             matched.append(
                 (
                     record,
@@ -875,12 +895,15 @@ class PersonalMemoryQueryEngine:
 
     async def _read_candidates(
         self, plan: PersonalMemoryQueryPlan
-    ) -> tuple[
-        list[MemoryRecord],
-        dict[tuple[str, str], float],
-        dict[tuple[str, str], tuple[str, ...]],
-        list[str],
-    ] | None:
+    ) -> (
+        tuple[
+            list[MemoryRecord],
+            dict[tuple[str, str], float],
+            dict[tuple[str, str], tuple[str, ...]],
+            list[str],
+        ]
+        | None
+    ):
         """Load a bounded authorized union of lexical and semantic candidates.
 
         Returning ``None`` requests the exhaustive lexical fallback. Exact counts
@@ -912,11 +935,7 @@ class PersonalMemoryQueryEngine:
         for candidate in [*lexical_result, *semantic_result]:
             scope = candidate.scope
             memory_id = str(candidate.memory_id or "").strip()
-            if (
-                scope is None
-                or scope.scope_key not in allowed_scopes
-                or not memory_id
-            ):
+            if scope is None or scope.scope_key not in allowed_scopes or not memory_id:
                 continue
             candidates.setdefault(
                 (scope.scope_key, memory_id), allowed_scopes[scope.scope_key]
@@ -924,11 +943,7 @@ class PersonalMemoryQueryEngine:
         for candidate in semantic_result:
             scope = candidate.scope
             memory_id = str(candidate.memory_id or "").strip()
-            if (
-                scope is None
-                or scope.scope_key not in allowed_scopes
-                or not memory_id
-            ):
+            if scope is None or scope.scope_key not in allowed_scopes or not memory_id:
                 continue
             key = (scope.scope_key, memory_id)
             semantic_scores[key] = max(
@@ -954,9 +969,7 @@ class PersonalMemoryQueryEngine:
             and record.scope.scope_key in allowed_scopes
             and _is_query_record_eligible(record, plan)
         ]
-        known_ids = {
-            (record.scope.scope_key, record.memory_id) for record in records
-        }
+        known_ids = {(record.scope.scope_key, record.memory_id) for record in records}
         semantic_scores = {
             key: score for key, score in semantic_scores.items() if key in known_ids
         }
@@ -965,12 +978,17 @@ class PersonalMemoryQueryEngine:
             for key, sources in semantic_sources.items()
             if key in known_ids
         }
-        return records, semantic_scores, bound_sources, [
-            (
-                "used bounded index-first lexical and semantic candidates; "
-                "result is not an exhaustive scope snapshot"
-            )
-        ]
+        return (
+            records,
+            semantic_scores,
+            bound_sources,
+            [
+                (
+                    "used bounded index-first lexical and semantic candidates; "
+                    "result is not an exhaustive scope snapshot"
+                )
+            ],
+        )
 
     async def _search_semantic_candidates(
         self, plan: PersonalMemoryQueryPlan, filters: MemoryFilter
@@ -1000,7 +1018,10 @@ class PersonalMemoryQueryEngine:
         self, plan: PersonalMemoryQueryPlan
     ) -> tuple[
         list[MemoryRecord],
-        dict[tuple[str, str], tuple[float, str, str, str]],
+        dict[
+            tuple[str, str],
+            tuple[float, str, str, str, str, float | None],
+        ],
         list[str],
         bool,
     ]:
@@ -1045,7 +1066,9 @@ class PersonalMemoryQueryEngine:
 
         allowed_scopes = {scope.scope_key: scope for scope in plan.scopes}
         candidate_scopes: dict[tuple[str, str], MemoryScope] = {}
-        details: dict[tuple[str, str], tuple[float, str, str, str]] = {}
+        details: dict[
+            tuple[str, str], tuple[float, str, str, str, str, float | None]
+        ] = {}
         for candidate in candidates:
             scope_key = candidate.scope.scope_key
             memory_id = str(candidate.memory_id or "").strip()
@@ -1061,6 +1084,8 @@ class PersonalMemoryQueryEngine:
                     candidate.source,
                     candidate.relation_type,
                     candidate.edge_id,
+                    candidate.match_kind,
+                    candidate.reranker_score,
                 )
         loaded = await asyncio.gather(
             *(
@@ -1117,13 +1142,15 @@ class PersonalMemoryQueryEngine:
         except Exception as exc:
             if not self.config.semantic_fallback_to_lexical:
                 raise
-            return {}, {}, [
-                f"semantic index unavailable; used lexical fallback: {type(exc).__name__}"
-            ]
+            return (
+                {},
+                {},
+                [
+                    f"semantic index unavailable; used lexical fallback: {type(exc).__name__}"
+                ],
+            )
         allowed_scopes = {scope.scope_key for scope in plan.scopes}
-        known_ids = {
-            (record.scope.scope_key, record.memory_id) for record in records
-        }
+        known_ids = {(record.scope.scope_key, record.memory_id) for record in records}
         scores: dict[tuple[str, str], float] = {}
         sources: dict[tuple[str, str], list[str]] = {}
         for candidate in candidates:
@@ -1284,10 +1311,14 @@ def _visible_memory_states(plan: PersonalMemoryQueryPlan) -> frozenset[MemorySta
     rejected records.
     """
 
-    if plan.intent in {
-        PersonalMemoryQueryIntent.HISTORY,
-        PersonalMemoryQueryIntent.AS_OF,
-    } or plan.as_of is not None:
+    if (
+        plan.intent
+        in {
+            PersonalMemoryQueryIntent.HISTORY,
+            PersonalMemoryQueryIntent.AS_OF,
+        }
+        or plan.as_of is not None
+    ):
         return frozenset(
             {
                 MemoryState.CANDIDATE,
@@ -1335,9 +1366,7 @@ def _query_memory_filter(plan: PersonalMemoryQueryPlan) -> MemoryFilter:
     """Build the same coarse eligibility filter for every candidate path."""
 
     excluded_authorities = (
-        None
-        if plan.subject == Actor.AGENT
-        else {FactAuthority.AGENT_OUTPUT}
+        None if plan.subject == Actor.AGENT else {FactAuthority.AGENT_OUTPUT}
     )
     return MemoryFilter(
         tags={"personal-memory"},
@@ -1358,10 +1387,7 @@ def _is_query_record_eligible(
 
     if record.state not in _visible_memory_states(plan):
         return False
-    if (
-        record.authority == FactAuthority.AGENT_OUTPUT
-        and plan.subject != Actor.AGENT
-    ):
+    if record.authority == FactAuthority.AGENT_OUTPUT and plan.subject != Actor.AGENT:
         return False
     if record.state not in {MemoryState.SUPERSEDED, MemoryState.EXPIRED}:
         return True
@@ -1416,9 +1442,7 @@ def _composite_semantic_sources(candidate: Any) -> tuple[str, ...]:
 def _relevant_conflicts(
     plan: PersonalMemoryQueryPlan,
     active_records: Sequence[MemoryRecord],
-    matched: Sequence[
-        tuple[MemoryRecord, float, float, float, datetime, list[str]]
-    ],
+    matched: Sequence[tuple[MemoryRecord, float, float, float, datetime, list[str]]],
     conflict_records: Sequence[MemoryRecord],
 ) -> list[PersonalMemoryConflictHit]:
     active_ids = {
@@ -1480,9 +1504,7 @@ def _relevant_conflicts(
 
 def _detect_ambiguity(
     plan: PersonalMemoryQueryPlan,
-    matched: Sequence[
-        tuple[MemoryRecord, float, float, float, datetime, list[str]]
-    ],
+    matched: Sequence[tuple[MemoryRecord, float, float, float, datetime, list[str]]],
 ) -> tuple[bool, list[str]]:
     if plan.intent not in {
         PersonalMemoryQueryIntent.CURRENT,
@@ -1595,8 +1617,7 @@ def _focused_query_coverage(query: str, document: str) -> float:
     if not query_terms:
         return 0.0
     overlap = sum(
-        min(count, document_terms.get(term, 0))
-        for term, count in query_terms.items()
+        min(count, document_terms.get(term, 0)) for term, count in query_terms.items()
     )
     return overlap / sum(query_terms.values())
 
@@ -1624,9 +1645,7 @@ def _detect_intent(query: str) -> QueryIntent:
 
 def _search_text(query: str) -> str:
     cleaned = unicodedata.normalize("NFKC", query).lower()
-    cleaned = re.sub(
-        r"20\d{2}(?:[-/年]\d{1,2})?(?:[-/月]\d{1,2})?日?", "", cleaned
-    )
+    cleaned = re.sub(r"20\d{2}(?:[-/年]\d{1,2})?(?:[-/月]\d{1,2})?日?", "", cleaned)
     for phrase in (
         "我",
         "用户",

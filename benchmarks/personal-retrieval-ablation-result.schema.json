@@ -33,16 +33,17 @@
       "properties": {
         "store": {"$ref": "#/$defs/source"},
         "vector": {"$ref": "#/$defs/source"},
-        "graph": {"$ref": "#/$defs/source"}
+        "graph": {"$ref": "#/$defs/source"},
+        "relation_reranker": {"$ref": "#/$defs/source"}
       }
     },
-    "planner_modes": {"type": "array", "items": {"enum": ["oracle", "deterministic"]}},
+    "planner_modes": {"type": "array", "items": {"enum": ["oracle", "deterministic", "report"]}},
     "profiles": {
       "type": "object",
-      "propertyNames": {"enum": ["oracle", "deterministic"]},
+      "propertyNames": {"enum": ["oracle", "deterministic", "report"]},
       "additionalProperties": {
         "type": "object",
-        "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph", "lexical_relation", "lexical_vector_relation"]},
+        "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph", "lexical_relation", "lexical_vector_relation", "lexical_relation_reranked", "lexical_vector_relation_reranked"]},
         "additionalProperties": {"$ref": "#/$defs/profile"}
       }
     },
@@ -88,11 +89,24 @@
     },
     "profile": {
       "type": "object",
-      "required": ["query_count", "error_count", "recall_at_1", "recall_at_5", "mrr", "required_evidence_recall", "forbidden_hit_count", "scope_leakage_count", "temporal_violation_count", "provenance_failure_count", "abstention_accuracy", "ambiguity_accuracy", "count_accuracy", "latency_ms"],
+      "required": ["query_count", "error_count"],
+      "allOf": [
+        {
+          "if": {
+            "required": ["unavailable"],
+            "properties": {"unavailable": {"const": true}}
+          },
+          "then": {"required": ["unavailable", "reason"]},
+          "else": {
+            "required": ["recall_at_1", "recall_at_5", "mrr", "required_evidence_recall", "forbidden_hit_count", "scope_leakage_count", "temporal_violation_count", "provenance_failure_count", "abstention_accuracy", "ambiguity_accuracy", "count_accuracy", "latency_ms"]
+          }
+        }
+      ],
       "properties": {
         "query_count": {"type": "integer"},
         "error_count": {"type": "integer", "minimum": 0},
         "unavailable": {"type": "boolean"},
+        "reason": {"type": "string"},
         "recall_at_1": {"type": "number", "minimum": 0, "maximum": 1},
         "recall_at_5": {"type": "number", "minimum": 0, "maximum": 1},
         "mrr": {"type": "number", "minimum": 0, "maximum": 1},
@@ -107,7 +121,7 @@
         "latency_ms": {"type": "object", "required": ["p50", "p95", "max"]},
         "contribution": {
           "type": "object",
-          "required": ["vector", "graph", "both", "relation"]
+          "required": ["vector", "graph", "both", "relation", "relation_reranker"]
         }
       }
     },

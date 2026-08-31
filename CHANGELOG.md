@@ -63,6 +63,13 @@
   output, and provider exceptions fail closed to the existing lexical relation
   decision, after which Edge→Episode provenance and authoritative Store revalidation
   still apply. No default cross-encoder or benchmark-derived threshold is claimed yet.
+- Add explicit `lexical_relation_reranked` and
+  `lexical_vector_relation_reranked` ablation profiles backed by a benchmark-only
+  local FastEmbed cross-encoder. Raw logits are sigmoid-normalized to the public 0..1
+  protocol, model/version/threshold are reproducibility metadata, and final-hit
+  accounting distinguishes reranker promotions from ordinary relation matches. A
+  missing model, missing threshold, or load failure is structured `unavailable` and
+  never silently reported under a reranked profile.
 - Add a separate relation-planner quality runner over the existing 30-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and

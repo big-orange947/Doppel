@@ -1,4 +1,4 @@
-﻿"""v0.9 personal hybrid retrieval ablation benchmark.
+"""v0.9 personal hybrid retrieval ablation benchmark.
 
 Compares four main execution profiles over the same pre-extracted fixture set:
 
@@ -8,6 +8,8 @@ Compares four main execution profiles over the same pre-extracted fixture set:
 - ``lexical_vector_graph``   : Store lexical candidates + weighted RRF of both indexes
 - ``lexical_relation``       : Store lexical candidates + Graphiti rich relations
 - ``lexical_vector_relation``: pgvector semantic + Graphiti relation-only candidates
+- ``lexical_relation_reranked``: relation-only candidates + local cross-encoder
+- ``lexical_vector_relation_reranked``: pgvector + reranked relation candidates
 
 plus three index-direct diagnostics (``vector_direct`` / ``graph_direct`` /
 ``composite_direct``) that bypass the query engine and report raw candidate
@@ -36,6 +38,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -58,6 +61,8 @@ from doppel_memory import (
     MemoryScope,
     MemoryState,
     PersonalMemoryQueryEngine,
+    RelationRerankRequest,
+    RelationRerankScore,
     __version__,
 )
 from doppel_memory.intelligence import MemoryTemporalStatus, PersonalMemoryType
@@ -70,7 +75,12 @@ from doppel_memory.query import (
 )
 
 PROFILE_MAIN = ("lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph")
-PROFILE_RELATION = ("lexical_relation", "lexical_vector_relation")
+PROFILE_RELATION_BASE = ("lexical_relation", "lexical_vector_relation")
+PROFILE_RELATION_RERANKED = (
+    "lexical_relation_reranked",
+    "lexical_vector_relation_reranked",
+)
+PROFILE_RELATION = (*PROFILE_RELATION_BASE, *PROFILE_RELATION_RERANKED)
 PROFILE_EXECUTION = (*PROFILE_MAIN, *PROFILE_RELATION)
 PROFILE_DIRECT = ("vector_direct", "graph_direct", "composite_direct")
 ALL_PROFILES = (*PROFILE_EXECUTION, *PROFILE_DIRECT)
@@ -217,9 +227,7 @@ class AblationDataset(BaseModel):
         if unknown_fixtures:
             raise ValueError(f"fixtures reference unknown scopes: {unknown_fixtures}")
         unknown_queries = sorted(
-            {scope for item in self.queries for scope in item.scopes}.difference(
-                known
-            )
+            {scope for item in self.queries for scope in item.scopes}.difference(known)
         )
         if unknown_queries:
             raise ValueError(f"queries reference unknown scopes: {unknown_queries}")
@@ -280,9 +288,7 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     for query in dataset.queries:
         if query.partition == "deferred_cross_subject":
             continue
-        if relation_benchmark and not (
-            query.entity_mentions or query.relation_hints
-        ):
+        if relation_benchmark and not (query.entity_mentions or query.relation_hints):
             failures.append(
                 f"{query.query_id}: relation benchmark query requires an entity "
                 "or relation anchor"
@@ -330,10 +336,7 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
                         f"{query.query_id}: required memory {memory_id} is not yet "
                         f"valid at as_of {query.as_of.isoformat()}"
                     )
-                if (
-                    fixture.valid_to is not None
-                    and fixture.valid_to < query.as_of
-                ):
+                if fixture.valid_to is not None and fixture.valid_to < query.as_of:
                     failures.append(
                         f"{query.query_id}: required memory {memory_id} already "
                         f"expired at as_of {query.as_of.isoformat()}"
@@ -434,9 +437,7 @@ class BenchmarkReportPlanner:
         self.path = Path(path).resolve()
         payload = self.path.read_bytes()
         raw = json.loads(payload)
-        source_fingerprint = str(
-            (raw.get("dataset") or {}).get("fingerprint") or ""
-        )
+        source_fingerprint = str((raw.get("dataset") or {}).get("fingerprint") or "")
         if source_fingerprint != dataset.fingerprint:
             raise ValueError(
                 "planner report dataset fingerprint does not match the current "
@@ -461,9 +462,7 @@ class BenchmarkReportPlanner:
                 continue
             if query_text in drafts:
                 raise ValueError(f"planner report repeats query text: {query_text!r}")
-            drafts[query_text] = PersonalMemoryQueryDraft.model_validate(
-                item["actual"]
-            )
+            drafts[query_text] = PersonalMemoryQueryDraft.model_validate(item["actual"])
         required = {
             query.query.strip()
             for query in dataset.queries
@@ -585,6 +584,112 @@ class _LocalEmbeddingProvider:
         return [[float(value) for value in vector] for vector in vectors]
 
 
+class _FastEmbedRelationReranker:
+    """Benchmark-only local cross-encoder with normalized protocol scores.
+
+    FastEmbed exposes raw cross-encoder logits. Doppel's public protocol requires a
+    stable 0..1 range, so this harness applies a documented sigmoid before returning
+    scores. Model selection and the acceptance threshold remain explicit CLI inputs;
+    this class is intentionally not a product default.
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        cache_dir: Path | None = None,
+        batch_size: int = 32,
+    ) -> None:
+        self.model_name = str(model_name or "").strip()
+        if not self.model_name:
+            raise ValueError("relation reranker model name must not be empty")
+        if batch_size < 1:
+            raise ValueError("relation reranker batch size must be positive")
+        self.cache_dir = cache_dir
+        self.batch_size = batch_size
+        self._model: Any = None
+        self._model_lock = asyncio.Lock()
+
+    @property
+    def name(self) -> str:
+        return f"fastembed-cross-encoder:{self.model_name}"
+
+    @property
+    def version(self) -> str:
+        return _fastembed_version()
+
+    @property
+    def score_normalization(self) -> str:
+        return "sigmoid(raw_cross_encoder_logit)"
+
+    async def warmup(self) -> None:
+        model = await self._ensure_model()
+        await asyncio.to_thread(
+            list,
+            model.rerank(
+                "关系查询",
+                ["RELATED_TO\n关系事实"],
+                batch_size=self.batch_size,
+            ),
+        )
+
+    async def rerank(
+        self, request: RelationRerankRequest
+    ) -> Sequence[RelationRerankScore]:
+        if not request.items:
+            return []
+        model = await self._ensure_model()
+        query = request.query_text or " ".join(request.relation_hints)
+        documents = [f"{item.relation_type}\n{item.fact}" for item in request.items]
+
+        def _score() -> list[float]:
+            return [
+                float(value)
+                for value in model.rerank(
+                    query,
+                    documents,
+                    batch_size=self.batch_size,
+                )
+            ]
+
+        raw_scores = await asyncio.to_thread(_score)
+        if len(raw_scores) != len(request.items):
+            raise RuntimeError(
+                "relation reranker returned a different number of scores than items"
+            )
+        scores: list[RelationRerankScore] = []
+        for item, raw_score in zip(request.items, raw_scores, strict=True):
+            if not math.isfinite(raw_score):
+                raise RuntimeError("relation reranker returned a non-finite score")
+            probability = _sigmoid(raw_score)
+            scores.append(RelationRerankScore(item_id=item.item_id, score=probability))
+        return scores
+
+    async def _ensure_model(self) -> Any:
+        if self._model is None:
+            async with self._model_lock:
+                if self._model is None:
+                    from fastembed.rerank.cross_encoder import TextCrossEncoder
+
+                    kwargs: dict[str, Any] = {}
+                    if self.cache_dir is not None:
+                        kwargs["cache_dir"] = str(self.cache_dir)
+                    self._model = await asyncio.to_thread(
+                        TextCrossEncoder,
+                        self.model_name,
+                        **kwargs,
+                    )
+        return self._model
+
+
+def _sigmoid(value: float) -> float:
+    if value >= 0:
+        factor = math.exp(-value)
+        return 1.0 / (1.0 + factor)
+    factor = math.exp(value)
+    return factor / (1.0 + factor)
+
+
 def _fastembed_version() -> str:
     try:
         import fastembed
@@ -643,7 +748,9 @@ async def _preseed_graph(
             for item in record.metadata.get("evidence", [])
             if isinstance(item, dict)
         ]
-        observed_at = max(evidence_times, default=record.created_at) or record.created_at
+        observed_at = (
+            max(evidence_times, default=record.created_at) or record.created_at
+        )
         episode_id = str(
             uuid5(
                 NAMESPACE_URL,
@@ -651,9 +758,7 @@ async def _preseed_graph(
             )
         )
         fingerprint = hashlib.sha256(record.content.encode("utf-8")).hexdigest()
-        episode_name = (
-            "DoppelMemory:v5:" f"{_b64(record.memory_id)}:{fingerprint}:1"
-        )
+        episode_name = f"DoppelMemory:v5:{_b64(record.memory_id)}:{fingerprint}:1"
         source_id = str(uuid5(NAMESPACE_URL, f"ablation:source:{episode_id}"))
         target_id = str(uuid5(NAMESPACE_URL, f"ablation:target:{episode_id}"))
         edge_id = str(uuid5(NAMESPACE_URL, f"ablation:edge:{episode_id}"))
@@ -700,10 +805,7 @@ async def _preseed_graph(
         )
         use_fallback = relation_edge_kind == "fallback" or (
             not relation_edge_kind
-            and (
-                graph_kind == "fallback"
-                or (graph_kind == "mixed" and index % 2 == 0)
-            )
+            and (graph_kind == "fallback" or (graph_kind == "mixed" and index % 2 == 0))
         )
         edge = EntityEdge(
             uuid=edge_id,
@@ -762,9 +864,7 @@ async def _probe_neo4j(uri: str, user: str, password: str) -> str:
         return f"{type(exc).__name__}: {exc}"
 
 
-async def _build_graphiti_client(
-    uri: str, user: str, password: str
-) -> Any:
+async def _build_graphiti_client(uri: str, user: str, password: str) -> Any:
     from graphiti_core import Graphiti
     from graphiti_core.llm_client.client import LLMClient
     from graphiti_core.llm_client.config import LLMConfig
@@ -779,7 +879,9 @@ async def _build_graphiti_client(
         uri=uri,
         user=user,
         password=password,
-        llm_client=_NoNetworkLLM(LLMConfig(model="disabled-ablation-eval"), cache=False),
+        llm_client=_NoNetworkLLM(
+            LLMConfig(model="disabled-ablation-eval"), cache=False
+        ),
         embedder=FastEmbedderClient(),
         cross_encoder=NoOpCrossEncoder(),
     )
@@ -791,10 +893,22 @@ async def _build_graph_index(store: Any, graph: Any) -> Any:
     return GraphitiSemanticIndex(store, enabled=True, graphiti_client=graph)
 
 
-async def _build_relation_index(store: Any, graph: Any) -> Any:
+async def _build_relation_index(
+    store: Any,
+    graph: Any,
+    *,
+    relation_reranker: Any | None = None,
+    minimum_reranker_score: float | None = None,
+) -> Any:
     from doppel_memory.graphiti_store import GraphitiRelationIndex
 
-    return GraphitiRelationIndex(store, enabled=True, graphiti_client=graph)
+    return GraphitiRelationIndex(
+        store,
+        enabled=True,
+        graphiti_client=graph,
+        relation_reranker=relation_reranker,
+        minimum_reranker_score=minimum_reranker_score,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -885,9 +999,7 @@ async def _build_vector_candidates(
     return index
 
 
-async def _build_composite_index(
-    vector_index: Any, graph_index: Any
-) -> Any:
+async def _build_composite_index(vector_index: Any, graph_index: Any) -> Any:
     from doppel_memory.vector import CompositeSemanticIndex
 
     indexes: dict[str, Any] = {}
@@ -969,6 +1081,7 @@ async def _run_case(
                 "graph": 0,
                 "both": 0,
                 "relation": 0,
+                "relation_reranker": 0,
             },
         }
     latency_ms = round((perf_counter() - started) * 1_000, 3)
@@ -982,7 +1095,9 @@ async def _run_case(
     )
 
 
-def _expected_intent_ok(result: PersonalMemoryQueryResult, query: AblationQuery) -> bool:
+def _expected_intent_ok(
+    result: PersonalMemoryQueryResult, query: AblationQuery
+) -> bool:
     accepted = query.accepted_intents or list(
         INTENT_ALIASES.get(query.intent, (query.intent,))
     )
@@ -1035,9 +1150,7 @@ def _planner_term_matches(
     expected: Sequence[str], actual: Sequence[str], *, exact: bool = False
 ) -> tuple[int, list[str]]:
     def normalized(value: str) -> str:
-        return re.sub(
-            r"[^\w\u3400-\u9fff]+", "", str(value or "").casefold()
-        )
+        return re.sub(r"[^\w\u3400-\u9fff]+", "", str(value or "").casefold())
 
     expected_terms = [normalized(item) for item in expected]
     actual_terms = [normalized(item) for item in actual]
@@ -1047,8 +1160,10 @@ def _planner_term_matches(
         for actual_index, actual_term in enumerate(actual_terms):
             if actual_index in matched_actual:
                 continue
-            matches = actual_term == expected_term if exact else (
-                expected_term in actual_term or actual_term in expected_term
+            matches = (
+                actual_term == expected_term
+                if exact
+                else (expected_term in actual_term or actual_term in expected_term)
             )
             if expected_term and actual_term and matches:
                 matched_expected.add(expected_index)
@@ -1081,9 +1196,7 @@ def _evaluate_result(
     plan_as_of = result.plan.as_of
     as_of_recognized = plan_as_of is not None
     report_planner_failures = (
-        _planner_report_failures(result, query)
-        if mode == PLANNER_MODE_REPORT
-        else []
+        _planner_report_failures(result, query) if mode == PLANNER_MODE_REPORT else []
     )
     temporal_plan_is_trusted = mode == PLANNER_MODE_ORACLE or (
         mode == PLANNER_MODE_REPORT
@@ -1099,7 +1212,12 @@ def _evaluate_result(
             # planner failures and are never counted here.
             record_valid_from = _optional_time(record.metadata.get("valid_from"))
             record_valid_to = _optional_time(record.metadata.get("valid_to"))
-            if record_valid_from is not None and record_valid_from > query.as_of or record_valid_to is not None and record_valid_to < query.as_of:
+            if (
+                record_valid_from is not None
+                and record_valid_from > query.as_of
+                or record_valid_to is not None
+                and record_valid_to < query.as_of
+            ):
                 temporal_violations += 1
         if not record.metadata.get("evidence"):
             provenance_failures += 1
@@ -1187,6 +1305,7 @@ def _evaluate_result(
         "graph": 0,
         "both": 0,
         "relation": 0,
+        "relation_reranker": 0,
     }
     for hit in hits:
         hit_sources = [
@@ -1202,10 +1321,10 @@ def _evaluate_result(
             contribution["vector"] += 1
         elif has_graph:
             contribution["graph"] += 1
-        if any(
-            reason.startswith("relation_source:") for reason in hit.reasons
-        ):
+        if any(reason.startswith("relation_source:") for reason in hit.reasons):
             contribution["relation"] += 1
+        if "relation_match_kind:reranker" in hit.reasons:
+            contribution["relation_reranker"] += 1
     return {
         "query_id": query.query_id,
         "profile": profile,
@@ -1302,6 +1421,9 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "graph": sum(case["contribution"]["graph"] for case in valid),
         "both": sum(case["contribution"]["both"] for case in valid),
         "relation": sum(case["contribution"].get("relation", 0) for case in valid),
+        "relation_reranker": sum(
+            case["contribution"].get("relation_reranker", 0) for case in valid
+        ),
     }
     return {
         "query_count": total,
@@ -1329,12 +1451,8 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
         ),
         "forbidden_hit_count": sum(len(case["forbidden"]) for case in valid),
         "scope_leakage_count": sum(case["scope_leakage"] for case in valid),
-        "temporal_violation_count": sum(
-            case["temporal_violations"] for case in valid
-        ),
-        "provenance_failure_count": sum(
-            case["provenance_failures"] for case in valid
-        ),
+        "temporal_violation_count": sum(case["temporal_violations"] for case in valid),
+        "provenance_failure_count": sum(case["provenance_failures"] for case in valid),
         "inactive_candidate_rejection_count": sum(
             case["inactive_rejections"] for case in valid
         ),
@@ -1399,9 +1517,7 @@ def apply_variant(
     dataset: AblationDataset, variant: MetamorphicVariant
 ) -> AblationDataset:
     pairs = [
-        (str(pair[0]), str(pair[1]))
-        for pair in variant.substitutions
-        if len(pair) == 2
+        (str(pair[0]), str(pair[1])) for pair in variant.substitutions if len(pair) == 2
     ]
     fixtures = [
         item.model_copy(update={"content": substitute(item.content, pairs)})
@@ -1423,7 +1539,14 @@ def _safety_metrics(
         grouped: dict[str, dict[str, int]] = {}
         for case in cases:
             item = grouped.setdefault(
-                case["query_id"], {"leakage": 0, "forbidden": 0, "abstain_ok": 0, "count_ok": 0, "evidence": 0}
+                case["query_id"],
+                {
+                    "leakage": 0,
+                    "forbidden": 0,
+                    "abstain_ok": 0,
+                    "count_ok": 0,
+                    "evidence": 0,
+                },
             )
             item["leakage"] = max(item["leakage"], case["scope_leakage"])
             item["forbidden"] = max(item["forbidden"], len(case["forbidden"]))
@@ -1587,9 +1710,7 @@ async def _direct_scan(
                                 "edge_uuid": edge_uuid,
                                 "episode_uuid": str(episode_uuid),
                                 "memory_id": memory_id,
-                                "edge_kind": (
-                                    "fallback" if is_fallback else "rich"
-                                ),
+                                "edge_kind": ("fallback" if is_fallback else "rich"),
                             }
                         )
                 attribution_by_query[query.query_id] = rows
@@ -1642,6 +1763,9 @@ async def run_ablation(
     require_live_postgres: bool = False,
     require_live_neo4j: bool = False,
     run_metamorphic: bool = True,
+    relation_reranker: Any | None = None,
+    minimum_reranker_score: float | None = None,
+    relation_reranker_reason: str = "",
 ) -> dict[str, Any]:
     unknown = set(profiles).difference(ALL_PROFILES)
     if unknown:
@@ -1651,6 +1775,23 @@ async def run_ablation(
         raise ValueError(f"unknown planner modes: {sorted(unknown_modes)}")
     if PLANNER_MODE_REPORT in planner_modes and planner_report is None:
         raise ValueError("planner mode 'report' requires planner_report")
+    if minimum_reranker_score is not None and not (
+        0.0 <= minimum_reranker_score <= 1.0
+    ):
+        raise ValueError("minimum_reranker_score must be between 0 and 1")
+    reranker_requested = bool(set(profiles) & set(PROFILE_RELATION_RERANKED))
+    if (
+        reranker_requested
+        and relation_reranker is None
+        and not relation_reranker_reason
+    ):
+        relation_reranker_reason = "relation reranker model is not configured"
+    if (
+        reranker_requested
+        and relation_reranker is not None
+        and minimum_reranker_score is None
+    ):
+        relation_reranker_reason = "relation reranker threshold is not configured"
     started = perf_counter()
     store_dir = tempfile.mkdtemp(prefix="doppel-ablation-store-")
     store_path = Path(store_dir) / "store.sqlite3"
@@ -1662,6 +1803,7 @@ async def run_ablation(
             "lexical_vector",
             "lexical_vector_graph",
             "lexical_vector_relation",
+            "lexical_vector_relation_reranked",
             "vector_direct",
             "composite_direct",
         }
@@ -1673,6 +1815,8 @@ async def run_ablation(
             "lexical_vector_graph",
             "lexical_relation",
             "lexical_vector_relation",
+            "lexical_relation_reranked",
+            "lexical_vector_relation_reranked",
             "graph_direct",
             "composite_direct",
         }
@@ -1724,6 +1868,7 @@ async def run_ablation(
     graph: Any | None = None
     graph_index: Any | None = None
     relation_index: Any | None = None
+    relation_reranked_index: Any | None = None
     vector_index: Any | None = None
     graph_reason = ""
     graph_seed_stats: dict[str, Any] = {}
@@ -1748,11 +1893,24 @@ async def run_ablation(
             else "not requested"
         )
         if not graph_reason:
-            graph = await _build_graphiti_client(NEO4J_URI, NEO4J_USER, os.environ.get("NEO4J_PASSWORD", ""))
+            graph = await _build_graphiti_client(
+                NEO4J_URI, NEO4J_USER, os.environ.get("NEO4J_PASSWORD", "")
+            )
             await _cleanup_graph_scope(graph, group_ids)
             graph_seed_stats = await _preseed_graph(graph, records, graph_kind="mixed")
             graph_index = await _build_graph_index(store, graph)
             relation_index = await _build_relation_index(store, graph)
+            if (
+                relation_reranker is not None
+                and minimum_reranker_score is not None
+                and not relation_reranker_reason
+            ):
+                relation_reranked_index = await _build_relation_index(
+                    store,
+                    graph,
+                    relation_reranker=relation_reranker,
+                    minimum_reranker_score=minimum_reranker_score,
+                )
 
         semantic_by_source: dict[str, Any] = {}
         if vector_index is not None:
@@ -1767,6 +1925,7 @@ async def run_ablation(
             profiles=profiles,
             semantic_by_source=semantic_by_source,
             relation_index=relation_index,
+            relation_reranked_index=relation_reranked_index,
             graph=graph,
             planner_modes=planner_modes,
             planner_report=planner_report,
@@ -1776,7 +1935,9 @@ async def run_ablation(
                 "kind": store_kind,
                 "available": True,
                 "path_shape": (
-                    "postgresql(doppel_ablation)" if pg_store is not None else "tempfile(sqlite3)"
+                    "postgresql(doppel_ablation)"
+                    if pg_store is not None
+                    else "tempfile(sqlite3)"
                 ),
             },
             "vector": {
@@ -1806,6 +1967,41 @@ async def run_ablation(
                     "uri_host": "bolt://127.0.0.1:7687",
                     "user": NEO4J_USER,
                     "preseed": graph_seed_stats,
+                },
+            },
+            "relation_reranker": {
+                "kind": "relation_cross_encoder",
+                "available": relation_reranked_index is not None,
+                "reason": (
+                    "not requested"
+                    if not reranker_requested
+                    else relation_reranker_reason or "relation graph is unavailable"
+                    if relation_reranked_index is None
+                    else ""
+                ),
+                "metadata": {
+                    "provider": (
+                        str(getattr(relation_reranker, "name", "") or "")
+                        if relation_reranker is not None
+                        else ""
+                    ),
+                    "version": (
+                        str(getattr(relation_reranker, "version", "") or "")
+                        if relation_reranker is not None
+                        else ""
+                    ),
+                    "minimum_score": (
+                        str(minimum_reranker_score)
+                        if minimum_reranker_score is not None
+                        else ""
+                    ),
+                    "score_normalization": str(
+                        getattr(
+                            relation_reranker,
+                            "score_normalization",
+                            "provider-normalized 0..1",
+                        )
+                    ),
                 },
             },
         }
@@ -1851,6 +2047,7 @@ async def _run_profiles(
     semantic_by_source: dict[str, Any],
     relation_index: Any | None,
     graph: Any | None,
+    relation_reranked_index: Any | None = None,
     planner_modes: Sequence[str] = PLANNER_MODES,
     planner_report: Path | None = None,
 ) -> dict[str, Any]:
@@ -1876,6 +2073,10 @@ async def _run_profiles(
         "lexical_vector_graph": composite,
         "lexical_relation": None,
         "lexical_vector_relation": vector_source if vector_available else None,
+        "lexical_relation_reranked": None,
+        "lexical_vector_relation_reranked": (
+            vector_source if vector_available else None
+        ),
     }
     profile_to_relation: dict[str, Any | None] = {
         "lexical": None,
@@ -1884,15 +2085,15 @@ async def _run_profiles(
         "lexical_vector_graph": None,
         "lexical_relation": relation_index,
         "lexical_vector_relation": relation_index,
+        "lexical_relation_reranked": relation_reranked_index,
+        "lexical_vector_relation_reranked": relation_reranked_index,
     }
     planners: dict[str, Any] = {
         PLANNER_MODE_DETERMINISTIC: DeterministicPersonalMemoryQueryPlanner(),
         PLANNER_MODE_ORACLE: BenchmarkOraclePlanner(dataset.queries),
     }
     if planner_report is not None:
-        planners[PLANNER_MODE_REPORT] = BenchmarkReportPlanner(
-            planner_report, dataset
-        )
+        planners[PLANNER_MODE_REPORT] = BenchmarkReportPlanner(planner_report, dataset)
     per_mode: dict[str, dict[str, dict[str, Any]]] = {}
     all_cases: list[dict[str, Any]] = []
     deferred_queries: list[str] = []
@@ -1909,8 +2110,10 @@ async def _run_profiles(
                 "lexical_graph",
                 "lexical_vector_graph",
                 "lexical_vector_relation",
+                "lexical_vector_relation_reranked",
             }
             relation_required = profile in PROFILE_RELATION
+            reranker_required = profile in PROFILE_RELATION_RERANKED
             if (semantic_required and semantic is None) or (
                 relation_required and relation is None
             ):
@@ -1918,7 +2121,9 @@ async def _run_profiles(
                 if semantic_required and semantic is None:
                     missing.append("semantic")
                 if relation_required and relation is None:
-                    missing.append("relation")
+                    missing.append(
+                        "relation_reranker" if reranker_required else "relation"
+                    )
                 per_profile[profile] = {
                     "query_count": len(dataset.queries),
                     "error_count": len(dataset.queries),
@@ -2060,6 +2265,21 @@ async def _run_profiles(
                 comparisons[f"{mode}_relation_full_vs_{base_name}"] = _delta(
                     relation_full, base
                 )
+        for reranked_name, base_name in (
+            ("lexical_relation_reranked", "lexical_relation"),
+            ("lexical_vector_relation_reranked", "lexical_vector_relation"),
+        ):
+            reranked = per_mode[mode].get(reranked_name)
+            base = per_mode[mode].get(base_name)
+            if (
+                reranked is not None
+                and base is not None
+                and not reranked.get("unavailable", False)
+                and not base.get("unavailable", False)
+            ):
+                comparisons[f"{mode}_{reranked_name}_vs_{base_name}"] = _delta(
+                    reranked, base
+                )
     report["comparisons"] = comparisons
 
     report["hard_gates"] = _collect_hard_gates(all_cases)
@@ -2081,8 +2301,8 @@ async def _run_profiles(
         dataset=dataset,
         per_mode=per_mode,
     )
-    report["relation_final_hit_attribution"] = (
-        _build_relation_final_hit_attribution(report=report, dataset=dataset)
+    report["relation_final_hit_attribution"] = _build_relation_final_hit_attribution(
+        report=report, dataset=dataset
     )
     return report
 
@@ -2249,9 +2469,7 @@ def _build_final_hit_attribution(
     # ---- vector final-hit attribution ------------------------------------ #
     vector_direct = report.get("diagnostics", {}).get("vector_direct")
     vector_candidates_by_query = (
-        vector_direct.get("candidate_memory_ids_by_query", {})
-        if vector_direct
-        else {}
+        vector_direct.get("candidate_memory_ids_by_query", {}) if vector_direct else {}
     )
     vector_result = None
     if vector_candidates_by_query:
@@ -2262,9 +2480,7 @@ def _build_final_hit_attribution(
             and case.get("profile") == "lexical_vector"
             and not case.get("error")
         ]
-        vector_by_query = {
-            case["query_id"]: case for case in oracle_vector_cases
-        }
+        vector_by_query = {case["query_id"]: case for case in oracle_vector_cases}
         vector_contribution = 0
         vector_queries: set[str] = set()
         vector_mapped_queries = 0
@@ -2378,8 +2594,7 @@ def build_threshold_sweep(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
         rows.append(
             {
                 "query_id": case["query_id"],
-                "positive": bool(case["hits"])
-                and not case["missing"],
+                "positive": bool(case["hits"]) and not case["missing"],
                 "negative": not case["hits"],
                 "top_score": top["score"] if top else 0.0,
                 "top_lexical": top["lexical_score"] if top else 0.0,
@@ -2489,6 +2704,31 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-scope-leakage", type=int, default=0)
     parser.add_argument("--max-temporal-violations", type=int, default=0)
+    parser.add_argument(
+        "--relation-reranker-model",
+        default="",
+        help=(
+            "local FastEmbed cross-encoder model used only by *_relation_reranked "
+            "profiles; no model is downloaded unless such a profile is requested"
+        ),
+    )
+    parser.add_argument(
+        "--relation-reranker-threshold",
+        type=float,
+        default=None,
+        help="explicit normalized 0..1 relation promotion threshold",
+    )
+    parser.add_argument(
+        "--relation-reranker-cache-dir",
+        type=Path,
+        default=None,
+        help="optional local FastEmbed model cache directory",
+    )
+    parser.add_argument(
+        "--relation-reranker-batch-size",
+        type=int,
+        default=32,
+    )
     parser.add_argument("--no-metamorphic", action="store_true")
     return parser
 
@@ -2519,9 +2759,7 @@ def _validate_report(
                 ):
                     failures.append(f"profile {profile} ({mode}) did not execute")
     gate_profiles = [
-        item.strip()
-        for item in (args.gate_profiles or "").split(",")
-        if item.strip()
+        item.strip() for item in (args.gate_profiles or "").split(",") if item.strip()
     ]
     if gate_profiles:
         invalid = sorted(set(gate_profiles).difference(PROFILE_EXECUTION))
@@ -2536,9 +2774,7 @@ def _validate_report(
                     continue
                 for group, items in profile_gates.items():
                     if items:
-                        failures.append(
-                            f"{mode}:{profile}:{group}: {items[:5]}"
-                        )
+                        failures.append(f"{mode}:{profile}:{group}: {items[:5]}")
     else:
         hard_gates = report.get("hard_gates", {})
         for group, items in hard_gates.items():
@@ -2584,7 +2820,27 @@ def _git_commit_hash() -> str:
 async def _async_main(args: argparse.Namespace) -> int:
     dataset = load_ablation_dataset(args.dataset)
     profiles = tuple(name.strip() for name in args.profiles.split(",") if name.strip())
-    modes = tuple(name.strip() for name in args.planner_modes.split(",") if name.strip())
+    modes = tuple(
+        name.strip() for name in args.planner_modes.split(",") if name.strip()
+    )
+    relation_reranker: _FastEmbedRelationReranker | None = None
+    relation_reranker_reason = ""
+    if set(profiles) & set(PROFILE_RELATION_RERANKED):
+        if not str(args.relation_reranker_model or "").strip():
+            relation_reranker_reason = "relation reranker model is not configured"
+        elif args.relation_reranker_threshold is None:
+            relation_reranker_reason = "relation reranker threshold is not configured"
+        else:
+            relation_reranker = _FastEmbedRelationReranker(
+                args.relation_reranker_model,
+                cache_dir=args.relation_reranker_cache_dir,
+                batch_size=args.relation_reranker_batch_size,
+            )
+            try:
+                await relation_reranker.warmup()
+            except Exception as exc:  # noqa: BLE001 - structured unavailability
+                relation_reranker_reason = f"{type(exc).__name__}: {exc}"
+                relation_reranker = None
     report = await run_ablation(
         dataset,
         profiles=profiles,
@@ -2593,6 +2849,9 @@ async def _async_main(args: argparse.Namespace) -> int:
         require_live_postgres=args.require_live_postgres,
         require_live_neo4j=args.require_live_neo4j,
         run_metamorphic=not args.no_metamorphic,
+        relation_reranker=relation_reranker,
+        minimum_reranker_score=args.relation_reranker_threshold,
+        relation_reranker_reason=relation_reranker_reason,
     )
     if not args.no_metamorphic:
         scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
@@ -2682,9 +2941,7 @@ async def _async_main(args: argparse.Namespace) -> int:
                 "profiles": report.get("profiles", {}),
                 "comparisons": report.get("comparisons", {}),
                 "hard_gates": report.get("hard_gates", {}),
-                "hard_gates_by_profile": report.get(
-                    "hard_gates_by_profile", {}
-                ),
+                "hard_gates_by_profile": report.get("hard_gates_by_profile", {}),
                 "graph_final_hit_attribution": report.get(
                     "graph_final_hit_attribution", {}
                 ),

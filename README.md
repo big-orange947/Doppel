@@ -1268,6 +1268,12 @@ draft fixture 猜一个“通用阈值”。缺失分数不会被补齐，重复
 权限字段，query 和 edge fact 本身仍可能包含私人内容；接入远程 scorer 会把这些文本发给其 provider，
 应优先使用本地模型，或由 host 明确处理授权、脱敏、留存策略和传输安全。
 
+仓库测评 runner 已将无重排与重排路径拆成独立 profile：
+`lexical_relation_reranked` / `lexical_vector_relation_reranked` 只有在本地模型和显式阈值都可用时才执行；
+缺模型、缺阈值或加载失败会结构化标为 `unavailable`，不会退化成原关系路径后继续挂着“reranked”名称。
+FastEmbed cross-encoder 原始 logit 会通过 sigmoid 归一化到协议要求的 0..1，并在报告中记录模型、版本、
+阈值、重排贡献和延迟。当前仍没有默认阈值，示例参数不构成生产推荐。
+
 自然语言 Planner 与检索层必须分开评测。`benchmarks.relation_planner_quality` 直接复用 30 条
 relation ablation 问句，在不执行 Store/pgvector/Graphiti 的情况下测量 intent、as-of、实体锚点和
 关系提示是否正确，并把无依据的 `memory_types/topic_keys` 硬过滤器单独记为错误；Reference Planner

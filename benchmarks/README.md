@@ -150,12 +150,38 @@ fragment expansion contains no fixture vocabulary and must retain zero forbidden
 on the wrong-relation adversarial partition.
 
 `RelationReranker` is now an injectable, text-only edge scoring protocol, but this
-30-query draft does not calibrate its threshold and the checked-in ablation does not
-claim cross-encoder quality. A scorer must be evaluated as a separate profile over an
-expanded frozen held-out/adversarial set: report recall gain, newly introduced
-forbidden hits, threshold sweep, latency, model identity, and failure fallback. Scope,
-time, provenance, lifecycle, and authoritative Store-reload gates remain mandatory
-regardless of the scorer result.
+30-query draft does not calibrate its threshold and no checked-in result claims
+cross-encoder quality. The runner now exposes distinct
+`lexical_relation_reranked` and `lexical_vector_relation_reranked` profiles. They never
+silently degrade into their non-reranked names: a missing model, missing threshold, or
+load failure produces structured `unavailable`. `relation_reranker` runtime metadata
+records model/version, the explicit threshold, and sigmoid normalization; final-hit
+contributions separately count `relation_reranker` promotions.
+
+The first local-only BGE run can be invoked after the model is available:
+
+```bash
+uv run python -m benchmarks.personal_retrieval_ablation `
+  --dataset benchmarks/datasets/personal-relation-ablation-zh-v1.json `
+  --profiles lexical_relation,lexical_relation_reranked,lexical_vector_relation,lexical_vector_relation_reranked `
+  --planner-modes oracle --no-metamorphic `
+  --relation-reranker-model BAAI/bge-reranker-base `
+  --relation-reranker-threshold 0.75 `
+  --gate-profiles lexical_relation_reranked,lexical_vector_relation_reranked `
+  --require-live-postgres --require-live-neo4j --require-all-profiles `
+  --output data/doppel/personal-relation-reranker-ablation.json
+```
+
+The threshold above is an explicit example, not a recommended default. A scorer must
+ultimately be evaluated as a separate profile over an expanded frozen
+held-out/adversarial set: report recall gain, newly introduced forbidden hits,
+threshold sweep, latency, model identity, and failure fallback. Scope, time,
+provenance, lifecycle, and authoritative Store-reload gates remain mandatory
+regardless of the scorer result. The oracle run primarily tests false promotion and
+safety because its gold surface relation hints already reach full recall. To measure
+recovery from real Planner paraphrases, repeat the same profiles with
+`--planner-modes report --planner-report <cached-report>`; report replay makes zero LLM
+calls and preserves Planner failures as a separate attribution bucket.
 
 ### Natural-language relation planner quality
 
