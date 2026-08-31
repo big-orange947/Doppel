@@ -1,0 +1,167 @@
+{
+  "suite": "doppel-personal-relation-ablation-zh-v1",
+  "suite_version": "1.0.0-draft",
+  "language": "zh-CN",
+  "status": "draft",
+  "frozen": false,
+  "publication_ready": false,
+  "description": "Relation-only retrieval draft: explicit entity anchors, rich-edge temporal gold, wrong-relation adversaries, and exact-scope collisions. No LLM extraction is involved.",
+  "scopes": {
+    "owner_a": {"user_id": "relation-owner-a", "agent_id": "echo", "display_name": "owner-a"},
+    "owner_b": {"user_id": "relation-owner-b", "agent_id": "echo", "display_name": "owner-b"},
+    "owner_c": {"user_id": "relation-owner-c", "agent_id": "echo", "display_name": "owner-c"}
+  },
+  "fixtures": [
+    {
+      "memory_id": "rel-a-book-linxiao-current", "scope": "owner_a",
+      "content": "《银河帝国》目前留在林晓那里，由她代为保管。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-07-01T00:00:00Z", "topic_key": "possession.book.galactic-empire",
+      "evidence": [{"message_id": "rel-msg-a-book-current", "at": "2026-07-01T09:00:00Z"}],
+      "relation": {"source_entity": "《银河帝国》", "relation_type": "HELD_BY", "target_entity": "林晓", "fact": "《银河帝国》由林晓保管，目前在林晓手里。"}
+    },
+    {
+      "memory_id": "rel-a-book-zhang-history", "scope": "owner_a",
+      "content": "《银河帝国》此前曾放在张伟那里，后来已经取回。",
+      "personal_memory_type": "state", "temporal_status": "historical", "state": "superseded",
+      "valid_from": "2026-01-10T00:00:00Z", "valid_to": "2026-06-30T23:59:59Z", "topic_key": "possession.book.galactic-empire",
+      "evidence": [{"message_id": "rel-msg-a-book-history", "at": "2026-01-10T09:00:00Z"}],
+      "relation": {"source_entity": "《银河帝国》", "relation_type": "HELD_BY", "target_entity": "张伟", "fact": "《银河帝国》曾由张伟保管，当时在张伟手里。"}
+    },
+    {
+      "memory_id": "rel-a-camera-studio-current", "scope": "owner_a",
+      "content": "相机目前放在工作室的器材柜里。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-05-15T00:00:00Z", "topic_key": "location.camera",
+      "evidence": [{"message_id": "rel-msg-a-camera-current", "at": "2026-05-15T11:00:00Z"}],
+      "relation": {"source_entity": "相机", "relation_type": "LOCATED_AT", "target_entity": "工作室器材柜", "fact": "相机位于工作室器材柜，当前放在工作室。"}
+    },
+    {
+      "memory_id": "rel-a-camera-home-history", "scope": "owner_a",
+      "content": "相机以前放在家里的书房，五月中旬已移走。",
+      "personal_memory_type": "state", "temporal_status": "historical", "state": "superseded",
+      "valid_from": "2026-01-01T00:00:00Z", "valid_to": "2026-05-14T23:59:59Z", "topic_key": "location.camera",
+      "evidence": [{"message_id": "rel-msg-a-camera-history", "at": "2026-01-01T11:00:00Z"}],
+      "relation": {"source_entity": "相机", "relation_type": "LOCATED_AT", "target_entity": "家中书房", "fact": "相机以前位于家中书房，当时放在书房。"}
+    },
+    {
+      "memory_id": "rel-a-job-xinghai-current", "scope": "owner_a",
+      "content": "我目前在星海科技任职。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-03-01T00:00:00Z", "topic_key": "employment.current",
+      "evidence": [{"message_id": "rel-msg-a-job-current", "at": "2026-03-01T08:00:00Z"}],
+      "relation": {"source_entity": "我", "relation_type": "EMPLOYED_BY", "target_entity": "星海科技", "fact": "我目前就职于星海科技，在星海科技任职。"}
+    },
+    {
+      "memory_id": "rel-a-job-yunshan-history", "scope": "owner_a",
+      "content": "我曾在云杉网络工作，二月底已经离职。",
+      "personal_memory_type": "state", "temporal_status": "historical", "state": "superseded",
+      "valid_from": "2024-06-01T00:00:00Z", "valid_to": "2026-02-28T23:59:59Z", "topic_key": "employment.current",
+      "evidence": [{"message_id": "rel-msg-a-job-history", "at": "2024-06-01T08:00:00Z"}],
+      "relation": {"source_entity": "我", "relation_type": "EMPLOYED_BY", "target_entity": "云杉网络", "fact": "我以前就职于云杉网络，曾在云杉网络任职。"}
+    },
+    {
+      "memory_id": "rel-a-key-chen-current", "scope": "owner_a",
+      "content": "备用钥匙交给陈明保管。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-08-01T00:00:00Z", "topic_key": "possession.spare-key",
+      "evidence": [{"message_id": "rel-msg-a-key", "at": "2026-08-01T10:00:00Z"}],
+      "relation": {"source_entity": "备用钥匙", "relation_type": "HELD_BY", "target_entity": "陈明", "fact": "备用钥匙由陈明保管，在陈明手里。"}
+    },
+    {
+      "memory_id": "rel-a-dog-anhe-current", "scope": "owner_a",
+      "content": "豆包现在由安和宠物医院的周医生负责复诊。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-06-20T00:00:00Z", "topic_key": "care.dog.doubao",
+      "evidence": [{"message_id": "rel-msg-a-dog", "at": "2026-06-20T14:00:00Z"}],
+      "relation": {"source_entity": "豆包", "relation_type": "CARED_FOR_BY", "target_entity": "安和宠物医院周医生", "fact": "豆包由安和宠物医院周医生照顾并负责复诊。"}
+    },
+    {
+      "memory_id": "rel-a-passport-drawer-current", "scope": "owner_a",
+      "content": "护照收在卧室衣柜最上层的抽屉。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-04-01T00:00:00Z", "topic_key": "location.passport",
+      "evidence": [{"message_id": "rel-msg-a-passport", "at": "2026-04-01T09:30:00Z"}],
+      "relation": {"source_entity": "护照", "relation_type": "STORED_IN", "target_entity": "卧室衣柜上层抽屉", "fact": "护照存放在卧室衣柜上层抽屉。"}
+    },
+    {
+      "memory_id": "rel-a-laptop-repair-current", "scope": "owner_a",
+      "content": "旧笔记本电脑送到远航维修店检修，还没有取回。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-08-20T00:00:00Z", "topic_key": "location.old-laptop",
+      "evidence": [{"message_id": "rel-msg-a-laptop", "at": "2026-08-20T16:00:00Z"}],
+      "relation": {"source_entity": "旧笔记本电脑", "relation_type": "LOCATED_AT", "target_entity": "远航维修店", "fact": "旧笔记本电脑位于远航维修店，正在维修店检修。"}
+    },
+    {
+      "memory_id": "rel-b-book-linxiao-current", "scope": "owner_b",
+      "content": "《银河帝国》放在林晓家的书架上。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-02-01T00:00:00Z", "topic_key": "location.book.galactic-empire",
+      "evidence": [{"message_id": "rel-msg-b-book", "at": "2026-02-01T09:00:00Z"}],
+      "relation": {"source_entity": "《银河帝国》", "relation_type": "LOCATED_AT", "target_entity": "林晓家书架", "fact": "《银河帝国》位于林晓家书架，放在林晓家的书架。"}
+    },
+    {
+      "memory_id": "rel-b-camera-dorm-current", "scope": "owner_b",
+      "content": "相机目前放在学校宿舍。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-03-10T00:00:00Z", "topic_key": "location.camera",
+      "evidence": [{"message_id": "rel-msg-b-camera", "at": "2026-03-10T09:00:00Z"}],
+      "relation": {"source_entity": "相机", "relation_type": "LOCATED_AT", "target_entity": "学校宿舍", "fact": "相机位于学校宿舍，放在宿舍。"}
+    },
+    {
+      "memory_id": "rel-c-key-li-current", "scope": "owner_c",
+      "content": "备用钥匙由李然保管。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-07-15T00:00:00Z", "topic_key": "possession.spare-key",
+      "evidence": [{"message_id": "rel-msg-c-key", "at": "2026-07-15T09:00:00Z"}],
+      "relation": {"source_entity": "备用钥匙", "relation_type": "HELD_BY", "target_entity": "李然", "fact": "备用钥匙由李然保管，在李然手里。"}
+    },
+    {
+      "memory_id": "rel-a-fallback-agent-guess", "scope": "owner_a",
+      "content": "系统猜测《银河帝国》可能在另一个联系人那里。",
+      "authority": "agent_output", "personal_memory_type": "state", "temporal_status": "current", "state": "candidate",
+      "valid_from": "2026-08-25T00:00:00Z", "topic_key": "possession.book.galactic-empire",
+      "evidence": [{"message_id": "rel-msg-agent-guess", "at": "2026-08-25T09:00:00Z"}],
+      "relation": {"source_entity": "《银河帝国》", "relation_type": "HELD_BY", "target_entity": "未知联系人", "fact": "系统猜测《银河帝国》由未知联系人保管。", "edge_kind": "fallback"}
+    }
+  ],
+  "queries": [
+    {"query_id":"rel-q01","query":"我那本《银河帝国》现在由谁保管？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["《银河帝国》"],"relation_hints":["保管"],"required_memory_ids":["rel-a-book-linxiao-current"],"forbidden_memory_ids":["rel-a-book-zhang-history","rel-b-book-linxiao-current","rel-a-fallback-agent-guess"],"category":"current_relation","partition":"dev"},
+    {"query_id":"rel-q02","query":"《银河帝国》眼下在谁手里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["《银河帝国》"],"relation_hints":["手里"],"required_memory_ids":["rel-a-book-linxiao-current"],"forbidden_memory_ids":["rel-a-book-zhang-history","rel-b-book-linxiao-current"],"category":"current_relation","partition":"heldout"},
+    {"query_id":"rel-q03","query":"2026年5月时《银河帝国》在谁那里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","as_of":"2026-05-15T12:00:00Z","entity_mentions":["《银河帝国》"],"relation_hints":["手里"],"required_memory_ids":["rel-a-book-zhang-history"],"forbidden_memory_ids":["rel-a-book-linxiao-current"],"category":"as_of_relation","partition":"dev"},
+    {"query_id":"rel-q04","query":"以前是谁替我保管《银河帝国》？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["《银河帝国》"],"relation_hints":["保管"],"required_memory_ids":["rel-a-book-zhang-history"],"forbidden_memory_ids":["rel-a-book-linxiao-current"],"category":"history_relation","partition":"heldout"},
+    {"query_id":"rel-q05","query":"相机现在放在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["相机"],"relation_hints":["放在"],"required_memory_ids":["rel-a-camera-studio-current"],"forbidden_memory_ids":["rel-a-camera-home-history","rel-b-camera-dorm-current"],"category":"current_relation","partition":"dev"},
+    {"query_id":"rel-q06","query":"相机目前位于什么地方？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["相机"],"relation_hints":["位于"],"required_memory_ids":["rel-a-camera-studio-current"],"forbidden_memory_ids":["rel-a-camera-home-history"],"category":"current_relation","partition":"heldout"},
+    {"query_id":"rel-q07","query":"2026年4月相机放在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","as_of":"2026-04-20T12:00:00Z","entity_mentions":["相机"],"relation_hints":["放在"],"required_memory_ids":["rel-a-camera-home-history"],"forbidden_memory_ids":["rel-a-camera-studio-current"],"category":"as_of_relation","partition":"dev"},
+    {"query_id":"rel-q08","query":"相机以前位于哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["相机"],"relation_hints":["位于"],"required_memory_ids":["rel-a-camera-home-history"],"forbidden_memory_ids":["rel-a-camera-studio-current"],"category":"history_relation","partition":"heldout"},
+    {"query_id":"rel-q09","query":"我目前就职于哪家公司？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["我"],"relation_hints":["就职"],"required_memory_ids":["rel-a-job-xinghai-current"],"forbidden_memory_ids":["rel-a-job-yunshan-history"],"category":"current_relation","partition":"dev"},
+    {"query_id":"rel-q10","query":"2025年我在哪家公司任职？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","as_of":"2025-06-15T12:00:00Z","entity_mentions":["我"],"relation_hints":["任职"],"required_memory_ids":["rel-a-job-yunshan-history"],"forbidden_memory_ids":["rel-a-job-xinghai-current"],"category":"as_of_relation","partition":"heldout"},
+    {"query_id":"rel-q11","query":"我以前就职过哪家公司？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["我"],"relation_hints":["就职"],"required_memory_ids":["rel-a-job-yunshan-history"],"forbidden_memory_ids":["rel-a-job-xinghai-current"],"category":"history_relation","partition":"dev"},
+    {"query_id":"rel-q12","query":"备用钥匙现在由谁保管？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["备用钥匙"],"relation_hints":["保管"],"required_memory_ids":["rel-a-key-chen-current"],"forbidden_memory_ids":["rel-c-key-li-current"],"category":"current_relation","partition":"dev"},
+    {"query_id":"rel-q13","query":"豆包由哪位医生照顾？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["豆包"],"relation_hints":["照顾"],"required_memory_ids":["rel-a-dog-anhe-current"],"category":"current_relation","partition":"heldout"},
+    {"query_id":"rel-q14","query":"护照存放在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["护照"],"relation_hints":["存放"],"required_memory_ids":["rel-a-passport-drawer-current"],"category":"current_relation","partition":"dev"},
+    {"query_id":"rel-q15","query":"旧笔记本电脑现在位于哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["旧笔记本电脑"],"relation_hints":["位于"],"required_memory_ids":["rel-a-laptop-repair-current"],"category":"current_relation","partition":"heldout"},
+    {"query_id":"rel-q16","query":"我的《银河帝国》放在哪里？","scopes":["owner_b"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["《银河帝国》"],"relation_hints":["放在"],"required_memory_ids":["rel-b-book-linxiao-current"],"forbidden_memory_ids":["rel-a-book-linxiao-current","rel-a-book-zhang-history"],"category":"scope_collision","partition":"adversarial","adversarial_note":"same book and contact names exist in another exact scope"},
+    {"query_id":"rel-q17","query":"我的相机现在放在哪里？","scopes":["owner_b"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["相机"],"relation_hints":["放在"],"required_memory_ids":["rel-b-camera-dorm-current"],"forbidden_memory_ids":["rel-a-camera-studio-current","rel-a-camera-home-history"],"category":"scope_collision","partition":"adversarial"},
+    {"query_id":"rel-q18","query":"我的备用钥匙是谁保管的？","scopes":["owner_c"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["备用钥匙"],"relation_hints":["保管"],"required_memory_ids":["rel-c-key-li-current"],"forbidden_memory_ids":["rel-a-key-chen-current"],"category":"scope_collision","partition":"adversarial"},
+    {"query_id":"rel-q19","query":"显微镜现在由谁保管？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["显微镜"],"relation_hints":["保管"],"expected_abstain":true,"category":"unknown_entity","partition":"adversarial"},
+    {"query_id":"rel-q20","query":"投影仪放在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["投影仪"],"relation_hints":["放在"],"expected_abstain":true,"category":"unknown_entity","partition":"heldout"},
+    {"query_id":"rel-q21","query":"谁购买了《银河帝国》？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","entity_mentions":["《银河帝国》"],"relation_hints":["购买"],"forbidden_memory_ids":["rel-a-book-linxiao-current","rel-a-book-zhang-history"],"expected_abstain":true,"category":"wrong_relation","partition":"adversarial"},
+    {"query_id":"rel-q22","query":"谁在维修相机？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","entity_mentions":["相机"],"relation_hints":["维修"],"forbidden_memory_ids":["rel-a-camera-studio-current","rel-a-camera-home-history"],"expected_abstain":true,"category":"wrong_relation","partition":"adversarial"},
+    {"query_id":"rel-q23","query":"备用钥匙是在哪里购买的？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","entity_mentions":["备用钥匙"],"relation_hints":["购买"],"forbidden_memory_ids":["rel-a-key-chen-current"],"expected_abstain":true,"category":"wrong_relation","partition":"heldout"},
+    {"query_id":"rel-q24","query":"豆包出生在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","entity_mentions":["豆包"],"relation_hints":["出生"],"forbidden_memory_ids":["rel-a-dog-anhe-current"],"expected_abstain":true,"category":"wrong_relation","partition":"adversarial"},
+    {"query_id":"rel-q25","query":"2026年6月30日《银河帝国》在谁手里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","as_of":"2026-06-30T12:00:00Z","entity_mentions":["《银河帝国》"],"relation_hints":["手里"],"required_memory_ids":["rel-a-book-zhang-history"],"forbidden_memory_ids":["rel-a-book-linxiao-current"],"category":"temporal_boundary","partition":"dev"},
+    {"query_id":"rel-q26","query":"2026年7月1日《银河帝国》由谁保管？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","as_of":"2026-07-01T12:00:00Z","entity_mentions":["《银河帝国》"],"relation_hints":["保管"],"required_memory_ids":["rel-a-book-linxiao-current"],"forbidden_memory_ids":["rel-a-book-zhang-history"],"category":"temporal_boundary","partition":"heldout"},
+    {"query_id":"rel-q27","query":"2026年5月14日相机位于哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","as_of":"2026-05-14T12:00:00Z","entity_mentions":["相机"],"relation_hints":["位于"],"required_memory_ids":["rel-a-camera-home-history"],"forbidden_memory_ids":["rel-a-camera-studio-current"],"category":"temporal_boundary","partition":"dev"},
+    {"query_id":"rel-q28","query":"2026年5月15日相机放在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","as_of":"2026-05-15T12:00:00Z","entity_mentions":["相机"],"relation_hints":["放在"],"required_memory_ids":["rel-a-camera-studio-current"],"forbidden_memory_ids":["rel-a-camera-home-history"],"category":"temporal_boundary","partition":"heldout"},
+    {"query_id":"rel-q29","query":"护照由谁保管？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","entity_mentions":["护照"],"relation_hints":["保管"],"forbidden_memory_ids":["rel-a-passport-drawer-current"],"expected_abstain":true,"category":"wrong_relation","partition":"adversarial"},
+    {"query_id":"rel-q30","query":"旧笔记本电脑由谁购买？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","entity_mentions":["旧笔记本电脑"],"relation_hints":["购买"],"forbidden_memory_ids":["rel-a-laptop-repair-current"],"expected_abstain":true,"category":"wrong_relation","partition":"heldout"}
+  ],
+  "requirements": {
+    "relation_benchmark": true,
+    "min_queries": 30,
+    "min_scopes": 3,
+    "zero_paid_llm_calls": true,
+    "required_profiles": ["lexical", "lexical_vector", "lexical_relation", "lexical_vector_relation"]
+  }
+}

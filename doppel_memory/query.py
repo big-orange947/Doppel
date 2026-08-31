@@ -506,60 +506,79 @@ class PersonalMemoryQueryEngine:
         semantic_scores: dict[tuple[str, str], float] = {}
         semantic_sources: dict[tuple[str, str], tuple[str, ...]] = {}
         relation_details: dict[tuple[str, str], tuple[float, str, str, str]] = {}
-        if (
-            self._semantic_index is not None
-            and bound.search_text
-            and bound.intent != PersonalMemoryQueryIntent.COUNT
-        ):
-            candidate_result = await self._read_candidates(bound)
-            if candidate_result is None:
-                for scope in bound.scopes:
-                    records.extend(await self._read_scope(scope, bound))
-                (
-                    semantic_scores,
-                    semantic_sources,
-                    semantic_warnings,
-                ) = await self._semantic_scores(bound, records)
-                warnings.extend(semantic_warnings)
-            else:
-                (
-                    records,
-                    semantic_scores,
-                    semantic_sources,
-                    candidate_warnings,
-                ) = candidate_result
-                warnings.extend(candidate_warnings)
-                complete = False
-        else:
-            for scope in bound.scopes:
-                records.extend(await self._read_scope(scope, bound))
-            # A SemanticIndex is a bounded top-k interface. It may improve lookup
-            # recall, but it cannot define an exhaustive set for an exact count.
-            # Counts therefore use only the complete structural/lexical scan.
-            if bound.intent != PersonalMemoryQueryIntent.COUNT:
-                (
-                    semantic_scores,
-                    semantic_sources,
-                    semantic_warnings,
-                ) = await self._semantic_scores(bound, records)
-                warnings.extend(semantic_warnings)
+        relation_task: asyncio.Task[
+            tuple[
+                list[MemoryRecord],
+                dict[tuple[str, str], tuple[float, str, str, str]],
+                list[str],
+            ]
+        ] | None = None
         if (
             self._relation_index is not None
             and bound.entity_mentions
             and bound.intent != PersonalMemoryQueryIntent.COUNT
         ):
-            relation_records, relation_details, relation_warnings = (
-                await self._read_relation_candidates(bound)
-            )
-            records_by_key = {
-                (record.scope.scope_key, record.memory_id): record for record in records
-            }
-            for record in relation_records:
-                records_by_key.setdefault(
-                    (record.scope.scope_key, record.memory_id), record
-                )
-            records = list(records_by_key.values())
-            warnings.extend(relation_warnings)
+            relation_task = asyncio.create_task(self._read_relation_candidates(bound))
+        try:
+            if (
+                self._semantic_index is not None
+                and bound.search_text
+                and bound.intent != PersonalMemoryQueryIntent.COUNT
+            ):
+                candidate_result = await self._read_candidates(bound)
+                if candidate_result is None:
+                    for scope in bound.scopes:
+                        records.extend(await self._read_scope(scope, bound))
+                    (
+                        semantic_scores,
+                        semantic_sources,
+                        semantic_warnings,
+                    ) = await self._semantic_scores(bound, records)
+                    warnings.extend(semantic_warnings)
+                else:
+                    (
+                        records,
+                        semantic_scores,
+                        semantic_sources,
+                        candidate_warnings,
+                    ) = candidate_result
+                    warnings.extend(candidate_warnings)
+                    complete = False
+            else:
+                for scope in bound.scopes:
+                    records.extend(await self._read_scope(scope, bound))
+                # A SemanticIndex is a bounded top-k interface. It may improve lookup
+                # recall, but it cannot define an exhaustive set for an exact count.
+                # Counts therefore use only the complete structural/lexical scan.
+                if bound.intent != PersonalMemoryQueryIntent.COUNT:
+                    (
+                        semantic_scores,
+                        semantic_sources,
+                        semantic_warnings,
+                    ) = await self._semantic_scores(bound, records)
+                    warnings.extend(semantic_warnings)
+            if relation_task is not None:
+                (
+                    relation_records,
+                    relation_details,
+                    relation_warnings,
+                ) = await relation_task
+                records_by_key = {
+                    (record.scope.scope_key, record.memory_id): record
+                    for record in records
+                }
+                for record in relation_records:
+                    records_by_key.setdefault(
+                        (record.scope.scope_key, record.memory_id), record
+                    )
+                records = list(records_by_key.values())
+                warnings.extend(relation_warnings)
+        except BaseException:
+            if relation_task is not None:
+                if not relation_task.done():
+                    relation_task.cancel()
+                await asyncio.gather(relation_task, return_exceptions=True)
+            raise
         for scope in bound.scopes:
             conflict_records.extend(await self._read_conflicts(scope))
         matched: list[

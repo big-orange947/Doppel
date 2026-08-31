@@ -6,6 +6,8 @@ Compares four main execution profiles over the same pre-extracted fixture set:
 - ``lexical_vector``         : Store lexical candidates + pgvector semantic candidates
 - ``lexical_graph``          : Store lexical candidates + Graphiti graph candidates
 - ``lexical_vector_graph``   : Store lexical candidates + weighted RRF of both indexes
+- ``lexical_relation``       : Store lexical candidates + Graphiti rich relations
+- ``lexical_vector_relation``: pgvector semantic + Graphiti relation-only candidates
 
 plus three index-direct diagnostics (``vector_direct`` / ``graph_direct`` /
 ``composite_direct``) that bypass the query engine and report raw candidate
@@ -67,8 +69,10 @@ from doppel_memory.query import (
 )
 
 PROFILE_MAIN = ("lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph")
+PROFILE_RELATION = ("lexical_relation", "lexical_vector_relation")
+PROFILE_EXECUTION = (*PROFILE_MAIN, *PROFILE_RELATION)
 PROFILE_DIRECT = ("vector_direct", "graph_direct", "composite_direct")
-ALL_PROFILES = (*PROFILE_MAIN, *PROFILE_DIRECT)
+ALL_PROFILES = (*PROFILE_EXECUTION, *PROFILE_DIRECT)
 
 SOURCE_VECTOR = "vector"
 SOURCE_GRAPH = "graph"
@@ -109,6 +113,18 @@ class AblationEvidence(BaseModel):
     at: datetime
 
 
+class AblationRelation(BaseModel):
+    """Gold rich edge used only by the repository relation benchmark."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source_entity: str
+    relation_type: str
+    target_entity: str
+    fact: str
+    edge_kind: Literal["rich", "fallback"] = "rich"
+
+
 class AblationMemory(BaseModel):
     """One pre-extracted authoritative MemoryRecord in the fixture set."""
 
@@ -131,6 +147,7 @@ class AblationMemory(BaseModel):
     tags: list[str] = Field(default_factory=list)
     evidence: list[AblationEvidence] = Field(default_factory=list)
     authorization: dict[str, Any] | None = None
+    relation: AblationRelation | None = None
 
 
 class AblationQuery(BaseModel):
@@ -146,6 +163,8 @@ class AblationQuery(BaseModel):
     as_of: datetime | None = None
     time_from: datetime | None = None
     time_to: datetime | None = None
+    entity_mentions: list[str] = Field(default_factory=list)
+    relation_hints: list[str] = Field(default_factory=list)
     required_memory_ids: list[str] = Field(default_factory=list)
     forbidden_memory_ids: list[str] = Field(default_factory=list)
     expected_abstain: bool = False
@@ -236,6 +255,7 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     """
     failures: list[str] = []
     scope_ids = {name: item.user_id for name, item in dataset.scopes.items()}
+    relation_benchmark = bool(dataset.requirements.get("relation_benchmark", False))
     for item in dataset.fixtures:
         scope_user = scope_ids.get(item.scope, "")
         if item.event_key and item.personal_memory_type != "episode":
@@ -257,6 +277,10 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     for query in dataset.queries:
         if query.partition == "deferred_cross_subject":
             continue
+        if relation_benchmark and not query.entity_mentions:
+            failures.append(
+                f"{query.query_id}: relation benchmark query requires entity_mentions"
+            )
         for memory_id in query.required_memory_ids:
             fixture = next(
                 (item for item in dataset.fixtures if item.memory_id == memory_id),
@@ -267,6 +291,13 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
                     f"{query.query_id}: required memory {memory_id} not in fixtures"
                 )
                 continue
+            if relation_benchmark and (
+                fixture.relation is None or fixture.relation.edge_kind != "rich"
+            ):
+                failures.append(
+                    f"{query.query_id}: required relation memory {memory_id} lacks a "
+                    "rich edge gold label"
+                )
             query_scope_users = {
                 scope_ids[name] for name in query.scopes if name in scope_ids
             }
@@ -326,9 +357,9 @@ class BenchmarkOraclePlanner:
     """Fixture-grounded planner: injects only the dataset's labeled structure.
 
     Deliberately does not choose scopes, memory IDs, topic keys, or any retrieval
-    hint beyond intent/as_of/time interval. It maps the exact fixture query text
-    back to its labeled plan so retrieval/index/Store layers can be measured
-    independently of natural-language planning.
+    identifier. It maps exact fixture query text back to intent/time labels and, for
+    relation datasets, explicit entity/relation labels so retrieval/index/Store layers
+    can be measured independently of natural-language planning.
     """
 
     name = "doppel.benchmark-oracle-planner"
@@ -365,9 +396,11 @@ class BenchmarkOraclePlanner:
             as_of=fixture.as_of,
             time_from=fixture.time_from,
             time_to=fixture.time_to,
+            entity_mentions=fixture.entity_mentions,
+            relation_hints=fixture.relation_hints,
             explanation=(
                 "benchmark oracle: fixture-labeled plan; no scope, memory ID, "
-                "topic key, or retrieval hint injected"
+                "or topic key injected"
             ),
         )
 
@@ -411,6 +444,9 @@ def _memory_record(
             for evidence in item.evidence
         ],
     }
+    relation = getattr(item, "relation", None)
+    if relation is not None:
+        metadata["benchmark_relation"] = relation.model_dump(mode="json")
     return MemoryRecord(
         memory_id=item.memory_id,
         scope=scope,
@@ -534,8 +570,23 @@ async def _preseed_graph(
         source_id = str(uuid5(NAMESPACE_URL, f"ablation:source:{episode_id}"))
         target_id = str(uuid5(NAMESPACE_URL, f"ablation:target:{episode_id}"))
         edge_id = str(uuid5(NAMESPACE_URL, f"ablation:edge:{episode_id}"))
-        source_name = f"owner:{record.scope.user_id}"
-        target_name = str(record.metadata.get("topic_key") or "memory")
+        relation_spec = record.metadata.get("benchmark_relation")
+        if isinstance(relation_spec, dict):
+            source_name = str(relation_spec.get("source_entity") or "").strip()
+            target_name = str(relation_spec.get("target_entity") or "").strip()
+            relation_name = str(relation_spec.get("relation_type") or "").strip()
+            relation_fact = str(relation_spec.get("fact") or record.content).strip()
+            relation_edge_kind = str(relation_spec.get("edge_kind") or "rich").strip()
+            if not source_name or not target_name or not relation_name:
+                raise ValueError(
+                    f"invalid benchmark relation fixture: {record.memory_id}"
+                )
+        else:
+            source_name = f"owner:{record.scope.user_id}"
+            target_name = str(record.metadata.get("topic_key") or "memory")
+            relation_name = RICH_EDGE_NAME
+            relation_fact = record.content
+            relation_edge_kind = ""
         source_embedding = await graph.embedder.create(source_name)
         target_embedding = await graph.embedder.create(target_name)
         fact_embedding = await graph.embedder.create(record.content)
@@ -553,8 +604,12 @@ async def _preseed_graph(
             name_embedding=target_embedding,
             summary=record.content,
         )
-        use_fallback = graph_kind == "fallback" or (
-            graph_kind == "mixed" and index % 2 == 0
+        use_fallback = relation_edge_kind == "fallback" or (
+            not relation_edge_kind
+            and (
+                graph_kind == "fallback"
+                or (graph_kind == "mixed" and index % 2 == 0)
+            )
         )
         edge = EntityEdge(
             uuid=edge_id,
@@ -562,8 +617,8 @@ async def _preseed_graph(
             source_node_uuid=source_id,
             target_node_uuid=target_id,
             created_at=observed_at,
-            name=FALLBACK_EDGE_NAME if use_fallback else RICH_EDGE_NAME,
-            fact=record.content,
+            name=FALLBACK_EDGE_NAME if use_fallback else relation_name,
+            fact=relation_fact,
             fact_embedding=fact_embedding,
             episodes=[episode_id],
             valid_at=valid_from,
@@ -640,6 +695,12 @@ async def _build_graph_index(store: Any, graph: Any) -> Any:
     from doppel_memory.graphiti_store import GraphitiSemanticIndex
 
     return GraphitiSemanticIndex(store, enabled=True, graphiti_client=graph)
+
+
+async def _build_relation_index(store: Any, graph: Any) -> Any:
+    from doppel_memory.graphiti_store import GraphitiRelationIndex
+
+    return GraphitiRelationIndex(store, enabled=True, graphiti_client=graph)
 
 
 # --------------------------------------------------------------------------- #
@@ -1407,18 +1468,43 @@ async def run_ablation(
     store_path = Path(store_dir) / "store.sqlite3"
     scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
     group_ids = [scope.scope_key for scope in scopes.values()]
+    vector_requested = require_live_postgres or bool(
+        set(profiles)
+        & {
+            "lexical_vector",
+            "lexical_vector_graph",
+            "lexical_vector_relation",
+            "vector_direct",
+            "composite_direct",
+        }
+    )
+    graph_requested = require_live_neo4j or bool(
+        set(profiles)
+        & {
+            "lexical_graph",
+            "lexical_vector_graph",
+            "lexical_relation",
+            "lexical_vector_relation",
+            "graph_direct",
+            "composite_direct",
+        }
+    )
 
     # v0.9 keeps PostgreSQL authoritative when it is live; SQLite is the
     # degradation path. The same authoritative store backs the pgvector
     # projection so index_records can re-load records it indexes (orphan
     # protection) instead of duplicating another authority.
     pg_password = os.environ.get("DOPPEL_ABLATION_PG_PASSWORD", "")
-    vector_reason = await _probe_postgres(
-        host=PG_HOST,
-        port=PG_PORT,
-        database=PG_DATABASE,
-        user=PG_USER,
-        password=pg_password,
+    vector_reason = (
+        await _probe_postgres(
+            host=PG_HOST,
+            port=PG_PORT,
+            database=PG_DATABASE,
+            user=PG_USER,
+            password=pg_password,
+        )
+        if vector_requested
+        else "not requested"
     )
     store: Any = None
     pg_store: Any | None = None
@@ -1449,6 +1535,7 @@ async def run_ablation(
     ]
     graph: Any | None = None
     graph_index: Any | None = None
+    relation_index: Any | None = None
     vector_index: Any | None = None
     graph_reason = ""
     graph_seed_stats: dict[str, Any] = {}
@@ -1465,14 +1552,19 @@ async def run_ablation(
             vector_index = await _build_vector_candidates(pg_store, records)
 
         # --- graph availability ------------------------------------------- #
-        graph_reason = await _probe_neo4j(
-            NEO4J_URI, NEO4J_USER, os.environ.get("NEO4J_PASSWORD", "")
+        graph_reason = (
+            await _probe_neo4j(
+                NEO4J_URI, NEO4J_USER, os.environ.get("NEO4J_PASSWORD", "")
+            )
+            if graph_requested
+            else "not requested"
         )
         if not graph_reason:
             graph = await _build_graphiti_client(NEO4J_URI, NEO4J_USER, os.environ.get("NEO4J_PASSWORD", ""))
             await _cleanup_graph_scope(graph, group_ids)
             graph_seed_stats = await _preseed_graph(graph, records, graph_kind="mixed")
             graph_index = await _build_graph_index(store, graph)
+            relation_index = await _build_relation_index(store, graph)
 
         semantic_by_source: dict[str, Any] = {}
         if vector_index is not None:
@@ -1486,6 +1578,7 @@ async def run_ablation(
             dataset=dataset,
             profiles=profiles,
             semantic_by_source=semantic_by_source,
+            relation_index=relation_index,
             graph=graph,
             planner_modes=planner_modes,
         )
@@ -1553,6 +1646,7 @@ async def _run_profiles(
     dataset: AblationDataset,
     profiles: Sequence[str],
     semantic_by_source: dict[str, Any],
+    relation_index: Any | None,
     graph: Any | None,
     planner_modes: Sequence[str] = PLANNER_MODES,
 ) -> dict[str, Any]:
@@ -1574,6 +1668,16 @@ async def _run_profiles(
         "lexical_graph": graph_source if graph_available else None,
         # full hybrid executes only when BOTH indexes are available.
         "lexical_vector_graph": composite,
+        "lexical_relation": None,
+        "lexical_vector_relation": vector_source if vector_available else None,
+    }
+    profile_to_relation: dict[str, Any | None] = {
+        "lexical": None,
+        "lexical_vector": None,
+        "lexical_graph": None,
+        "lexical_vector_graph": None,
+        "lexical_relation": relation_index,
+        "lexical_vector_relation": relation_index,
     }
     planners: dict[str, Any] = {
         PLANNER_MODE_DETERMINISTIC: DeterministicPersonalMemoryQueryPlanner(),
@@ -1585,19 +1689,34 @@ async def _run_profiles(
     for mode in planner_modes:
         planner = planners[mode]
         per_profile: dict[str, dict[str, Any]] = {}
-        for profile in PROFILE_MAIN:
+        for profile in PROFILE_EXECUTION:
             if profile not in profiles:
                 continue
             semantic = profile_to_semantic[profile]
-            if semantic is None and profile != "lexical":
+            relation = profile_to_relation[profile]
+            semantic_required = profile in {
+                "lexical_vector",
+                "lexical_graph",
+                "lexical_vector_graph",
+                "lexical_vector_relation",
+            }
+            relation_required = profile in PROFILE_RELATION
+            if (semantic_required and semantic is None) or (
+                relation_required and relation is None
+            ):
+                missing = []
+                if semantic_required and semantic is None:
+                    missing.append("semantic")
+                if relation_required and relation is None:
+                    missing.append("relation")
                 per_profile[profile] = {
                     "query_count": len(dataset.queries),
                     "error_count": len(dataset.queries),
                     "unavailable": True,
-                    "reason": "semantic source unavailable (see runtime)",
+                    "reason": f"{' + '.join(missing)} source unavailable (see runtime)",
                 }
                 continue
-            engine = _engines(store, semantic)
+            engine = _engines(store, semantic, relation)
             cases: list[dict[str, Any]] = []
             for query in dataset.queries:
                 if query.partition == "deferred_cross_subject":
@@ -1650,7 +1769,11 @@ async def _run_profiles(
         diagnostics["composite_vector_only_degradation"] = degraded
 
     report: dict[str, Any] = {
-        "runner": "doppel.personal-retrieval-ablation.v1",
+        "runner": (
+            "doppel.personal-relation-ablation.v1"
+            if dataset.requirements.get("relation_benchmark", False)
+            else "doppel.personal-retrieval-ablation.v1"
+        ),
         "dataset": {
             "name": dataset.suite,
             "version": dataset.suite_version,
@@ -1695,6 +1818,18 @@ async def _run_profiles(
                 and not full.get("unavailable", False)
             ):
                 comparisons[f"{mode}_full_vs_{base_name}"] = _delta(full, base)
+        relation_full = per_mode[mode].get("lexical_vector_relation")
+        for base_name in ("lexical", "lexical_vector", "lexical_relation"):
+            base = per_mode[mode].get(base_name)
+            if (
+                relation_full is not None
+                and base is not None
+                and not base.get("unavailable", False)
+                and not relation_full.get("unavailable", False)
+            ):
+                comparisons[f"{mode}_relation_full_vs_{base_name}"] = _delta(
+                    relation_full, base
+                )
     report["comparisons"] = comparisons
 
     layered: dict[str, list[str]] = {
@@ -1723,7 +1858,65 @@ async def _run_profiles(
         dataset=dataset,
         per_mode=per_mode,
     )
+    report["relation_final_hit_attribution"] = (
+        _build_relation_final_hit_attribution(report=report, dataset=dataset)
+    )
     return report
+
+
+def _build_relation_final_hit_attribution(
+    *,
+    report: dict[str, Any],
+    dataset: AblationDataset,
+) -> dict[str, Any]:
+    """Count accepted relation-ranked hits against query gold, never raw edges."""
+
+    query_by_id = {query.query_id: query for query in dataset.queries}
+    oracle_cases = [
+        case
+        for case in report.get("cases", [])
+        if case.get("mode") == PLANNER_MODE_ORACLE
+        and case.get("profile") in PROFILE_RELATION
+        and not case.get("error")
+    ]
+    if not oracle_cases:
+        return {"available": False, "reason": "relation profiles were not executed"}
+    correct_links: set[tuple[str, str, str]] = set()
+    incorrect_links: set[tuple[str, str, str]] = set()
+    relation_queries: set[tuple[str, str]] = set()
+    for case in oracle_cases:
+        query = query_by_id[case["query_id"]]
+        required = set(query.required_memory_ids)
+        forbidden = set(query.forbidden_memory_ids)
+        for hit in case.get("hit_scores", []):
+            reasons = list(hit.get("reasons", []))
+            if not any(reason == "relation_match" for reason in reasons):
+                continue
+            memory_id = str(hit.get("memory_id") or "")
+            edge_ids = [
+                reason.removeprefix("relation_edge:")
+                for reason in reasons
+                if reason.startswith("relation_edge:")
+            ] or [""]
+            relation_queries.add((case["profile"], case["query_id"]))
+            for edge_id in edge_ids:
+                link = (case["query_id"], memory_id, edge_id)
+                if memory_id in required:
+                    correct_links.add(link)
+                if memory_id in forbidden or query.expected_abstain:
+                    incorrect_links.add(link)
+    return {
+        "available": True,
+        "method": (
+            "oracle final accepted hits carrying relation_match, checked against "
+            "required/forbidden labels after Store revalidation"
+        ),
+        "correct_relation_final_hit_links": len(correct_links),
+        "incorrect_relation_final_hit_links": len(incorrect_links),
+        "unique_profile_queries_with_relation_hit": len(relation_queries),
+        "correct_links": [list(item) for item in sorted(correct_links)],
+        "incorrect_links": [list(item) for item in sorted(incorrect_links)],
+    }
 
 
 def _build_final_hit_attribution(
@@ -1858,8 +2051,16 @@ def _build_final_hit_attribution(
     }
 
 
-def _engines(store: Any, semantic: Any | None) -> PersonalMemoryQueryEngine:
-    return PersonalMemoryQueryEngine(store, semantic_index=semantic)
+def _engines(
+    store: Any,
+    semantic: Any | None,
+    relation: Any | None = None,
+) -> PersonalMemoryQueryEngine:
+    return PersonalMemoryQueryEngine(
+        store,
+        semantic_index=semantic,
+        relation_index=relation,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -1997,7 +2198,7 @@ def _parser() -> argparse.ArgumentParser:
         default=",".join(PROFILE_MAIN),
         help=(
             "comma-separated profiles; main: "
-            + ",".join(PROFILE_MAIN)
+            + ",".join(PROFILE_EXECUTION)
             + "; diagnostics: "
             + ",".join(PROFILE_DIRECT)
         ),

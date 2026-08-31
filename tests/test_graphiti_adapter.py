@@ -696,6 +696,7 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
                 "source_entity_name": "相机",
                 "target_entity_id": "entity-wang",
                 "target_entity_name": "小王",
+                "relation_hint_match": 1,
             },
             {
                 "group_id": scope.scope_key,
@@ -708,6 +709,7 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
                 "source_entity_name": "相机",
                 "target_entity_id": "fallback-target",
                 "target_entity_name": "memory",
+                "relation_hint_match": 0,
             },
             {
                 "group_id": other_scope.scope_key,
@@ -720,6 +722,7 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
                 "source_entity_name": "相机",
                 "target_entity_id": "other-target",
                 "target_entity_name": "其他人",
+                "relation_hint_match": 1,
             },
         ]
     )
@@ -750,6 +753,7 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
     assert candidate.episode_ids == [indexed.episode_id]
     assert candidate.source_entity_name == "相机"
     assert candidate.target_entity_name == "小王"
+    assert candidate.score > 0.35
     assert fake.search_calls == []
     query, params = relation_driver.calls[0]
     assert "MATCH (source:Entity)-[edge:RELATES_TO]->(target:Entity)" in query
@@ -758,6 +762,23 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
     assert params["anchors"] == ["相机"]
     assert params["relation_hints"] == ["held"]
     assert params["valid_at"] == valid_at
+
+    relation_driver.rows[0]["relation_hint_match"] = 0
+    unrelated = await relation.search_relations(
+        RelationQuery(
+            query_text="相机放在哪里？",
+            entity_mentions=["相机"],
+            relation_hints=["located"],
+            subject="owner",
+            subject_id=scope.user_id,
+            valid_at=valid_at,
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+        limit=5,
+    )
+    assert len(unrelated) == 1
+    assert unrelated[0].score == 0.2
 
     health = await relation.health()
     assert health["ok"] is True
@@ -799,6 +820,7 @@ async def test_graphiti_relation_index_revalidates_store_time_and_filters() -> N
                 "source_entity_name": "相机",
                 "target_entity_id": "entity-wang",
                 "target_entity_name": "小王",
+                "relation_hint_match": 0,
             }
         ]
     )

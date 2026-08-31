@@ -681,13 +681,15 @@ class GraphitiRelationIndex:
                 "WITH source, edge, target, "
                 "CASE WHEN size($relation_hints) > 0 AND "
                 "any(hint IN $relation_hints WHERE "
-                "toLower(coalesce(edge.name, '')) CONTAINS hint) "
+                "toLower(coalesce(edge.name, '')) CONTAINS hint OR "
+                "toLower(coalesce(edge.fact, '')) CONTAINS hint) "
                 "THEN 1 ELSE 0 END AS relation_hint_match "
                 "RETURN edge.group_id AS group_id, edge.uuid AS edge_id, "
                 "edge.name AS relation_type, edge.episodes AS episode_ids, "
                 "edge.valid_at AS valid_at, edge.invalid_at AS invalid_at, "
                 "source.uuid AS source_entity_id, source.name AS source_entity_name, "
-                "target.uuid AS target_entity_id, target.name AS target_entity_name "
+                "target.uuid AS target_entity_id, target.name AS target_entity_name, "
+                "relation_hint_match AS relation_hint_match "
                 "ORDER BY relation_hint_match DESC, "
                 "coalesce(edge.valid_at, edge.created_at) DESC, edge.uuid "
                 "LIMIT $limit",
@@ -748,6 +750,7 @@ class GraphitiRelationIndex:
             scope = scope_by_key.get(group_id)
             edge_id = str(row["edge_id"] or "")
             relation_type = str(row["relation_type"] or "")
+            relation_hint_match = bool(row["relation_hint_match"] or 0)
             row_episode_ids = [
                 str(value) for value in list(row["episode_ids"] or []) if value
             ]
@@ -776,7 +779,12 @@ class GraphitiRelationIndex:
                     scope=scope,
                     memory_id=record.memory_id,
                     source="graphiti_relation",
-                    score=_graphiti_rank_score(rank, len(rows)),
+                    score=_relation_candidate_score(
+                        rank,
+                        len(rows),
+                        hints_present=bool(relation_hints),
+                        hint_match=relation_hint_match,
+                    ),
                     relation_type=relation_type,
                     source_entity_id=str(row["source_entity_id"] or ""),
                     source_entity_name=str(row["source_entity_name"] or ""),
@@ -1414,6 +1422,23 @@ def _graphiti_rank_score(rank: int, result_count: int) -> float:
     # Preserve that ordering in the SemanticIndex score range without inventing a
     # cosine value; every accepted top-k candidate remains above the default gate.
     return round(1.0 - (max(rank, 0) / (2.0 * result_count)), 6)
+
+
+def _relation_candidate_score(
+    rank: int,
+    result_count: int,
+    *,
+    hints_present: bool,
+    hint_match: bool,
+) -> float:
+    base = _graphiti_rank_score(rank, result_count)
+    if not hints_present or hint_match:
+        return base
+    # An entity anchor proves graph adjacency, not that the edge answers the asked
+    # relationship. Keep the candidate observable for custom thresholds while making
+    # it fail Doppel's default relation relevance gate. This is deliberately generic:
+    # no domain predicate map or benchmark vocabulary is embedded here.
+    return round(min(base, 0.2), 6)
 
 
 def _graphiti_episode_name(

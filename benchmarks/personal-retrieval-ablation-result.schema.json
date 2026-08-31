@@ -11,7 +11,7 @@
     "suite_fingerprint"
   ],
   "properties": {
-    "runner": {"const": "doppel.personal-retrieval-ablation.v1"},
+    "runner": {"enum": ["doppel.personal-retrieval-ablation.v1", "doppel.personal-relation-ablation.v1"]},
     "dataset": {
       "type": "object",
       "required": ["name", "version", "status", "frozen", "publication_ready", "fingerprint", "memory_count", "query_count", "partition_counts"],
@@ -41,7 +41,7 @@
       "propertyNames": {"enum": ["oracle", "deterministic"]},
       "additionalProperties": {
         "type": "object",
-        "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph"]},
+        "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph", "lexical_relation", "lexical_vector_relation"]},
         "additionalProperties": {"$ref": "#/$defs/profile"}
       }
     },
@@ -105,7 +105,7 @@
         "latency_ms": {"type": "object", "required": ["p50", "p95", "max"]},
         "contribution": {
           "type": "object",
-          "required": ["vector", "graph", "both"]
+          "required": ["vector", "graph", "both", "relation"]
         }
       }
     },

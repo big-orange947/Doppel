@@ -1240,7 +1240,9 @@ engine = PersonalMemoryQueryEngine(
 ```
 
 Reference planner 只有在问题明确提到人、地点、物品或命名概念时才填写 `entity_mentions`；
-`relation_hints` 是可选排序提示，不是领域关键词表。Deterministic planner 不猜实体，因此不会为了
+`relation_hints` 是通用的关系相关性提示，不是领域关键词表。Graphiti edge name 或自然语言 fact
+命中提示时保留正常关系分；只命中实体却没有回答所问关系的边会降至默认阈值以下，但不会从底层
+候选中硬删除。Deterministic planner 不猜实体，因此不会为了
 benchmark 问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回
 Store 复核，Graphiti/Neo4j 从不成为事实权威。
 

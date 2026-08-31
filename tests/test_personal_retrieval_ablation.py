@@ -23,7 +23,9 @@ from benchmarks.personal_retrieval_ablation import (
     ALL_PROFILES,
     PLANNER_MODE_ORACLE,
     PROFILE_DIRECT,
+    PROFILE_EXECUTION,
     PROFILE_MAIN,
+    PROFILE_RELATION,
     SOURCE_GRAPH,
     SOURCE_VECTOR,
     AblationDataset,
@@ -33,6 +35,7 @@ from benchmarks.personal_retrieval_ablation import (
     _evaluate_result,
     _memory_record,
     _run_case,
+    _run_profiles,
     _safety_metrics,
     apply_variant,
     load_ablation_dataset,
@@ -40,8 +43,10 @@ from benchmarks.personal_retrieval_ablation import (
 )
 from doppel_memory import (
     DeterministicPersonalMemoryQueryPlanner,
+    InMemoryStore,
     MemoryScope,
     PersonalMemoryQueryEngine,
+    RelationCandidate,
 )
 from doppel_memory.models import utc_now
 
@@ -56,6 +61,12 @@ DATASET_PATH = (
     / "benchmarks"
     / "datasets"
     / "personal-retrieval-ablation-zh-v1.json"
+)
+RELATION_DATASET_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "benchmarks"
+    / "datasets"
+    / "personal-relation-ablation-zh-v1.json"
 )
 
 NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "")
@@ -131,6 +142,32 @@ def _hit(
 
 
 class DatasetTest(unittest.TestCase):
+    def test_relation_dataset_has_edge_gold_and_adversarial_coverage(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        self.assertEqual(len(dataset.queries), 30)
+        self.assertGreaterEqual(len(dataset.scopes), 3)
+        self.assertTrue(all(query.entity_mentions for query in dataset.queries))
+        self.assertGreaterEqual(
+            sum(item.relation is not None for item in dataset.fixtures),
+            10,
+        )
+        self.assertTrue(
+            any(query.category == "wrong_relation" for query in dataset.queries)
+        )
+        self.assertTrue(
+            any(query.category == "scope_collision" for query in dataset.queries)
+        )
+
+    def test_relation_dataset_validator_rejects_missing_anchor(self) -> None:
+        from benchmarks.personal_retrieval_ablation import validate_dataset_semantics
+
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        broken = dataset.queries[0].model_copy(update={"entity_mentions": []})
+        failures = validate_dataset_semantics(
+            dataset.model_copy(update={"queries": [broken, *dataset.queries[1:]]})
+        )
+        self.assertTrue(any("requires entity_mentions" in item for item in failures))
+
     def test_dataset_meets_first_version_gates(self) -> None:
         dataset = _dataset()
         self.assertGreaterEqual(len(dataset.queries), 30)
@@ -183,7 +220,12 @@ class DatasetTest(unittest.TestCase):
             PROFILE_DIRECT,
             ("vector_direct", "graph_direct", "composite_direct"),
         )
-        self.assertEqual(tuple(ALL_PROFILES), (*PROFILE_MAIN, *PROFILE_DIRECT))
+        self.assertEqual(
+            PROFILE_RELATION,
+            ("lexical_relation", "lexical_vector_relation"),
+        )
+        self.assertEqual(PROFILE_EXECUTION, (*PROFILE_MAIN, *PROFILE_RELATION))
+        self.assertEqual(tuple(ALL_PROFILES), (*PROFILE_EXECUTION, *PROFILE_DIRECT))
 
     def test_report_schema_validates(self) -> None:
         import pydantic
@@ -194,9 +236,7 @@ class DatasetTest(unittest.TestCase):
         self.assertIn("required", schema)
         for key in schema["required"]:
             self.assertIn(key, report, key)
-        self.assertEqual(
-            schema["properties"]["runner"]["const"], report["runner"]
-        )
+        self.assertIn(report["runner"], schema["properties"]["runner"]["enum"])
         report_keys = set(report["profiles"]["deterministic"]["lexical"])
         schema_required = set(schema["$defs"]["profile"]["required"])
         self.assertTrue(schema_required.issubset(report_keys), schema_required - report_keys)
@@ -246,7 +286,7 @@ class DatasetTest(unittest.TestCase):
                         "ambiguity_accuracy": 1.0,
                         "count_accuracy": 1.0,
                         "latency_ms": {"p50": 1, "p95": 2, "max": 3},
-                        "contribution": {"vector": 0, "graph": 0, "both": 0},
+                        "contribution": {"vector": 0, "graph": 0, "both": 0, "relation": 0},
                     }
                 },
                 "oracle": {
@@ -265,7 +305,7 @@ class DatasetTest(unittest.TestCase):
                         "ambiguity_accuracy": 1.0,
                         "count_accuracy": 1.0,
                         "latency_ms": {"p50": 1, "p95": 2, "max": 3},
-                        "contribution": {"vector": 0, "graph": 0, "both": 0},
+                        "contribution": {"vector": 0, "graph": 0, "both": 0, "relation": 0},
                     }
                 }
             },
@@ -697,6 +737,100 @@ class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
             "retrieval_temporal_failure", case["retrieval_failures"]
         )
         self.assertEqual(case["temporal_violations"], 0)
+
+
+class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
+    async def test_relation_profile_runs_engine_and_attributes_gold_hits(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
+        store = InMemoryStore()
+        records = [
+            _memory_record(item, scopes[item.scope], utc_now())
+            for item in dataset.fixtures
+        ]
+        for record in records:
+            self.assertTrue((await store.put(record)).accepted)
+
+        class _FixtureRelationIndex:
+            async def search_relations(
+                self, request, requested_scopes, *, filters=None, limit=10
+            ):
+                del filters
+                allowed = {scope.scope_key for scope in requested_scopes}
+                anchors = [item.casefold() for item in request.entity_mentions]
+                hints = [item.casefold() for item in request.relation_hints]
+                candidates = []
+                for fixture, record in zip(dataset.fixtures, records, strict=True):
+                    relation = fixture.relation
+                    if (
+                        relation is None
+                        or relation.edge_kind != "rich"
+                        or record.scope.scope_key not in allowed
+                    ):
+                        continue
+                    entities = (
+                        relation.source_entity.casefold(),
+                        relation.target_entity.casefold(),
+                    )
+                    if not any(
+                        anchor in entity for anchor in anchors for entity in entities
+                    ):
+                        continue
+                    relation_text = (
+                        relation.relation_type + " " + relation.fact
+                    ).casefold()
+                    if hints and not any(hint in relation_text for hint in hints):
+                        continue
+                    if (
+                        request.valid_at is not None
+                        and fixture.valid_from is not None
+                        and fixture.valid_from > request.valid_at
+                    ):
+                        continue
+                    if (
+                        request.valid_at is not None
+                        and fixture.valid_to is not None
+                        and fixture.valid_to < request.valid_at
+                    ):
+                        continue
+                    candidates.append(
+                        RelationCandidate(
+                            scope=record.scope,
+                            memory_id=record.memory_id,
+                            source="fixture_relation",
+                            score=0.9,
+                            relation_type=relation.relation_type,
+                            source_entity_name=relation.source_entity,
+                            target_entity_name=relation.target_entity,
+                            edge_id="edge-" + record.memory_id,
+                            episode_ids=["episode-" + record.memory_id],
+                            valid_at=fixture.valid_from,
+                            invalid_at=fixture.valid_to,
+                        )
+                    )
+                return candidates[:limit]
+
+        report = await _run_profiles(
+            store=store,
+            scopes=scopes,
+            dataset=dataset,
+            profiles=("lexical", "lexical_relation"),
+            semantic_by_source={},
+            relation_index=_FixtureRelationIndex(),
+            graph=None,
+            planner_modes=(PLANNER_MODE_ORACLE,),
+        )
+
+        relation_metrics = report["profiles"]["oracle"]["lexical_relation"]
+        lexical_metrics = report["profiles"]["oracle"]["lexical"]
+        self.assertGreater(
+            relation_metrics["recall_at_1"], lexical_metrics["recall_at_1"]
+        )
+        self.assertGreater(relation_metrics["contribution"]["relation"], 0)
+        attribution = report["relation_final_hit_attribution"]
+        self.assertTrue(attribution["available"])
+        self.assertGreater(attribution["correct_relation_final_hit_links"], 0)
+        self.assertEqual(attribution["incorrect_relation_final_hit_links"], 0)
 
 
 @unittest.skipUnless(

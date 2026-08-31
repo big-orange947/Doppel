@@ -109,6 +109,28 @@ anchors, relation-bearing rich edges, and edge-level gold labels; it must not be
 inferred by renaming the existing graph profile or by treating fallback edges as
 relations.
 
+The separate draft fixture
+`datasets/personal-relation-ablation-zh-v1.json` provides that edge-level gold: 14
+authoritative memories, 30 queries, 3 exact owner scopes, explicit entity anchors,
+rich relation facts, current/history/as-of boundaries, same-name cross-scope
+collisions, unknown entities, and wrong-relation adversaries. Run the four relation
+ablation paths with zero paid LLM calls:
+
+```bash
+uv run python -m benchmarks.personal_retrieval_ablation `
+  --dataset benchmarks/datasets/personal-relation-ablation-zh-v1.json `
+  --profiles lexical,lexical_vector,lexical_relation,lexical_vector_relation `
+  --planner-modes oracle --no-metamorphic `
+  --output data/doppel/personal-relation-ablation.json
+```
+
+`oracle` labels only intent/time/entity/relation structure; it never injects a scope,
+memory ID, target entity, or topic key. `relation_final_hit_attribution` counts only
+final Store-revalidated hits carrying `relation_match`, then checks them against
+required/forbidden gold. Raw graph adjacency does not count as a correct contribution.
+The fixture remains `frozen=false` and `publication_ready=false`; it is an engineering
+baseline, not public numerical evidence yet.
+
 The runner executes both a fixture-bound `oracle` planner mode (retrieval isolation)
 and the real domain-neutral deterministic planner (planner + retrieval baseline).
 Full hybrid is unavailable unless both vector and graph sources are live. Graph

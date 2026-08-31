@@ -790,9 +790,14 @@ top-k 不是完整 snapshot。semantic provider 失败时可配置回退完整 l
 `entity_mentions` 时运行，接收 exact scopes、subject、可选 relation hints 与 valid_at，返回带
 Edge/Episode provenance 的 memory candidates。`GraphitiRelationIndex` 绕过 Graphiti 的通用
 embedding/BM25/RRF 搜索，只读取非 `DOPPEL_MEMORY_FALLBACK` 的 Entity→RELATES_TO→Entity rich
-edges；自然语言 relation hints 只影响图边顺序，不作为可能误杀的硬 ontology 过滤。每个候选仍回
+edges；自然语言 relation hints 提供软排序与分数门，不作为直接删除候选的硬 ontology 过滤。每个候选仍回
 authoritative Store，并经过与 lexical/pgvector 相同的 scope、subject、authority、lifecycle、时间门。
 relation score 独立进入解释与排序，不因它同时出现在向量源中而自动获得双倍语义奖励。
+
+实体相邻不等于关系相关。若 plan 提供 relation hints，Graphiti adapter 会在 edge name 与 edge fact
+中做领域无关的大小写归一化包含匹配；未命中的边仍可被观察和自定义阈值消费，但默认降为 0.2，
+低于 Doppel 的 0.35 relation gate。该规则没有“书/相机/工作”等领域表，且 pgvector/lexical
+仍可独立让同一记忆入选。semantic 与 relation 候选源并发执行，避免最高配置把两段 I/O 延迟相加。
 
 count 始终使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
 “一共几次”。SemanticIndex 是 top-k 协议，因此不参与 exact count 的集合定义；计数只使用完整

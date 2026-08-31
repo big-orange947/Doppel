@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -1199,6 +1200,51 @@ class _FailingRelationIndex:
     ):
         del request, scopes, filters, limit
         raise RelationIndexUnavailableError("synthetic relation outage")
+
+
+async def test_semantic_and_relation_sources_execute_concurrently() -> None:
+    semantic_started = asyncio.Event()
+    relation_started = asyncio.Event()
+
+    class _CoordinatedSemanticIndex:
+        async def search(self, query, scopes, *, filters=None, limit=10):
+            del query, scopes, filters, limit
+            semantic_started.set()
+            await relation_started.wait()
+            return []
+
+    class _CoordinatedRelationIndex:
+        async def search_relations(
+            self, request, scopes, *, filters=None, limit=10
+        ):
+            del request, scopes, filters, limit
+            relation_started.set()
+            await semantic_started.wait()
+            return []
+
+    engine = PersonalMemoryQueryEngine(
+        InMemoryStore(),
+        semantic_index=_CoordinatedSemanticIndex(),
+        relation_index=_CoordinatedRelationIndex(),
+    )
+    result = await asyncio.wait_for(
+        engine.query(
+            _DraftPlanner(
+                intent="lookup",
+                search_text="相机在哪里",
+                entity_mentions=["相机"],
+                relation_hints=["位于"],
+            ),
+            "相机在哪里？",
+            [SCOPE],
+            now=NOW,
+        ),
+        timeout=1.0,
+    )
+
+    assert semantic_started.is_set()
+    assert relation_started.is_set()
+    assert result.hits == []
 
 
 async def test_relation_candidates_are_separate_rank_features_and_store_reloaded() -> (

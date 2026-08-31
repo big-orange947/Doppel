@@ -43,6 +43,12 @@
   embedding/BM25/RRF search. `PersonalMemoryQueryEngine` accepts this relation
   source independently from pgvector, applies the same exact-scope/authority/
   lifecycle/time Store gates, and exposes a separate `relation_score`.
+- Relation hints now measure generic edge-name/fact relevance: an entity-adjacent edge
+  that does not answer the requested relation remains observable at score 0.2 but is
+  below the default relation gate. Semantic and relation candidate reads run
+  concurrently. A separate 30-query Chinese relation ablation draft covers temporal
+  boundaries, exact-scope name collisions, unknown entities, and wrong-relation
+  adversaries without paid LLM calls.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and
