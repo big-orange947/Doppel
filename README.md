@@ -1249,6 +1249,12 @@ pgvector/词法候选仍可在合格关系事实之间辅助排序，却不能�
 问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回 Store 复核，
 Graphiti/Neo4j 从不成为事实权威。
 
+自然语言 Planner 与检索层必须分开评测。`benchmarks.relation_planner_quality` 直接复用 30 条
+relation ablation 问句，在不执行 Store/pgvector/Graphiti 的情况下测量 intent、as-of、实体锚点和
+关系提示是否正确；Reference Planner 支持内容寻址缓存、调用次数上限和 provider token 汇总。
+这样真实模型漏掉“以前”、把日期解析错、没有识别物品名，都会归因到 Planner，而不会被记成
+Graphiti 召回缺陷。Deterministic Planner 继续保持无领域词典，不承担实体/关系抽取职责。
+
 v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
 计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，
 当前保留 3 个 missing evidence hit 和 1 个 over-broad hit，不用特判抹平；CI 只冻结不回退上限，

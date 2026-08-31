@@ -142,6 +142,45 @@ aggregate gate across every executed profile.
 The fixture remains `frozen=false` and `publication_ready=false`; it is an engineering
 baseline, not public numerical evidence yet.
 
+### Natural-language relation planner quality
+
+Retrieval ablation uses an oracle plan so graph quality is not confused with planner
+quality. `relation_planner_quality.py` evaluates the real planner separately over the
+same 30 natural-language questions and the same dev/heldout/adversarial partitions:
+
+```bash
+# zero-network structural baseline
+uv run python -m benchmarks.relation_planner_quality `
+  --planner deterministic --no-cache `
+  --max-structural-failures 30 `
+  --output data/doppel/relation-planner-deterministic.json
+
+# OpenAI-compatible reference planner; credentials stay in the environment
+$env:DOPPEL_MODEL = "deepseek-v4-flash"
+$env:DOPPEL_OPENAI_BASE_URL = "https://api.deepseek.com"
+$env:DOPPEL_SCHEMA_MODE = "json_object"
+$env:DOPPEL_API_KEY = "..."
+uv run python -m benchmarks.relation_planner_quality `
+  --planner reference --max-calls 30 `
+  --max-completion-tokens 768 --max-tokens-parameter max_tokens `
+  --thinking disabled `
+  --output data/doppel/relation-planner-deepseek.json
+```
+
+The runner evaluates the structured draft before any Store/index call: exact intent,
+as-of presence and calendar date, entity and relation recall, unexpected terms,
+provider failures, and latency. Successful drafts use a content-addressed disk cache,
+so a rerun does not spend another provider call; failed/invalid responses are never
+cached. `--max-calls` is checked before each cache miss. Provider token usage is an
+aggregate content-free ledger. The cache fingerprint includes planner/provider
+version and the complete request but never includes an API key. The result contract is
+[`relation-planner-quality-result.schema.json`](relation-planner-quality-result.schema.json).
+
+The deterministic planner intentionally has no domain/entity parser and therefore is
+expected to score zero exact relation structures. It remains a temporal/aggregation
+baseline; these results must not be "fixed" by adding fixture vocabulary to runtime
+code.
+
 The runner executes both a fixture-bound `oracle` planner mode (retrieval isolation)
 and the real domain-neutral deterministic planner (planner + retrieval baseline).
 Full hybrid is unavailable unless both vector and graph sources are live. Graph

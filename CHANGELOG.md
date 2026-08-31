@@ -55,6 +55,12 @@
   discarded warm-up, both dedicated PostgreSQL fixtures and exact Neo4j scopes are
   cleaned in `finally`, and quality gates can target candidate profiles independently
   without hiding control-profile failures from the report.
+- Add a separate relation-planner quality runner over the existing 30-query
+  dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
+  entity/relation recall, unexpected anchors, provider errors, latency, usage, and
+  partition/category accuracy before retrieval executes. Reference-model runs use a
+  preflight call budget and content-addressed successful-draft cache; API keys are
+  environment-only and are never part of cache keys, reports, or error details.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/doppel-memory/doppel/schemas/relation-planner-quality-result.schema.json",
+  "title": "Doppel relation planner quality result",
+  "type": "object",
+  "required": [
+    "runner",
+    "doppel_version",
+    "generated_at",
+    "dataset",
+    "planner",
+    "environment",
+    "metrics",
+    "by_partition",
+    "by_category",
+    "usage",
+    "budget",
+    "cache",
+    "cases"
+  ],
+  "properties": {
+    "runner": {"const": "doppel.relation-planner-quality.v1"},
+    "doppel_version": {"type": "string"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "dataset": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "fingerprint",
+        "query_count",
+        "frozen",
+        "publication_ready"
+      ],
+      "properties": {
+        "fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "query_count": {"type": "integer", "minimum": 1},
+        "frozen": {"type": "boolean"},
+        "publication_ready": {"type": "boolean"}
+      }
+    },
+    "planner": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "environment": {"type": "object"},
+    "metrics": {
+      "type": "object",
+      "required": [
+        "case_count",
+        "valid_case_count",
+        "provider_error_count",
+        "structural_failure_count",
+        "exact_structure_accuracy",
+        "intent_accuracy",
+        "as_of_presence_accuracy",
+        "as_of_date_accuracy",
+        "entity_recall",
+        "relation_recall",
+        "unexpected_entity_count",
+        "unexpected_relation_count",
+        "latency_ms"
+      ],
+      "properties": {
+        "case_count": {"type": "integer", "minimum": 1},
+        "valid_case_count": {"type": "integer", "minimum": 0},
+        "provider_error_count": {"type": "integer", "minimum": 0},
+        "structural_failure_count": {"type": "integer", "minimum": 0},
+        "exact_structure_accuracy": {"$ref": "#/$defs/ratio"},
+        "intent_accuracy": {"$ref": "#/$defs/ratio"},
+        "as_of_presence_accuracy": {"$ref": "#/$defs/ratio"},
+        "as_of_date_accuracy": {"$ref": "#/$defs/ratio"},
+        "entity_recall": {"$ref": "#/$defs/ratio"},
+        "relation_recall": {"$ref": "#/$defs/ratio"},
+        "unexpected_entity_count": {"type": "integer", "minimum": 0},
+        "unexpected_relation_count": {"type": "integer", "minimum": 0},
+        "latency_ms": {
+          "type": "object",
+          "required": ["p50", "p95", "max"]
+        }
+      }
+    },
+    "by_partition": {"type": "object"},
+    "by_category": {"type": "object"},
+    "usage": {"type": "object"},
+    "budget": {
+      "type": "object",
+      "required": ["max_calls", "calls"]
+    },
+    "cache": {
+      "type": "object",
+      "required": ["enabled", "hits", "misses"]
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "query_id",
+          "partition",
+          "category",
+          "query",
+          "error",
+          "error_code",
+          "latency_ms",
+          "structure_ok",
+          "intent_ok",
+          "as_of_presence_ok",
+          "as_of_date_ok",
+          "expected_entity_count",
+          "matched_entity_count",
+          "unexpected_entity_count",
+          "expected_relation_count",
+          "matched_relation_count",
+          "unexpected_relation_count",
+          "actual"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "ratio": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}
