@@ -801,7 +801,8 @@ relation score 独立进入解释与排序，不因它同时出现在向量源�
 把“过去已生效且现在仍 current”的状态排除。
 
 实体相邻不等于关系相关。若 plan 提供 relation hints，Graphiti adapter 会在 edge name 与 edge fact
-中做领域无关的大小写归一化包含匹配；未命中的边仍可被观察和自定义阈值消费，但默认降为 0.2，
+中做领域无关的大小写归一化包含匹配。中文长短语另外展开为有界的连续 2–4 字片段，以容忍模型把
+实体或疑问端点留在提示中；单字不参与，且不维护任何同义词/ontology/domain map。未命中的边仍可被观察和自定义阈值消费，但默认降为 0.2，
 低于 Doppel 的 0.35 relation gate。该规则没有“书/相机/工作”等领域表，且 pgvector/lexical
 仍可独立让同一记忆入选。semantic 与 relation 候选源并发执行，避免最高配置把两段 I/O 延迟相加。
 

@@ -142,6 +142,13 @@ aggregate gate across every executed profile.
 The fixture remains `frozen=false` and `publication_ready=false`; it is an engineering
 baseline, not public numerical evidence yet.
 
+Production relation matching may expand a long Chinese hint into bounded contiguous
+2-4 character fragments, but the planner-quality runner deliberately continues to
+score the concise gold surface predicate exactly. This keeps planner quality honest
+while separately measuring whether the retrieval adapter can recover safely. The
+fragment expansion contains no fixture vocabulary and must retain zero forbidden hits
+on the wrong-relation adversarial partition.
+
 ### Natural-language relation planner quality
 
 Retrieval ablation uses an oracle plan so graph quality is not confused with planner

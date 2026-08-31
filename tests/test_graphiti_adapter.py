@@ -31,6 +31,7 @@ from doppel_memory.graphiti_store import (
     GraphitiRelationIndex,
     GraphitiSemanticIndex,
     _ensure_graphiti_fallback_edge,
+    _relation_match_terms,
 )
 
 
@@ -149,6 +150,11 @@ class _RelationDriver:
         if query == "RETURN 1 AS doppel_relation_health":
             return SimpleNamespace(records=[{"doppel_relation_health": 1}])
         return SimpleNamespace(records=self.rows)
+
+
+def test_relation_match_terms_never_expand_single_han_characters() -> None:
+    assert _relation_match_terms(["在"]) == []
+    assert "保管" in _relation_match_terms(["由谁保管"])
 
 
 async def test_graphiti_029_adapter_constructs_without_connecting() -> None:
@@ -798,6 +804,24 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
     subject_params = relation_driver.calls[-1][1]
     assert len(subject_params["anchors"]) == 1
     assert subject_params["anchors"][0].startswith("doppelsubject-")
+
+    relation_driver.rows[0]["relation_hint_match"] = 0
+    await relation.search_relations(
+        RelationQuery(
+            query_text="物品现在放在哪里？",
+            entity_mentions=["物品"],
+            relation_hints=["放在哪里"],
+            subject="owner",
+            subject_id=scope.user_id,
+            valid_at=valid_at,
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+        limit=5,
+    )
+    expanded_params = relation_driver.calls[-1][1]
+    assert "放在" in expanded_params["relation_hints"]
+    assert all(len(item) >= 2 for item in expanded_params["relation_hints"])
 
     health = await relation.health()
     assert health["ok"] is True

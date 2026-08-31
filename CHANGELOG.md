@@ -93,6 +93,14 @@
   Store revalidation both apply interval overlap. Explicitly time-scoped history uses
   validity coordinates rather than a present-day `historical` label, so a state that
   was already valid then and remains current now is not incorrectly excluded.
+- Graphiti relation matching now expands model-generated phrases into a bounded set
+  of contiguous 2-4 character Han fragments before testing edge name/fact text.
+  Single-character hints never qualify an edge, expansion is capped, and no synonym,
+  entity, benchmark, or domain vocabulary is embedded in runtime code. Exact scope,
+  temporal overlap, provenance, and authoritative Store gates still run afterwards.
+  On the draft 30-query live v6 replay this raised relation evidence recall from
+  13/22 to 16/22 while forbidden, scope, temporal, provenance, and security failures
+  remained zero; six synonym/abstraction misses remain and are not hidden.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and

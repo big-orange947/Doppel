@@ -14,6 +14,7 @@ import base64
 import hashlib
 import json
 import logging
+import re
 import warnings
 from collections import deque
 from collections.abc import Sequence
@@ -665,7 +666,8 @@ class GraphitiRelationIndex:
                 _graphiti_subject_identity(scope, bound.subject_id)[0].casefold()
                 for scope in scope_by_key.values()
             ]
-        relation_hints = [item.casefold() for item in bound.relation_hints]
+        raw_relation_hints = [item.casefold() for item in bound.relation_hints]
+        relation_hints = _relation_match_terms(raw_relation_hints)
         try:
             graphiti = await self._ensure_graphiti()
             driver = getattr(graphiti, "driver", None)
@@ -793,7 +795,7 @@ class GraphitiRelationIndex:
                     score=_relation_candidate_score(
                         rank,
                         len(rows),
-                        hints_present=bool(relation_hints),
+                        hints_present=bool(raw_relation_hints),
                         hint_match=relation_hint_match,
                     ),
                     relation_type=relation_type,
@@ -1461,6 +1463,34 @@ def _relation_candidate_score(
     # it fail Doppel's default relation relevance gate. This is deliberately generic:
     # no domain predicate map or benchmark vocabulary is embedded here.
     return round(min(base, 0.2), 6)
+
+
+def _relation_match_terms(hints: Sequence[str], *, limit: int = 64) -> list[str]:
+    """Expand relation phrases into bounded lexical fragments without an ontology.
+
+    Long model-generated phrases often include an entity or interrogative endpoint.
+    Contiguous 2-4 character Han fragments recover the surface predicate while
+    avoiding one-character matches. No synonym, entity, or domain vocabulary is
+    encoded here; exact-scope, time, and Store gates still apply afterwards.
+    """
+
+    terms: list[str] = []
+    for raw in hints:
+        value = str(raw or "").strip().casefold()
+        if not value:
+            continue
+        han_only = bool(re.fullmatch(r"[\u3400-\u9fff]+", value))
+        if not han_only or len(value) >= 2:
+            terms.append(value)
+        for sequence in re.findall(r"[\u3400-\u9fff]+", value):
+            for size in range(2, min(4, len(sequence)) + 1):
+                terms.extend(
+                    sequence[index : index + size]
+                    for index in range(len(sequence) - size + 1)
+                )
+        if len(terms) >= limit:
+            break
+    return list(dict.fromkeys(terms))[:limit]
 
 
 def _graphiti_episode_name(
