@@ -31,6 +31,11 @@ from doppel_memory.models import (
     MemoryScope,
     MemoryState,
 )
+from doppel_memory.relation import (
+    RelationIndex,
+    RelationIndexUnavailableError,
+    RelationQuery,
+)
 from doppel_memory.store import MemoryStore
 from doppel_memory.vector import (
     CompositeRecallResult,
@@ -73,6 +78,8 @@ class PersonalMemoryQueryDraft(BaseModel):
     memory_types: list[str] = Field(default_factory=list)
     topic_keys: list[str] = Field(default_factory=list)
     temporal_statuses: list[str] = Field(default_factory=list)
+    entity_mentions: list[str] = Field(default_factory=list)
+    relation_hints: list[str] = Field(default_factory=list)
     subject: str = Actor.OWNER
     subject_id: str = ""
     as_of: datetime | None = None
@@ -95,6 +102,12 @@ class PersonalMemoryQueryDraft(BaseModel):
     @classmethod
     def _normalize_namespaces(cls, value: Any) -> list[str]:
         items = [str(item or "").strip().lower() for item in list(value or [])]
+        return list(dict.fromkeys(item for item in items if item))
+
+    @field_validator("entity_mentions", "relation_hints", mode="before")
+    @classmethod
+    def _normalize_relation_terms(cls, value: Any) -> list[str]:
+        items = [str(item or "").strip() for item in list(value or [])]
         return list(dict.fromkeys(item for item in items if item))
 
     @field_validator("as_of", "time_from", "time_to")
@@ -172,7 +185,10 @@ ordinary lookup/list questions. Omit topic_keys unless the host's extracted memo
 use one explicit stable slot that the question names exactly; topic_keys are hard
 filters, not guesses or synonyms. Use episode memory type for occurrence counting and
 keep search_text empty only when a complete structural set is required. Do not infer
-that a plan happened.
+that a plan happened. Populate entity_mentions only for explicitly referenced people,
+places, objects, or named concepts that can anchor a graph relation. Populate
+relation_hints only for an explicit relationship being asked about; do not invent
+domain predicates or use relation fields as generic semantic-search keywords.
 Use the supplied current time to resolve relative expressions. Prefer a conservative
 draft and explain ambiguity rather than broadening the subject or time range.
 """
@@ -182,7 +198,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "3"
+    version = "4"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -269,9 +285,13 @@ class PersonalMemoryQueryConfig(BaseModel):
     minimum_lexical_score: float = Field(default=0.25, ge=0.0, le=1.0)
     minimum_semantic_score: float = Field(default=0.35, ge=0.0, le=1.0)
     semantic_candidate_limit: int = Field(default=100, ge=1, le=10_000)
+    relation_candidate_limit: int = Field(default=40, ge=1, le=10_000)
     lexical_weight: float = Field(default=1.0, ge=0.0, le=10.0)
     semantic_weight: float = Field(default=1.0, ge=0.0, le=10.0)
+    relation_weight: float = Field(default=1.0, ge=0.0, le=10.0)
+    minimum_relation_score: float = Field(default=0.35, ge=0.0, le=1.0)
     semantic_fallback_to_lexical: bool = True
+    relation_fallback_to_nonrelation: bool = True
 
     @property
     def fingerprint(self) -> str:
@@ -293,6 +313,8 @@ class PersonalMemoryQueryPlan(BaseModel):
     memory_types: list[str] = Field(default_factory=list)
     topic_keys: list[str] = Field(default_factory=list)
     temporal_statuses: list[str] = Field(default_factory=list)
+    entity_mentions: list[str] = Field(default_factory=list)
+    relation_hints: list[str] = Field(default_factory=list)
     subject: str
     subject_id: str
     as_of: datetime | None = None
@@ -314,6 +336,7 @@ class PersonalMemoryQueryHit(BaseModel):
     score: float = Field(ge=0.0)
     lexical_score: float = Field(ge=0.0, le=1.0)
     semantic_score: float = Field(ge=0.0, le=1.0)
+    relation_score: float = Field(default=0.0, ge=0.0, le=1.0)
     effective_at: datetime
     reasons: list[str] = Field(default_factory=list)
 
@@ -401,6 +424,7 @@ class PersonalMemoryQueryEngine:
         config: PersonalMemoryQueryConfig | None = None,
         *,
         semantic_index: SemanticIndex | None = None,
+        relation_index: RelationIndex | None = None,
     ) -> None:
         if not store.capabilities.pagination:
             raise NotImplementedError(
@@ -409,6 +433,7 @@ class PersonalMemoryQueryEngine:
         self._store = store
         self.config = config or PersonalMemoryQueryConfig()
         self._semantic_index = semantic_index
+        self._relation_index = relation_index
 
     async def plan(
         self,
@@ -454,6 +479,8 @@ class PersonalMemoryQueryEngine:
             memory_types=draft.memory_types,
             topic_keys=draft.topic_keys,
             temporal_statuses=temporal_statuses,
+            entity_mentions=draft.entity_mentions,
+            relation_hints=draft.relation_hints,
             subject=draft.subject,
             subject_id=subject_id,
             as_of=draft.as_of,
@@ -478,6 +505,7 @@ class PersonalMemoryQueryEngine:
         complete = True
         semantic_scores: dict[tuple[str, str], float] = {}
         semantic_sources: dict[tuple[str, str], tuple[str, ...]] = {}
+        relation_details: dict[tuple[str, str], tuple[float, str, str, str]] = {}
         if (
             self._semantic_index is not None
             and bound.search_text
@@ -515,9 +543,28 @@ class PersonalMemoryQueryEngine:
                     semantic_warnings,
                 ) = await self._semantic_scores(bound, records)
                 warnings.extend(semantic_warnings)
+        if (
+            self._relation_index is not None
+            and bound.entity_mentions
+            and bound.intent != PersonalMemoryQueryIntent.COUNT
+        ):
+            relation_records, relation_details, relation_warnings = (
+                await self._read_relation_candidates(bound)
+            )
+            records_by_key = {
+                (record.scope.scope_key, record.memory_id): record for record in records
+            }
+            for record in relation_records:
+                records_by_key.setdefault(
+                    (record.scope.scope_key, record.memory_id), record
+                )
+            records = list(records_by_key.values())
+            warnings.extend(relation_warnings)
         for scope in bound.scopes:
             conflict_records.extend(await self._read_conflicts(scope))
-        matched: list[tuple[MemoryRecord, float, float, datetime, list[str]]] = []
+        matched: list[
+            tuple[MemoryRecord, float, float, float, datetime, list[str]]
+        ] = []
         if (
             bound.as_of is not None
             and bound.as_of > bound.now
@@ -538,13 +585,24 @@ class PersonalMemoryQueryEngine:
             source_names = semantic_sources.get(
                 (record.scope.scope_key, record.memory_id), ()
             )
+            relation_score, relation_source, relation_type, relation_edge = (
+                relation_details.get(
+                    (record.scope.scope_key, record.memory_id), (0.0, "", "", "")
+                )
+            )
             if semantic_score < self.config.minimum_semantic_score:
                 semantic_score = 0.0
                 source_names = ()
+            if relation_score < self.config.minimum_relation_score:
+                relation_score = 0.0
+                relation_source = ""
+                relation_type = ""
+                relation_edge = ""
             if (
-                bound.search_text
+                (bound.search_text or bound.entity_mentions)
                 and lexical_score < self.config.minimum_lexical_score
                 and semantic_score < self.config.minimum_semantic_score
+                and relation_score < self.config.minimum_relation_score
             ):
                 continue
             if lexical_score >= self.config.minimum_lexical_score:
@@ -552,8 +610,24 @@ class PersonalMemoryQueryEngine:
             if semantic_score >= self.config.minimum_semantic_score:
                 reasons.append("semantic_match")
                 reasons.extend(f"semantic_source:{name}" for name in source_names)
+            if relation_score >= self.config.minimum_relation_score:
+                reasons.extend(
+                    (
+                        "relation_match",
+                        f"relation_source:{relation_source}",
+                        f"relation_type:{relation_type}",
+                        f"relation_edge:{relation_edge}",
+                    )
+                )
             matched.append(
-                (record, lexical_score, semantic_score, effective_at, reasons)
+                (
+                    record,
+                    lexical_score,
+                    semantic_score,
+                    relation_score,
+                    effective_at,
+                    reasons,
+                )
             )
 
         conflicts = _relevant_conflicts(bound, records, matched, conflict_records)
@@ -566,8 +640,16 @@ class PersonalMemoryQueryEngine:
         )
         matched.sort(
             key=lambda item: (
-                _rank_score(self.config, bound, item[0], item[1], item[2], item[3]),
-                item[3],
+                _rank_score(
+                    self.config,
+                    bound,
+                    item[0],
+                    item[1],
+                    item[2],
+                    item[3],
+                    item[4],
+                ),
+                item[4],
                 item[0].memory_id,
             ),
             reverse=True,
@@ -581,16 +663,23 @@ class PersonalMemoryQueryEngine:
                     record,
                     lexical_score,
                     semantic_score,
+                    relation_score,
                     effective_at,
                 ),
                 lexical_score=lexical_score,
                 semantic_score=semantic_score,
+                relation_score=relation_score,
                 effective_at=effective_at,
                 reasons=reasons,
             )
-            for record, lexical_score, semantic_score, effective_at, reasons in matched[
-                : self.config.limit
-            ]
+            for (
+                record,
+                lexical_score,
+                semantic_score,
+                relation_score,
+                effective_at,
+                reasons,
+            ) in matched[: self.config.limit]
         ]
         count = _count_result(bound, [item[0] for item in matched])
         if count.status == PersonalMemoryCountStatus.INDETERMINATE:
@@ -808,6 +897,82 @@ class PersonalMemoryQueryEngine:
             plan.scopes,
             filters=filters,
             limit=self.config.semantic_candidate_limit,
+        )
+
+    async def _read_relation_candidates(
+        self, plan: PersonalMemoryQueryPlan
+    ) -> tuple[
+        list[MemoryRecord],
+        dict[tuple[str, str], tuple[float, str, str, str]],
+        list[str],
+    ]:
+        assert self._relation_index is not None
+        valid_at = plan.as_of
+        if valid_at is None and plan.intent != PersonalMemoryQueryIntent.HISTORY:
+            valid_at = plan.now
+        request = RelationQuery(
+            query_text=plan.query,
+            entity_mentions=plan.entity_mentions,
+            relation_hints=plan.relation_hints,
+            subject=plan.subject,
+            subject_id=plan.subject_id,
+            valid_at=valid_at,
+        )
+        try:
+            candidates = await self._relation_index.search_relations(
+                request,
+                plan.scopes,
+                filters=_query_memory_filter(plan),
+                limit=self.config.relation_candidate_limit,
+            )
+        except Exception as exc:
+            if not self.config.relation_fallback_to_nonrelation:
+                raise
+            error_name = type(exc).__name__
+            if isinstance(exc, RelationIndexUnavailableError):
+                error_name = "RelationIndexUnavailableError"
+            return [], {}, [
+                f"relation index unavailable; used non-relation paths: {error_name}"
+            ]
+
+        allowed_scopes = {scope.scope_key: scope for scope in plan.scopes}
+        candidate_scopes: dict[tuple[str, str], MemoryScope] = {}
+        details: dict[tuple[str, str], tuple[float, str, str, str]] = {}
+        for candidate in candidates:
+            scope_key = candidate.scope.scope_key
+            memory_id = str(candidate.memory_id or "").strip()
+            if scope_key not in allowed_scopes or not memory_id:
+                continue
+            key = (scope_key, memory_id)
+            candidate_scopes.setdefault(key, allowed_scopes[scope_key])
+            score = min(max(float(candidate.score), 0.0), 1.0)
+            current = details.get(key)
+            if current is None or score > current[0]:
+                details[key] = (
+                    score,
+                    candidate.source,
+                    candidate.relation_type,
+                    candidate.edge_id,
+                )
+        loaded = await asyncio.gather(
+            *(
+                self._store.get(scope, memory_id)
+                for (_, memory_id), scope in candidate_scopes.items()
+            )
+        )
+        records = [
+            record
+            for record in loaded
+            if record is not None
+            and "personal-memory" in record.tags
+            and record.scope.scope_key in allowed_scopes
+            and _is_query_record_eligible(record, plan)
+        ]
+        known = {(record.scope.scope_key, record.memory_id) for record in records}
+        return (
+            records,
+            {key: value for key, value in details.items() if key in known},
+            [],
         )
 
     def _validate_plan(self, plan: PersonalMemoryQueryPlan) -> None:
@@ -1095,6 +1260,7 @@ def _rank_score(
     record: MemoryRecord,
     lexical_score: float,
     semantic_score: float,
+    relation_score: float,
     effective_at: datetime,
 ) -> float:
     structural = 1.0
@@ -1108,6 +1274,7 @@ def _rank_score(
         structural
         + config.lexical_weight * lexical_score
         + config.semantic_weight * semantic_score
+        + config.relation_weight * relation_score
         + recency_tiebreaker,
         6,
     )
@@ -1122,7 +1289,9 @@ def _composite_semantic_sources(candidate: Any) -> tuple[str, ...]:
 def _relevant_conflicts(
     plan: PersonalMemoryQueryPlan,
     active_records: Sequence[MemoryRecord],
-    matched: Sequence[tuple[MemoryRecord, float, float, datetime, list[str]]],
+    matched: Sequence[
+        tuple[MemoryRecord, float, float, float, datetime, list[str]]
+    ],
     conflict_records: Sequence[MemoryRecord],
 ) -> list[PersonalMemoryConflictHit]:
     active_ids = {
@@ -1184,7 +1353,9 @@ def _relevant_conflicts(
 
 def _detect_ambiguity(
     plan: PersonalMemoryQueryPlan,
-    matched: Sequence[tuple[MemoryRecord, float, float, datetime, list[str]]],
+    matched: Sequence[
+        tuple[MemoryRecord, float, float, float, datetime, list[str]]
+    ],
 ) -> tuple[bool, list[str]]:
     if plan.intent not in {
         PersonalMemoryQueryIntent.CURRENT,
@@ -1192,7 +1363,7 @@ def _detect_ambiguity(
     }:
         return False, []
     groups: dict[tuple[str, str, str, str], set[str]] = defaultdict(set)
-    for record, _, _, _, _ in matched:
+    for record, _, _, _, _, _ in matched:
         key = (
             record.scope.scope_key,
             _metadata_text(record, "subject_id"),

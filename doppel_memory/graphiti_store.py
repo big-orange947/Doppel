@@ -1,9 +1,10 @@
 """Experimental Graphiti/Neo4j integrations.
 
-``GraphitiSemanticIndex`` is the preferred integration: a durable Store remains the
-source of truth while Graphiti contributes graph-derived semantic candidates. The
-legacy ``GraphitiMemoryStore`` remains temporarily available for migration, but it
-cannot satisfy Doppel's core Store contract.
+``GraphitiSemanticIndex`` remains the compatibility integration for Graphiti's full
+hybrid search. ``GraphitiRelationIndex`` is the focused relation/time integration: a
+durable Store remains authoritative while Graphiti contributes only anchored rich
+edges. The legacy ``GraphitiMemoryStore`` remains temporarily available for migration,
+but it cannot satisfy Doppel's core Store contract.
 """
 
 from __future__ import annotations
@@ -55,6 +56,11 @@ from doppel_memory.models import (
     StoreCapabilities,
     WriteResult,
     WriteStatus,
+)
+from doppel_memory.relation import (
+    RelationCandidate,
+    RelationIndexUnavailableError,
+    RelationQuery,
 )
 from doppel_memory.store import MemoryStore
 from doppel_memory.vector import SemanticIndexUnavailableError
@@ -572,6 +578,243 @@ class GraphitiSemanticIndex:
                 "ok": False,
                 "backend": "graphiti",
                 "role": "semantic_index",
+                "experimental": True,
+                "reason": str(exc),
+            }
+
+    async def close(self) -> None:
+        if self._graphiti is not None and self._owns_client:
+            await self._graphiti.close()
+            self._graphiti = None
+
+    async def _ensure_graphiti(self) -> Any:
+        if self._graphiti is None:
+            async with self._init_lock:
+                if self._graphiti is None:
+                    self._graphiti = _build_graphiti_client(
+                        neo4j_uri=self._neo4j_uri,
+                        neo4j_user=self._neo4j_user,
+                        neo4j_password=self._neo4j_password,
+                        llm_api_key=self._llm_api_key,
+                        llm_base_url=self._llm_base_url,
+                        llm_model=self._llm_model,
+                    )
+        return self._graphiti
+
+
+class GraphitiRelationIndex:
+    """Graphiti-backed rich relation lookup without generic semantic search.
+
+    Graphiti remains responsible for Episode/Entity/Edge construction. This adapter
+    deliberately bypasses ``Graphiti.search`` (embedding + BM25 + RRF) and reads only
+    non-fallback entity relations anchored by an explicit structured query. Returned
+    edges are derived candidates: every Episode is mapped back to its authoritative
+    Store record before it leaves the adapter.
+    """
+
+    def __init__(
+        self,
+        store: MemoryStore,
+        *,
+        neo4j_uri: str = "bolt://127.0.0.1:7687",
+        neo4j_user: str = "neo4j",
+        neo4j_password: str = "neo4j",
+        llm_api_key: str = "",
+        llm_base_url: str = "",
+        llm_model: str = "",
+        enabled: bool = True,
+        graphiti_client: Any | None = None,
+    ) -> None:
+        self._store = store
+        self._neo4j_uri = neo4j_uri
+        self._neo4j_user = neo4j_user
+        self._neo4j_password = neo4j_password
+        self._llm_api_key = llm_api_key
+        self._llm_base_url = llm_base_url
+        self._llm_model = llm_model
+        self._enabled = enabled
+        self._graphiti: Any | None = graphiti_client
+        self._owns_client = graphiti_client is None
+        self._init_lock = asyncio.Lock()
+
+    @property
+    def identity(self) -> str:
+        return f"graphiti:0.29:doppel-relation-v{GRAPHITI_PROJECTION_VERSION}"
+
+    async def search_relations(
+        self,
+        request: RelationQuery,
+        scopes: Sequence[MemoryScope],
+        *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> Sequence[RelationCandidate]:
+        if not scopes:
+            raise MemoryIsolationError(
+                "Graphiti relation search requires at least one exact scope"
+            )
+        if not self._enabled:
+            raise RelationIndexUnavailableError("Graphiti relation index is disabled")
+        if limit <= 0:
+            return []
+        bound = RelationQuery.model_validate(request)
+        scope_by_key = {scope.scope_key: scope for scope in scopes}
+        anchors = [item.casefold() for item in bound.entity_mentions]
+        relation_hints = [item.casefold() for item in bound.relation_hints]
+        try:
+            graphiti = await self._ensure_graphiti()
+            driver = getattr(graphiti, "driver", None)
+            if driver is None or not hasattr(driver, "execute_query"):
+                raise RuntimeError("Graphiti client does not expose a graph driver")
+            raw = await driver.execute_query(
+                "MATCH (source:Entity)-[edge:RELATES_TO]->(target:Entity) "
+                "WHERE edge.group_id IN $group_ids "
+                "AND source.group_id = edge.group_id "
+                "AND target.group_id = edge.group_id "
+                "AND coalesce(edge.name, '') <> $fallback_name "
+                "AND any(anchor IN $anchors WHERE "
+                "toLower(coalesce(source.name, '')) CONTAINS anchor OR "
+                "toLower(coalesce(target.name, '')) CONTAINS anchor) "
+                "AND ($valid_at IS NULL OR "
+                "(edge.valid_at IS NULL OR edge.valid_at <= $valid_at) AND "
+                "(edge.invalid_at IS NULL OR edge.invalid_at >= $valid_at)) "
+                "WITH source, edge, target, "
+                "CASE WHEN size($relation_hints) > 0 AND "
+                "any(hint IN $relation_hints WHERE "
+                "toLower(coalesce(edge.name, '')) CONTAINS hint) "
+                "THEN 1 ELSE 0 END AS relation_hint_match "
+                "RETURN edge.group_id AS group_id, edge.uuid AS edge_id, "
+                "edge.name AS relation_type, edge.episodes AS episode_ids, "
+                "edge.valid_at AS valid_at, edge.invalid_at AS invalid_at, "
+                "source.uuid AS source_entity_id, source.name AS source_entity_name, "
+                "target.uuid AS target_entity_id, target.name AS target_entity_name "
+                "ORDER BY relation_hint_match DESC, "
+                "coalesce(edge.valid_at, edge.created_at) DESC, edge.uuid "
+                "LIMIT $limit",
+                group_ids=list(scope_by_key),
+                anchors=anchors,
+                relation_hints=relation_hints,
+                fallback_name=GRAPHITI_FALLBACK_EDGE_NAME,
+                valid_at=bound.valid_at,
+                limit=limit * 2,
+            )
+            rows = _graph_query_records(raw)
+        except Exception as exc:
+            if isinstance(exc, RelationIndexUnavailableError):
+                raise
+            raise RelationIndexUnavailableError(
+                f"Graphiti relation search failed: {exc}"
+            ) from exc
+
+        episode_ids = {
+            str(episode_id)
+            for row in rows
+            for episode_id in list(row["episode_ids"] or [])
+            if episode_id
+        }
+        try:
+            episodes = await _load_graphiti_episodes(graphiti, episode_ids)
+        except Exception as exc:
+            raise RelationIndexUnavailableError(
+                f"Graphiti relation provenance lookup failed: {exc}"
+            ) from exc
+        source_by_episode = {
+            str(getattr(episode, "uuid", "") or ""): (
+                str(getattr(episode, "group_id", "") or ""),
+                _memory_id_from_episode_name(
+                    str(getattr(episode, "name", "") or "")
+                ),
+            )
+            for episode in episodes
+        }
+        source_keys = sorted(
+            {
+                source
+                for source in source_by_episode.values()
+                if source[0] in scope_by_key and source[1]
+            }
+        )
+        source_records = await asyncio.gather(
+            *(
+                self._store.get(scope_by_key[scope_key], memory_id)
+                for scope_key, memory_id in source_keys
+            )
+        )
+        record_by_source = dict(zip(source_keys, source_records, strict=True))
+        filter_obj = filters or MemoryFilter()
+        results: dict[tuple[str, str], RelationCandidate] = {}
+        for rank, row in enumerate(rows):
+            group_id = str(row["group_id"] or "")
+            scope = scope_by_key.get(group_id)
+            edge_id = str(row["edge_id"] or "")
+            relation_type = str(row["relation_type"] or "")
+            row_episode_ids = [
+                str(value) for value in list(row["episode_ids"] or []) if value
+            ]
+            if (
+                scope is None
+                or not edge_id
+                or not relation_type
+                or relation_type == GRAPHITI_FALLBACK_EDGE_NAME
+            ):
+                continue
+            for episode_id in row_episode_ids:
+                source_key = source_by_episode.get(episode_id, ("", ""))
+                record = record_by_source.get(source_key)
+                if (
+                    record is None
+                    or source_key[0] != group_id
+                    or record.scope.scope_key != group_id
+                    or not _core_record_matches_filter(record, filter_obj)
+                    or not _core_record_valid_at(record, bound.valid_at)
+                ):
+                    continue
+                key = (group_id, record.memory_id)
+                if key in results:
+                    continue
+                results[key] = RelationCandidate(
+                    scope=scope,
+                    memory_id=record.memory_id,
+                    source="graphiti_relation",
+                    score=_graphiti_rank_score(rank, len(rows)),
+                    relation_type=relation_type,
+                    source_entity_id=str(row["source_entity_id"] or ""),
+                    source_entity_name=str(row["source_entity_name"] or ""),
+                    target_entity_id=str(row["target_entity_id"] or ""),
+                    target_entity_name=str(row["target_entity_name"] or ""),
+                    edge_id=edge_id,
+                    episode_ids=row_episode_ids,
+                    valid_at=_optional_datetime(row["valid_at"]),
+                    invalid_at=_optional_datetime(row["invalid_at"]),
+                )
+                if len(results) >= limit:
+                    return list(results.values())
+        return list(results.values())
+
+    async def health(self) -> dict[str, Any]:
+        if not self._enabled:
+            return {"enabled": False, "ok": False, "reason": "disabled"}
+        try:
+            graphiti = await self._ensure_graphiti()
+            driver = getattr(graphiti, "driver", None)
+            if driver is None:
+                raise RuntimeError("Graphiti client does not expose a graph driver")
+            await driver.execute_query("RETURN 1 AS doppel_relation_health")
+            return {
+                "enabled": True,
+                "ok": True,
+                "backend": "graphiti",
+                "role": "relation_index",
+                "semantic_search": False,
+                "experimental": True,
+            }
+        except Exception as exc:  # noqa: BLE001 - health is an observation boundary
+            return {
+                "enabled": True,
+                "ok": False,
+                "backend": "graphiti",
+                "role": "relation_index",
+                "semantic_search": False,
                 "experimental": True,
                 "reason": str(exc),
             }

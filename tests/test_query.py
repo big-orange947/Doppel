@@ -35,6 +35,10 @@ from doppel_memory.query import (
     PersonalMemoryQueryRequest,
     ReferencePersonalMemoryQueryPlanner,
 )
+from doppel_memory.relation import (
+    RelationCandidate,
+    RelationIndexUnavailableError,
+)
 from doppel_memory.vector import CompositeSemanticIndex
 
 SCOPE = MemoryScope(user_id="owner", agent_id="personal-agent")
@@ -1175,6 +1179,196 @@ class _TemporalSemanticIndex:
                 similarity=0.9,
             )
         ]
+
+
+class _RelationIndex:
+    def __init__(self, candidates: list[RelationCandidate]) -> None:
+        self.candidates = candidates
+        self.calls: list[tuple[Any, list[MemoryScope], Any, int]] = []
+
+    async def search_relations(
+        self, request, scopes, *, filters=None, limit=10
+    ):
+        self.calls.append((request, list(scopes), filters, limit))
+        return self.candidates
+
+
+class _FailingRelationIndex:
+    async def search_relations(
+        self, request, scopes, *, filters=None, limit=10
+    ):
+        del request, scopes, filters, limit
+        raise RelationIndexUnavailableError("synthetic relation outage")
+
+
+async def test_relation_candidates_are_separate_rank_features_and_store_reloaded() -> (
+    None
+):
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "camera-holder",
+            "该物品目前由联系人保管。",
+            memory_type="state",
+            temporal_status="current",
+            topic_key="possession",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    relation_index = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="camera-holder",
+                source="graphiti_relation",
+                score=0.92,
+                relation_type="HELD_BY",
+                source_entity_id="entity-camera",
+                source_entity_name="相机",
+                target_entity_id="entity-contact",
+                target_entity_name="联系人",
+                edge_id="edge-held-by",
+                episode_ids=["episode-camera"],
+                valid_at=datetime(2026, 8, 1, tzinfo=UTC),
+            )
+        ]
+    )
+    engine = PersonalMemoryQueryEngine(
+        store,
+        PersonalMemoryQueryConfig(minimum_lexical_score=0.99),
+        relation_index=relation_index,
+    )
+
+    result = await engine.query(
+        _DraftPlanner(
+            intent="lookup",
+            search_text="那件东西现在在哪里",
+            entity_mentions=["相机"],
+            relation_hints=["持有"],
+            subject="owner",
+        ),
+        "那件东西现在在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert len(relation_index.calls) == 1
+    request, scopes, filters, limit = relation_index.calls[0]
+    assert request.entity_mentions == ["相机"]
+    assert request.relation_hints == ["持有"]
+    assert request.valid_at == NOW
+    assert scopes == [SCOPE]
+    assert filters.exclude_authorities == {FactAuthority.AGENT_OUTPUT}
+    assert limit == engine.config.relation_candidate_limit
+    assert [hit.record.memory_id for hit in result.hits] == ["camera-holder"]
+    assert result.hits[0].relation_score == 0.92
+    assert result.hits[0].semantic_score == 0.0
+    assert "relation_source:graphiti_relation" in result.hits[0].reasons
+    assert "relation_type:HELD_BY" in result.hits[0].reasons
+
+
+async def test_relation_index_requires_explicit_entity_anchor() -> None:
+    store = InMemoryStore()
+    relation_index = _RelationIndex([])
+    result = await PersonalMemoryQueryEngine(
+        store, relation_index=relation_index
+    ).query(
+        _DraftPlanner(intent="lookup", search_text="普通语义问题"),
+        "普通语义问题",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert relation_index.calls == []
+    assert result.hits == []
+
+
+async def test_relation_candidates_cannot_bypass_scope_or_authority_gate() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "agent-relation",
+            "Agent 猜测某个物品属于用户。",
+            memory_type="fact",
+            temporal_status="current",
+            day=1,
+            authority=FactAuthority.AGENT_OUTPUT,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    relation_index = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="agent-relation",
+                source="graphiti_relation",
+                score=1.0,
+                relation_type="OWNS",
+                edge_id="edge-agent",
+                episode_ids=["episode-agent"],
+            ),
+            RelationCandidate(
+                scope=OTHER_SCOPE,
+                memory_id="other-memory",
+                source="graphiti_relation",
+                score=1.0,
+                relation_type="OWNS",
+                edge_id="edge-other",
+                episode_ids=["episode-other"],
+            ),
+        ]
+    )
+
+    result = await PersonalMemoryQueryEngine(
+        store, relation_index=relation_index
+    ).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="物品归属",
+            entity_mentions=["物品"],
+            subject="owner",
+        ),
+        "这个物品属于谁？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.hits == []
+
+
+async def test_relation_outage_degrades_to_nonrelation_paths() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "lexical-fallback",
+            "我的相机在书房。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(
+        store, relation_index=_FailingRelationIndex()
+    ).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="相机",
+            entity_mentions=["相机"],
+            subject="owner",
+        ),
+        "相机在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["lexical-fallback"]
+    assert any("relation index unavailable" in item for item in result.warnings)
 
 
 async def test_current_query_uses_temporal_semantic_index_at_bound_now() -> None:

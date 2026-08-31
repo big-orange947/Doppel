@@ -177,6 +177,12 @@ from doppel_memory.query import (
     PersonalMemoryQueryResult,
     ReferencePersonalMemoryQueryPlanner,
 )
+from doppel_memory.relation import (
+    RelationCandidate,
+    RelationIndex,
+    RelationIndexUnavailableError,
+    RelationQuery,
+)
 from doppel_memory.retriever import (
     IdentityReranker,
     Reranker,
@@ -364,6 +370,10 @@ __all__ = [
     "ReferenceMemoryConsolidator",
     "ReferencePersonalMemoryAnalyzer",
     "ReferencePersonalMemoryQueryPlanner",
+    "RelationCandidate",
+    "RelationIndex",
+    "RelationIndexUnavailableError",
+    "RelationQuery",
     "Reranker",
     "RetrievalStrategy",
     "Retriever",

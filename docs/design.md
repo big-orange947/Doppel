@@ -786,6 +786,14 @@ exact scope 和 memory ID 从 authoritative Store 重载；未知、孤儿、越
 complete=false，明确表示
 top-k 不是完整 snapshot。semantic provider 失败时可配置回退完整 lexical scan，warning 会进入结果。
 
+关系检索不再伪装成第二个 SemanticIndex。`RelationIndex` 只在可信 plan 提供显式
+`entity_mentions` 时运行，接收 exact scopes、subject、可选 relation hints 与 valid_at，返回带
+Edge/Episode provenance 的 memory candidates。`GraphitiRelationIndex` 绕过 Graphiti 的通用
+embedding/BM25/RRF 搜索，只读取非 `DOPPEL_MEMORY_FALLBACK` 的 Entity→RELATES_TO→Entity rich
+edges；自然语言 relation hints 只影响图边顺序，不作为可能误杀的硬 ontology 过滤。每个候选仍回
+authoritative Store，并经过与 lexical/pgvector 相同的 scope、subject、authority、lifecycle、时间门。
+relation score 独立进入解释与排序，不因它同时出现在向量源中而自动获得双倍语义奖励。
+
 count 始终使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
 “一共几次”。SemanticIndex 是 top-k 协议，因此不参与 exact count 的集合定义；计数只使用完整
 结构/词法扫描。普通查询中，结构化条件仍是硬门禁，lexical/semantic 只能筛选或排序候选。

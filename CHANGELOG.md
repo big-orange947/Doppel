@@ -36,6 +36,13 @@
 
 ### Changed
 
+- Split graph relations from generic semantic retrieval. The additive
+  `RelationIndex` protocol carries explicit entity anchors and optional relation
+  hints; `GraphitiRelationIndex` queries only non-fallback Entity relationships,
+  maps Edge -> Episode -> authoritative memory, and never invokes Graphiti's
+  embedding/BM25/RRF search. `PersonalMemoryQueryEngine` accepts this relation
+  source independently from pgvector, applies the same exact-scope/authority/
+  lifecycle/time Store gates, and exposes a separate `relation_score`.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and

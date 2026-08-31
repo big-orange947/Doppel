@@ -156,6 +156,10 @@
       "ReferencePersonalMemoryAnalyzer",
       "ReferencePersonalMemoryQueryPlanner",
       "ReferenceMemoryConsolidator",
+      "RelationCandidate",
+      "RelationIndex",
+      "RelationIndexUnavailableError",
+      "RelationQuery",
       "ProposalBatchResult",
       "ProposalEvaluator",
       "ProposalWriter",
@@ -203,6 +207,7 @@
     "doppel_memory.graphiti_store.GraphitiIndexResult",
     "doppel_memory.graphiti_store.GraphitiIndexUnavailableError",
     "doppel_memory.graphiti_store.GraphitiMemoryStore",
+    "doppel_memory.graphiti_store.GraphitiRelationIndex",
     "doppel_memory.graphiti_store.GraphitiSemanticIndex"
   ]
 }

@@ -678,15 +678,14 @@ async def _build_vector_index(
     from doppel_memory.postgres_store import PostgreSQLStore
 
     dsn = (
-        f"postgresql://{quote(user)}:{quote(password)}@"
-        f"{host}:{port}/{quote(database)}"
+        f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}@"
+        f"{host}:{port}/{quote(database, safe='')}"
     )
     # DSN carries credentials internally; the report only ever records
     # host/port/database/user, never the password.
     pg_store = PostgreSQLStore(dsn)
-    # PostgreSQLStore migrates lazily on first connection; there is no public
-    # initialize() method, so trigger the pool+schemas explicitly.
-    await pg_store._ensure_pool()
+    # PostgreSQLStore initializes lazily through its public Store operations; the
+    # fixture ``put`` calls below create the pool and schema before vector indexing.
     return pg_store
 
 
@@ -814,6 +813,7 @@ async def _run_case(
                 "vector": 0,
                 "graph": 0,
                 "both": 0,
+                "relation": 0,
             },
         }
     latency_ms = round((perf_counter() - started) * 1_000, 3)
@@ -943,6 +943,7 @@ def _evaluate_result(
         "vector": 0,
         "graph": 0,
         "both": 0,
+        "relation": 0,
     }
     for hit in hits:
         hit_sources = [
@@ -958,6 +959,10 @@ def _evaluate_result(
             contribution["vector"] += 1
         elif has_graph:
             contribution["graph"] += 1
+        if any(
+            reason.startswith("relation_source:") for reason in hit.reasons
+        ):
+            contribution["relation"] += 1
     return {
         "query_id": query.query_id,
         "profile": profile,
@@ -974,6 +979,10 @@ def _evaluate_result(
                 "score": round(hit.score, 6),
                 "lexical_score": round(hit.lexical_score, 6),
                 "semantic_score": round(hit.semantic_score, 6),
+                "relation_score": round(
+                    float(getattr(hit, "relation_score", 0.0)),
+                    6,
+                ),
                 "reasons": list(hit.reasons),
             }
             for hit in hits
@@ -1046,6 +1055,7 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "vector": sum(case["contribution"]["vector"] for case in valid),
         "graph": sum(case["contribution"]["graph"] for case in valid),
         "both": sum(case["contribution"]["both"] for case in valid),
+        "relation": sum(case["contribution"].get("relation", 0) for case in valid),
     }
     return {
         "query_count": total,
@@ -1496,7 +1506,10 @@ async def run_ablation(
                     "dimensions": str(_LocalEmbeddingProvider().dimensions),
                     "normalization": "none",
                     "distance_metric": "cosine",
-                    "candidate_limit": "10",
+                    "direct_diagnostic_candidate_limit": "10",
+                    "engine_semantic_candidate_limit": "100",
+                    "composite_candidate_multiplier": "4",
+                    "composite_per_source_requested_limit": "400",
                     "host": PG_HOST,
                     "port": str(PG_PORT),
                     "database": PG_DATABASE,
@@ -1531,8 +1544,6 @@ async def run_ablation(
                     file=sys.stderr,
                 )
             await graph.close()
-        if pg_store is not None:
-            await pg_store.close()
 
 
 async def _run_profiles(
@@ -1925,6 +1936,7 @@ def build_threshold_sweep(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 "top_score": top["score"] if top else 0.0,
                 "top_lexical": top["lexical_score"] if top else 0.0,
                 "top_semantic": top["semantic_score"] if top else 0.0,
+                "top_relation": top.get("relation_score", 0.0) if top else 0.0,
             }
         )
     sweep: list[dict[str, Any]] = []

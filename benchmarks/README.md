@@ -101,6 +101,14 @@ Profiles are named by what actually executes: `lexical`, `lexical_vector`,
 5 users, dev/heldout/adversarial partitions) and is **not** frozen or
 publication-ready.
 
+The `lexical_graph` profiles intentionally retain the compatibility
+`GraphitiSemanticIndex` path, so this ablation can measure the redundancy and latency
+of full Graphiti hybrid search next to pgvector. They are not a benchmark for the new
+`GraphitiRelationIndex`. Relation-only quality requires fixtures with explicit entity
+anchors, relation-bearing rich edges, and edge-level gold labels; it must not be
+inferred by renaming the existing graph profile or by treating fallback edges as
+relations.
+
 The runner executes both a fixture-bound `oracle` planner mode (retrieval isolation)
 and the real domain-neutral deterministic planner (planner + retrieval baseline).
 Full hybrid is unavailable unless both vector and graph sources are live. Graph

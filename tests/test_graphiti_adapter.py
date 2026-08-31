@@ -19,6 +19,8 @@ from doppel_memory import (
     MemoryFilter,
     MemoryRecord,
     MemoryScope,
+    RelationIndex,
+    RelationQuery,
     Retriever,
     SemanticIndex,
 )
@@ -26,6 +28,7 @@ from doppel_memory.graphiti_store import (
     GRAPHITI_FALLBACK_EDGE_NAME,
     GraphitiIndexUnavailableError,
     GraphitiMemoryStore,
+    GraphitiRelationIndex,
     GraphitiSemanticIndex,
     _ensure_graphiti_fallback_edge,
 )
@@ -134,6 +137,18 @@ class _FallbackDriver:
         if "RETURN count(edge) AS edges" in query:
             return SimpleNamespace(records=[{"edges": self.existing_edges}])
         return SimpleNamespace(records=[{"edge_uuid": params["edge_uuid"]}])
+
+
+class _RelationDriver:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def execute_query(self, query: str, **params):
+        self.calls.append((query, params))
+        if query == "RETURN 1 AS doppel_relation_health":
+            return SimpleNamespace(records=[{"doppel_relation_health": 1}])
+        return SimpleNamespace(records=self.rows)
 
 
 async def test_graphiti_029_adapter_constructs_without_connecting() -> None:
@@ -643,3 +658,162 @@ async def test_graphiti_outage_can_explicitly_fall_back_to_core_store() -> None:
     assert [hit.fact for hit in hits] == ["literal fallback memory"]
     with pytest.raises(GraphitiIndexUnavailableError, match="neo4j unavailable"):
         await index.search("query", [scope])
+
+
+async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
+    scope = MemoryScope(user_id="relation-owner", agent_id="bot")
+    other_scope = MemoryScope(user_id="other-owner", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
+    record = MemoryRecord(
+        memory_id="camera-holder",
+        scope=scope,
+        content="相机目前由小王保管。",
+        tags=["personal-memory", "possession"],
+        metadata={
+            "subject": "owner",
+            "subject_id": scope.user_id,
+            "temporal_status": "current",
+            "valid_from": "2026-08-01T00:00:00+00:00",
+            "valid_to": None,
+            "evidence": [{"evidence_id": "message-camera"}],
+        },
+    )
+    assert (await store.put(record)).accepted
+    indexed = await semantic.index_record(record)
+    valid_at = datetime(2026, 8, 20, tzinfo=UTC)
+    relation_driver = _RelationDriver(
+        [
+            {
+                "group_id": scope.scope_key,
+                "edge_id": "edge-rich",
+                "relation_type": "HELD_BY",
+                "episode_ids": [indexed.episode_id],
+                "valid_at": datetime(2026, 8, 1, tzinfo=UTC),
+                "invalid_at": None,
+                "source_entity_id": "entity-camera",
+                "source_entity_name": "相机",
+                "target_entity_id": "entity-wang",
+                "target_entity_name": "小王",
+            },
+            {
+                "group_id": scope.scope_key,
+                "edge_id": "edge-fallback",
+                "relation_type": GRAPHITI_FALLBACK_EDGE_NAME,
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": "fallback-source",
+                "source_entity_name": "相机",
+                "target_entity_id": "fallback-target",
+                "target_entity_name": "memory",
+            },
+            {
+                "group_id": other_scope.scope_key,
+                "edge_id": "edge-other-scope",
+                "relation_type": "HELD_BY",
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": "other-source",
+                "source_entity_name": "相机",
+                "target_entity_id": "other-target",
+                "target_entity_name": "其他人",
+            },
+        ]
+    )
+    fake.driver = relation_driver
+    relation = GraphitiRelationIndex(store, graphiti_client=fake)
+
+    assert isinstance(relation, RelationIndex)
+    candidates = await relation.search_relations(
+        RelationQuery(
+            query_text="相机现在由谁保管？",
+            entity_mentions=["相机"],
+            relation_hints=["held"],
+            subject="owner",
+            subject_id=scope.user_id,
+            valid_at=valid_at,
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+        limit=5,
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.memory_id == record.memory_id
+    assert candidate.scope == scope
+    assert candidate.relation_type == "HELD_BY"
+    assert candidate.edge_id == "edge-rich"
+    assert candidate.episode_ids == [indexed.episode_id]
+    assert candidate.source_entity_name == "相机"
+    assert candidate.target_entity_name == "小王"
+    assert fake.search_calls == []
+    query, params = relation_driver.calls[0]
+    assert "MATCH (source:Entity)-[edge:RELATES_TO]->(target:Entity)" in query
+    assert "coalesce(edge.name, '') <> $fallback_name" in query
+    assert params["group_ids"] == [scope.scope_key]
+    assert params["anchors"] == ["相机"]
+    assert params["relation_hints"] == ["held"]
+    assert params["valid_at"] == valid_at
+
+    health = await relation.health()
+    assert health["ok"] is True
+    assert health["role"] == "relation_index"
+    assert health["semantic_search"] is False
+
+
+async def test_graphiti_relation_index_revalidates_store_time_and_filters() -> None:
+    scope = MemoryScope(user_id="relation-time", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
+    record = MemoryRecord(
+        memory_id="ended-relation",
+        scope=scope,
+        content="相机曾由小王保管。",
+        tags=["personal-memory", "possession"],
+        metadata={
+            "subject": "owner",
+            "subject_id": scope.user_id,
+            "temporal_status": "historical",
+            "valid_from": "2026-01-01T00:00:00+00:00",
+            "valid_to": "2026-02-01T00:00:00+00:00",
+            "evidence": [{"evidence_id": "message-ended"}],
+        },
+    )
+    assert (await store.put(record)).accepted
+    indexed = await semantic.index_record(record)
+    fake.driver = _RelationDriver(
+        [
+            {
+                "group_id": scope.scope_key,
+                "edge_id": "edge-stale",
+                "relation_type": "HELD_BY",
+                "episode_ids": [indexed.episode_id],
+                "valid_at": datetime(2026, 1, 1, tzinfo=UTC),
+                "invalid_at": datetime(2026, 2, 1, tzinfo=UTC),
+                "source_entity_id": "entity-camera",
+                "source_entity_name": "相机",
+                "target_entity_id": "entity-wang",
+                "target_entity_name": "小王",
+            }
+        ]
+    )
+    relation = GraphitiRelationIndex(store, graphiti_client=fake)
+
+    candidates = await relation.search_relations(
+        RelationQuery(
+            query_text="相机现在由谁保管？",
+            entity_mentions=["相机"],
+            subject="owner",
+            subject_id=scope.user_id,
+            valid_at=datetime(2026, 8, 1, tzinfo=UTC),
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+    )
+
+    assert candidates == []

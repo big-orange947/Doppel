@@ -1216,6 +1216,34 @@ planner 的时间/意图识别能力如实标注（`as_of_recognized`）。数�
 `agent_output`；current/history/planned intent 会在 planner 漏填时补上对应的领域无关时间硬门；
 history/as-of 可读取带明确有效区间的 superseded/expired 记录，current 不可读取。
 
+Graphiti 现在有两个明确角色。`GraphitiSemanticIndex` 保留为兼容的完整 Graphiti hybrid search；
+新的 `GraphitiRelationIndex` 不调用 Graphiti embedding/BM25/RRF，只查询显式实体锚点相邻的 rich
+关系边，并排除 `DOPPEL_MEMORY_FALLBACK`。推荐高配置组合是 PostgreSQL 权威 Store + pgvector
+普通语义召回 + Graphiti relation-only 时间/关系扩展，而不是把 pgvector 与完整 Graphiti search
+再次等权 RRF：
+
+```python
+from doppel_memory import PersonalMemoryQueryEngine
+from doppel_memory.graphiti_store import GraphitiRelationIndex
+
+relation_index = GraphitiRelationIndex(
+    store,
+    neo4j_uri="bolt://127.0.0.1:7687",
+    neo4j_user="neo4j",
+    neo4j_password=neo4j_password,
+)
+engine = PersonalMemoryQueryEngine(
+    store,
+    semantic_index=pgvector_index,
+    relation_index=relation_index,
+)
+```
+
+Reference planner 只有在问题明确提到人、地点、物品或命名概念时才填写 `entity_mentions`；
+`relation_hints` 是可选排序提示，不是领域关键词表。Deterministic planner 不猜实体，因此不会为了
+benchmark 问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回
+Store 复核，Graphiti/Neo4j 从不成为事实权威。
+
 v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
 计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，
 当前保留 3 个 missing evidence hit 和 1 个 over-broad hit，不用特判抹平；CI 只冻结不回退上限，
