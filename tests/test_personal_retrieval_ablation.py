@@ -278,10 +278,13 @@ class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(scores[0].score, 0.5)
         self.assertAlmostEqual(scores[1].score, _sigmoid(2.0))
         self.assertEqual(fake.calls[0][1]["batch_size"], 5)
+        self.assertEqual(fake.calls[0][1]["activation_fn"](2.0), 2.0)
         self.assertEqual(
             fake.calls[0][0][0][0],
             "Instruct: distinguish relations\nQuery: 谁在维修电脑？",
         )
+        self.assertIn("score_input=raw_logits", scorer.version)
+        self.assertIn("normalization=sigmoid", scorer.version)
         self.assertNotIn("distinguish relations", scorer.version)
         self.assertEqual(
             scorer.observations[0]["scores"]["edge-repairer"],
@@ -510,6 +513,8 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(dev[0.75]["promoted_required"], 1)
         self.assertEqual(dev[0.75]["promoted_forbidden"], 0)
         self.assertEqual(dev[0.65]["promoted_forbidden"], 1)
+        self.assertEqual(report["dev_recommendation"]["threshold"], 0.75)
+        self.assertEqual(report["dev_recommendation"]["required_recall"], 0.05)
 
     def test_dataset_meets_first_version_gates(self) -> None:
         dataset = _dataset()
@@ -711,6 +716,9 @@ class DatasetTest(unittest.TestCase):
                 "output_path": "report.json",
                 "command": "python -m benchmark",
                 "commit_hash": "a" * 40,
+                "tracked_worktree_dirty": False,
+                "tracked_dirty_paths": [],
+                "source_tree_sha256": "b" * 64,
                 "planner_modes": ["oracle", "deterministic"],
                 "requested_profiles": ["lexical"],
                 "gate_profiles": [],

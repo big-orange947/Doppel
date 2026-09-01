@@ -83,6 +83,12 @@
 - Record requested device, batch size, PyTorch/CUDA versions, CUDA availability, and
   detected GPU identity for SentenceTransformers benchmark profiles so CPU and GPU
   measurements cannot be silently compared as the same runtime.
+- Force raw-logit output for SentenceTransformers rerankers when Doppel owns sigmoid
+  normalization. This prevents the library's single-label default activation from
+  applying a first sigmoid and collapsing a second normalization around `0.5`.
+- Make retrieval reports disclose tracked dirty paths and a hash over the benchmark
+  plus all `doppel_memory` Python sources. Relation score sweeps also emit a dev-only
+  threshold recommendation using a fixed zero-forbidden/zero-false-abstention rule.
 - Add a separate relation-planner quality runner over the existing 65-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and

@@ -1000,10 +1000,17 @@ class _SentenceTransformersRelationReranker:
     @property
     def version(self) -> str:
         prefix_hash = hashlib.sha256(self.query_prefix.encode("utf-8")).hexdigest()[:12]
+        score_input = (
+            "raw_logits"
+            if self._score_normalization == "sigmoid"
+            else "provider_default"
+        )
         return (
             f"{_package_version('sentence-transformers')}"
             f";revision={self.revision or 'default'}"
             f";query_prefix_sha256={prefix_hash}"
+            f";score_input={score_input}"
+            f";normalization={self._score_normalization}"
         )
 
     @property
@@ -1055,11 +1062,19 @@ class _SentenceTransformersRelationReranker:
         ]
 
         def _score() -> list[float]:
+            predict_kwargs: dict[str, Any] = {
+                "batch_size": self.batch_size,
+                "show_progress_bar": False,
+                "convert_to_numpy": True,
+            }
+            if self._score_normalization == "sigmoid":
+                # SentenceTransformers may default single-label CrossEncoders to a
+                # sigmoid activation. Force identity here so Doppel applies exactly
+                # one documented sigmoid to the provider's raw logits below.
+                predict_kwargs["activation_fn"] = _identity_activation
             raw = model.predict(
                 pairs,
-                batch_size=self.batch_size,
-                show_progress_bar=False,
-                convert_to_numpy=True,
+                **predict_kwargs,
             )
             return [_scalar_float(value) for value in list(raw)]
 
@@ -1133,6 +1148,10 @@ def _scalar_float(value: Any) -> float:
             raise RuntimeError("reranker output row must contain exactly one score")
         return _scalar_float(items[0])
     return float(value)
+
+
+def _identity_activation(value: Any) -> Any:
+    return value
 
 
 def _sigmoid(value: float) -> float:
@@ -3272,6 +3291,47 @@ def build_relation_reranker_threshold_sweep(
                     ),
                 }
             )
+    safe_dev_rows = [
+        row
+        for row in sweep["dev"]
+        if row["promoted_forbidden"] == 0
+        and row["abstention_false_promotion_queries"] == 0
+    ]
+    dev_recommendation: dict[str, Any]
+    if safe_dev_rows:
+        maximum_safe_recall = max(row["required_recall"] for row in safe_dev_rows)
+        selected = min(
+            (
+                row
+                for row in safe_dev_rows
+                if row["required_recall"] == maximum_safe_recall
+            ),
+            key=lambda row: row["threshold"],
+        )
+        dev_recommendation = {
+            "available": True,
+            "threshold": selected["threshold"],
+            "required_recall": selected["required_recall"],
+            "promoted_required": selected["promoted_required"],
+            "required_gold": selected["required_gold"],
+            "promoted_forbidden": selected["promoted_forbidden"],
+            "abstention_false_promotion_queries": selected[
+                "abstention_false_promotion_queries"
+            ],
+            "rule": (
+                "dev only: require zero promoted forbidden and zero abstention false "
+                "promotions; maximize required recall; choose the smallest threshold "
+                "among ties"
+            ),
+        }
+    else:
+        dev_recommendation = {
+            "available": False,
+            "reason": (
+                "no dev threshold has both zero promoted forbidden memories and zero "
+                "abstention false promotions"
+            ),
+        }
     return {
         "available": bool(scores),
         "reason": "" if scores else "no dataset relation candidates were scored",
@@ -3289,6 +3349,7 @@ def build_relation_reranker_threshold_sweep(
         "inconsistent_scored_pairs": inconsistent_pairs,
         "ignored_non_dataset_observations": ignored_observations,
         "unknown_edge_scores": unknown_edge_scores,
+        "dev_recommendation": dev_recommendation,
         "sweep_by_partition": sweep,
     }
 
@@ -3524,6 +3585,42 @@ def _git_commit_hash() -> str:
         return ""
 
 
+def _git_tracked_dirty_paths() -> list[str]:
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return ["<git-status-unavailable>"]
+        return sorted(
+            line[3:].strip()
+            for line in result.stdout.splitlines()
+            if len(line) >= 4 and line[3:].strip()
+        )
+    except Exception:  # noqa: BLE001 - best effort
+        return ["<git-status-unavailable>"]
+
+
+def _source_tree_sha256() -> str:
+    root = Path(__file__).resolve().parents[1]
+    paths = [Path(__file__).resolve()]
+    paths.extend(sorted((root / "doppel_memory").rglob("*.py")))
+    digest = hashlib.sha256()
+    for path in paths:
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        digest.update(relative)
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def _sanitized_command(argv: Sequence[str]) -> str:
     hashed_value_flags = {
         "--embedding-query-prefix",
@@ -3707,12 +3804,16 @@ async def _async_main(args: argparse.Namespace) -> int:
             if profiles_by_mode[profile].get("unavailable", False)
         }
     )
+    tracked_dirty_paths = _git_tracked_dirty_paths()
     report["reproducibility"] = {
         "output_path": (
             str(Path(args.output).resolve()) if args.output is not None else ""
         ),
         "command": _sanitized_command(sys.argv),
         "commit_hash": _git_commit_hash(),
+        "tracked_worktree_dirty": bool(tracked_dirty_paths),
+        "tracked_dirty_paths": tracked_dirty_paths,
+        "source_tree_sha256": _source_tree_sha256(),
         "planner_modes": list(modes),
         "requested_profiles": list(profiles),
         "gate_profiles": [

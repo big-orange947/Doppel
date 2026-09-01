@@ -271,6 +271,11 @@ candidate before the configured promotion gate. It maps opaque fixture edge IDs 
 to gold only inside the repository benchmark and reports 0.05 increments separately
 for dev, heldout, adversarial, and all. Normalization, instruction, and threshold must
 be selected using dev only; heldout/adversarial rows are read after freezing them.
+The machine-generated `dev_recommendation` applies one fixed rule: require zero
+promoted forbidden memories and zero abstention false promotions, maximize required
+recall, then choose the smallest threshold among ties. Reports also disclose tracked
+dirty paths and hash the benchmark plus the complete `doppel_memory` Python source
+tree, so an uncommitted implementation cannot masquerade as the recorded HEAD.
 
 ### Natural-language relation planner quality
 

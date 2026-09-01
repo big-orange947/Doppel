@@ -70,7 +70,7 @@
     "relation_reranker_threshold_sweep": {"type": "object"},
     "reproducibility": {
       "type": "object",
-      "required": ["output_path", "command", "commit_hash", "planner_modes", "requested_profiles", "gate_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "canonical_payload_sha256", "file_sha256_sidecar"]
+      "required": ["output_path", "command", "commit_hash", "tracked_worktree_dirty", "tracked_dirty_paths", "source_tree_sha256", "planner_modes", "requested_profiles", "gate_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "canonical_payload_sha256", "file_sha256_sidecar"]
     },
     "elapsed_seconds": {"type": "number"},
     "doppel_version": {"type": "string"},
