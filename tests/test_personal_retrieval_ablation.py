@@ -18,6 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
+from uuid import NAMESPACE_URL, uuid5
 
 from benchmarks.personal_retrieval_ablation import (
     ALL_PROFILES,
@@ -42,8 +43,12 @@ from benchmarks.personal_retrieval_ablation import (
     _run_case,
     _run_profiles,
     _safety_metrics,
+    _sanitized_command,
+    _SentenceTransformersEmbeddingProvider,
+    _SentenceTransformersRelationReranker,
     _sigmoid,
     apply_variant,
+    build_relation_reranker_threshold_sweep,
     load_ablation_dataset,
     substitute,
 )
@@ -153,6 +158,88 @@ def _hit(
 
 
 class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
+    async def test_sentence_transformer_embedding_uses_dedicated_query_prefix(
+        self,
+    ) -> None:
+        class FakeModel:
+            def __init__(self) -> None:
+                self.calls: list[tuple[list[str], dict[str, Any]]] = []
+
+            def encode(self, texts, **kwargs):
+                self.calls.append((list(texts), dict(kwargs)))
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        provider = _SentenceTransformersEmbeddingProvider(
+            "fixture/embedding",
+            dimensions=3,
+            query_prefix="Instruct: personal memory\nQuery: ",
+            batch_size=4,
+        )
+        fake = FakeModel()
+        provider._model = fake
+
+        documents = await provider.embed(["护照在抽屉"])
+        queries = await provider.embed_queries(["护照在哪"])
+
+        self.assertEqual(documents, [[1.0, 0.0, 0.0]])
+        self.assertEqual(queries, [[1.0, 0.0, 0.0]])
+        self.assertEqual(fake.calls[0][0], ["护照在抽屉"])
+        self.assertEqual(
+            fake.calls[1][0],
+            ["Instruct: personal memory\nQuery: 护照在哪"],
+        )
+        self.assertEqual(fake.calls[0][1]["batch_size"], 4)
+        self.assertIn("query_prefix_sha256=", provider.version)
+        self.assertNotIn("personal memory", provider.version)
+
+    async def test_sentence_transformer_reranker_normalizes_and_records(self) -> None:
+        class FakeCrossEncoder:
+            def __init__(self) -> None:
+                self.calls: list[Any] = []
+
+            def predict(self, pairs, **kwargs):
+                self.calls.append((list(pairs), dict(kwargs)))
+                return [0.0, 2.0]
+
+        scorer = _SentenceTransformersRelationReranker(
+            "fixture/reranker",
+            score_normalization="sigmoid",
+            query_prefix="Instruct: distinguish relations\nQuery: ",
+            batch_size=5,
+        )
+        fake = FakeCrossEncoder()
+        scorer._model = fake
+        request = RelationRerankRequest(
+            query_text="谁在维修电脑？",
+            items=[
+                RelationRerankItem(
+                    item_id="edge-location",
+                    relation_type="LOCATED_AT",
+                    fact="电脑在维修店",
+                ),
+                RelationRerankItem(
+                    item_id="edge-repairer",
+                    relation_type="REPAIRED_BY",
+                    fact="电脑由高师傅维修",
+                ),
+            ],
+        )
+
+        scores = await scorer.rerank(request)
+
+        self.assertAlmostEqual(scores[0].score, 0.5)
+        self.assertAlmostEqual(scores[1].score, _sigmoid(2.0))
+        self.assertEqual(fake.calls[0][1]["batch_size"], 5)
+        self.assertEqual(
+            fake.calls[0][0][0][0],
+            "Instruct: distinguish relations\nQuery: 谁在维修电脑？",
+        )
+        self.assertNotIn("distinguish relations", scorer.version)
+        self.assertEqual(
+            scorer.observations[0]["scores"]["edge-repairer"],
+            scores[1].score,
+        )
+
     async def test_fastembed_harness_batches_text_and_normalizes_logits(self) -> None:
         class FakeCrossEncoder:
             def __init__(self) -> None:
@@ -205,6 +292,7 @@ class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(scorer.name, "fastembed-cross-encoder:fixture/model")
+        self.assertEqual(len(scorer.observations), 1)
 
     async def test_fastembed_harness_rejects_invalid_provider_output(self) -> None:
         class WrongLengthCrossEncoder:
@@ -247,6 +335,23 @@ class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
 
 
 class DatasetTest(unittest.TestCase):
+    def test_reproducibility_command_hashes_model_query_prefixes(self) -> None:
+        command = _sanitized_command(
+            [
+                "benchmark",
+                "--embedding-query-prefix",
+                "private embedding instruction",
+                "--relation-reranker-query-prefix=private reranker instruction",
+                "--embedding-model",
+                "fixture/model",
+            ]
+        )
+
+        self.assertNotIn("private embedding instruction", command)
+        self.assertNotIn("private reranker instruction", command)
+        self.assertIn("--embedding-model fixture/model", command)
+        self.assertEqual(command.count("<sha256:"), 2)
+
     def test_relation_dataset_has_edge_gold_and_adversarial_coverage(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
         self.assertEqual(len(dataset.queries), 65)
@@ -301,6 +406,13 @@ class DatasetTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate query IDs"):
             AblationDataset.model_validate(duplicate_query)
 
+        duplicate_text = dataset.model_dump(mode="python")
+        duplicate_text["queries"][1]["query"] = duplicate_text["queries"][0][
+            "query"
+        ]
+        with self.assertRaisesRegex(ValueError, "duplicate query texts"):
+            AblationDataset.model_validate(duplicate_text)
+
     def test_relation_dataset_validator_rejects_missing_anchor(self) -> None:
         from benchmarks.personal_retrieval_ablation import validate_dataset_semantics
 
@@ -312,6 +424,44 @@ class DatasetTest(unittest.TestCase):
             dataset.model_copy(update={"queries": [broken, *dataset.queries[1:]]})
         )
         self.assertTrue(any("entity or relation anchor" in item for item in failures))
+
+    def test_relation_reranker_threshold_sweep_uses_raw_candidate_scores(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        query = next(item for item in dataset.queries if item.query_id == "rel-q31")
+        required_id = "rel-a-book-recommended-chen"
+        forbidden_id = "rel-a-book-linxiao-current"
+
+        def edge_id(memory_id: str) -> str:
+            fixture = next(
+                item for item in dataset.fixtures if item.memory_id == memory_id
+            )
+            scope = dataset.scopes[fixture.scope].to_scope()
+            episode = uuid5(
+                NAMESPACE_URL,
+                f"doppel:{scope.scope_key}:{memory_id}",
+            )
+            return str(uuid5(NAMESPACE_URL, f"ablation:edge:{episode}"))
+
+        report = build_relation_reranker_threshold_sweep(
+            dataset,
+            [
+                {
+                    "query_text": query.query,
+                    "scores": {
+                        edge_id(required_id): 0.80,
+                        edge_id(forbidden_id): 0.70,
+                    },
+                }
+            ],
+        )
+        dev = {
+            row["threshold"]: row
+            for row in report["sweep_by_partition"]["dev"]
+        }
+        self.assertTrue(report["available"])
+        self.assertEqual(dev[0.75]["promoted_required"], 1)
+        self.assertEqual(dev[0.75]["promoted_forbidden"], 0)
+        self.assertEqual(dev[0.65]["promoted_forbidden"], 1)
 
     def test_dataset_meets_first_version_gates(self) -> None:
         dataset = _dataset()

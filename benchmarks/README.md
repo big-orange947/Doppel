@@ -191,9 +191,9 @@ reproducible operational baseline. The next comparison matrix is:
 | candidate | role | license | current harness |
 | --- | --- | --- | --- |
 | `BAAI/bge-reranker-base` | lightweight baseline | MIT | FastEmbed |
-| `BAAI/bge-reranker-v2-m3` | multilingual quality candidate, 0.6B | Apache-2.0 | adapter required |
-| `Qwen/Qwen3-Reranker-0.6B` | instruction-aware 100+ language candidate | Apache-2.0 | adapter required |
-| `Qwen/Qwen3-Reranker-4B` | maximum-quality GPU profile candidate | Apache-2.0 | adapter required |
+| `BAAI/bge-reranker-v2-m3` | multilingual quality candidate, 0.6B | Apache-2.0 | optional SentenceTransformers |
+| `Qwen/Qwen3-Reranker-0.6B` | instruction-aware 100+ language candidate | Apache-2.0 | optional SentenceTransformers |
+| `Qwen/Qwen3-Reranker-4B` | maximum-quality GPU profile candidate | Apache-2.0 | optional SentenceTransformers |
 | `jinaai/jina-reranker-v2-base-multilingual` | research-only comparison | CC-BY-NC-4.0 | FastEmbed; never a general default |
 
 No model is promoted from public leaderboard numbers. A candidate must win on this
@@ -213,6 +213,50 @@ pgvector's 2,000-dimension HNSW `vector` limit, so a fair Doppel run must use th
 models' supported reduced output dimension (for example 1024), record that choice,
 create a new vector namespace, and rebuild the derived index. It must never reuse or
 reinterpret vectors produced by the existing 512-dimensional provider.
+
+The benchmark does not add Transformers/PyTorch to Doppel's runtime dependencies.
+When `sentence-transformers` is installed in the evaluation environment, the same
+runner can load those candidates explicitly. Score normalization is mandatory for
+that backend because some CrossEncoder configurations expose raw logits while others
+expose a provider-normalized 0..1 score. The report records the selected backend,
+model, package version, revision, normalization, dimension, and query-prefix hash.
+Missing packages or model files remain structured `unavailable`.
+
+Example BGE v2 relation run (the threshold is deliberately illustrative):
+
+```bash
+uv run python -m benchmarks.personal_retrieval_ablation `
+  --dataset benchmarks/datasets/personal-relation-ablation-zh-v1.json `
+  --profiles lexical_relation,lexical_relation_reranked `
+  --planner-modes oracle --no-metamorphic `
+  --relation-reranker-backend sentence-transformers `
+  --relation-reranker-model BAAI/bge-reranker-v2-m3 `
+  --relation-reranker-score-normalization sigmoid `
+  --relation-reranker-threshold 0.75 `
+  --require-live-neo4j --require-all-profiles `
+  --output data/doppel/relation-bge-v2-m3.json
+```
+
+Example instruction-aware Qwen3 embedding run:
+
+```bash
+uv run python -m benchmarks.personal_retrieval_ablation `
+  --dataset benchmarks/datasets/personal-relation-ablation-zh-v1.json `
+  --profiles lexical,lexical_vector `
+  --planner-modes oracle --no-metamorphic `
+  --embedding-backend sentence-transformers `
+  --embedding-model Qwen/Qwen3-Embedding-0.6B `
+  --embedding-dimensions 1024 `
+  --embedding-query-prefix "Instruct: Retrieve personal memories that answer the query.`nQuery: " `
+  --require-live-postgres --require-all-profiles `
+  --output data/doppel/vector-qwen3-0.6b.json
+```
+
+`relation_reranker_threshold_sweep` is built from the raw score of every graph edge
+candidate before the configured promotion gate. It maps opaque fixture edge IDs back
+to gold only inside the repository benchmark and reports 0.05 increments separately
+for dev, heldout, adversarial, and all. Normalization, instruction, and threshold must
+be selected using dev only; heldout/adversarial rows are read after freezing them.
 
 ### Natural-language relation planner quality
 

@@ -67,6 +67,7 @@
     "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}},
     "metamorphic": {"type": "object"},
     "threshold_sweep": {"type": "object"},
+    "relation_reranker_threshold_sweep": {"type": "object"},
     "reproducibility": {
       "type": "object",
       "required": ["output_path", "command", "commit_hash", "planner_modes", "requested_profiles", "gate_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "canonical_payload_sha256", "file_sha256_sidecar"]

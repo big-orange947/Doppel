@@ -37,6 +37,7 @@ import argparse
 import asyncio
 import base64
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -62,6 +63,7 @@ from doppel_memory import (
     MemoryScope,
     MemoryState,
     PersonalMemoryQueryEngine,
+    RelationRerankItem,
     RelationRerankRequest,
     RelationRerankScore,
     __version__,
@@ -85,6 +87,28 @@ PROFILE_RELATION = (*PROFILE_RELATION_BASE, *PROFILE_RELATION_RERANKED)
 PROFILE_EXECUTION = (*PROFILE_MAIN, *PROFILE_RELATION)
 PROFILE_DIRECT = ("vector_direct", "graph_direct", "composite_direct")
 ALL_PROFILES = (*PROFILE_EXECUTION, *PROFILE_DIRECT)
+VECTOR_PROFILES = frozenset(
+    {
+        "lexical_vector",
+        "lexical_vector_graph",
+        "lexical_vector_relation",
+        "lexical_vector_relation_reranked",
+        "vector_direct",
+        "composite_direct",
+    }
+)
+GRAPH_PROFILES = frozenset(
+    {
+        "lexical_graph",
+        "lexical_vector_graph",
+        "lexical_relation",
+        "lexical_vector_relation",
+        "lexical_relation_reranked",
+        "lexical_vector_relation_reranked",
+        "graph_direct",
+        "composite_direct",
+    }
+)
 
 SOURCE_VECTOR = "vector"
 SOURCE_GRAPH = "graph"
@@ -233,6 +257,14 @@ class AblationDataset(BaseModel):
         )
         if duplicate_query_ids:
             raise ValueError(f"duplicate query IDs: {duplicate_query_ids}")
+        query_texts = [item.query for item in self.queries]
+        duplicate_query_texts = sorted(
+            item for item, count in Counter(query_texts).items() if count > 1
+        )
+        if duplicate_query_texts:
+            raise ValueError(
+                f"duplicate query texts: {duplicate_query_texts}"
+            )
         known = set(self.scopes)
         unknown_fixtures = sorted(
             {item.scope for item in self.fixtures}.difference(known)
@@ -600,14 +632,48 @@ def _memory_record(
 
 
 class _LocalEmbeddingProvider:
-    """BAAI/bge-small-zh-v1.5 via fastembed; honest, low-cost, local-only."""
+    """Benchmark-only FastEmbed provider with explicit model identity."""
 
-    name = "fastembed:BAAI/bge-small-zh-v1.5"
-
-    def __init__(self, dimensions: int = 512) -> None:
+    def __init__(
+        self,
+        model_name: str = "BAAI/bge-small-zh-v1.5",
+        *,
+        dimensions: int = 512,
+        cache_dir: Path | None = None,
+        batch_size: int = 32,
+    ) -> None:
+        self.model_name = str(model_name or "").strip()
+        if not self.model_name:
+            raise ValueError("embedding model name must not be empty")
+        if dimensions < 1:
+            raise ValueError("embedding dimensions must be positive")
+        if batch_size < 1:
+            raise ValueError("embedding batch size must be positive")
         self._dimensions = dimensions
+        self.cache_dir = cache_dir
+        self.batch_size = batch_size
         self._model: Any = None
-        self.version = _fastembed_version()
+        self._model_lock = asyncio.Lock()
+
+    @property
+    def name(self) -> str:
+        return f"fastembed:{self.model_name}"
+
+    @property
+    def version(self) -> str:
+        return _fastembed_version()
+
+    @property
+    def backend(self) -> str:
+        return "fastembed"
+
+    @property
+    def normalization(self) -> str:
+        return "provider_output; pgvector_cosine"
+
+    @property
+    def query_embedding(self) -> str:
+        return "symmetric"
 
     @property
     def dimensions(self) -> int:
@@ -616,12 +682,164 @@ class _LocalEmbeddingProvider:
     async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
         if not texts:
             return []
-        if self._model is None:
-            from fastembed import TextEmbedding
-
-            self._model = TextEmbedding("BAAI/bge-small-zh-v1.5")
-        vectors = await asyncio.to_thread(list, self._model.embed(list(texts)))
+        model = await self._ensure_model()
+        vectors = await asyncio.to_thread(
+            list,
+            model.embed(list(texts), batch_size=self.batch_size),
+        )
         return [[float(value) for value in vector] for vector in vectors]
+
+    async def warmup(self) -> None:
+        await self.embed(["Doppel embedding warmup"])
+
+    async def _ensure_model(self) -> Any:
+        if self._model is None:
+            async with self._model_lock:
+                if self._model is None:
+                    from fastembed import TextEmbedding
+
+                    kwargs: dict[str, Any] = {}
+                    if self.cache_dir is not None:
+                        kwargs["cache_dir"] = str(self.cache_dir)
+                    self._model = await asyncio.to_thread(
+                        TextEmbedding,
+                        self.model_name,
+                        **kwargs,
+                    )
+        return self._model
+
+
+class _SentenceTransformersEmbeddingProvider:
+    """Optional high-quality embedding harness with asymmetric query text.
+
+    This class is repository benchmark infrastructure, not a Doppel default. The
+    exact query prefix participates in the provider version fingerprint. Stored
+    documents are encoded without that prefix, while search text uses
+    ``embed_queries`` and is therefore isolated in a distinct vector namespace.
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        dimensions: int,
+        query_prefix: str = "",
+        revision: str = "",
+        cache_dir: Path | None = None,
+        batch_size: int = 32,
+        device: str = "",
+        trust_remote_code: bool = False,
+    ) -> None:
+        self.model_name = str(model_name or "").strip()
+        if not self.model_name:
+            raise ValueError("embedding model name must not be empty")
+        if dimensions < 1:
+            raise ValueError("embedding dimensions must be positive")
+        if batch_size < 1:
+            raise ValueError("embedding batch size must be positive")
+        self._dimensions = dimensions
+        self.query_prefix = str(query_prefix or "")
+        self.revision = str(revision or "").strip()
+        self.cache_dir = cache_dir
+        self.batch_size = batch_size
+        self.device = str(device or "").strip()
+        self.trust_remote_code = bool(trust_remote_code)
+        self._model: Any = None
+        self._model_lock = asyncio.Lock()
+
+    @property
+    def name(self) -> str:
+        return f"sentence-transformers:{self.model_name}"
+
+    @property
+    def version(self) -> str:
+        prefix_hash = hashlib.sha256(self.query_prefix.encode("utf-8")).hexdigest()[:12]
+        return (
+            f"{_package_version('sentence-transformers')}"
+            f";revision={self.revision or 'default'}"
+            f";truncate_dim={self.dimensions}"
+            f";query_prefix_sha256={prefix_hash};normalize=l2"
+        )
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    @property
+    def backend(self) -> str:
+        return "sentence-transformers"
+
+    @property
+    def normalization(self) -> str:
+        return "l2_normalized; pgvector_cosine"
+
+    @property
+    def query_embedding(self) -> str:
+        return "dedicated_prefix"
+
+    @property
+    def query_prefix_sha256(self) -> str:
+        return hashlib.sha256(self.query_prefix.encode("utf-8")).hexdigest()
+
+    async def warmup(self) -> None:
+        await self.embed(["Doppel document warmup"])
+        await self.embed_queries(["Doppel query warmup"])
+
+    async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
+        return await self._encode(texts)
+
+    async def embed_queries(
+        self, texts: Sequence[str]
+    ) -> Sequence[Sequence[float]]:
+        return await self._encode(
+            [f"{self.query_prefix}{text}" for text in texts]
+        )
+
+    async def _encode(
+        self, texts: Sequence[str]
+    ) -> Sequence[Sequence[float]]:
+        if not texts:
+            return []
+        model = await self._ensure_model()
+
+        def _run() -> list[list[float]]:
+            raw = model.encode(
+                list(texts),
+                batch_size=self.batch_size,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
+            return [[float(value) for value in vector] for vector in list(raw)]
+
+        return await asyncio.to_thread(_run)
+
+    async def _ensure_model(self) -> Any:
+        if self._model is None:
+            async with self._model_lock:
+                if self._model is None:
+                    sentence_transformers = importlib.import_module(
+                        "sentence_transformers"
+                    )
+                    sentence_transformer = (
+                        sentence_transformers.SentenceTransformer
+                    )
+
+                    kwargs: dict[str, Any] = {"truncate_dim": self.dimensions}
+                    if self.cache_dir is not None:
+                        kwargs["cache_folder"] = str(self.cache_dir)
+                    if self.device:
+                        kwargs["device"] = self.device
+                    if self.revision:
+                        kwargs["revision"] = self.revision
+                    if self.trust_remote_code:
+                        kwargs["trust_remote_code"] = True
+                    self._model = await asyncio.to_thread(
+                        sentence_transformer,
+                        self.model_name,
+                        **kwargs,
+                    )
+        return self._model
 
 
 class _FastEmbedRelationReranker:
@@ -637,6 +855,7 @@ class _FastEmbedRelationReranker:
         self,
         model_name: str,
         *,
+        query_prefix: str = "",
         cache_dir: Path | None = None,
         batch_size: int = 32,
     ) -> None:
@@ -647,8 +866,10 @@ class _FastEmbedRelationReranker:
             raise ValueError("relation reranker batch size must be positive")
         self.cache_dir = cache_dir
         self.batch_size = batch_size
+        self.query_prefix = str(query_prefix or "")
         self._model: Any = None
         self._model_lock = asyncio.Lock()
+        self._observations: list[dict[str, Any]] = []
 
     @property
     def name(self) -> str:
@@ -656,11 +877,24 @@ class _FastEmbedRelationReranker:
 
     @property
     def version(self) -> str:
-        return _fastembed_version()
+        prefix_hash = hashlib.sha256(self.query_prefix.encode("utf-8")).hexdigest()[:12]
+        return f"{_fastembed_version()};query_prefix_sha256={prefix_hash}"
 
     @property
     def score_normalization(self) -> str:
         return "sigmoid(raw_cross_encoder_logit)"
+
+    @property
+    def backend(self) -> str:
+        return "fastembed"
+
+    @property
+    def query_prefix_sha256(self) -> str:
+        return hashlib.sha256(self.query_prefix.encode("utf-8")).hexdigest()
+
+    @property
+    def observations(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._observations]
 
     async def warmup(self) -> None:
         model = await self._ensure_model()
@@ -679,7 +913,9 @@ class _FastEmbedRelationReranker:
         if not request.items:
             return []
         model = await self._ensure_model()
-        query = request.query_text or " ".join(request.relation_hints)
+        query = self.query_prefix + (
+            request.query_text or " ".join(request.relation_hints)
+        )
         documents = [f"{item.relation_type}\n{item.fact}" for item in request.items]
 
         def _score() -> list[float]:
@@ -703,6 +939,7 @@ class _FastEmbedRelationReranker:
                 raise RuntimeError("relation reranker returned a non-finite score")
             probability = _sigmoid(raw_score)
             scores.append(RelationRerankScore(item_id=item.item_id, score=probability))
+        _record_relation_observation(self._observations, request, scores)
         return scores
 
     async def _ensure_model(self) -> Any:
@@ -722,6 +959,181 @@ class _FastEmbedRelationReranker:
         return self._model
 
 
+class _SentenceTransformersRelationReranker:
+    """Optional CrossEncoder harness for BGE v2 and Qwen3 rerankers."""
+
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        score_normalization: Literal["identity", "sigmoid"],
+        query_prefix: str = "",
+        revision: str = "",
+        cache_dir: Path | None = None,
+        batch_size: int = 32,
+        device: str = "",
+        trust_remote_code: bool = False,
+    ) -> None:
+        self.model_name = str(model_name or "").strip()
+        if not self.model_name:
+            raise ValueError("relation reranker model name must not be empty")
+        if score_normalization not in {"identity", "sigmoid"}:
+            raise ValueError("score normalization must be identity or sigmoid")
+        if batch_size < 1:
+            raise ValueError("relation reranker batch size must be positive")
+        self._score_normalization = score_normalization
+        self.query_prefix = str(query_prefix or "")
+        self.revision = str(revision or "").strip()
+        self.cache_dir = cache_dir
+        self.batch_size = batch_size
+        self.device = str(device or "").strip()
+        self.trust_remote_code = bool(trust_remote_code)
+        self._model: Any = None
+        self._model_lock = asyncio.Lock()
+        self._observations: list[dict[str, Any]] = []
+
+    @property
+    def name(self) -> str:
+        return f"sentence-transformers-cross-encoder:{self.model_name}"
+
+    @property
+    def version(self) -> str:
+        prefix_hash = hashlib.sha256(self.query_prefix.encode("utf-8")).hexdigest()[:12]
+        return (
+            f"{_package_version('sentence-transformers')}"
+            f";revision={self.revision or 'default'}"
+            f";query_prefix_sha256={prefix_hash}"
+        )
+
+    @property
+    def score_normalization(self) -> str:
+        return (
+            "identity(provider_0_to_1)"
+            if self._score_normalization == "identity"
+            else "sigmoid(raw_cross_encoder_logit)"
+        )
+
+    @property
+    def backend(self) -> str:
+        return "sentence-transformers"
+
+    @property
+    def query_prefix_sha256(self) -> str:
+        return hashlib.sha256(self.query_prefix.encode("utf-8")).hexdigest()
+
+    @property
+    def observations(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._observations]
+
+    async def warmup(self) -> None:
+        await self.rerank(
+            RelationRerankRequest(
+                query_text="关系查询",
+                items=[
+                    RelationRerankItem(
+                        item_id="warmup-edge",
+                        relation_type="RELATED_TO",
+                        fact="关系事实",
+                    )
+                ],
+            )
+        )
+
+    async def rerank(
+        self, request: RelationRerankRequest
+    ) -> Sequence[RelationRerankScore]:
+        if not request.items:
+            return []
+        model = await self._ensure_model()
+        query = self.query_prefix + (
+            request.query_text or " ".join(request.relation_hints)
+        )
+        pairs = [
+            (query, f"{item.relation_type}\n{item.fact}")
+            for item in request.items
+        ]
+
+        def _score() -> list[float]:
+            raw = model.predict(
+                pairs,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True,
+            )
+            return [_scalar_float(value) for value in list(raw)]
+
+        raw_scores = await asyncio.to_thread(_score)
+        if len(raw_scores) != len(request.items):
+            raise RuntimeError(
+                "relation reranker returned a different number of scores than items"
+            )
+        scores: list[RelationRerankScore] = []
+        for item, raw_score in zip(request.items, raw_scores, strict=True):
+            if not math.isfinite(raw_score):
+                raise RuntimeError("relation reranker returned a non-finite score")
+            normalized = (
+                _sigmoid(raw_score)
+                if self._score_normalization == "sigmoid"
+                else raw_score
+            )
+            if not 0.0 <= normalized <= 1.0:
+                raise RuntimeError(
+                    "identity-normalized reranker score is outside 0..1"
+                )
+            scores.append(RelationRerankScore(item_id=item.item_id, score=normalized))
+        _record_relation_observation(self._observations, request, scores)
+        return scores
+
+    async def _ensure_model(self) -> Any:
+        if self._model is None:
+            async with self._model_lock:
+                if self._model is None:
+                    sentence_transformers = importlib.import_module(
+                        "sentence_transformers"
+                    )
+                    cross_encoder = sentence_transformers.CrossEncoder
+
+                    kwargs: dict[str, Any] = {}
+                    if self.cache_dir is not None:
+                        kwargs["cache_folder"] = str(self.cache_dir)
+                    if self.device:
+                        kwargs["device"] = self.device
+                    if self.revision:
+                        kwargs["revision"] = self.revision
+                    if self.trust_remote_code:
+                        kwargs["trust_remote_code"] = True
+                    self._model = await asyncio.to_thread(
+                        cross_encoder,
+                        self.model_name,
+                        **kwargs,
+                    )
+        return self._model
+
+
+def _record_relation_observation(
+    target: list[dict[str, Any]],
+    request: RelationRerankRequest,
+    scores: Sequence[RelationRerankScore],
+) -> None:
+    target.append(
+        {
+            "query_text": request.query_text,
+            "scores": {score.item_id: float(score.score) for score in scores},
+        }
+    )
+
+
+def _scalar_float(value: Any) -> float:
+    if hasattr(value, "item"):
+        return float(value.item())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        items = list(value)
+        if len(items) != 1:
+            raise RuntimeError("reranker output row must contain exactly one score")
+        return _scalar_float(items[0])
+    return float(value)
+
+
 def _sigmoid(value: float) -> float:
     if value >= 0:
         factor = math.exp(-value)
@@ -737,6 +1149,43 @@ def _fastembed_version() -> str:
         return str(getattr(fastembed, "__version__", "") or "unknown")
     except Exception:  # noqa: BLE001 - version is best effort
         return "unknown"
+
+
+def _package_version(package: str) -> str:
+    try:
+        from importlib.metadata import version
+
+        return version(package)
+    except Exception:  # noqa: BLE001 - optional dependency metadata
+        return "unknown"
+
+
+def _embedding_runtime_metadata(provider: Any | None) -> dict[str, str]:
+    if provider is None:
+        return {
+            "provider": "",
+            "provider_version": "",
+            "backend": "",
+            "model": "",
+            "dimensions": "",
+            "normalization": "",
+            "query_embedding": "",
+            "query_prefix_sha256": "",
+        }
+    return {
+        "provider": str(getattr(provider, "name", "") or ""),
+        "provider_version": str(getattr(provider, "version", "") or ""),
+        "backend": str(getattr(provider, "backend", "") or ""),
+        "model": str(getattr(provider, "model_name", "") or ""),
+        "dimensions": str(getattr(provider, "dimensions", "") or ""),
+        "normalization": str(getattr(provider, "normalization", "") or ""),
+        "query_embedding": str(
+            getattr(provider, "query_embedding", "symmetric") or ""
+        ),
+        "query_prefix_sha256": str(
+            getattr(provider, "query_prefix_sha256", "") or ""
+        ),
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -1027,12 +1476,13 @@ async def _reset_ablation_postgres(
 async def _build_vector_candidates(
     pg_store: Any,
     records: Sequence[MemoryRecord],
+    provider: Any,
 ) -> Any:
     from doppel_memory.vector import PostgreSQLVectorIndex, VectorIndexConfig
 
     index = PostgreSQLVectorIndex(
         pg_store,
-        provider=_LocalEmbeddingProvider(),
+        provider=provider,
         config=VectorIndexConfig(create_extension=True, create_hnsw_index=False),
     )
     await index.index_records(records)
@@ -1803,6 +2253,8 @@ async def run_ablation(
     require_live_postgres: bool = False,
     require_live_neo4j: bool = False,
     run_metamorphic: bool = True,
+    embedding_provider: Any | None = None,
+    embedding_provider_reason: str = "",
     relation_reranker: Any | None = None,
     minimum_reranker_score: float | None = None,
     relation_reranker_reason: str = "",
@@ -1837,37 +2289,17 @@ async def run_ablation(
     store_path = Path(store_dir) / "store.sqlite3"
     scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
     group_ids = [scope.scope_key for scope in scopes.values()]
-    vector_requested = require_live_postgres or bool(
-        set(profiles)
-        & {
-            "lexical_vector",
-            "lexical_vector_graph",
-            "lexical_vector_relation",
-            "lexical_vector_relation_reranked",
-            "vector_direct",
-            "composite_direct",
-        }
-    )
-    graph_requested = require_live_neo4j or bool(
-        set(profiles)
-        & {
-            "lexical_graph",
-            "lexical_vector_graph",
-            "lexical_relation",
-            "lexical_vector_relation",
-            "lexical_relation_reranked",
-            "lexical_vector_relation_reranked",
-            "graph_direct",
-            "composite_direct",
-        }
-    )
+    vector_requested = require_live_postgres or bool(set(profiles) & VECTOR_PROFILES)
+    graph_requested = require_live_neo4j or bool(set(profiles) & GRAPH_PROFILES)
+    if vector_requested and embedding_provider is None and not embedding_provider_reason:
+        embedding_provider = _LocalEmbeddingProvider()
 
     # v0.9 keeps PostgreSQL authoritative when it is live; SQLite is the
     # degradation path. The same authoritative store backs the pgvector
     # projection so index_records can re-load records it indexes (orphan
     # protection) instead of duplicating another authority.
     pg_password = os.environ.get("DOPPEL_ABLATION_PG_PASSWORD", "")
-    vector_reason = (
+    postgres_reason = (
         await _probe_postgres(
             host=PG_HOST,
             port=PG_PORT,
@@ -1878,9 +2310,10 @@ async def run_ablation(
         if vector_requested
         else "not requested"
     )
+    vector_reason = embedding_provider_reason or postgres_reason
     store: Any = None
     pg_store: Any | None = None
-    if not vector_reason:
+    if not postgres_reason:
         await _reset_ablation_postgres(
             host=PG_HOST,
             port=PG_PORT,
@@ -1922,7 +2355,9 @@ async def run_ablation(
 
         # --- vector index (same authoritative store) ------------------------ #
         if not vector_reason:
-            vector_index = await _build_vector_candidates(pg_store, records)
+            vector_index = await _build_vector_candidates(
+                pg_store, records, embedding_provider
+            )
 
         # --- graph availability ------------------------------------------- #
         graph_reason = (
@@ -1985,9 +2420,7 @@ async def run_ablation(
                 "available": not bool(vector_reason),
                 "reason": vector_reason,
                 "metadata": {
-                    "provider": _LocalEmbeddingProvider.name,
-                    "dimensions": str(_LocalEmbeddingProvider().dimensions),
-                    "normalization": "none",
+                    **_embedding_runtime_metadata(embedding_provider),
                     "distance_metric": "cosine",
                     "direct_diagnostic_candidate_limit": "10",
                     "engine_semantic_candidate_limit": "100",
@@ -2020,6 +2453,28 @@ async def run_ablation(
                     else ""
                 ),
                 "metadata": {
+                    "backend": (
+                        str(getattr(relation_reranker, "backend", "") or "")
+                        if relation_reranker is not None
+                        else ""
+                    ),
+                    "model": (
+                        str(getattr(relation_reranker, "model_name", "") or "")
+                        if relation_reranker is not None
+                        else ""
+                    ),
+                    "query_prefix_sha256": (
+                        str(
+                            getattr(
+                                relation_reranker,
+                                "query_prefix_sha256",
+                                "",
+                            )
+                            or ""
+                        )
+                        if relation_reranker is not None
+                        else ""
+                    ),
                     "provider": (
                         str(getattr(relation_reranker, "name", "") or "")
                         if relation_reranker is not None
@@ -2680,6 +3135,134 @@ def build_threshold_sweep(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def build_relation_reranker_threshold_sweep(
+    dataset: AblationDataset,
+    observations: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    """Evaluate raw relation scorer promotions before the configured hard gate.
+
+    The provider sees opaque edge IDs. This repository-only evaluator reconstructs
+    the deterministic fixture edge mapping, deduplicates repeated profile calls, and
+    compares scores with required/forbidden gold. Runtime Doppel code never receives
+    this mapping and never lets the scorer select a memory or scope.
+    """
+
+    query_by_text = {query.query: query for query in dataset.queries}
+    edge_to_memory: dict[str, str] = {}
+    for fixture in dataset.fixtures:
+        scope = dataset.scopes[fixture.scope].to_scope()
+        episode_id = str(
+            uuid5(
+                NAMESPACE_URL,
+                f"doppel:{scope.scope_key}:{fixture.memory_id}",
+            )
+        )
+        edge_id = str(uuid5(NAMESPACE_URL, f"ablation:edge:{episode_id}"))
+        edge_to_memory[edge_id] = fixture.memory_id
+
+    observed_values: dict[tuple[str, str], list[float]] = {}
+    ignored_observations = 0
+    unknown_edge_scores = 0
+    for observation in observations:
+        query = query_by_text.get(str(observation.get("query_text") or ""))
+        if query is None:
+            ignored_observations += 1
+            continue
+        for edge_id, raw_score in dict(observation.get("scores") or {}).items():
+            memory_id = edge_to_memory.get(str(edge_id))
+            if memory_id is None:
+                unknown_edge_scores += 1
+                continue
+            observed_values.setdefault((query.query_id, memory_id), []).append(
+                float(raw_score)
+            )
+
+    inconsistent_pairs = 0
+    scores: dict[tuple[str, str], float] = {}
+    duplicate_observations = 0
+    for key, values in observed_values.items():
+        duplicate_observations += max(len(values) - 1, 0)
+        if max(values) - min(values) > 1e-6:
+            inconsistent_pairs += 1
+        scores[key] = sum(values) / len(values)
+
+    partitions = ("dev", "heldout", "adversarial", "all")
+    thresholds = [value / 20 for value in range(1, 20)]
+    sweep: dict[str, list[dict[str, Any]]] = {name: [] for name in partitions}
+    for partition in partitions:
+        queries = [
+            query
+            for query in dataset.queries
+            if partition == "all" or query.partition == partition
+        ]
+        required_pairs = {
+            (query.query_id, memory_id)
+            for query in queries
+            for memory_id in query.required_memory_ids
+        }
+        forbidden_pairs = {
+            (query.query_id, memory_id)
+            for query in queries
+            for memory_id in query.forbidden_memory_ids
+        }
+        abstain_query_ids = {
+            query.query_id for query in queries if query.expected_abstain
+        }
+        for threshold in thresholds:
+            promoted = {key for key, score in scores.items() if score >= threshold}
+            promoted_required = required_pairs.intersection(promoted)
+            scored_forbidden = forbidden_pairs.intersection(scores)
+            promoted_forbidden = forbidden_pairs.intersection(promoted)
+            abstain_false_promotions = {
+                query_id
+                for query_id, _ in promoted
+                if query_id in abstain_query_ids
+            }
+            sweep[partition].append(
+                {
+                    "threshold": threshold,
+                    "required_recall": round(
+                        len(promoted_required) / max(len(required_pairs), 1), 4
+                    ),
+                    "required_candidate_coverage": round(
+                        len(required_pairs.intersection(scores))
+                        / max(len(required_pairs), 1),
+                        4,
+                    ),
+                    "promoted_required": len(promoted_required),
+                    "required_gold": len(required_pairs),
+                    "promoted_forbidden": len(promoted_forbidden),
+                    "scored_forbidden": len(scored_forbidden),
+                    "abstention_false_promotion_queries": len(
+                        abstain_false_promotions
+                    ),
+                    "abstention_queries": len(abstain_query_ids),
+                    "promoted_candidate_pairs": len(
+                        {key for key in promoted if key[0] in {q.query_id for q in queries}}
+                    ),
+                }
+            )
+    return {
+        "available": bool(scores),
+        "reason": "" if scores else "no dataset relation candidates were scored",
+        "method": (
+            "raw provider scores over every graph candidate before the configured "
+            "relation threshold; deterministic fixture edge IDs are mapped to gold "
+            "only inside the repository benchmark"
+        ),
+        "selection_policy": (
+            "choose normalization/instruction/threshold on dev only, then freeze "
+            "before reading heldout and adversarial rows"
+        ),
+        "unique_scored_pairs": len(scores),
+        "duplicate_observations": duplicate_observations,
+        "inconsistent_scored_pairs": inconsistent_pairs,
+        "ignored_non_dataset_observations": ignored_observations,
+        "unknown_edge_scores": unknown_edge_scores,
+        "sweep_by_partition": sweep,
+    }
+
+
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
@@ -2745,10 +3328,45 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-scope-leakage", type=int, default=0)
     parser.add_argument("--max-temporal-violations", type=int, default=0)
     parser.add_argument(
+        "--embedding-backend",
+        choices=("fastembed", "sentence-transformers"),
+        default="fastembed",
+        help="local embedding runtime for pgvector profiles",
+    )
+    parser.add_argument(
+        "--embedding-model",
+        default="BAAI/bge-small-zh-v1.5",
+        help="explicit local embedding model identity",
+    )
+    parser.add_argument(
+        "--embedding-dimensions",
+        type=int,
+        default=512,
+        help="declared and validated output dimension",
+    )
+    parser.add_argument("--embedding-cache-dir", type=Path, default=None)
+    parser.add_argument("--embedding-batch-size", type=int, default=32)
+    parser.add_argument("--embedding-device", default="")
+    parser.add_argument("--embedding-revision", default="")
+    parser.add_argument(
+        "--embedding-query-prefix",
+        default="",
+        help=(
+            "exact prefix for asymmetric query encoding; hashed, not copied, "
+            "into the report"
+        ),
+    )
+    parser.add_argument("--embedding-trust-remote-code", action="store_true")
+    parser.add_argument(
+        "--relation-reranker-backend",
+        choices=("fastembed", "sentence-transformers"),
+        default="fastembed",
+    )
+    parser.add_argument(
         "--relation-reranker-model",
         default="",
         help=(
-            "local FastEmbed cross-encoder model used only by *_relation_reranked "
+            "local cross-encoder model used only by *_relation_reranked "
             "profiles; no model is downloaded unless such a profile is requested"
         ),
     )
@@ -2762,12 +3380,31 @@ def _parser() -> argparse.ArgumentParser:
         "--relation-reranker-cache-dir",
         type=Path,
         default=None,
-        help="optional local FastEmbed model cache directory",
+        help="optional local model cache directory",
     )
     parser.add_argument(
         "--relation-reranker-batch-size",
         type=int,
         default=32,
+    )
+    parser.add_argument("--relation-reranker-device", default="")
+    parser.add_argument("--relation-reranker-revision", default="")
+    parser.add_argument(
+        "--relation-reranker-query-prefix",
+        default="",
+        help="optional task instruction/prefix; only its hash is reported",
+    )
+    parser.add_argument(
+        "--relation-reranker-score-normalization",
+        choices=("identity", "sigmoid"),
+        default=None,
+        help=(
+            "required for sentence-transformers: identity for provider 0..1 "
+            "scores or sigmoid for raw logits"
+        ),
+    )
+    parser.add_argument(
+        "--relation-reranker-trust-remote-code", action="store_true"
     )
     parser.add_argument("--no-metamorphic", action="store_true")
     return parser
@@ -2857,30 +3494,123 @@ def _git_commit_hash() -> str:
         return ""
 
 
+def _sanitized_command(argv: Sequence[str]) -> str:
+    hashed_value_flags = {
+        "--embedding-query-prefix",
+        "--relation-reranker-query-prefix",
+    }
+    sanitized: list[str] = []
+    index = 0
+    while index < len(argv):
+        item = str(argv[index])
+        if item in hashed_value_flags and index + 1 < len(argv):
+            value = str(argv[index + 1])
+            digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+            sanitized.extend([item, f"<sha256:{digest}>"])
+            index += 2
+            continue
+        matching_flag = next(
+            (
+                flag
+                for flag in hashed_value_flags
+                if item.startswith(flag + "=")
+            ),
+            "",
+        )
+        if matching_flag:
+            value = item.removeprefix(matching_flag + "=")
+            digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+            sanitized.append(f"{matching_flag}=<sha256:{digest}>")
+        else:
+            sanitized.append(item)
+        index += 1
+    return " ".join(sanitized)
+
+
 async def _async_main(args: argparse.Namespace) -> int:
     dataset = load_ablation_dataset(args.dataset)
     profiles = tuple(name.strip() for name in args.profiles.split(",") if name.strip())
     modes = tuple(
         name.strip() for name in args.planner_modes.split(",") if name.strip()
     )
-    relation_reranker: _FastEmbedRelationReranker | None = None
+    embedding_provider: Any | None = None
+    embedding_provider_reason = ""
+    if set(profiles) & VECTOR_PROFILES or args.require_live_postgres:
+        try:
+            if args.embedding_backend == "sentence-transformers":
+                embedding_provider = _SentenceTransformersEmbeddingProvider(
+                    args.embedding_model,
+                    dimensions=args.embedding_dimensions,
+                    query_prefix=args.embedding_query_prefix,
+                    revision=args.embedding_revision,
+                    cache_dir=args.embedding_cache_dir,
+                    batch_size=args.embedding_batch_size,
+                    device=args.embedding_device,
+                    trust_remote_code=args.embedding_trust_remote_code,
+                )
+            else:
+                embedding_provider = _LocalEmbeddingProvider(
+                    args.embedding_model,
+                    dimensions=args.embedding_dimensions,
+                    cache_dir=args.embedding_cache_dir,
+                    batch_size=args.embedding_batch_size,
+                )
+            await embedding_provider.warmup()
+        except Exception as exc:  # noqa: BLE001 - structured unavailability
+            embedding_provider_reason = f"{type(exc).__name__}: {exc}"
+
+    relation_reranker: Any | None = None
     relation_reranker_reason = ""
     if set(profiles) & set(PROFILE_RELATION_RERANKED):
         if not str(args.relation_reranker_model or "").strip():
             relation_reranker_reason = "relation reranker model is not configured"
         elif args.relation_reranker_threshold is None:
             relation_reranker_reason = "relation reranker threshold is not configured"
-        else:
-            relation_reranker = _FastEmbedRelationReranker(
-                args.relation_reranker_model,
-                cache_dir=args.relation_reranker_cache_dir,
-                batch_size=args.relation_reranker_batch_size,
+        elif (
+            args.relation_reranker_backend == "sentence-transformers"
+            and args.relation_reranker_score_normalization is None
+        ):
+            relation_reranker_reason = (
+                "sentence-transformers reranker requires explicit score normalization"
             )
+        elif (
+            args.relation_reranker_backend == "fastembed"
+            and args.relation_reranker_score_normalization not in (None, "sigmoid")
+        ):
+            relation_reranker_reason = (
+                "FastEmbed reranker exposes raw logits and requires sigmoid"
+            )
+        else:
             try:
+                if args.relation_reranker_backend == "sentence-transformers":
+                    score_normalization = (
+                        args.relation_reranker_score_normalization
+                    )
+                    if score_normalization not in ("identity", "sigmoid"):
+                        raise ValueError(
+                            "sentence-transformers reranker requires identity "
+                            "or sigmoid score normalization"
+                        )
+                    relation_reranker = _SentenceTransformersRelationReranker(
+                        args.relation_reranker_model,
+                        score_normalization=score_normalization,
+                        query_prefix=args.relation_reranker_query_prefix,
+                        revision=args.relation_reranker_revision,
+                        cache_dir=args.relation_reranker_cache_dir,
+                        batch_size=args.relation_reranker_batch_size,
+                        device=args.relation_reranker_device,
+                        trust_remote_code=args.relation_reranker_trust_remote_code,
+                    )
+                else:
+                    relation_reranker = _FastEmbedRelationReranker(
+                        args.relation_reranker_model,
+                        query_prefix=args.relation_reranker_query_prefix,
+                        cache_dir=args.relation_reranker_cache_dir,
+                        batch_size=args.relation_reranker_batch_size,
+                    )
                 await relation_reranker.warmup()
             except Exception as exc:  # noqa: BLE001 - structured unavailability
                 relation_reranker_reason = f"{type(exc).__name__}: {exc}"
-                relation_reranker = None
     report = await run_ablation(
         dataset,
         profiles=profiles,
@@ -2889,6 +3619,8 @@ async def _async_main(args: argparse.Namespace) -> int:
         require_live_postgres=args.require_live_postgres,
         require_live_neo4j=args.require_live_neo4j,
         run_metamorphic=not args.no_metamorphic,
+        embedding_provider=embedding_provider,
+        embedding_provider_reason=embedding_provider_reason,
         relation_reranker=relation_reranker,
         minimum_reranker_score=args.relation_reranker_threshold,
         relation_reranker_reason=relation_reranker_reason,
@@ -2917,6 +3649,18 @@ async def _async_main(args: argparse.Namespace) -> int:
     cases = report.get("cases", [])
     if cases:
         report["threshold_sweep"] = build_threshold_sweep(cases)
+    if relation_reranker is not None and not relation_reranker_reason:
+        report["relation_reranker_threshold_sweep"] = (
+            build_relation_reranker_threshold_sweep(
+                dataset,
+                getattr(relation_reranker, "observations", []),
+            )
+        )
+    else:
+        report["relation_reranker_threshold_sweep"] = {
+            "available": False,
+            "reason": relation_reranker_reason or "reranker profile not requested",
+        }
     executed = sorted(
         {
             f"{mode}:{profile}"
@@ -2937,7 +3681,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         "output_path": (
             str(Path(args.output).resolve()) if args.output is not None else ""
         ),
-        "command": " ".join(sys.argv),
+        "command": _sanitized_command(sys.argv),
         "commit_hash": _git_commit_hash(),
         "planner_modes": list(modes),
         "requested_profiles": list(profiles),

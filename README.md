@@ -209,6 +209,14 @@ class MyEmbeddingProvider:
     ) -> Sequence[Sequence[float]]:
         return await my_embedding_service.embed(texts)
 
+    # Optional additive extension for instruction-aware/asymmetric models.
+    # Include this instruction/template in ``version`` so it gets a new
+    # vector namespace when changed.
+    async def embed_queries(
+        self, texts: Sequence[str]
+    ) -> Sequence[Sequence[float]]:
+        return await my_embedding_service.embed_queries(texts)
+
 vector_index = PostgreSQLVectorIndex(
     store,
     MyEmbeddingProvider(),

@@ -40,6 +40,22 @@ class TinyProvider:
         return [[1.0, 0.0, 0.0] for _ in texts]
 
 
+class TinyAsymmetricProvider(TinyProvider):
+    def __init__(self) -> None:
+        self.document_calls: list[list[str]] = []
+        self.query_calls: list[list[str]] = []
+
+    async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
+        self.document_calls.append(list(texts))
+        return [[1.0, 0.0, 0.0] for _ in texts]
+
+    async def embed_queries(
+        self, texts: Sequence[str]
+    ) -> Sequence[Sequence[float]]:
+        self.query_calls.append(list(texts))
+        return [[0.0, 1.0, 0.0] for _ in texts]
+
+
 class FakeSemanticIndex:
     def __init__(self, results=None, error: Exception | None = None) -> None:
         self.results = list(results or [])
@@ -153,6 +169,28 @@ def test_profile_identity_and_vector_validation_are_deterministic() -> None:
         first._validate_vector([1, float("nan"), 0])
     with pytest.raises(EmbeddingProviderError, match="non-zero"):
         first._validate_vector([0, 0, 0])
+
+
+async def test_asymmetric_query_embeddings_are_explicit_and_namespaced() -> None:
+    from doppel_memory import PostgreSQLStore, QueryEmbeddingProvider
+
+    provider = TinyAsymmetricProvider()
+    assert isinstance(provider, QueryEmbeddingProvider)
+    symmetric = PostgreSQLVectorIndex(
+        PostgreSQLStore("postgresql://unused"), TinyProvider()
+    )
+    asymmetric = PostgreSQLVectorIndex(
+        PostgreSQLStore("postgresql://unused"), provider
+    )
+
+    document_vectors = await asymmetric._embed_texts(["document"])
+    query_vectors = await asymmetric._embed_texts(["question"], query=True)
+
+    assert symmetric.profile != asymmetric.profile
+    assert document_vectors == [[1.0, 0.0, 0.0]]
+    assert query_vectors == [[0.0, 1.0, 0.0]]
+    assert provider.document_calls == [["document"]]
+    assert provider.query_calls == [["question"]]
 
 
 def test_vector_report_rejects_inconsistent_counts() -> None:

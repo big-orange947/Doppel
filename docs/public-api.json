@@ -169,6 +169,7 @@
       "ProposalWriter",
       "PostgreSQLStore",
       "PostgreSQLVectorIndex",
+      "QueryEmbeddingProvider",
       "ScopedHistoryReader",
       "ScopedMemoryReader",
       "SemanticIndex",

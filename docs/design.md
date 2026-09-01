@@ -498,6 +498,12 @@ cursor，不在库内部创建无边界后台任务。
 调用者给出的 exact scope 重新读取 authoritative record，content hash 未变化时不再次调用 provider。
 模型升级或维度变化得到新表，可在旧 profile 仍在线时逐页回填，切换 strategy 后再由部署方清理旧表。
 
+Instruction-aware 模型可以额外实现加法协议 `QueryEmbeddingProvider.embed_queries()`：`embed()` 只编码
+入库文档，查询时才调用 `embed_queries()`。支持该协议本身会进入 vector profile identity；provider 还
+必须把 query instruction/template、裁剪维度和归一化方式写入自己的 version。这样修改查询模板会创建
+新的派生向量 namespace，不会把对称 BGE、小维度 Matryoshka 输出和另一套 instruction 的向量静默
+混用。未实现该扩展的旧 provider 保持完全对称的既有行为。
+
 pgvector extension 安装和 HNSW 都默认关闭。extension 通常是数据库级运维动作；框架只有在
 `create_extension=True` 时尝试 `CREATE EXTENSION`。无 HNSW 时使用 exact nearest neighbor，保证基线
 recall；显式启用 HNSW 时验证 pgvector vector index 的 2,000 维上限。向量输入验证数量、维度、有限值

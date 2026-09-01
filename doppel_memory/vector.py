@@ -64,6 +64,21 @@ class EmbeddingProvider(Protocol):
 
 
 @runtime_checkable
+class QueryEmbeddingProvider(EmbeddingProvider, Protocol):
+    """Optional asymmetric provider for instruction-aware query embeddings.
+
+    ``embed`` continues to encode stored documents. ``embed_queries`` is used only
+    for search text. Providers must include every query instruction/template and
+    normalization choice in their declared ``version`` so a change creates a new
+    derived-vector namespace instead of silently mixing incompatible embeddings.
+    """
+
+    async def embed_queries(
+        self, texts: Sequence[str]
+    ) -> Sequence[Sequence[float]]: ...
+
+
+@runtime_checkable
 class SemanticIndex(Protocol):
     """Scope-aware semantic candidate source consumed by retrieval strategies."""
 
@@ -331,6 +346,7 @@ class PostgreSQLVectorIndex:
         self._config = config or VectorIndexConfig()
         self._provider_name = str(getattr(provider, "name", "") or "").strip()
         self._provider_version = str(getattr(provider, "version", "") or "").strip()
+        self._has_query_embedder = isinstance(provider, QueryEmbeddingProvider)
         raw_dimensions = getattr(provider, "dimensions", 0)
         if isinstance(raw_dimensions, bool) or not isinstance(raw_dimensions, int):
             raise TypeError("embedding provider dimensions must be an integer")
@@ -352,6 +368,8 @@ class PostgreSQLVectorIndex:
             "name": self._provider_name,
             "version": self._provider_version,
         }
+        if self._has_query_embedder:
+            identity["query_embedding"] = "dedicated"
         payload = json.dumps(identity, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(payload.encode()).hexdigest()[:16]
         self._identity_json = payload
@@ -616,9 +634,16 @@ class PostgreSQLVectorIndex:
             for row in rows
         }
 
-    async def _embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
+    async def _embed_texts(
+        self, texts: Sequence[str], *, query: bool = False
+    ) -> list[list[float]]:
         try:
-            raw_vectors = await self._provider.embed(texts)
+            if query and self._has_query_embedder:
+                query_provider = self._provider
+                assert isinstance(query_provider, QueryEmbeddingProvider)
+                raw_vectors = await query_provider.embed_queries(texts)
+            else:
+                raw_vectors = await self._provider.embed(texts)
         except Exception as exc:
             raise EmbeddingProviderError(
                 f"embedding provider {self._provider_name}@{self._provider_version} "
@@ -858,7 +883,7 @@ class PostgreSQLVectorIndex:
         if limit <= 0 or not str(query or "").strip():
             return []
         await self.initialize()
-        (query_vector,) = await self._embed_texts([query.strip()])
+        (query_vector,) = await self._embed_texts([query.strip()], query=True)
         vector_literal = _vector_literal(query_vector)
         scope_keys = list(dict.fromkeys(scope.scope_key for scope in scopes))
         where = ["record.scope_key = ANY($1::text[])"]
@@ -913,6 +938,9 @@ class PostgreSQLVectorIndex:
             "profile": self._profile,
             "provider": self._provider_name,
             "provider_version": self._provider_version,
+            "query_embedding": (
+                "dedicated" if self._has_query_embedder else "symmetric"
+            ),
             "dimensions": self._dimensions,
             "metric": "cosine",
             "indexed_records": int(indexed),

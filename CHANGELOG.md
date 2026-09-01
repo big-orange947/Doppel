@@ -70,6 +70,16 @@
   accounting distinguishes reranker promotions from ordinary relation matches. A
   missing model, missing threshold, or load failure is structured `unavailable` and
   never silently reported under a reranked profile.
+- Add the optional `QueryEmbeddingProvider` extension for instruction-aware and
+  asymmetric embedding models. Stored documents still use `embed()` while search
+  text can use `embed_queries()`; the asymmetric mode participates in pgvector
+  profile identity, and providers must include their query template, truncation, and
+  normalization in `version`. Existing symmetric providers remain compatible.
+- Add benchmark-only SentenceTransformers adapters for configurable embedding and
+  relation reranker models without adding PyTorch/Transformers to Doppel's runtime
+  dependencies. Model/backend/revision/dimension/query-prefix hash/normalization are
+  reported, missing optional packages are structured unavailable, and raw edge
+  scores produce a dev/heldout/adversarial threshold sweep before the relation gate.
 - Add a separate relation-planner quality runner over the existing 65-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and
