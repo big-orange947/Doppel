@@ -225,7 +225,16 @@ Missing packages or model files remain structured `unavailable`.
 Use a current evaluation environment for these model families: the upstream Qwen3
 reranker integration targets SentenceTransformers 5.4+, while Qwen3 model loading
 requires Transformers 4.51+. These are benchmark-environment requirements only and
-do not become Doppel runtime dependencies.
+do not become Doppel runtime dependencies. A CUDA-capable machine must also install
+a CUDA-enabled PyTorch build explicitly; a CPU-only `torch` wheel paired with
+`--embedding-device cuda` or `--relation-reranker-device cuda` is correctly reported
+unavailable and must not be presented as a GPU benchmark. Reports record the requested
+device, batch size, PyTorch/CUDA versions, CUDA availability, and detected GPU name.
+
+If Hugging Face Xet/CAS is unreachable in the evaluation network, retrying with
+`HF_HUB_DISABLE_XET=1` selects the standard Hub download path. A partially downloaded
+or unavailable model still remains structured `unavailable`; the runner never falls
+back to another model under the requested profile name.
 
 Example BGE v2 relation run (the threshold is deliberately illustrative):
 

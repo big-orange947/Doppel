@@ -37,9 +37,11 @@ from benchmarks.personal_retrieval_ablation import (
     BenchmarkReportPlanner,
     _aggregate,
     _direct_scan,
+    _embedding_runtime_metadata,
     _evaluate_result,
     _FastEmbedRelationReranker,
     _memory_record,
+    _relation_reranker_runtime_metadata,
     _run_case,
     _run_profiles,
     _safety_metrics,
@@ -158,6 +160,52 @@ def _hit(
 
 
 class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
+    def test_sentence_transformer_runtime_metadata_records_cuda_environment(
+        self,
+    ) -> None:
+        fake_cuda = SimpleNamespace(
+            is_available=lambda: True,
+            device_count=lambda: 1,
+            get_device_name=lambda index: "Fixture GPU",
+        )
+        fake_torch = SimpleNamespace(
+            __version__="2.fixture+cu999",
+            version=SimpleNamespace(cuda="99.9"),
+            cuda=fake_cuda,
+        )
+        embedding = _SentenceTransformersEmbeddingProvider(
+            "fixture/embedding",
+            dimensions=3,
+            device="cuda",
+            batch_size=4,
+        )
+        reranker = _SentenceTransformersRelationReranker(
+            "fixture/reranker",
+            score_normalization="sigmoid",
+            device="cuda",
+            batch_size=5,
+        )
+
+        with patch(
+            "benchmarks.personal_retrieval_ablation.importlib.import_module",
+            return_value=fake_torch,
+        ):
+            embedding_metadata = _embedding_runtime_metadata(embedding)
+            reranker_metadata = _relation_reranker_runtime_metadata(
+                reranker,
+                0.75,
+            )
+
+        self.assertEqual(embedding_metadata["device_requested"], "cuda")
+        self.assertEqual(embedding_metadata["batch_size"], "4")
+        self.assertEqual(embedding_metadata["torch_version"], "2.fixture+cu999")
+        self.assertEqual(embedding_metadata["torch_cuda_version"], "99.9")
+        self.assertEqual(embedding_metadata["cuda_available"], "true")
+        self.assertEqual(embedding_metadata["cuda_device_name"], "Fixture GPU")
+        self.assertEqual(reranker_metadata["minimum_score"], "0.75")
+        self.assertEqual(reranker_metadata["batch_size"], "5")
+        self.assertEqual(reranker_metadata["cuda_device_count"], "1")
+
     async def test_sentence_transformer_embedding_uses_dedicated_query_prefix(
         self,
     ) -> None:

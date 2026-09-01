@@ -80,6 +80,9 @@
   dependencies. Model/backend/revision/dimension/query-prefix hash/normalization are
   reported, missing optional packages are structured unavailable, and raw edge
   scores produce a dev/heldout/adversarial threshold sweep before the relation gate.
+- Record requested device, batch size, PyTorch/CUDA versions, CUDA availability, and
+  detected GPU identity for SentenceTransformers benchmark profiles so CPU and GPU
+  measurements cannot be silently compared as the same runtime.
 - Add a separate relation-planner quality runner over the existing 65-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and

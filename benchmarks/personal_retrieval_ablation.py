@@ -50,7 +50,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -75,6 +75,7 @@ from doppel_memory.query import (
     PersonalMemoryQueryHit,
     PersonalMemoryQueryRequest,
     PersonalMemoryQueryResult,
+    QueryIntent,
 )
 
 PROFILE_MAIN = ("lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph")
@@ -482,7 +483,7 @@ class BenchmarkOraclePlanner:
         if intent not in _INTENT_VALUES:
             raise ValueError(f"oracle planner does not know intent {intent!r}")
         return PersonalMemoryQueryDraft(
-            intent=intent,
+            intent=cast(QueryIntent, intent),
             search_text=str(request.query or "").strip(),
             as_of=fixture.as_of,
             time_from=fixture.time_from,
@@ -1171,11 +1172,14 @@ def _embedding_runtime_metadata(provider: Any | None) -> dict[str, str]:
             "normalization": "",
             "query_embedding": "",
             "query_prefix_sha256": "",
+            "device_requested": "",
+            "batch_size": "",
         }
+    backend = str(getattr(provider, "backend", "") or "")
     return {
         "provider": str(getattr(provider, "name", "") or ""),
         "provider_version": str(getattr(provider, "version", "") or ""),
-        "backend": str(getattr(provider, "backend", "") or ""),
+        "backend": backend,
         "model": str(getattr(provider, "model_name", "") or ""),
         "dimensions": str(getattr(provider, "dimensions", "") or ""),
         "normalization": str(getattr(provider, "normalization", "") or ""),
@@ -1185,7 +1189,76 @@ def _embedding_runtime_metadata(provider: Any | None) -> dict[str, str]:
         "query_prefix_sha256": str(
             getattr(provider, "query_prefix_sha256", "") or ""
         ),
+        "device_requested": str(getattr(provider, "device", "") or "auto"),
+        "batch_size": str(getattr(provider, "batch_size", "") or ""),
+        **_torch_runtime_metadata(backend),
     }
+
+
+def _relation_reranker_runtime_metadata(
+    provider: Any | None,
+    minimum_score: float | None,
+) -> dict[str, str]:
+    if provider is None:
+        return {
+            "backend": "",
+            "model": "",
+            "query_prefix_sha256": "",
+            "provider": "",
+            "version": "",
+            "minimum_score": str(minimum_score) if minimum_score is not None else "",
+            "score_normalization": "",
+            "device_requested": "",
+            "batch_size": "",
+        }
+    backend = str(getattr(provider, "backend", "") or "")
+    return {
+        "backend": backend,
+        "model": str(getattr(provider, "model_name", "") or ""),
+        "query_prefix_sha256": str(
+            getattr(provider, "query_prefix_sha256", "") or ""
+        ),
+        "provider": str(getattr(provider, "name", "") or ""),
+        "version": str(getattr(provider, "version", "") or ""),
+        "minimum_score": (
+            str(minimum_score) if minimum_score is not None else ""
+        ),
+        "score_normalization": str(
+            getattr(provider, "score_normalization", "provider-normalized 0..1")
+        ),
+        "device_requested": str(getattr(provider, "device", "") or "auto"),
+        "batch_size": str(getattr(provider, "batch_size", "") or ""),
+        **_torch_runtime_metadata(backend),
+    }
+
+
+def _torch_runtime_metadata(backend: str) -> dict[str, str]:
+    if backend != "sentence-transformers":
+        return {}
+    try:
+        torch = importlib.import_module("torch")
+        cuda = torch.cuda
+        cuda_available = bool(cuda.is_available())
+        return {
+            "torch_version": str(getattr(torch, "__version__", "") or "unknown"),
+            "torch_cuda_version": str(
+                getattr(getattr(torch, "version", None), "cuda", "") or "none"
+            ),
+            "cuda_available": str(cuda_available).lower(),
+            "cuda_device_count": str(cuda.device_count() if cuda_available else 0),
+            "cuda_device_name": (
+                str(cuda.get_device_name(0)) if cuda_available else ""
+            ),
+        }
+    except Exception as exc:  # noqa: BLE001 - optional runtime metadata
+        return {
+            "torch_version": "unavailable",
+            "torch_cuda_version": "",
+            "cuda_available": "unknown",
+            "cuda_device_count": "",
+            "cuda_device_name": "",
+            "torch_probe_error": type(exc).__name__,
+        }
 
 
 # --------------------------------------------------------------------------- #
@@ -1233,13 +1306,12 @@ async def _preseed_graph(
         valid_from = _optional_time(record.metadata.get("valid_from"))
         valid_to = _optional_time(record.metadata.get("valid_to"))
         evidence_times = [
-            _optional_time(item.get("at"))
+            parsed
             for item in record.metadata.get("evidence", [])
             if isinstance(item, dict)
+            if (parsed := _optional_time(item.get("at"))) is not None
         ]
-        observed_at = (
-            max(evidence_times, default=record.created_at) or record.created_at
-        )
+        observed_at = max(evidence_times, default=record.created_at)
         episode_id = str(
             uuid5(
                 NAMESPACE_URL,
@@ -2452,52 +2524,10 @@ async def run_ablation(
                     if relation_reranked_index is None
                     else ""
                 ),
-                "metadata": {
-                    "backend": (
-                        str(getattr(relation_reranker, "backend", "") or "")
-                        if relation_reranker is not None
-                        else ""
-                    ),
-                    "model": (
-                        str(getattr(relation_reranker, "model_name", "") or "")
-                        if relation_reranker is not None
-                        else ""
-                    ),
-                    "query_prefix_sha256": (
-                        str(
-                            getattr(
-                                relation_reranker,
-                                "query_prefix_sha256",
-                                "",
-                            )
-                            or ""
-                        )
-                        if relation_reranker is not None
-                        else ""
-                    ),
-                    "provider": (
-                        str(getattr(relation_reranker, "name", "") or "")
-                        if relation_reranker is not None
-                        else ""
-                    ),
-                    "version": (
-                        str(getattr(relation_reranker, "version", "") or "")
-                        if relation_reranker is not None
-                        else ""
-                    ),
-                    "minimum_score": (
-                        str(minimum_reranker_score)
-                        if minimum_reranker_score is not None
-                        else ""
-                    ),
-                    "score_normalization": str(
-                        getattr(
-                            relation_reranker,
-                            "score_normalization",
-                            "provider-normalized 0..1",
-                        )
-                    ),
-                },
+                "metadata": _relation_reranker_runtime_metadata(
+                    relation_reranker,
+                    minimum_reranker_score,
+                ),
             },
         }
         report["elapsed_seconds"] = round(perf_counter() - started, 3)
