@@ -222,6 +222,11 @@ expose a provider-normalized 0..1 score. The report records the selected backend
 model, package version, revision, normalization, dimension, and query-prefix hash.
 Missing packages or model files remain structured `unavailable`.
 
+Use a current evaluation environment for these model families: the upstream Qwen3
+reranker integration targets SentenceTransformers 5.4+, while Qwen3 model loading
+requires Transformers 4.51+. These are benchmark-environment requirements only and
+do not become Doppel runtime dependencies.
+
 Example BGE v2 relation run (the threshold is deliberately illustrative):
 
 ```bash
