@@ -93,6 +93,8 @@
 - Make retrieval reports disclose tracked dirty paths and a hash over the benchmark
   plus all `doppel_memory` Python sources. Relation score sweeps also emit a dev-only
   threshold recommendation using a fixed zero-forbidden/zero-false-abstention rule.
+- Content-address local SentenceTransformers reranker directories in benchmark
+  reports, including a full file-manifest hash and the model weights SHA-256.
 - Add a separate relation-planner quality runner over the existing 65-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and

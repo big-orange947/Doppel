@@ -157,7 +157,10 @@ cross-encoder quality. The runner now exposes distinct
 silently degrade into their non-reranked names: a missing model, missing threshold, or
 load failure produces structured `unavailable`. `relation_reranker` runtime metadata
 records model/version, the explicit threshold, and sigmoid normalization; final-hit
-contributions separately count `relation_reranker` promotions.
+contributions separately count `relation_reranker` promotions. When the model is a
+local directory, the report also hashes every model file into a content-addressed
+manifest and records the `model.safetensors` SHA-256, so renaming or silently
+replacing a local checkpoint cannot masquerade as the same evaluation.
 
 The first local-only BGE run can be invoked after the model is available:
 

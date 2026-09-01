@@ -1229,6 +1229,9 @@ def _relation_reranker_runtime_metadata(
             "score_normalization": "",
             "device_requested": "",
             "batch_size": "",
+            "local_model_manifest_sha256": "",
+            "local_model_file_count": "",
+            "model_weights_sha256": "",
         }
     backend = str(getattr(provider, "backend", "") or "")
     return {
@@ -1247,7 +1250,56 @@ def _relation_reranker_runtime_metadata(
         ),
         "device_requested": str(getattr(provider, "device", "") or "auto"),
         "batch_size": str(getattr(provider, "batch_size", "") or ""),
+        **_local_model_manifest_metadata(
+            str(getattr(provider, "model_name", "") or "")
+        ),
         **_torch_runtime_metadata(backend),
+    }
+
+
+def _local_model_manifest_metadata(model_name: str) -> dict[str, str]:
+    """Content-address a local model directory without trusting its path name."""
+
+    model_path = Path(model_name)
+    if not model_path.is_dir():
+        return {
+            "local_model_manifest_sha256": "",
+            "local_model_file_count": "",
+            "model_weights_sha256": "",
+        }
+    entries: list[dict[str, str | int]] = []
+    weights_sha256 = ""
+    for path in sorted(
+        (item for item in model_path.rglob("*") if item.is_file()),
+        key=lambda item: item.relative_to(model_path).as_posix(),
+    ):
+        relative = path.relative_to(model_path).as_posix()
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            while chunk := stream.read(8 * 1024 * 1024):
+                digest.update(chunk)
+        file_sha256 = digest.hexdigest()
+        entries.append(
+            {
+                "path": relative,
+                "size": path.stat().st_size,
+                "sha256": file_sha256,
+            }
+        )
+        if relative == "model.safetensors":
+            weights_sha256 = file_sha256
+    manifest_payload = json.dumps(
+        entries,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "local_model_manifest_sha256": hashlib.sha256(
+            manifest_payload
+        ).hexdigest(),
+        "local_model_file_count": str(len(entries)),
+        "model_weights_sha256": weights_sha256,
     }
 
 

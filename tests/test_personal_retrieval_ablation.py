@@ -8,6 +8,7 @@ and schema conformance. Live Neo4j/pgvector profiles are only exercised by
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -40,6 +41,7 @@ from benchmarks.personal_retrieval_ablation import (
     _embedding_runtime_metadata,
     _evaluate_result,
     _FastEmbedRelationReranker,
+    _local_model_manifest_metadata,
     _memory_record,
     _relation_reranker_runtime_metadata,
     _run_case,
@@ -160,6 +162,26 @@ def _hit(
 
 
 class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
+    def test_local_model_manifest_is_content_addressed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            model_path = Path(directory)
+            (model_path / "config.json").write_text("{}", encoding="utf-8")
+            (model_path / "model.safetensors").write_bytes(b"weights-v1")
+
+            first = _local_model_manifest_metadata(str(model_path))
+            (model_path / "model.safetensors").write_bytes(b"weights-v2")
+            second = _local_model_manifest_metadata(str(model_path))
+
+        self.assertEqual(first["local_model_file_count"], "2")
+        self.assertEqual(
+            first["model_weights_sha256"],
+            hashlib.sha256(b"weights-v1").hexdigest(),
+        )
+        self.assertNotEqual(
+            first["local_model_manifest_sha256"],
+            second["local_model_manifest_sha256"],
+        )
+
     def test_sentence_transformer_runtime_metadata_records_cuda_environment(
         self,
     ) -> None:
