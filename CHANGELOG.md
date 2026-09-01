@@ -49,7 +49,7 @@
   gate an evidence-eligibility constraint by default: lexical/vector candidates may
   rank qualified graph facts but cannot answer a different relation. Semantic and
   relation candidate reads still run concurrently, and a graph outage retains the
-  configured non-relation fallback. A separate 30-query Chinese relation ablation
+  configured non-relation fallback. A separate 65-query Chinese relation ablation
   draft covers temporal boundaries, exact-scope name collisions, unknown entities,
   and wrong-relation adversaries without paid LLM calls. Profile latency uses one
   discarded warm-up, both dedicated PostgreSQL fixtures and exact Neo4j scopes are
@@ -70,7 +70,7 @@
   accounting distinguishes reranker promotions from ordinary relation matches. A
   missing model, missing threshold, or load failure is structured `unavailable` and
   never silently reported under a reranked profile.
-- Add a separate relation-planner quality runner over the existing 30-query
+- Add a separate relation-planner quality runner over the existing 65-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and
   partition/category accuracy before retrieval executes. Reference-model runs use a
@@ -87,9 +87,10 @@
 - Time-range query filtering now uses overlap with a record's authoritative
   `valid_from`/`valid_to` interval instead of requiring its effective/start instant to
   fall inside the query window. Common temporal-status aliases normalize at the
-  query-draft boundary. The live 30-query relation ablation covers subject-only
-  questions and continues to require zero scope, provenance, temporal, and forbidden
-  relation failures in the gated relation profiles.
+  query-draft boundary. The live 65-query relation ablation covers subject-only
+  questions and continues to require zero scope, provenance, and temporal failures;
+  wrong-relation forbidden hits remain an explicit quality failure instead of being
+  folded into those security gates.
 - The personal retrieval ablation can consume a successful planner-quality report
   as a third `report` planner mode. It requires an exact dataset fingerprint, hashes
   the source report, performs zero provider calls during replay, and reuses each
@@ -116,6 +117,15 @@
   On the draft 30-query live v6 replay this raised relation evidence recall from
   13/22 to 16/22 while forbidden, scope, temporal, provenance, and security failures
   remained zero; six synonym/abstraction misses remain and are not hidden.
+- Expand the relation ablation from 14 memories / 30 queries / 3 owner scopes to
+  28 memories / 65 queries / 5 owner scopes. New heldout and adversarial cases cover
+  one entity carrying several valid relation types, colloquial paraphrases, expired
+  possession, compositional false edges, and repeated object names across owners.
+  Dataset validation now rejects duplicate gold IDs, inverted validity intervals,
+  contradictory required/forbidden labels, abstention cases with required answers,
+  and unmet declared minimum counts. The expanded zero-LLM live baseline records
+  0.72 relation Recall@1 with one forbidden hit, versus 0.90 vector Recall@1 with
+  19 forbidden hits; scope, temporal, provenance, and security failures remain zero.
 - Personal-memory queries now derive one evidence-eligibility filter from the trusted
   plan for full scans, lexical candidates, semantic candidates, and final Store
   revalidation. Agent-authored output cannot become an owner/contact fact; human and

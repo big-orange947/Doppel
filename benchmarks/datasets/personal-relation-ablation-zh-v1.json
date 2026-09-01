@@ -1,15 +1,17 @@
 {
   "suite": "doppel-personal-relation-ablation-zh-v1",
-  "suite_version": "1.0.0-draft",
+  "suite_version": "1.1.0-draft",
   "language": "zh-CN",
   "status": "draft",
   "frozen": false,
   "publication_ready": false,
-  "description": "Relation-only retrieval draft: explicit entity anchors, rich-edge temporal gold, wrong-relation adversaries, and exact-scope collisions. No LLM extraction is involved.",
+  "description": "Relation-only retrieval draft: explicit entity anchors, rich-edge temporal gold, same-entity multi-relation distractors, paraphrase recovery, wrong-relation adversaries, expired relations, and exact-scope collisions. No LLM extraction is involved.",
   "scopes": {
     "owner_a": {"user_id": "relation-owner-a", "agent_id": "echo", "display_name": "owner-a"},
     "owner_b": {"user_id": "relation-owner-b", "agent_id": "echo", "display_name": "owner-b"},
-    "owner_c": {"user_id": "relation-owner-c", "agent_id": "echo", "display_name": "owner-c"}
+    "owner_c": {"user_id": "relation-owner-c", "agent_id": "echo", "display_name": "owner-c"},
+    "owner_d": {"user_id": "relation-owner-d", "agent_id": "echo", "display_name": "owner-d"},
+    "owner_e": {"user_id": "relation-owner-e", "agent_id": "echo", "display_name": "owner-e"}
   },
   "fixtures": [
     {
@@ -117,6 +119,118 @@
       "relation": {"source_entity": "备用钥匙", "relation_type": "HELD_BY", "target_entity": "李然", "fact": "备用钥匙由李然保管，在李然手里。"}
     },
     {
+      "memory_id": "rel-a-book-recommended-chen", "scope": "owner_a",
+      "content": "《银河帝国》是陈明推荐给我的。",
+      "personal_memory_type": "fact", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2025-11-03T00:00:00Z", "topic_key": "origin.recommendation.book.galactic-empire",
+      "evidence": [{"message_id": "rel-msg-a-book-recommended", "at": "2025-11-03T20:00:00Z"}],
+      "relation": {"source_entity": "《银河帝国》", "relation_type": "RECOMMENDED_BY", "target_entity": "陈明", "fact": "《银河帝国》由陈明推荐，是陈明推荐给我的书。"}
+    },
+    {
+      "memory_id": "rel-a-passport-issued-entry", "scope": "owner_a",
+      "content": "现在这本护照由上海市公安局出入境管理局签发。",
+      "personal_memory_type": "fact", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2024-09-18T00:00:00Z", "topic_key": "identity.passport.issuer",
+      "evidence": [{"message_id": "rel-msg-a-passport-issued", "at": "2024-09-18T10:00:00Z"}],
+      "relation": {"source_entity": "护照", "relation_type": "ISSUED_BY", "target_entity": "上海市公安局出入境管理局", "fact": "护照由上海市公安局出入境管理局签发。"}
+    },
+    {
+      "memory_id": "rel-a-laptop-repaired-gao", "scope": "owner_a",
+      "content": "旧笔记本由远航维修店的高师傅负责检修。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-08-20T00:00:00Z", "topic_key": "repair.old-laptop",
+      "evidence": [{"message_id": "rel-msg-a-laptop-repaired", "at": "2026-08-20T16:05:00Z"}],
+      "relation": {"source_entity": "旧笔记本电脑", "relation_type": "REPAIRED_BY", "target_entity": "远航维修店高师傅", "fact": "旧笔记本电脑由远航维修店高师傅检修，高师傅正在维修。"}
+    },
+    {
+      "memory_id": "rel-a-dog-adopted-huancheng", "scope": "owner_a",
+      "content": "豆包是我在环城流浪动物救助站领养的。",
+      "personal_memory_type": "fact", "temporal_status": "historical", "state": "confirmed",
+      "valid_from": "2022-10-06T00:00:00Z", "topic_key": "origin.dog.doubao",
+      "evidence": [{"message_id": "rel-msg-a-dog-adopted", "at": "2022-10-06T14:00:00Z"}],
+      "relation": {"source_entity": "豆包", "relation_type": "ADOPTED_FROM", "target_entity": "环城流浪动物救助站", "fact": "豆包从环城流浪动物救助站领养，是在那里领回来的。"}
+    },
+    {
+      "memory_id": "rel-a-violin-wang-current", "scope": "owner_a",
+      "content": "小提琴现在借放在王宁家，由王宁保管。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-08-10T00:00:00Z", "topic_key": "possession.violin",
+      "evidence": [{"message_id": "rel-msg-a-violin-current", "at": "2026-08-10T12:00:00Z"}],
+      "relation": {"source_entity": "小提琴", "relation_type": "HELD_BY", "target_entity": "王宁", "fact": "小提琴目前由王宁保管，借放在王宁家。"}
+    },
+    {
+      "memory_id": "rel-a-violin-zhou-history", "scope": "owner_a",
+      "content": "小提琴七月底以前一直由周岚保管，后来转交给王宁。",
+      "personal_memory_type": "state", "temporal_status": "historical", "state": "superseded",
+      "valid_from": "2026-02-01T00:00:00Z", "valid_to": "2026-07-31T23:59:59Z", "topic_key": "possession.violin",
+      "evidence": [{"message_id": "rel-msg-a-violin-history", "at": "2026-02-01T12:00:00Z"}],
+      "relation": {"source_entity": "小提琴", "relation_type": "HELD_BY", "target_entity": "周岚", "fact": "小提琴以前由周岚保管，当时在周岚手里。"}
+    },
+    {
+      "memory_id": "rel-a-bike-loaned-zhao", "scope": "owner_a",
+      "content": "折叠自行车借给赵晨了，九月中旬前不用还。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-08-22T00:00:00Z", "valid_to": "2026-09-15T23:59:59Z", "topic_key": "loan.folding-bike",
+      "evidence": [{"message_id": "rel-msg-a-bike-loaned", "at": "2026-08-22T18:00:00Z"}],
+      "relation": {"source_entity": "折叠自行车", "relation_type": "LOANED_TO", "target_entity": "赵晨", "fact": "折叠自行车借给赵晨，目前由赵晨借用。"}
+    },
+    {
+      "memory_id": "rel-a-bike-repaired-ruixing", "scope": "owner_a",
+      "content": "折叠自行车去年在瑞兴车行修过变速器。",
+      "personal_memory_type": "episode", "temporal_status": "historical", "state": "confirmed",
+      "valid_from": "2025-09-12T00:00:00Z", "valid_to": "2025-09-12T23:59:59Z", "topic_key": "repair.folding-bike", "event_key": "repair.folding-bike.2025-09-12",
+      "evidence": [{"message_id": "rel-msg-a-bike-repaired", "at": "2025-09-12T17:00:00Z"}],
+      "relation": {"source_entity": "折叠自行车", "relation_type": "REPAIRED_AT", "target_entity": "瑞兴车行", "fact": "折叠自行车曾在瑞兴车行维修，变速器在那里修过。"}
+    },
+    {
+      "memory_id": "rel-a-access-card-reception-history", "scope": "owner_a",
+      "content": "门禁卡上周曾放在前台，8月25日已经取回。",
+      "personal_memory_type": "state", "temporal_status": "historical", "state": "superseded",
+      "valid_from": "2026-08-18T00:00:00Z", "valid_to": "2026-08-25T09:00:00Z", "topic_key": "possession.access-card",
+      "evidence": [{"message_id": "rel-msg-a-access-card-history", "at": "2026-08-18T09:00:00Z"}],
+      "relation": {"source_entity": "门禁卡", "relation_type": "HELD_BY", "target_entity": "公司前台", "fact": "门禁卡曾由公司前台保管，8月25日之前在前台。"}
+    },
+    {
+      "memory_id": "rel-a-contract-cabinet-current", "scope": "owner_a",
+      "content": "租房合同原件收在书房灰色文件柜第二层。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-01-16T00:00:00Z", "topic_key": "location.rental-contract",
+      "evidence": [{"message_id": "rel-msg-a-contract", "at": "2026-01-16T21:00:00Z"}],
+      "relation": {"source_entity": "租房合同原件", "relation_type": "STORED_IN", "target_entity": "书房灰色文件柜第二层", "fact": "租房合同原件存放在书房灰色文件柜第二层。"}
+    },
+    {
+      "memory_id": "rel-d-passport-bank-current", "scope": "owner_d",
+      "content": "护照寄存在银行保险箱。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-02-20T00:00:00Z", "topic_key": "location.passport",
+      "evidence": [{"message_id": "rel-msg-d-passport", "at": "2026-02-20T10:00:00Z"}],
+      "relation": {"source_entity": "护照", "relation_type": "STORED_IN", "target_entity": "银行保险箱", "fact": "护照存放在银行保险箱。"}
+    },
+    {
+      "memory_id": "rel-d-violin-wang-current", "scope": "owner_d",
+      "content": "小提琴交给王宁老师保管。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-06-01T00:00:00Z", "topic_key": "possession.violin",
+      "evidence": [{"message_id": "rel-msg-d-violin", "at": "2026-06-01T12:00:00Z"}],
+      "relation": {"source_entity": "小提琴", "relation_type": "HELD_BY", "target_entity": "王宁老师", "fact": "小提琴由王宁老师保管。"}
+    },
+    {
+      "memory_id": "rel-e-laptop-office-current", "scope": "owner_e",
+      "content": "旧笔记本电脑放在办公室靠窗的柜子里。",
+      "personal_memory_type": "state", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-04-04T00:00:00Z", "topic_key": "location.old-laptop",
+      "evidence": [{"message_id": "rel-msg-e-laptop", "at": "2026-04-04T15:00:00Z"}],
+      "relation": {"source_entity": "旧笔记本电脑", "relation_type": "LOCATED_AT", "target_entity": "办公室靠窗柜子", "fact": "旧笔记本电脑位于办公室靠窗的柜子。"}
+    },
+    {
+      "memory_id": "rel-e-book-recommended-li", "scope": "owner_e",
+      "content": "《银河帝国》是李然推荐给我的。",
+      "personal_memory_type": "fact", "temporal_status": "current", "state": "confirmed",
+      "valid_from": "2026-01-02T00:00:00Z", "topic_key": "origin.recommendation.book.galactic-empire",
+      "evidence": [{"message_id": "rel-msg-e-book-recommended", "at": "2026-01-02T20:00:00Z"}],
+      "relation": {"source_entity": "《银河帝国》", "relation_type": "RECOMMENDED_BY", "target_entity": "李然", "fact": "《银河帝国》由李然推荐。"}
+    },
+    {
       "memory_id": "rel-a-fallback-agent-guess", "scope": "owner_a",
       "content": "系统猜测《银河帝国》可能在另一个联系人那里。",
       "authority": "agent_output", "personal_memory_type": "state", "temporal_status": "current", "state": "candidate",
@@ -155,12 +269,47 @@
     {"query_id":"rel-q27","query":"2026年5月14日相机位于哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","accepted_intents":["as_of","history"],"as_of":"2026-05-14T12:00:00Z","accept_interval_covering_as_of":true,"entity_mentions":["相机"],"relation_hints":["位于"],"required_memory_ids":["rel-a-camera-home-history"],"forbidden_memory_ids":["rel-a-camera-studio-current"],"category":"temporal_boundary","partition":"dev"},
     {"query_id":"rel-q28","query":"2026年5月15日相机放在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","accepted_intents":["as_of","history"],"as_of":"2026-05-15T12:00:00Z","accept_interval_covering_as_of":true,"entity_mentions":["相机"],"relation_hints":["放在"],"required_memory_ids":["rel-a-camera-studio-current"],"forbidden_memory_ids":["rel-a-camera-home-history"],"category":"temporal_boundary","partition":"heldout"},
     {"query_id":"rel-q29","query":"护照由谁保管？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","current"],"entity_mentions":["护照"],"relation_hints":["保管"],"forbidden_memory_ids":["rel-a-passport-drawer-current"],"expected_abstain":true,"category":"wrong_relation","partition":"adversarial"},
-    {"query_id":"rel-q30","query":"旧笔记本电脑由谁购买？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","history"],"entity_mentions":["旧笔记本电脑"],"relation_hints":["购买"],"forbidden_memory_ids":["rel-a-laptop-repair-current"],"expected_abstain":true,"category":"wrong_relation","partition":"heldout"}
+    {"query_id":"rel-q30","query":"旧笔记本电脑由谁购买？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","history"],"entity_mentions":["旧笔记本电脑"],"relation_hints":["购买"],"forbidden_memory_ids":["rel-a-laptop-repair-current"],"expected_abstain":true,"category":"wrong_relation","partition":"heldout"},
+    {"query_id":"rel-q31","query":"《银河帝国》是谁推荐给我的？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","history"],"entity_mentions":["《银河帝国》"],"relation_hints":["推荐"],"required_memory_ids":["rel-a-book-recommended-chen"],"forbidden_memory_ids":["rel-a-book-linxiao-current","rel-a-book-zhang-history","rel-e-book-recommended-li"],"category":"same_entity_multi_relation","partition":"dev"},
+    {"query_id":"rel-q32","query":"当初是谁给我安利的《银河帝国》？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","history"],"entity_mentions":["《银河帝国》"],"relation_hints":["安利"],"required_memory_ids":["rel-a-book-recommended-chen"],"forbidden_memory_ids":["rel-a-book-linxiao-current","rel-a-book-zhang-history"],"category":"semantic_paraphrase","partition":"heldout","note":"Lexical baseline should not be given a fixture synonym; a reranker may recover it from query and fact semantics."},
+    {"query_id":"rel-q33","query":"不是问谁推荐的，我那套《银河帝国》现在到底在谁手上？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["《银河帝国》"],"relation_hints":["手上"],"required_memory_ids":["rel-a-book-linxiao-current"],"forbidden_memory_ids":["rel-a-book-recommended-chen","rel-a-book-zhang-history"],"category":"same_entity_multi_relation","partition":"adversarial"},
+    {"query_id":"rel-q34","query":"我的护照由哪个机构签发？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","current"],"entity_mentions":["护照"],"relation_hints":["签发"],"required_memory_ids":["rel-a-passport-issued-entry"],"forbidden_memory_ids":["rel-a-passport-drawer-current","rel-d-passport-bank-current"],"category":"same_entity_multi_relation","partition":"dev"},
+    {"query_id":"rel-q35","query":"这本护照是哪儿出的？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","current"],"entity_mentions":["护照"],"relation_hints":["哪儿出的"],"required_memory_ids":["rel-a-passport-issued-entry"],"forbidden_memory_ids":["rel-a-passport-drawer-current"],"category":"semantic_paraphrase","partition":"heldout"},
+    {"query_id":"rel-q36","query":"护照呢，我塞哪儿了来着？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["护照"],"relation_hints":["塞哪儿"],"required_memory_ids":["rel-a-passport-drawer-current"],"forbidden_memory_ids":["rel-a-passport-issued-entry","rel-d-passport-bank-current"],"category":"semantic_paraphrase","partition":"adversarial"},
+    {"query_id":"rel-q37","query":"旧笔记本电脑由谁负责维修？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","accepted_intents":["current","lookup"],"entity_mentions":["旧笔记本电脑"],"relation_hints":["维修"],"required_memory_ids":["rel-a-laptop-repaired-gao"],"forbidden_memory_ids":["rel-a-laptop-repair-current","rel-e-laptop-office-current"],"category":"same_entity_multi_relation","partition":"dev"},
+    {"query_id":"rel-q38","query":"那台旧电脑现在是谁在弄？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","accepted_intents":["current","lookup"],"entity_mentions":["旧笔记本电脑"],"relation_hints":["在弄"],"required_memory_ids":["rel-a-laptop-repaired-gao"],"forbidden_memory_ids":["rel-a-laptop-repair-current"],"category":"semantic_paraphrase","partition":"heldout"},
+    {"query_id":"rel-q39","query":"旧笔记本电脑现在在哪儿，不是问谁修？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["旧笔记本电脑"],"relation_hints":["在哪儿"],"required_memory_ids":["rel-a-laptop-repair-current"],"forbidden_memory_ids":["rel-a-laptop-repaired-gao","rel-e-laptop-office-current"],"category":"same_entity_multi_relation","partition":"adversarial"},
+    {"query_id":"rel-q40","query":"豆包是从哪个救助站领养的？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","accepted_intents":["history","lookup"],"entity_mentions":["豆包"],"relation_hints":["领养"],"required_memory_ids":["rel-a-dog-adopted-huancheng"],"forbidden_memory_ids":["rel-a-dog-anhe-current"],"category":"same_entity_multi_relation","partition":"dev"},
+    {"query_id":"rel-q41","query":"豆包当初是从哪儿抱回来的？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","accepted_intents":["history","lookup"],"entity_mentions":["豆包"],"relation_hints":["抱回来"],"required_memory_ids":["rel-a-dog-adopted-huancheng"],"forbidden_memory_ids":["rel-a-dog-anhe-current"],"category":"semantic_paraphrase","partition":"heldout"},
+    {"query_id":"rel-q42","query":"我问的是现在谁给豆包复诊，不是从哪儿领养的。","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["豆包"],"relation_hints":["复诊"],"required_memory_ids":["rel-a-dog-anhe-current"],"forbidden_memory_ids":["rel-a-dog-adopted-huancheng"],"category":"same_entity_multi_relation","partition":"adversarial"},
+    {"query_id":"rel-q43","query":"小提琴现在由谁保管？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["小提琴"],"relation_hints":["保管"],"required_memory_ids":["rel-a-violin-wang-current"],"forbidden_memory_ids":["rel-a-violin-zhou-history","rel-d-violin-wang-current"],"category":"current_relation","partition":"dev"},
+    {"query_id":"rel-q44","query":"小提琴之前在谁那儿？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["小提琴"],"relation_hints":["谁那儿"],"required_memory_ids":["rel-a-violin-zhou-history"],"forbidden_memory_ids":["rel-a-violin-wang-current"],"category":"semantic_paraphrase","partition":"heldout"},
+    {"query_id":"rel-q45","query":"2026年6月小提琴在谁手里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","accepted_intents":["as_of","history"],"as_of":"2026-06-15T12:00:00Z","accept_interval_covering_as_of":true,"entity_mentions":["小提琴"],"relation_hints":["手里"],"required_memory_ids":["rel-a-violin-zhou-history"],"forbidden_memory_ids":["rel-a-violin-wang-current"],"category":"as_of_relation","partition":"dev"},
+    {"query_id":"rel-q46","query":"8月10日以后小提琴交给谁了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","accepted_intents":["as_of","history"],"as_of":"2026-08-11T12:00:00Z","accept_interval_covering_as_of":true,"entity_mentions":["小提琴"],"relation_hints":["交给"],"required_memory_ids":["rel-a-violin-wang-current"],"forbidden_memory_ids":["rel-a-violin-zhou-history"],"category":"temporal_boundary","partition":"heldout"},
+    {"query_id":"rel-q47","query":"折叠自行车借给谁了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["折叠自行车"],"relation_hints":["借给"],"required_memory_ids":["rel-a-bike-loaned-zhao"],"forbidden_memory_ids":["rel-a-bike-repaired-ruixing"],"category":"same_entity_multi_relation","partition":"dev"},
+    {"query_id":"rel-q48","query":"我的折叠车这阵子给谁骑着呢？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["折叠自行车"],"relation_hints":["给谁骑"],"required_memory_ids":["rel-a-bike-loaned-zhao"],"forbidden_memory_ids":["rel-a-bike-repaired-ruixing"],"category":"semantic_paraphrase","partition":"heldout"},
+    {"query_id":"rel-q49","query":"折叠自行车去年在哪家车行维修？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["折叠自行车"],"relation_hints":["维修"],"required_memory_ids":["rel-a-bike-repaired-ruixing"],"forbidden_memory_ids":["rel-a-bike-loaned-zhao"],"category":"same_entity_multi_relation","partition":"dev"},
+    {"query_id":"rel-q50","query":"折叠车的变速器之前在哪儿弄过？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["折叠自行车"],"relation_hints":["弄过"],"required_memory_ids":["rel-a-bike-repaired-ruixing"],"forbidden_memory_ids":["rel-a-bike-loaned-zhao"],"category":"semantic_paraphrase","partition":"adversarial"},
+    {"query_id":"rel-q51","query":"十月了，折叠自行车还在赵晨那里吗？","scopes":["owner_a"],"now":"2026-10-01T12:00:00Z","intent":"current","entity_mentions":["折叠自行车","赵晨"],"relation_hints":["还在"],"forbidden_memory_ids":["rel-a-bike-loaned-zhao","rel-a-bike-repaired-ruixing"],"expected_abstain":true,"category":"expired_relation","partition":"adversarial"},
+    {"query_id":"rel-q52","query":"门禁卡现在还在公司前台吗？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["门禁卡","公司前台"],"relation_hints":["还在"],"forbidden_memory_ids":["rel-a-access-card-reception-history"],"expected_abstain":true,"category":"expired_relation","partition":"adversarial"},
+    {"query_id":"rel-q53","query":"门禁卡之前交给谁保管过？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["门禁卡"],"relation_hints":["保管"],"required_memory_ids":["rel-a-access-card-reception-history"],"category":"history_relation","partition":"dev"},
+    {"query_id":"rel-q54","query":"8月20日门禁卡在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"as_of","accepted_intents":["as_of","history"],"as_of":"2026-08-20T12:00:00Z","accept_interval_covering_as_of":true,"entity_mentions":["门禁卡"],"relation_hints":["在哪里"],"required_memory_ids":["rel-a-access-card-reception-history"],"category":"as_of_relation","partition":"heldout"},
+    {"query_id":"rel-q55","query":"租房合同原件存放在哪里？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["租房合同原件"],"relation_hints":["存放"],"required_memory_ids":["rel-a-contract-cabinet-current"],"category":"current_relation","partition":"dev"},
+    {"query_id":"rel-q56","query":"租房那份纸质合同我塞哪个柜子了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["租房合同原件"],"relation_hints":["塞哪个柜子"],"required_memory_ids":["rel-a-contract-cabinet-current"],"category":"semantic_paraphrase","partition":"heldout"},
+    {"query_id":"rel-q57","query":"我的护照放在哪里？","scopes":["owner_d"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["护照"],"relation_hints":["放在"],"required_memory_ids":["rel-d-passport-bank-current"],"forbidden_memory_ids":["rel-a-passport-drawer-current","rel-a-passport-issued-entry"],"category":"scope_collision","partition":"adversarial"},
+    {"query_id":"rel-q58","query":"我的小提琴是谁保管的？","scopes":["owner_d"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["小提琴"],"relation_hints":["保管"],"required_memory_ids":["rel-d-violin-wang-current"],"forbidden_memory_ids":["rel-a-violin-wang-current","rel-a-violin-zhou-history"],"category":"scope_collision","partition":"adversarial"},
+    {"query_id":"rel-q59","query":"旧笔记本电脑现在在哪？","scopes":["owner_e"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["旧笔记本电脑"],"relation_hints":["在哪"],"required_memory_ids":["rel-e-laptop-office-current"],"forbidden_memory_ids":["rel-a-laptop-repair-current","rel-a-laptop-repaired-gao"],"category":"scope_collision","partition":"adversarial"},
+    {"query_id":"rel-q60","query":"《银河帝国》谁推荐给我的？","scopes":["owner_e"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","history"],"entity_mentions":["《银河帝国》"],"relation_hints":["推荐"],"required_memory_ids":["rel-e-book-recommended-li"],"forbidden_memory_ids":["rel-a-book-recommended-chen","rel-a-book-linxiao-current"],"category":"scope_collision","partition":"adversarial"},
+    {"query_id":"rel-q61","query":"快递包裹现在在哪个驿站？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["快递包裹"],"relation_hints":["驿站"],"expected_abstain":true,"category":"unknown_entity","partition":"heldout"},
+    {"query_id":"rel-q62","query":"纪念戒指交给谁保管了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["纪念戒指"],"relation_hints":["保管"],"expected_abstain":true,"category":"unknown_entity","partition":"adversarial"},
+    {"query_id":"rel-q63","query":"陈明把《银河帝国》放在哪里了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["《银河帝国》","陈明"],"relation_hints":["放在"],"forbidden_memory_ids":["rel-a-book-recommended-chen","rel-a-book-linxiao-current"],"expected_abstain":true,"category":"entity_relation_composition","partition":"adversarial","adversarial_note":"Both entities exist, but no edge states that Chen stores the book."},
+    {"query_id":"rel-q64","query":"护照是什么时候续签的？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["护照"],"relation_hints":["续签"],"forbidden_memory_ids":["rel-a-passport-issued-entry","rel-a-passport-drawer-current"],"expected_abstain":true,"category":"wrong_relation","partition":"heldout"},
+    {"query_id":"rel-q65","query":"旧笔记本电脑属于谁？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","accepted_intents":["lookup","current"],"entity_mentions":["旧笔记本电脑"],"relation_hints":["属于"],"forbidden_memory_ids":["rel-a-laptop-repair-current","rel-a-laptop-repaired-gao"],"expected_abstain":true,"category":"wrong_relation","partition":"adversarial"}
   ],
   "requirements": {
     "relation_benchmark": true,
-    "min_queries": 30,
-    "min_scopes": 3,
+    "min_queries": 65,
+    "min_scopes": 5,
     "zero_paid_llm_calls": true,
     "required_profiles": ["lexical", "lexical_vector", "lexical_relation", "lexical_vector_relation"]
   }

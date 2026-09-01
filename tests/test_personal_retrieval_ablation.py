@@ -249,8 +249,9 @@ class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
 class DatasetTest(unittest.TestCase):
     def test_relation_dataset_has_edge_gold_and_adversarial_coverage(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
-        self.assertEqual(len(dataset.queries), 30)
-        self.assertGreaterEqual(len(dataset.scopes), 3)
+        self.assertEqual(len(dataset.queries), 65)
+        self.assertEqual(len(dataset.fixtures), 28)
+        self.assertGreaterEqual(len(dataset.scopes), 5)
         self.assertTrue(
             all(
                 query.entity_mentions or query.relation_hints
@@ -267,6 +268,38 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(
             any(query.category == "scope_collision" for query in dataset.queries)
         )
+        self.assertGreaterEqual(
+            sum(
+                query.category == "semantic_paraphrase"
+                for query in dataset.queries
+            ),
+            8,
+        )
+        self.assertGreaterEqual(
+            sum(
+                query.category == "same_entity_multi_relation"
+                for query in dataset.queries
+            ),
+            8,
+        )
+        self.assertTrue(
+            any(query.category == "expired_relation" for query in dataset.queries)
+        )
+        partitions = {query.partition for query in dataset.queries}
+        self.assertEqual(partitions, {"dev", "heldout", "adversarial"})
+
+    def test_dataset_model_rejects_duplicate_gold_ids(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        duplicate_fixture = dataset.model_dump(mode="python")
+        duplicate_fixture["fixtures"].append(duplicate_fixture["fixtures"][0])
+        with self.assertRaisesRegex(ValueError, "duplicate fixture IDs"):
+            AblationDataset.model_validate(duplicate_fixture)
+
+        duplicate_query = dataset.model_dump(mode="python")
+        duplicate_query["queries"].append(duplicate_query["queries"][0])
+        duplicate_query["requirements"]["min_queries"] += 1
+        with self.assertRaisesRegex(ValueError, "duplicate query IDs"):
+            AblationDataset.model_validate(duplicate_query)
 
     def test_relation_dataset_validator_rejects_missing_anchor(self) -> None:
         from benchmarks.personal_retrieval_ablation import validate_dataset_semantics
@@ -965,6 +998,10 @@ class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
 class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
     async def test_relation_profile_runs_engine_and_attributes_gold_hits(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        # Keep this unit focused on contribution accounting over the original
+        # exact-surface cases. The expanded paraphrase/adversarial partition is
+        # intentionally allowed to expose false promotions in live ablations.
+        dataset = dataset.model_copy(update={"queries": dataset.queries[:30]})
         scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
         store = InMemoryStore()
         records = [

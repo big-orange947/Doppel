@@ -76,7 +76,7 @@ async def test_gold_planner_scores_every_relation_case() -> None:
 
     report = await run_relation_planner_quality(dataset, planner)
 
-    assert report["metrics"]["case_count"] == 30
+    assert report["metrics"]["case_count"] == 65
     assert report["metrics"]["provider_error_count"] == 0
     assert report["metrics"]["structural_failure_count"] == 0
     assert report["metrics"]["exact_structure_accuracy"] == 1

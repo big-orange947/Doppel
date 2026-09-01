@@ -110,10 +110,11 @@ inferred by renaming the existing graph profile or by treating fallback edges as
 relations.
 
 The separate draft fixture
-`datasets/personal-relation-ablation-zh-v1.json` provides that edge-level gold: 14
-authoritative memories, 30 queries, 3 exact owner scopes, explicit entity anchors,
+`datasets/personal-relation-ablation-zh-v1.json` provides that edge-level gold: 28
+authoritative memories, 65 queries, 5 exact owner scopes, explicit entity anchors,
 rich relation facts, current/history/as-of boundaries, same-name cross-scope
-collisions, unknown entities, and wrong-relation adversaries. Run the four relation
+collisions, same-entity multi-relation distractors, colloquial paraphrases, expired
+relations, unknown entities, and wrong-relation adversaries. Run the four relation
 ablation paths with zero paid LLM calls:
 
 ```bash
@@ -150,7 +151,7 @@ fragment expansion contains no fixture vocabulary and must retain zero forbidden
 on the wrong-relation adversarial partition.
 
 `RelationReranker` is now an injectable, text-only edge scoring protocol, but this
-30-query draft does not calibrate its threshold and no checked-in result claims
+65-query draft does not calibrate its threshold and no checked-in result claims
 cross-encoder quality. The runner now exposes distinct
 `lexical_relation_reranked` and `lexical_vector_relation_reranked` profiles. They never
 silently degrade into their non-reranked names: a missing model, missing threshold, or
@@ -183,17 +184,47 @@ recovery from real Planner paraphrases, repeat the same profiles with
 `--planner-modes report --planner-report <cached-report>`; report replay makes zero LLM
 calls and preserves Planner failures as a separate attribution bucket.
 
+Model selection is deliberately an ablation, not a framework constant. The current
+FastEmbed harness supports `BAAI/bge-reranker-base`, so it remains the small,
+reproducible operational baseline. The next comparison matrix is:
+
+| candidate | role | license | current harness |
+| --- | --- | --- | --- |
+| `BAAI/bge-reranker-base` | lightweight baseline | MIT | FastEmbed |
+| `BAAI/bge-reranker-v2-m3` | multilingual quality candidate, 0.6B | Apache-2.0 | adapter required |
+| `Qwen/Qwen3-Reranker-0.6B` | instruction-aware 100+ language candidate | Apache-2.0 | adapter required |
+| `Qwen/Qwen3-Reranker-4B` | maximum-quality GPU profile candidate | Apache-2.0 | adapter required |
+| `jinaai/jina-reranker-v2-base-multilingual` | research-only comparison | CC-BY-NC-4.0 | FastEmbed; never a general default |
+
+No model is promoted from public leaderboard numbers. A candidate must win on this
+dataset's heldout/adversarial partitions after threshold sweep while preserving zero
+scope/time/provenance failures and not increasing forbidden hits beyond an explicitly
+reviewed budget. Reports must also include p50/p95 latency, peak host/GPU memory,
+model revision, score normalization, and offline availability. Doppel may eventually
+publish a lightweight profile and a highest-quality profile; the public protocol
+remains provider-neutral in either case.
+
+The embedding model is a separate decision. `BAAI/bge-small-zh-v1.5` remains the
+512-dimensional low-cost baseline used by the current reproducible pgvector run; its
+high recall does not make it a relation classifier. Candidate replacement profiles
+are `BAAI/bge-m3` (1024 dimensions; dense/sparse/multi-vector capable) and the
+instruction-aware Qwen3-Embedding family. Qwen3 4B/8B native dimensions exceed
+pgvector's 2,000-dimension HNSW `vector` limit, so a fair Doppel run must use the
+models' supported reduced output dimension (for example 1024), record that choice,
+create a new vector namespace, and rebuild the derived index. It must never reuse or
+reinterpret vectors produced by the existing 512-dimensional provider.
+
 ### Natural-language relation planner quality
 
 Retrieval ablation uses an oracle plan so graph quality is not confused with planner
 quality. `relation_planner_quality.py` evaluates the real planner separately over the
-same 30 natural-language questions and the same dev/heldout/adversarial partitions:
+same 65 natural-language questions and the same dev/heldout/adversarial partitions:
 
 ```bash
 # zero-network structural baseline
 uv run python -m benchmarks.relation_planner_quality `
   --planner deterministic --no-cache `
-  --max-structural-failures 30 `
+  --max-structural-failures 65 `
   --output data/doppel/relation-planner-deterministic.json
 
 # OpenAI-compatible reference planner; credentials stay in the environment
@@ -202,7 +233,7 @@ $env:DOPPEL_OPENAI_BASE_URL = "https://api.deepseek.com"
 $env:DOPPEL_SCHEMA_MODE = "json_object"
 $env:DOPPEL_API_KEY = "..."
 uv run python -m benchmarks.relation_planner_quality `
-  --planner reference --max-calls 30 `
+  --planner reference --max-calls 65 `
   --max-completion-tokens 768 --max-tokens-parameter max_tokens `
   --thinking disabled `
   --output data/doppel/relation-planner-deepseek.json
@@ -228,7 +259,7 @@ fingerprint, and `provider_calls=0`:
 ```bash
 uv run python -m benchmarks.relation_planner_quality `
   --replay-report data/doppel/relation-planner-deepseek.json --no-cache `
-  --max-structural-failures 30 `
+  --max-structural-failures 65 `
   --output data/doppel/relation-planner-deepseek-rescored.json
 ```
 

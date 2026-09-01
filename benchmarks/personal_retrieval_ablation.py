@@ -44,6 +44,7 @@ import platform
 import re
 import sys
 import tempfile
+from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -220,6 +221,18 @@ class AblationDataset(BaseModel):
 
     @model_validator(mode="after")
     def _references_known_scopes(self) -> AblationDataset:
+        fixture_ids = [item.memory_id for item in self.fixtures]
+        duplicate_fixture_ids = sorted(
+            item for item, count in Counter(fixture_ids).items() if count > 1
+        )
+        if duplicate_fixture_ids:
+            raise ValueError(f"duplicate fixture IDs: {duplicate_fixture_ids}")
+        query_ids = [item.query_id for item in self.queries]
+        duplicate_query_ids = sorted(
+            item for item, count in Counter(query_ids).items() if count > 1
+        )
+        if duplicate_query_ids:
+            raise ValueError(f"duplicate query IDs: {duplicate_query_ids}")
         known = set(self.scopes)
         unknown_fixtures = sorted(
             {item.scope for item in self.fixtures}.difference(known)
@@ -231,6 +244,16 @@ class AblationDataset(BaseModel):
         )
         if unknown_queries:
             raise ValueError(f"queries reference unknown scopes: {unknown_queries}")
+        minimum_queries = int(self.requirements.get("min_queries", 0) or 0)
+        if len(self.queries) < minimum_queries:
+            raise ValueError(
+                f"dataset has {len(self.queries)} queries; requires {minimum_queries}"
+            )
+        minimum_scopes = int(self.requirements.get("min_scopes", 0) or 0)
+        if len(self.scopes) < minimum_scopes:
+            raise ValueError(
+                f"dataset has {len(self.scopes)} scopes; requires {minimum_scopes}"
+            )
         return self
 
     @property
@@ -269,6 +292,12 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     relation_benchmark = bool(dataset.requirements.get("relation_benchmark", False))
     for item in dataset.fixtures:
         scope_user = scope_ids.get(item.scope, "")
+        if (
+            item.valid_from is not None
+            and item.valid_to is not None
+            and item.valid_to < item.valid_from
+        ):
+            failures.append(f"{item.memory_id}: valid_to precedes valid_from")
         if item.event_key and item.personal_memory_type != "episode":
             failures.append(
                 f"{item.memory_id}: event_key present but memory_type is not episode"
@@ -288,6 +317,17 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     for query in dataset.queries:
         if query.partition == "deferred_cross_subject":
             continue
+        overlap = sorted(
+            set(query.required_memory_ids).intersection(query.forbidden_memory_ids)
+        )
+        if overlap:
+            failures.append(
+                f"{query.query_id}: required and forbidden gold overlap: {overlap}"
+            )
+        if query.expected_abstain and query.required_memory_ids:
+            failures.append(
+                f"{query.query_id}: abstention gold cannot require a memory"
+            )
         if relation_benchmark and not (query.entity_mentions or query.relation_hints):
             failures.append(
                 f"{query.query_id}: relation benchmark query requires an entity "
