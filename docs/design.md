@@ -793,7 +793,8 @@ complete=false，明确表示
 top-k 不是完整 snapshot。semantic provider 失败时可配置回退完整 lexical scan，warning 会进入结果。
 
 关系检索不再伪装成第二个 SemanticIndex。`RelationIndex` 只在可信 plan 提供显式
-`entity_mentions` 或 `relation_hints` 时运行，接收 exact scopes、subject、可选 relation hints，以及
+`entity_mentions`、`relation_hints` 或 `relation_types` 时运行，接收 exact scopes、subject、可选
+relation hints、host ontology 约束，以及
 互斥的 `valid_at` 或 `time_from/time_to`，返回带
 Edge/Episode provenance 的 memory candidates。`GraphitiRelationIndex` 绕过 Graphiti 的通用
 embedding/BM25/RRF 搜索，只读取非 `DOPPEL_MEMORY_FALLBACK` 的 Entity→RELATES_TO→Entity rich
@@ -820,6 +821,11 @@ ID、状态或时间元数据。配置 scorer 时必须显式配置 0..1 阈值�
 Store 重载以及完整安全/时间门。这个协议边界允许未来接入本地 cross-encoder，但模型选择与阈值
 必须在扩大且冻结的 held-out/adversarial fixture 上校准，当前 draft 数据不承担这项结论。协议虽不
 暴露身份字段，query/fact 文本仍可能敏感；远程 scorer 的授权、脱敏、传输与留存由 host 负责。
+
+当 host 有受治理的关系 ontology 时，`available_relation_types` 是 Planner 可选标签的唯一白名单。
+Planner draft 中的 `relation_types` 必须是该集合的子集；绑定器拒绝模型自造标签，执行器和 adapter
+分别做一次精确类型过滤。精确类型是硬约束，reranker 只在未选择类型或类型内排序时承担软语义
+判断。旧 plan 未选择类型时保持相同 plan ID，因而这一字段是向后兼容的协议加法。
 
 count 始终使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
 “一共几次”。SemanticIndex 是 top-k 协议，因此不参与 exact count 的集合定义；计数只使用完整

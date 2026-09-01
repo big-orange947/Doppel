@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -1200,6 +1202,114 @@ class _FailingRelationIndex:
     ):
         del request, scopes, filters, limit
         raise RelationIndexUnavailableError("synthetic relation outage")
+
+
+async def test_exact_relation_types_are_host_bound_and_defensively_enforced() -> None:
+    store = InMemoryStore()
+    for record in (
+        _record(
+            "camera-location-exact",
+            "相机目前放在工作室。",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+        _record(
+            "camera-purchase-exact",
+            "相机由小王购买。",
+            memory_type="fact",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    ):
+        await _put(store, record)
+    relation_index = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="camera-location-exact",
+                source="graphiti_relation",
+                score=0.1,
+                relation_type="LOCATED_AT",
+                match_kind="type",
+                edge_id="edge-location-exact",
+                episode_ids=["episode-location-exact"],
+            ),
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="camera-purchase-exact",
+                source="graphiti_relation",
+                score=1.0,
+                relation_type="PURCHASED_BY",
+                match_kind="type",
+                edge_id="edge-purchase-exact",
+                episode_ids=["episode-purchase-exact"],
+            ),
+        ]
+    )
+    engine = PersonalMemoryQueryEngine(store, relation_index=relation_index)
+
+    result = await engine.query(
+        _DraftPlanner(
+            intent="current",
+            search_text="相机在哪里",
+            entity_mentions=["相机"],
+            relation_hints=["在哪里"],
+            relation_types=["located_at"],
+        ),
+        "相机在哪里？",
+        [SCOPE],
+        now=NOW,
+        available_relation_types=["PURCHASED_BY", "LOCATED_AT"],
+    )
+
+    request = relation_index.calls[0][0]
+    assert request.relation_types == ["LOCATED_AT"]
+    assert [hit.record.memory_id for hit in result.hits] == ["camera-location-exact"]
+    assert result.hits[0].relation_score == 1.0
+
+
+async def test_planner_cannot_invent_relation_types_outside_host_ontology() -> None:
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+
+    with pytest.raises(
+        PersonalMemoryQueryPlanningError,
+        match="outside the host ontology",
+    ):
+        await engine.plan(
+            _DraftPlanner(
+                search_text="相机",
+                relation_types=["INVENTED_RELATION"],
+            ),
+            "相机怎么了？",
+            [SCOPE],
+            now=NOW,
+            available_relation_types=["LOCATED_AT"],
+        )
+
+
+async def test_empty_relation_types_preserve_pre_extension_plan_ids() -> None:
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+    plan = await engine.plan(
+        _DraftPlanner(search_text="相机"),
+        "相机在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+    legacy_payload = plan.model_dump(mode="json")
+    legacy_payload.pop("plan_id")
+    legacy_payload.pop("relation_types")
+    encoded = json.dumps(
+        legacy_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    assert plan.relation_types == []
+    assert plan.plan_id == "pmq_" + hashlib.sha256(encoded).hexdigest()
 
 
 async def test_semantic_and_relation_sources_execute_concurrently() -> None:

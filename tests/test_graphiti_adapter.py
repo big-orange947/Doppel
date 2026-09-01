@@ -762,6 +762,7 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
             query_text="相机现在由谁保管？",
             entity_mentions=["相机"],
             relation_hints=["held"],
+            relation_types=["held_by"],
             subject="owner",
             subject_id=scope.user_id,
             valid_at=valid_at,
@@ -776,6 +777,7 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
     assert candidate.memory_id == record.memory_id
     assert candidate.scope == scope
     assert candidate.relation_type == "HELD_BY"
+    assert candidate.match_kind == "type"
     assert candidate.edge_id == "edge-rich"
     assert candidate.episode_ids == [indexed.episode_id]
     assert candidate.source_entity_name == "相机"
@@ -785,9 +787,11 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
     query, params = relation_driver.calls[0]
     assert "MATCH (source:Entity)-[edge:RELATES_TO]->(target:Entity)" in query
     assert "coalesce(edge.name, '') <> $fallback_name" in query
+    assert "toUpper(coalesce(edge.name, '')) IN $relation_types" in query
     assert params["group_ids"] == [scope.scope_key]
     assert params["anchors"] == ["相机"]
     assert params["relation_hints"] == ["held"]
+    assert params["relation_types"] == ["HELD_BY"]
     assert params["valid_at"] == valid_at
 
     relation_driver.rows[0]["relation_hint_match"] = 0

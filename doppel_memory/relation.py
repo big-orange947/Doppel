@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal, Protocol, runtime_checkable
@@ -23,6 +24,7 @@ class RelationQuery(BaseModel):
     query_text: str
     entity_mentions: list[str] = Field(default_factory=list)
     relation_hints: list[str] = Field(default_factory=list)
+    relation_types: list[str] = Field(default_factory=list)
     subject: str
     subject_id: str
     valid_at: datetime | None = None
@@ -37,8 +39,27 @@ class RelationQuery(BaseModel):
     @field_validator("entity_mentions", "relation_hints", mode="before")
     @classmethod
     def _normalize_terms(cls, value: object) -> list[str]:
-        terms = [str(item or "").strip() for item in list(value or [])]
+        terms = [str(item or "").strip() for item in _list_items(value)]
         return list(dict.fromkeys(item for item in terms if item))
+
+    @field_validator("relation_types", mode="before")
+    @classmethod
+    def _normalize_relation_types(cls, value: object) -> list[str]:
+        relation_types = [
+            str(item or "").strip().upper() for item in _list_items(value)
+        ]
+        normalized = list(dict.fromkeys(item for item in relation_types if item))
+        invalid = [
+            item
+            for item in normalized
+            if re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", item) is None
+        ]
+        if invalid:
+            raise ValueError(
+                "relation types must be canonical uppercase identifiers: "
+                f"{invalid}"
+            )
+        return normalized
 
     @field_validator("valid_at", "time_from", "time_to")
     @classmethod
@@ -105,7 +126,7 @@ class RelationRerankRequest(BaseModel):
     @field_validator("relation_hints", mode="before")
     @classmethod
     def _normalize_hints(cls, value: object) -> list[str]:
-        hints = [str(item or "").strip() for item in list(value or [])]
+        hints = [str(item or "").strip() for item in _list_items(value)]
         return list(dict.fromkeys(item for item in hints if item))
 
     @model_validator(mode="after")
@@ -163,7 +184,9 @@ class RelationCandidate(BaseModel):
     score: float = Field(ge=0.0, le=1.0)
     relation_type: str
     fact: str = ""
-    match_kind: Literal["adjacency", "lexical", "reranker", "none"] = "adjacency"
+    match_kind: Literal["adjacency", "type", "lexical", "reranker", "none"] = (
+        "adjacency"
+    )
     reranker_score: float | None = Field(default=None, ge=0.0, le=1.0)
     source_entity_id: str = ""
     source_entity_name: str = ""
@@ -200,7 +223,7 @@ class RelationCandidate(BaseModel):
     @field_validator("episode_ids", mode="before")
     @classmethod
     def _normalize_episode_ids(cls, value: object) -> list[str]:
-        items = [str(item or "").strip() for item in list(value or [])]
+        items = [str(item or "").strip() for item in _list_items(value)]
         return list(dict.fromkeys(item for item in items if item))
 
     @field_validator("valid_at", "invalid_at")
@@ -227,3 +250,11 @@ class RelationIndex(Protocol):
         filters: MemoryFilter | None = None,
         limit: int = 10,
     ) -> Sequence[RelationCandidate]: ...
+
+
+def _list_items(value: object) -> list[object]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return list(value)
+    return [value]

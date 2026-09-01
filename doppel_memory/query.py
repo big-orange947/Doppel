@@ -80,6 +80,7 @@ class PersonalMemoryQueryDraft(BaseModel):
     temporal_statuses: list[str] = Field(default_factory=list)
     entity_mentions: list[str] = Field(default_factory=list)
     relation_hints: list[str] = Field(default_factory=list)
+    relation_types: list[str] = Field(default_factory=list)
     subject: str = Actor.OWNER
     subject_id: str = ""
     as_of: datetime | None = None
@@ -116,6 +117,11 @@ class PersonalMemoryQueryDraft(BaseModel):
         items = [str(item or "").strip() for item in list(value or [])]
         return list(dict.fromkeys(item for item in items if item))
 
+    @field_validator("relation_types", mode="before")
+    @classmethod
+    def _normalize_relation_types(cls, value: Any) -> list[str]:
+        return _canonical_relation_types(value)
+
     @field_validator("as_of", "time_from", "time_to")
     @classmethod
     def _normalize_time(cls, value: datetime | None) -> datetime | None:
@@ -143,6 +149,7 @@ class PersonalMemoryQueryRequest(BaseModel):
     now: datetime
     default_subject: str = Actor.OWNER
     default_subject_id: str = ""
+    available_relation_types: list[str] = Field(default_factory=list)
 
     @field_validator("query", "default_subject_id", mode="before")
     @classmethod
@@ -167,6 +174,11 @@ class PersonalMemoryQueryRequest(BaseModel):
         if value.tzinfo is None:
             raise ValueError("query now must include a timezone")
         return value.astimezone(UTC)
+
+    @field_validator("available_relation_types", mode="before")
+    @classmethod
+    def _normalize_available_relation_types(cls, value: Any) -> list[str]:
+        return _canonical_relation_types(value)
 
 
 @runtime_checkable
@@ -208,6 +220,10 @@ near the predicate. The trusted
 owner/agent subject is already bound outside entity_mentions: when the question only
 anchors on that subject, keep entity_mentions empty and still emit the explicit
 relation hint.
+relation_types is an optional exact hard filter over the host's relation ontology.
+Only select labels present in available_relation_types, and only when the requested
+predicate is unambiguous. Never invent a label. Leave relation_types empty when the
+available list is empty or when more than one listed relation could answer the query.
 The input default_subject/default_subject_id are trusted host authority, not semantic
 fields for the model to reinterpret. Echo them unchanged; a person, pet, object, or
 place mentioned in the question belongs in entity_mentions, not subject.
@@ -220,7 +236,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "6"
+    version = "7"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -344,6 +360,7 @@ class PersonalMemoryQueryPlan(BaseModel):
     temporal_statuses: list[str] = Field(default_factory=list)
     entity_mentions: list[str] = Field(default_factory=list)
     relation_hints: list[str] = Field(default_factory=list)
+    relation_types: list[str] = Field(default_factory=list)
     subject: str
     subject_id: str
     as_of: datetime | None = None
@@ -474,6 +491,7 @@ class PersonalMemoryQueryEngine:
         default_subject: str = Actor.OWNER,
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
+        available_relation_types: Sequence[str] = (),
     ) -> PersonalMemoryQueryPlan:
         _require_identity(planner, "personal-memory query planner")
         bound_scopes = _bind_scopes(scopes)
@@ -483,6 +501,7 @@ class PersonalMemoryQueryEngine:
             now=now,
             default_subject=default_subject,
             default_subject_id=default_subject_id or owner_id,
+            available_relation_types=list(available_relation_types),
         )
         draft = PersonalMemoryQueryDraft.model_validate(await planner.plan(request))
         if draft.confidence < self.config.minimum_planner_confidence:
@@ -516,6 +535,10 @@ class PersonalMemoryQueryEngine:
             temporal_statuses=temporal_statuses,
             entity_mentions=draft.entity_mentions,
             relation_hints=draft.relation_hints,
+            relation_types=_bind_relation_types(
+                draft.relation_types,
+                request.available_relation_types,
+            ),
             subject=draft.subject,
             subject_id=subject_id,
             as_of=draft.as_of,
@@ -559,7 +582,7 @@ class PersonalMemoryQueryEngine:
         ) = None
         if (
             self._relation_index is not None
-            and (bound.entity_mentions or bound.relation_hints)
+            and (bound.entity_mentions or bound.relation_hints or bound.relation_types)
             and bound.intent != PersonalMemoryQueryIntent.COUNT
         ):
             relation_task = asyncio.create_task(self._read_relation_candidates(bound))
@@ -611,7 +634,7 @@ class PersonalMemoryQueryEngine:
                 warnings.extend(relation_warnings)
                 require_relation_match = (
                     self.config.relation_hints_require_match
-                    and bool(bound.relation_hints)
+                    and bool(bound.relation_hints or bound.relation_types)
                     and relation_available
                 )
                 if require_relation_match:
@@ -824,6 +847,7 @@ class PersonalMemoryQueryEngine:
         default_subject: str = Actor.OWNER,
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
+        available_relation_types: Sequence[str] = (),
     ) -> PersonalMemoryQueryResult:
         plan = await self.plan(
             planner,
@@ -833,6 +857,7 @@ class PersonalMemoryQueryEngine:
             default_subject=default_subject,
             default_subject_id=default_subject_id,
             allowed_subject_ids=allowed_subject_ids,
+            available_relation_types=available_relation_types,
         )
         return await self.execute(plan)
 
@@ -1033,6 +1058,7 @@ class PersonalMemoryQueryEngine:
             query_text=plan.query,
             entity_mentions=plan.entity_mentions,
             relation_hints=plan.relation_hints,
+            relation_types=plan.relation_types,
             subject=plan.subject,
             subject_id=plan.subject_id,
             valid_at=valid_at,
@@ -1065,6 +1091,7 @@ class PersonalMemoryQueryEngine:
             )
 
         allowed_scopes = {scope.scope_key: scope for scope in plan.scopes}
+        required_relation_types = set(plan.relation_types)
         candidate_scopes: dict[tuple[str, str], MemoryScope] = {}
         details: dict[
             tuple[str, str], tuple[float, str, str, str, str, float | None]
@@ -1072,11 +1099,21 @@ class PersonalMemoryQueryEngine:
         for candidate in candidates:
             scope_key = candidate.scope.scope_key
             memory_id = str(candidate.memory_id or "").strip()
-            if scope_key not in allowed_scopes or not memory_id:
+            relation_type = str(candidate.relation_type or "").strip().upper()
+            if (
+                scope_key not in allowed_scopes
+                or not memory_id
+                or (
+                    required_relation_types
+                    and relation_type not in required_relation_types
+                )
+            ):
                 continue
             key = (scope_key, memory_id)
             candidate_scopes.setdefault(key, allowed_scopes[scope_key])
             score = min(max(float(candidate.score), 0.0), 1.0)
+            if required_relation_types:
+                score = 1.0
             current = details.get(key)
             if current is None or score > current[0]:
                 details[key] = (
@@ -1735,7 +1772,47 @@ def _contains_any(value: str, needles: Sequence[str]) -> bool:
 def _plan_payload(plan: PersonalMemoryQueryPlan) -> dict[str, Any]:
     payload = plan.model_dump(mode="json")
     payload.pop("plan_id", None)
+    # Keep plan IDs generated before the additive relation_types field valid when
+    # no exact relation constraint is selected.
+    if not payload.get("relation_types"):
+        payload.pop("relation_types", None)
     return payload
+
+
+def _canonical_relation_types(value: Any) -> list[str]:
+    raw_items = (
+        list(value)
+        if isinstance(value, (list, tuple, set, frozenset))
+        else []
+        if value is None
+        else [value]
+    )
+    items = [str(item or "").strip().upper() for item in raw_items]
+    normalized = list(dict.fromkeys(item for item in items if item))
+    invalid = [
+        item
+        for item in normalized
+        if re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", item) is None
+    ]
+    if invalid:
+        raise ValueError(
+            "relation types must be canonical uppercase identifiers: " f"{invalid}"
+        )
+    return normalized
+
+
+def _bind_relation_types(
+    requested: Sequence[str], available: Sequence[str]
+) -> list[str]:
+    selected = _canonical_relation_types(requested)
+    allowed = set(_canonical_relation_types(available))
+    unknown = sorted(set(selected).difference(allowed))
+    if unknown:
+        raise PersonalMemoryQueryPlanningError(
+            "planner selected relation types outside the host ontology: "
+            f"{unknown}"
+        )
+    return selected
 
 
 def _fingerprint(value: Any) -> str:

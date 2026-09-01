@@ -62,6 +62,10 @@ The provisional `RelationQuery` accepts either one `valid_at` instant or an addi
 `time_from`/`time_to` interval. Implementations must reject a mixed point/range request
 and keep every returned relation subject to authoritative Store revalidation.
 
+`relation_types` is an additive exact-match constraint. A host exposes its ontology
+through `available_relation_types`; planners cannot bind labels outside that
+allowlist. Empty relation types preserve pre-field plan fingerprints and behavior.
+
 The v0.8.1 governance policy, decision, plan, checkpoint, result, and runner types are
 provisional root APIs. Governance is additive to the stable Store lifecycle: every
 reinforcement, opt-in decay, archive, or restore writes an auditable replacement

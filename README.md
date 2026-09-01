@@ -1264,6 +1264,13 @@ pgvector/词法候选仍可在合格关系事实之间辅助排序，却不能�
 问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回 Store 复核，
 Graphiti/Neo4j 从不成为事实权威。
 
+如果 host 使用稳定的关系 ontology，还可以在调用 `engine.query(...)` 时通过
+`available_relation_types` 提供允许的机器标签。Planner 只能从该白名单选择
+`relation_types`；执行层与 Graphiti adapter 都会再次按标签精确过滤，未知标签直接拒绝绑定。
+这是一条比自然语言相似度更强的关系资格门，适合 `LOCATED_AT`、`HELD_BY` 这类已治理的边；
+没有 ontology 或谓词存在歧义时必须保持为空，由 `relation_hints` 与可选 reranker 负责软匹配。
+类型映射由 host/Planner 决定，Doppel 核心不维护问句、语言或业务领域的特判词典。
+
 高配置部署可以向 `GraphitiRelationIndex` 注入 `RelationReranker`，用于弥补 Planner 输出的关系短语
 与 Graphiti edge 文本之间的同义改写。该协议一次只接收 `query_text`、`relation_hints` 以及每条边的
 不透明 `item_id + relation_type + fact`；它看不到 scope、subject ID、memory ID、生命周期或时间字段，
@@ -1271,7 +1278,7 @@ Graphiti/Neo4j 从不成为事实权威。
 draft fixture 猜一个“通用阈值”。缺失分数不会被补齐，重复/未知 item ID、非法分数或 provider 异常
 均 fail closed：只保留原有 exact/2–4 字词面资格，不会因重排器故障扩大召回面。重排命中的 Edge
 仍须完成 Episode provenance 与权威 Store 二次校验。`RelationCandidate.match_kind`、`fact` 和
-`reranker_score` 用于审计这条边是 adjacency、lexical、reranker 还是未满足关系资格；当前只提供
+`reranker_score` 用于审计这条边是 adjacency、type、lexical、reranker 还是未满足关系资格；当前只提供
 通用协议与安全接线，不内置 cross-encoder 模型，也不宣称已有生产阈值。虽然协议不暴露身份与
 权限字段，query 和 edge fact 本身仍可能包含私人内容；接入远程 scorer 会把这些文本发给其 provider，
 应优先使用本地模型，或由 host 明确处理授权、脱敏、留存策略和传输安全。

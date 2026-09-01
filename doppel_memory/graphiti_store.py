@@ -689,6 +689,8 @@ class GraphitiRelationIndex:
             ]
         raw_relation_hints = [item.casefold() for item in bound.relation_hints]
         relation_hints = _relation_match_terms(raw_relation_hints)
+        relation_types = list(bound.relation_types)
+        relation_type_set = set(relation_types)
         try:
             graphiti = await self._ensure_graphiti()
             driver = getattr(graphiti, "driver", None)
@@ -700,6 +702,8 @@ class GraphitiRelationIndex:
                 "AND source.group_id = edge.group_id "
                 "AND target.group_id = edge.group_id "
                 "AND coalesce(edge.name, '') <> $fallback_name "
+                "AND (size($relation_types) = 0 OR "
+                "toUpper(coalesce(edge.name, '')) IN $relation_types) "
                 "AND any(anchor IN $anchors WHERE "
                 "toLower(coalesce(source.name, '')) CONTAINS anchor OR "
                 "toLower(coalesce(target.name, '')) CONTAINS anchor) "
@@ -729,6 +733,7 @@ class GraphitiRelationIndex:
                 group_ids=list(scope_by_key),
                 anchors=anchors,
                 relation_hints=relation_hints,
+                relation_types=relation_types,
                 fallback_name=GRAPHITI_FALLBACK_EDGE_NAME,
                 valid_at=bound.valid_at,
                 time_from=bound.time_from,
@@ -804,6 +809,9 @@ class GraphitiRelationIndex:
             scope = scope_by_key.get(group_id)
             edge_id = str(row["edge_id"] or "")
             relation_type = str(row["relation_type"] or "")
+            relation_type_match = bool(
+                relation_type_set and relation_type.upper() in relation_type_set
+            )
             fact = str(_graph_row_value(row, "fact", "") or "")
             relation_hint_match = bool(row["relation_hint_match"] or 0)
             reranker_score = reranker_scores.get(edge_id)
@@ -829,6 +837,7 @@ class GraphitiRelationIndex:
                 or not edge_id
                 or not relation_type
                 or relation_type == GRAPHITI_FALLBACK_EDGE_NAME
+                or (relation_type_set and not relation_type_match)
             ):
                 continue
             for episode_id in row_episode_ids:
@@ -853,11 +862,15 @@ class GraphitiRelationIndex:
                         rank,
                         len(rows),
                         hints_present=bool(raw_relation_hints),
-                        hint_match=relation_hint_match or reranker_match,
+                        hint_match=(
+                            relation_type_match
+                            or relation_hint_match
+                            or reranker_match
+                        ),
                     ),
                     relation_type=relation_type,
                     fact=fact,
-                    match_kind=match_kind,
+                    match_kind=("type" if relation_type_match else match_kind),
                     reranker_score=reranker_score,
                     source_entity_id=str(row["source_entity_id"] or ""),
                     source_entity_name=str(row["source_entity_name"] or ""),

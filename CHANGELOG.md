@@ -86,6 +86,10 @@
 - Force raw-logit output for SentenceTransformers rerankers when Doppel owns sigmoid
   normalization. This prevents the library's single-label default activation from
   applying a first sigmoid and collapsing a second normalization around `0.5`.
+- Add host-bound canonical `relation_types` to personal-memory query planning and
+  Graphiti relation lookup. Types are selected only from an explicit host ontology,
+  enforced again by the execution layer, and remain optional so natural-language
+  hints/rerankers can handle open-vocabulary relations without domain special cases.
 - Make retrieval reports disclose tracked dirty paths and a hash over the benchmark
   plus all `doppel_memory` Python sources. Relation score sweeps also emit a dev-only
   threshold recommendation using a fixed zero-forbidden/zero-false-abstention rule.

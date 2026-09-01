@@ -77,6 +77,7 @@ from doppel_memory.query import (
     PersonalMemoryQueryPlanner,
     PersonalMemoryQueryResult,
 )
+from doppel_memory.relation import RelationIndex
 from doppel_memory.retriever import Reranker, RetrievalStrategy, Retriever
 from doppel_memory.sqlite_store import SQLiteStore
 from doppel_memory.store import MemoryStore
@@ -358,14 +359,19 @@ class DoppelClient:
         now: datetime | None = None,
         config: PersonalMemoryQueryConfig | None = None,
         semantic_index: SemanticIndex | None = None,
+        relation_index: RelationIndex | None = None,
         default_subject: str = "owner",
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
+        available_relation_types: Sequence[str] = (),
     ) -> PersonalMemoryQueryResult:
         """Return structured personal-memory evidence and safe aggregation."""
 
         return await PersonalMemoryQueryEngine(
-            self._store, config, semantic_index=semantic_index
+            self._store,
+            config,
+            semantic_index=semantic_index,
+            relation_index=relation_index,
         ).query(
             planner or DeterministicPersonalMemoryQueryPlanner(),
             query,
@@ -374,6 +380,7 @@ class DoppelClient:
             default_subject=default_subject,
             default_subject_id=default_subject_id,
             allowed_subject_ids=allowed_subject_ids,
+            available_relation_types=available_relation_types,
         )
 
     # ---------------------------------------------------------------- 高层 API
