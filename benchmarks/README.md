@@ -143,6 +143,15 @@ aggregate gate across every executed profile.
 The fixture remains `frozen=false` and `publication_ready=false`; it is an engineering
 baseline, not public numerical evidence yet.
 
+The relation dataset also carries a closed, host-owned relation ontology and one
+canonical relation-type label per query. `oracle_typed` selects those labels through
+the same public `available_relation_types` / `relation_types` binding used by a real
+host, while ordinary `oracle` continues to emit only open-vocabulary surface hints.
+Running both modes over the same profiles measures the retrieval ceiling gained from
+correct relation typing without crediting that gain to Graphiti or a cross-encoder.
+It is deliberately an oracle ceiling, not evidence that a production LLM Planner can
+choose the type reliably; Planner type-selection quality must be measured separately.
+
 Production relation matching may expand a long Chinese hint into bounded contiguous
 2-4 character fragments, but the planner-quality runner deliberately continues to
 score the concise gold surface predicate exactly. This keeps planner quality honest

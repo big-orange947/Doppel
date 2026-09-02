@@ -37,10 +37,10 @@
         "relation_reranker": {"$ref": "#/$defs/source"}
       }
     },
-    "planner_modes": {"type": "array", "items": {"enum": ["oracle", "deterministic", "report"]}},
+    "planner_modes": {"type": "array", "items": {"enum": ["oracle", "oracle_typed", "deterministic", "report"]}},
     "profiles": {
       "type": "object",
-      "propertyNames": {"enum": ["oracle", "deterministic", "report"]},
+      "propertyNames": {"enum": ["oracle", "oracle_typed", "deterministic", "report"]},
       "additionalProperties": {
         "type": "object",
         "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph", "lexical_relation", "lexical_vector_relation", "lexical_relation_reranked", "lexical_vector_relation_reranked"]},

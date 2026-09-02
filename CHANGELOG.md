@@ -95,6 +95,10 @@
   threshold recommendation using a fixed zero-forbidden/zero-false-abstention rule.
 - Content-address local SentenceTransformers reranker directories in benchmark
   reports, including a full file-manifest hash and the model weights SHA-256.
+- Add an independent `oracle_typed` relation-ablation mode backed by a closed
+  dataset ontology. It uses the public host allowlist and exact relation-type plan
+  constraints, while the existing oracle keeps surface hints, so structured Planner
+  ceiling gains are not misattributed to Graphiti or the relation reranker.
 - Add a separate relation-planner quality runner over the existing 65-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and

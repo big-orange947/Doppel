@@ -238,6 +238,8 @@ class AblationDataset(BaseModel):
     frozen: bool = False
     publication_ready: bool = False
     description: str = ""
+    relation_types: list[str] = Field(default_factory=list)
+    relation_type_labels: dict[str, list[str]] = Field(default_factory=dict)
     scopes: dict[str, AblationScope]
     metamorphic_variants: list[MetamorphicVariant] = Field(default_factory=list)
     fixtures: list[AblationMemory] = Field(min_length=10)
@@ -266,6 +268,35 @@ class AblationDataset(BaseModel):
             raise ValueError(
                 f"duplicate query texts: {duplicate_query_texts}"
             )
+        invalid_relation_types = sorted(
+            item
+            for item in self.relation_types
+            if re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", item) is None
+        )
+        if invalid_relation_types:
+            raise ValueError(
+                "dataset relation types must be canonical uppercase identifiers: "
+                f"{invalid_relation_types}"
+            )
+        if len(self.relation_types) != len(set(self.relation_types)):
+            raise ValueError("dataset relation types must be unique")
+        query_id_set = set(query_ids)
+        unknown_relation_labels = sorted(
+            set(self.relation_type_labels).difference(query_id_set)
+        )
+        if unknown_relation_labels:
+            raise ValueError(
+                "relation type labels reference unknown queries: "
+                f"{unknown_relation_labels}"
+            )
+        allowed_relation_types = set(self.relation_types)
+        for query_id, labels in self.relation_type_labels.items():
+            unknown_types = sorted(set(labels).difference(allowed_relation_types))
+            if unknown_types:
+                raise ValueError(
+                    f"{query_id}: relation type labels are outside the dataset "
+                    f"ontology: {unknown_types}"
+                )
         known = set(self.scopes)
         unknown_fixtures = sorted(
             {item.scope for item in self.fixtures}.difference(known)
@@ -439,10 +470,11 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
 # --------------------------------------------------------------------------- #
 
 PLANNER_MODE_ORACLE = "oracle"
+PLANNER_MODE_ORACLE_TYPED = "oracle_typed"
 PLANNER_MODE_DETERMINISTIC = "deterministic"
 PLANNER_MODE_REPORT = "report"
 PLANNER_MODES = (PLANNER_MODE_ORACLE, PLANNER_MODE_DETERMINISTIC)
-ALL_PLANNER_MODES = (*PLANNER_MODES, PLANNER_MODE_REPORT)
+ALL_PLANNER_MODES = (*PLANNER_MODES, PLANNER_MODE_ORACLE_TYPED, PLANNER_MODE_REPORT)
 
 
 class BenchmarkOraclePlanner:
@@ -455,10 +487,18 @@ class BenchmarkOraclePlanner:
     """
 
     name = "doppel.benchmark-oracle-planner"
-    version = "1"
+    version = "2"
 
-    def __init__(self, queries: Sequence[AblationQuery]) -> None:
+    def __init__(
+        self,
+        queries: Sequence[AblationQuery],
+        *,
+        relation_type_labels: dict[str, list[str]] | None = None,
+    ) -> None:
         self._by_text: dict[str, AblationQuery] = {}
+        self._relation_type_labels = dict(relation_type_labels or {})
+        if self._relation_type_labels:
+            self.name = "doppel.benchmark-typed-oracle-planner"
         duplicate_texts = set()
         for query in queries:
             key = str(query.query or "").strip()
@@ -490,6 +530,7 @@ class BenchmarkOraclePlanner:
             time_to=fixture.time_to,
             entity_mentions=fixture.entity_mentions,
             relation_hints=fixture.relation_hints,
+            relation_types=self._relation_type_labels.get(fixture.query_id, []),
             explanation=(
                 "benchmark oracle: fixture-labeled plan; no scope, memory ID, "
                 "or topic key injected"
@@ -1668,12 +1709,19 @@ async def _run_case(
     *,
     profile: str,
     mode: str = PLANNER_MODE_DETERMINISTIC,
+    available_relation_types: Sequence[str] = (),
 ) -> dict[str, Any]:
     started = perf_counter()
     bound_scopes = [scopes[name] for name in query.scopes]
     allowed_scope_keys = {scope.scope_key for scope in bound_scopes}
     try:
-        result = await engine.query(planner, query.query, bound_scopes, now=query.now)
+        result = await engine.query(
+            planner,
+            query.query,
+            bound_scopes,
+            now=query.now,
+            available_relation_types=available_relation_types,
+        )
     except Exception as exc:  # noqa: BLE001 - structured failure
         return {
             "query_id": query.query_id,
@@ -1831,7 +1879,10 @@ def _evaluate_result(
     report_planner_failures = (
         _planner_report_failures(result, query) if mode == PLANNER_MODE_REPORT else []
     )
-    temporal_plan_is_trusted = mode == PLANNER_MODE_ORACLE or (
+    temporal_plan_is_trusted = mode in {
+        PLANNER_MODE_ORACLE,
+        PLANNER_MODE_ORACLE_TYPED,
+    } or (
         mode == PLANNER_MODE_REPORT
         and "planner_temporal_miss" not in report_planner_failures
     )
@@ -2687,6 +2738,10 @@ async def _run_profiles(
     planners: dict[str, Any] = {
         PLANNER_MODE_DETERMINISTIC: DeterministicPersonalMemoryQueryPlanner(),
         PLANNER_MODE_ORACLE: BenchmarkOraclePlanner(dataset.queries),
+        PLANNER_MODE_ORACLE_TYPED: BenchmarkOraclePlanner(
+            dataset.queries,
+            relation_type_labels=dataset.relation_type_labels,
+        ),
     }
     if planner_report is not None:
         planners[PLANNER_MODE_REPORT] = BenchmarkReportPlanner(planner_report, dataset)
@@ -2742,6 +2797,7 @@ async def _run_profiles(
                     warmup.query,
                     [scopes[name] for name in warmup.scopes],
                     now=warmup.now,
+                    available_relation_types=dataset.relation_types,
                 )
             cases: list[dict[str, Any]] = []
             for query in dataset.queries:
@@ -2750,7 +2806,13 @@ async def _run_profiles(
                     continue
                 cases.append(
                     await _run_case(
-                        engine, planner, query, scopes, profile=profile, mode=mode
+                        engine,
+                        planner,
+                        query,
+                        scopes,
+                        profile=profile,
+                        mode=mode,
+                        available_relation_types=dataset.relation_types,
                     )
                 )
             per_profile[profile] = _aggregate(cases)
@@ -2875,6 +2937,23 @@ async def _run_profiles(
             ):
                 comparisons[f"{mode}_{reranked_name}_vs_{base_name}"] = _delta(
                     reranked, base
+                )
+    if (
+        PLANNER_MODE_ORACLE in per_mode
+        and PLANNER_MODE_ORACLE_TYPED in per_mode
+    ):
+        for profile in PROFILE_EXECUTION:
+            untyped = per_mode[PLANNER_MODE_ORACLE].get(profile)
+            typed = per_mode[PLANNER_MODE_ORACLE_TYPED].get(profile)
+            if (
+                untyped is not None
+                and typed is not None
+                and not untyped.get("unavailable", False)
+                and not typed.get("unavailable", False)
+            ):
+                comparisons[f"oracle_typed_vs_oracle_{profile}"] = _delta(
+                    typed,
+                    untyped,
                 )
     report["comparisons"] = comparisons
 
@@ -3142,7 +3221,13 @@ async def _run_metamorphic_safety(
     base_engine = _engines(store, None)
     base_cases = [
         await _run_case(
-            base_engine, planner, query, scopes, profile="lexical", mode=mode
+            base_engine,
+            planner,
+            query,
+            scopes,
+            profile="lexical",
+            mode=mode,
+            available_relation_types=dataset.relation_types,
         )
         for query in dataset.queries
     ]
@@ -3165,7 +3250,13 @@ async def _run_metamorphic_safety(
             engine = _engines(variant_store, None)
             variant_cases = [
                 await _run_case(
-                    engine, planner, query, scopes, profile="lexical", mode=mode
+                    engine,
+                    planner,
+                    query,
+                    scopes,
+                    profile="lexical",
+                    mode=mode,
+                    available_relation_types=variant_dataset.relation_types,
                 )
                 for query in variant_dataset.queries
             ]

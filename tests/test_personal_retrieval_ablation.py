@@ -24,6 +24,7 @@ from uuid import NAMESPACE_URL, uuid5
 from benchmarks.personal_retrieval_ablation import (
     ALL_PROFILES,
     PLANNER_MODE_ORACLE,
+    PLANNER_MODE_ORACLE_TYPED,
     PLANNER_MODE_REPORT,
     PROFILE_DIRECT,
     PROFILE_EXECUTION,
@@ -35,6 +36,7 @@ from benchmarks.personal_retrieval_ablation import (
     SOURCE_VECTOR,
     AblationDataset,
     AblationQuery,
+    BenchmarkOraclePlanner,
     BenchmarkReportPlanner,
     _aggregate,
     _direct_scan,
@@ -1224,6 +1226,38 @@ class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
 
 
 class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
+    def test_relation_dataset_has_complete_typed_oracle_labels(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+
+        self.assertEqual(
+            set(dataset.relation_type_labels),
+            {query.query_id for query in dataset.queries},
+        )
+        self.assertTrue(dataset.relation_types)
+        for labels in dataset.relation_type_labels.values():
+            self.assertTrue(labels)
+            self.assertTrue(set(labels).issubset(dataset.relation_types))
+
+    async def test_typed_oracle_selects_only_host_ontology_labels(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        query = next(item for item in dataset.queries if item.query_id == "rel-q35")
+        planner = BenchmarkOraclePlanner(
+            dataset.queries,
+            relation_type_labels=dataset.relation_type_labels,
+        )
+
+        draft = await planner.plan(
+            PersonalMemoryQueryRequest(
+                query=query.query,
+                now=query.now,
+                available_relation_types=dataset.relation_types,
+            )
+        )
+
+        self.assertEqual(draft.relation_hints, ["哪儿出的"])
+        self.assertEqual(draft.relation_types, ["ISSUED_BY"])
+        self.assertEqual(planner.name, "doppel.benchmark-typed-oracle-planner")
+
     async def test_relation_profile_runs_engine_and_attributes_gold_hits(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
         # Keep this unit focused on contribution accounting over the original
@@ -1250,6 +1284,7 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
                 allowed = {scope.scope_key for scope in requested_scopes}
                 anchors = [item.casefold() for item in request.entity_mentions]
                 hints = [item.casefold() for item in request.relation_hints]
+                relation_types = set(request.relation_types)
                 candidates = []
                 for fixture, record in zip(dataset.fixtures, records, strict=True):
                     relation = fixture.relation
@@ -1267,10 +1302,16 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
                         anchor in entity for anchor in anchors for entity in entities
                     ):
                         continue
+                    if relation_types and relation.relation_type not in relation_types:
+                        continue
                     relation_text = (
                         relation.relation_type + " " + relation.fact
                     ).casefold()
-                    if hints and not any(hint in relation_text for hint in hints):
+                    if (
+                        hints
+                        and not relation_types
+                        and not any(hint in relation_text for hint in hints)
+                    ):
                         continue
                     if (
                         request.valid_at is not None
@@ -1318,7 +1359,7 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
             relation_index=_FixtureRelationIndex(),
             relation_reranked_index=_FixtureRelationIndex("reranker"),
             graph=None,
-            planner_modes=(PLANNER_MODE_ORACLE,),
+            planner_modes=(PLANNER_MODE_ORACLE, PLANNER_MODE_ORACLE_TYPED),
         )
 
         relation_metrics = report["profiles"]["oracle"]["lexical_relation"]
@@ -1339,6 +1380,17 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn(
             "oracle_lexical_relation_reranked_vs_lexical_relation",
+            report["comparisons"],
+        )
+        typed_metrics = report["profiles"][PLANNER_MODE_ORACLE_TYPED][
+            "lexical_relation"
+        ]
+        self.assertGreaterEqual(
+            typed_metrics["recall_at_1"], relation_metrics["recall_at_1"]
+        )
+        self.assertEqual(typed_metrics["forbidden_hit_count"], 0)
+        self.assertIn(
+            "oracle_typed_vs_oracle_lexical_relation",
             report["comparisons"],
         )
         attribution = report["relation_final_hit_attribution"]
