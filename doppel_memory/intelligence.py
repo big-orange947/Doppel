@@ -243,8 +243,11 @@ class StructuredGenerationRequest(BaseModel):
 class StructuredOutputModel(Protocol):
     """Minimal boundary implemented by a hosted or local structured model."""
 
-    name: str
-    version: str
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def version(self) -> str: ...
 
     async def generate(
         self, request: StructuredGenerationRequest

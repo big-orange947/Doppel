@@ -1289,9 +1289,10 @@ draft fixture 猜一个“通用阈值”。缺失分数不会被补齐，重复
 FastEmbed cross-encoder 原始 logit 会通过 sigmoid 归一化到协议要求的 0..1，并在报告中记录模型、版本、
 阈值、重排贡献和延迟。当前仍没有默认阈值，示例参数不构成生产推荐。
 
-自然语言 Planner 与检索层必须分开评测。`benchmarks.relation_planner_quality` 直接复用 30 条
+自然语言 Planner 与检索层必须分开评测。`benchmarks.relation_planner_quality` 直接复用 65 条
 relation ablation 问句，在不执行 Store/pgvector/Graphiti 的情况下测量 intent、as-of、实体锚点和
-关系提示是否正确，并把无依据的 `memory_types/topic_keys` 硬过滤器单独记为错误；Reference Planner
+关系提示是否正确；宿主提供的封闭 `relation_types` 本体还会独立测量精确选择、召回率、精确率和
+越界标签，并把无依据的 `memory_types/topic_keys` 硬过滤器单独记为错误；Reference Planner
 支持内容寻址缓存、调用次数上限、provider token 汇总和旧报告零付费 replay。
 这样真实模型漏掉“以前”、把日期解析错、没有识别物品名，都会归因到 Planner，而不会被记成
 Graphiti 召回缺陷。Deterministic Planner 继续保持无领域词典，不承担实体/关系抽取职责。

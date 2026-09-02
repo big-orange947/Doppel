@@ -30,13 +30,15 @@
         "fingerprint",
         "query_count",
         "frozen",
-        "publication_ready"
+        "publication_ready",
+        "relation_type_count"
       ],
       "properties": {
         "fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
         "query_count": {"type": "integer", "minimum": 1},
         "frozen": {"type": "boolean"},
-        "publication_ready": {"type": "boolean"}
+        "publication_ready": {"type": "boolean"},
+        "relation_type_count": {"type": "integer", "minimum": 0}
       }
     },
     "planner": {
@@ -56,6 +58,7 @@
         "provider_error_count",
         "structural_failure_count",
         "exact_structure_accuracy",
+        "typed_structure_accuracy",
         "intent_accuracy",
         "intent_semantics_accuracy",
         "as_of_presence_accuracy",
@@ -64,6 +67,12 @@
         "subject_binding_accuracy",
         "entity_recall",
         "relation_recall",
+        "relation_type_exact_accuracy",
+        "relation_type_recall",
+        "relation_type_precision",
+        "relation_type_failure_count",
+        "unexpected_relation_type_count",
+        "relation_type_ontology_violation_count",
         "unexpected_entity_count",
         "unexpected_relation_count",
         "unexpected_hard_filter_count",
@@ -75,6 +84,7 @@
         "provider_error_count": {"type": "integer", "minimum": 0},
         "structural_failure_count": {"type": "integer", "minimum": 0},
         "exact_structure_accuracy": {"$ref": "#/$defs/ratio"},
+        "typed_structure_accuracy": {"$ref": "#/$defs/ratio"},
         "intent_accuracy": {"$ref": "#/$defs/ratio"},
         "intent_semantics_accuracy": {"$ref": "#/$defs/ratio"},
         "as_of_presence_accuracy": {"$ref": "#/$defs/ratio"},
@@ -83,6 +93,12 @@
         "subject_binding_accuracy": {"$ref": "#/$defs/ratio"},
         "entity_recall": {"$ref": "#/$defs/ratio"},
         "relation_recall": {"$ref": "#/$defs/ratio"},
+        "relation_type_exact_accuracy": {"$ref": "#/$defs/ratio"},
+        "relation_type_recall": {"$ref": "#/$defs/ratio"},
+        "relation_type_precision": {"$ref": "#/$defs/ratio"},
+        "relation_type_failure_count": {"type": "integer", "minimum": 0},
+        "unexpected_relation_type_count": {"type": "integer", "minimum": 0},
+        "relation_type_ontology_violation_count": {"type": "integer", "minimum": 0},
         "unexpected_entity_count": {"type": "integer", "minimum": 0},
         "unexpected_relation_count": {"type": "integer", "minimum": 0},
         "unexpected_hard_filter_count": {"type": "integer", "minimum": 0},
@@ -144,6 +160,13 @@
           "expected_relation_count",
           "matched_relation_count",
           "unexpected_relation_count",
+          "expected_relation_type_count",
+          "actual_relation_type_count",
+          "matched_relation_type_count",
+          "unexpected_relation_type_count",
+          "relation_type_ontology_violation_count",
+          "relation_type_ok",
+          "typed_structure_ok",
           "unexpected_hard_filter_count",
           "hard_filter_ok",
           "actual"

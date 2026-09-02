@@ -99,6 +99,10 @@
   dataset ontology. It uses the public host allowlist and exact relation-type plan
   constraints, while the existing oracle keeps surface hints, so structured Planner
   ceiling gains are not misattributed to Graphiti or the relation reranker.
+- Extend the relation-planner quality runner with the same host ontology request,
+  independent relation-type accuracy/recall/precision and whitelist-violation
+  metrics, plus an opt-in exact-type failure gate. Existing surface-structure scores
+  retain their original meaning for longitudinal comparison.
 - Add a separate relation-planner quality runner over the existing 65-query
   dev/heldout/adversarial relation fixture. It measures intent, as-of recognition,
   entity/relation recall, unexpected anchors, provider errors, latency, usage, and

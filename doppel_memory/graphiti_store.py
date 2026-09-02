@@ -239,13 +239,14 @@ class GraphitiSemanticIndex:
         graphiti: Any | None = None
         managed_episode_slot = False
         try:
-            graphiti = await self._ensure_graphiti()
+            active_graphiti: Any = await self._ensure_graphiti()
+            graphiti = active_graphiti
             if current is not None:
-                await graphiti.remove_episode(episode_id)
-            managed_episode_slot = _can_precreate_graphiti_episode_slot(graphiti)
+                await active_graphiti.remove_episode(episode_id)
+            managed_episode_slot = _can_precreate_graphiti_episode_slot(active_graphiti)
             if managed_episode_slot:
                 await _precreate_graphiti_episode_slot(
-                    graphiti,
+                    active_graphiti,
                     episode_id=episode_id,
                     name=_graphiti_episode_name(
                         record.memory_id, fingerprint, record.version
@@ -255,7 +256,7 @@ class GraphitiSemanticIndex:
                     source_description=record.extractor or "doppel",
                     reference_time=_graphiti_reference_time(record),
                 )
-            result = await graphiti.add_episode(
+            result = await active_graphiti.add_episode(
                 name=_graphiti_episode_name(
                     record.memory_id, fingerprint, record.version
                 ),
@@ -276,7 +277,7 @@ class GraphitiSemanticIndex:
                     "Graphiti returned an episode UUID different from the requested ID"
                 )
             await _ensure_graphiti_fallback_edge(
-                graphiti,
+                active_graphiti,
                 record=record,
                 episode_id=episode_id,
                 fingerprint=fingerprint,

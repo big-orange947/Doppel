@@ -310,7 +310,7 @@ $env:DOPPEL_API_KEY = "..."
 uv run python -m benchmarks.relation_planner_quality `
   --planner reference --max-calls 65 `
   --max-completion-tokens 768 --max-tokens-parameter max_tokens `
-  --thinking disabled `
+  --thinking disabled --max-relation-type-failures 0 `
   --output data/doppel/relation-planner-deepseek.json
 ```
 
@@ -318,7 +318,13 @@ The runner evaluates the structured draft before any Store/index call: exact int
 semantically accepted intent alternatives, point-in-time or explicitly labeled
 covering intervals, entity and relation recall, unexpected terms, unrequested hard
 `memory_types`/`topic_keys` filters, trusted-subject binding, provider failures, and
-latency. Relation hints are scored against the concise normalized surface predicate;
+latency. The host's closed `relation_types` ontology is passed in every request and
+scored independently as exact selection, recall, precision, unexpected labels, and
+out-of-ontology violations. `typed_structure_accuracy` requires both the original
+surface-plan contract and exact canonical relation typing; the original
+`exact_structure_accuracy` remains unchanged for comparison with older reports.
+`--max-relation-type-failures` is an opt-in exit gate, so old structure-only commands
+keep their previous behavior. Relation hints are scored against the concise normalized surface predicate;
 an overlong phrase containing the gold term does not receive credit because it would
 not satisfy the production relation gate. Successful drafts use a content-addressed disk cache,
 so a rerun does not spend another provider call; failed/invalid responses are never

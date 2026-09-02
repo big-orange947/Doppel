@@ -15,6 +15,7 @@ from benchmarks.relation_planner_quality import (
     PlannerCallBudgetExceeded,
     ReplayPlanner,
     UsageLedger,
+    _async_main,
     _evaluate_case,
     _parser,
     _term_matches,
@@ -34,6 +35,7 @@ class _GoldPlanner:
     version = "1"
 
     def __init__(self, dataset: Any) -> None:
+        self.dataset = dataset
         self.by_query = {item.query: item for item in dataset.queries}
         self.calls = 0
 
@@ -47,6 +49,7 @@ class _GoldPlanner:
             search_text=item.query,
             entity_mentions=item.entity_mentions,
             relation_hints=item.relation_hints,
+            relation_types=self.dataset.relation_type_labels[item.query_id],
             as_of=item.as_of,
             subject=request.default_subject,
             subject_id=request.default_subject_id,
@@ -80,8 +83,14 @@ async def test_gold_planner_scores_every_relation_case() -> None:
     assert report["metrics"]["provider_error_count"] == 0
     assert report["metrics"]["structural_failure_count"] == 0
     assert report["metrics"]["exact_structure_accuracy"] == 1
+    assert report["metrics"]["typed_structure_accuracy"] == 1
     assert report["metrics"]["entity_recall"] == 1
     assert report["metrics"]["relation_recall"] == 1
+    assert report["metrics"]["relation_type_exact_accuracy"] == 1
+    assert report["metrics"]["relation_type_recall"] == 1
+    assert report["metrics"]["relation_type_precision"] == 1
+    assert report["metrics"]["relation_type_failure_count"] == 0
+    assert report["metrics"]["relation_type_ontology_violation_count"] == 0
     assert report["by_partition"]["adversarial"]["exact_structure_accuracy"] == 1
 
 
@@ -102,6 +111,31 @@ async def test_relation_mismatch_is_reported_without_retrieval() -> None:
     assert report["metrics"]["structural_failure_count"] > 0
     assert report["metrics"]["exact_structure_accuracy"] < 1
     assert report["metrics"]["unexpected_relation_count"] > 0
+
+
+@pytest.mark.asyncio
+async def test_relation_type_mismatch_and_ontology_violation_are_independent() -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    query = dataset.queries[0]
+    planner = _StaticPlanner(
+        PersonalMemoryQueryDraft(
+            intent=query.intent,
+            search_text=query.query,
+            entity_mentions=query.entity_mentions,
+            relation_hints=query.relation_hints,
+            relation_types=["INVENTED_BY_TEST"],
+            subject_id=dataset.scopes[query.scopes[0]].user_id,
+        )
+    )
+
+    case = await _evaluate_case(planner, dataset, query)
+
+    assert case["structure_ok"] is True
+    assert case["relation_type_ok"] is False
+    assert case["typed_structure_ok"] is False
+    assert case["expected_relation_types"] == ["HELD_BY"]
+    assert case["unexpected_relation_types"] == ["INVENTED_BY_TEST"]
+    assert case["relation_type_ontology_violations"] == ["INVENTED_BY_TEST"]
 
 
 @pytest.mark.asyncio
@@ -213,6 +247,8 @@ def test_reference_cli_is_explicit_and_budgeted() -> None:
             "disabled",
             "--max-calls",
             "5",
+            "--max-relation-type-failures",
+            "3",
         ]
     )
 
@@ -222,6 +258,39 @@ def test_reference_cli_is_explicit_and_budgeted() -> None:
     assert args.max_tokens_parameter == "max_tokens"
     assert args.thinking == "disabled"
     assert args.max_calls == 5
+    assert args.max_relation_type_failures == 3
+
+
+@pytest.mark.asyncio
+async def test_deterministic_planner_is_not_limited_by_provider_call_budget(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "deterministic.json"
+    args = _parser().parse_args(
+        [
+            "--planner",
+            "deterministic",
+            "--no-cache",
+            "--max-calls",
+            "0",
+            "--max-structural-failures",
+            "65",
+            "--max-relation-type-failures",
+            "65",
+            "--output",
+            str(output),
+        ]
+    )
+
+    exit_code = await _async_main(args)
+    report = json.loads(output.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert report["metrics"]["case_count"] == 65
+    assert report["metrics"]["valid_case_count"] == 65
+    assert report["metrics"]["provider_error_count"] == 0
+    assert report["metrics"]["relation_type_failure_count"] == 65
+    assert report["budget"] == {"max_calls": None, "calls": 0}
 
 
 @pytest.mark.asyncio

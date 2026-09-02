@@ -191,11 +191,21 @@ async def run_relation_planner_quality(
 
     valid = [case for case in cases if not case["error"]]
     structural_failures = sum(not case["structure_ok"] for case in valid)
+    relation_type_failures = sum(not case["relation_type_ok"] for case in valid)
     provider_errors = sum(bool(case["error"]) for case in cases)
     total_expected_entities = sum(case["expected_entity_count"] for case in valid)
     total_matched_entities = sum(case["matched_entity_count"] for case in valid)
     total_expected_relations = sum(case["expected_relation_count"] for case in valid)
     total_matched_relations = sum(case["matched_relation_count"] for case in valid)
+    total_expected_relation_types = sum(
+        case["expected_relation_type_count"] for case in valid
+    )
+    total_actual_relation_types = sum(
+        case["actual_relation_type_count"] for case in valid
+    )
+    total_matched_relation_types = sum(
+        case["matched_relation_type_count"] for case in valid
+    )
     by_partition = _group_metrics(cases, "partition")
     by_category = _group_metrics(cases, "category")
     latencies = sorted(case["latency_ms"] for case in cases)
@@ -210,6 +220,7 @@ async def run_relation_planner_quality(
             "query_count": len(cases),
             "frozen": dataset.frozen,
             "publication_ready": dataset.publication_ready,
+            "relation_type_count": len(dataset.relation_types),
         },
         "planner": {
             "name": str(planner.name),
@@ -226,6 +237,9 @@ async def run_relation_planner_quality(
             "structural_failure_count": structural_failures,
             "exact_structure_accuracy": _ratio(
                 len(valid) - structural_failures, len(cases)
+            ),
+            "typed_structure_accuracy": _ratio(
+                sum(case["typed_structure_ok"] for case in valid), len(cases)
             ),
             "intent_accuracy": _ratio(
                 sum(case["intent_ok"] for case in valid), len(cases)
@@ -248,6 +262,24 @@ async def run_relation_planner_quality(
             "entity_recall": _ratio(total_matched_entities, total_expected_entities),
             "relation_recall": _ratio(
                 total_matched_relations, total_expected_relations
+            ),
+            "relation_type_exact_accuracy": _ratio(
+                len(valid) - relation_type_failures, len(cases)
+            ),
+            "relation_type_recall": _ratio(
+                total_matched_relation_types, total_expected_relation_types
+            ),
+            "relation_type_precision": (
+                _ratio(total_matched_relation_types, total_actual_relation_types)
+                if total_actual_relation_types
+                else 0.0
+            ),
+            "relation_type_failure_count": relation_type_failures,
+            "unexpected_relation_type_count": sum(
+                case["unexpected_relation_type_count"] for case in valid
+            ),
+            "relation_type_ontology_violation_count": sum(
+                case["relation_type_ontology_violation_count"] for case in valid
             ),
             "unexpected_entity_count": sum(
                 case["unexpected_entity_count"] for case in valid
@@ -291,6 +323,7 @@ async def _evaluate_case(
         now=query.now,
         default_subject=Actor.OWNER,
         default_subject_id=scope.user_id,
+        available_relation_types=dataset.relation_types,
     )
     started = perf_counter()
     try:
@@ -318,6 +351,15 @@ async def _evaluate_case(
             "expected_relation_count": len(query.relation_hints),
             "matched_relation_count": 0,
             "unexpected_relation_count": 0,
+            "expected_relation_type_count": len(
+                dataset.relation_type_labels.get(query.query_id, [])
+            ),
+            "actual_relation_type_count": 0,
+            "matched_relation_type_count": 0,
+            "unexpected_relation_type_count": 0,
+            "relation_type_ontology_violation_count": 0,
+            "relation_type_ok": False,
+            "typed_structure_ok": False,
             "unexpected_hard_filter_count": 0,
             "hard_filter_ok": False,
             "actual": None,
@@ -354,6 +396,22 @@ async def _evaluate_case(
     matched_relations, unexpected_relations = _relation_term_matches(
         query.relation_hints, draft.relation_hints
     )
+    expected_relation_types = dataset.relation_type_labels.get(query.query_id, [])
+    expected_relation_type_set = set(expected_relation_types)
+    actual_relation_type_set = set(draft.relation_types)
+    matched_relation_types = expected_relation_type_set.intersection(
+        actual_relation_type_set
+    )
+    unexpected_relation_types = sorted(
+        actual_relation_type_set.difference(expected_relation_type_set)
+    )
+    ontology_violations = sorted(
+        actual_relation_type_set.difference(dataset.relation_types)
+    )
+    relation_type_ok = (
+        actual_relation_type_set == expected_relation_type_set
+        and not ontology_violations
+    )
     entity_ok = matched_entities == len(query.entity_mentions) and not unexpected_entities
     relation_ok = (
         matched_relations == len(query.relation_hints) and not unexpected_relations
@@ -371,6 +429,7 @@ async def _evaluate_case(
         and hard_filter_ok
         and subject_binding_ok
     )
+    typed_structure_ok = structure_ok and relation_type_ok
     return {
         "query_id": query.query_id,
         "partition": query.partition,
@@ -393,6 +452,16 @@ async def _evaluate_case(
         "expected_relation_count": len(query.relation_hints),
         "matched_relation_count": matched_relations,
         "unexpected_relation_count": len(unexpected_relations),
+        "expected_relation_type_count": len(expected_relation_type_set),
+        "actual_relation_type_count": len(actual_relation_type_set),
+        "matched_relation_type_count": len(matched_relation_types),
+        "unexpected_relation_type_count": len(unexpected_relation_types),
+        "relation_type_ontology_violation_count": len(ontology_violations),
+        "expected_relation_types": sorted(expected_relation_type_set),
+        "unexpected_relation_types": unexpected_relation_types,
+        "relation_type_ontology_violations": ontology_violations,
+        "relation_type_ok": relation_type_ok,
+        "typed_structure_ok": typed_structure_ok,
         "unexpected_hard_filter_count": len(unexpected_hard_filters),
         "unexpected_hard_filters": unexpected_hard_filters,
         "hard_filter_ok": hard_filter_ok,
@@ -465,6 +534,12 @@ def _group_metrics(cases: list[dict[str, Any]], key: str) -> dict[str, Any]:
             "exact_structure_accuracy": _ratio(
                 sum(item["structure_ok"] for item in items), len(items)
             ),
+            "typed_structure_accuracy": _ratio(
+                sum(item["typed_structure_ok"] for item in items), len(items)
+            ),
+            "relation_type_exact_accuracy": _ratio(
+                sum(item["relation_type_ok"] for item in items), len(items)
+            ),
         }
         for name, items in sorted(grouped.items())
     }
@@ -504,6 +579,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--max-calls", type=int, default=40)
     parser.add_argument("--max-structural-failures", type=int, default=0)
+    parser.add_argument(
+        "--max-relation-type-failures",
+        type=int,
+        default=None,
+        help=(
+            "optional exact relation-type failure gate; omitted preserves the "
+            "legacy structure-only exit policy"
+        ),
+    )
     parser.add_argument("--model", default=os.environ.get("DOPPEL_MODEL", ""))
     parser.add_argument(
         "--base-url",
@@ -553,9 +637,9 @@ async def _async_main(args: argparse.Namespace) -> int:
         base_planner = DeterministicPersonalMemoryQueryPlanner()
 
     budget = (
-        None
-        if args.replay_report is not None
-        else PlannerCallBudget(base_planner, max_calls=args.max_calls)
+        PlannerCallBudget(base_planner, max_calls=args.max_calls)
+        if args.replay_report is None and args.planner == "reference"
+        else None
     )
     cache = CachedPlanner(
         budget or base_planner,
@@ -597,6 +681,11 @@ async def _async_main(args: argparse.Namespace) -> int:
     return int(
         metrics["provider_error_count"] > 0
         or metrics["structural_failure_count"] > args.max_structural_failures
+        or (
+            args.max_relation_type_failures is not None
+            and metrics["relation_type_failure_count"]
+            > args.max_relation_type_failures
+        )
     )
 
 
@@ -604,6 +693,11 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.max_calls < 0:
         raise ValueError("--max-calls must be non-negative")
+    if (
+        args.max_relation_type_failures is not None
+        and args.max_relation_type_failures < 0
+    ):
+        raise ValueError("--max-relation-type-failures must be non-negative")
     return asyncio.run(_async_main(args))
 
 
