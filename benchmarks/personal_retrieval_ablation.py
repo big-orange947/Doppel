@@ -3526,7 +3526,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--planner-modes",
         default=",".join(PLANNER_MODES),
-        help="comma-separated planner modes: oracle,deterministic,report",
+        help="comma-separated planner modes: " + ",".join(ALL_PLANNER_MODES),
     )
     parser.add_argument(
         "--planner-report",
