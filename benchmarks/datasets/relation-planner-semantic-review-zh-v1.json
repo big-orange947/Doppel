@@ -1,0 +1,132 @@
+{
+  "version": "1.0.0-draft",
+  "dataset_fingerprint": "00faec11ddb3ce5c84dcaeb0251cc6e118bbac8f1f1da5c42eaf5fcc503f1ffd",
+  "status": "posthoc_diagnostic",
+  "publication_ready": false,
+  "note": "Authored after inspecting the typed-v2 run. This is an engineering diagnosis, not untouched heldout validation. It reviews query observability using the host's label names, not hidden memory IDs or stored edge facts. It never changes the legacy scores, provider inputs, or retrieval gold. Ambiguous hard filters are risks, not accepted answers.",
+  "relation_groups": [
+    {
+      "name": "explicit_custody",
+      "query_ids": ["rel-q01", "rel-q04", "rel-q12", "rel-q18", "rel-q19", "rel-q26", "rel-q29", "rel-q43", "rel-q53", "rel-q58", "rel-q62"],
+      "policy": "explicit", "expected_types": ["HELD_BY"],
+      "reason": "The question explicitly asks who keeps or safeguards the object. It does not ask who owns, bought, or recommended it."
+    },
+    {
+      "name": "possession_or_transfer_without_contract",
+      "query_ids": ["rel-q02", "rel-q03", "rel-q25", "rel-q33", "rel-q44", "rel-q45", "rel-q46", "rel-q48", "rel-q51"],
+      "policy": "underdetermined",
+      "reason": "Being with somebody, transferring an item, or letting somebody use it does not uniquely distinguish custody, a loan, or ownership. The host supplies labels but no entailment/subtype contract. Do not infer a unique storage label from a hidden edge."
+    },
+    {
+      "name": "generic_location_with_overlapping_labels",
+      "query_ids": ["rel-q05", "rel-q06", "rel-q07", "rel-q08", "rel-q15", "rel-q16", "rel-q17", "rel-q20", "rel-q27", "rel-q28", "rel-q36", "rel-q39", "rel-q52", "rel-q54", "rel-q57", "rel-q59", "rel-q61", "rel-q63"],
+      "policy": "underdetermined",
+      "reason": "A general location question can be answered by location, storage, or custody evidence. LOCATED_AT and STORED_IN overlap without host definitions; a reception desk can denote a place or a custodian. Selecting any single exact edge label may lose legitimate evidence."
+    },
+    {
+      "name": "explicit_storage",
+      "query_ids": ["rel-q14", "rel-q55", "rel-q56"],
+      "policy": "explicit", "expected_types": ["STORED_IN"],
+      "reason": "Explicit storage or putting an original document in a cabinet identifies storage more specifically than a general location question."
+    },
+    {
+      "name": "employment",
+      "query_ids": ["rel-q09", "rel-q10", "rel-q11"],
+      "policy": "explicit", "expected_types": ["EMPLOYED_BY"],
+      "reason": "The named predicate explicitly concerns employment by a company."
+    },
+    {
+      "name": "medical_care",
+      "query_ids": ["rel-q13", "rel-q42"],
+      "policy": "explicit", "expected_types": ["CARED_FOR_BY"],
+      "reason": "The requested endpoint is a doctor providing care or a follow-up visit; acquisition/adoption is not the requested relation."
+    },
+    {
+      "name": "purchaser",
+      "query_ids": ["rel-q21", "rel-q30"],
+      "policy": "explicit", "expected_types": ["PURCHASED_BY"],
+      "reason": "The question explicitly asks for the buyer, not the purchase location or present custodian."
+    },
+    {
+      "name": "repairer",
+      "query_ids": ["rel-q22", "rel-q37"],
+      "policy": "explicit", "expected_types": ["REPAIRED_BY"],
+      "reason": "Repair is explicit and the requested endpoint is the responsible person, not the place of repair."
+    },
+    {
+      "name": "purchase_location", "query_ids": ["rel-q23"],
+      "policy": "explicit", "expected_types": ["PURCHASED_AT"],
+      "reason": "The query explicitly asks where the purchase occurred."
+    },
+    {
+      "name": "birth_location", "query_ids": ["rel-q24"],
+      "policy": "explicit", "expected_types": ["BORN_AT"],
+      "reason": "The query explicitly asks where birth occurred."
+    },
+    {
+      "name": "recommender", "query_ids": ["rel-q31", "rel-q32", "rel-q60"],
+      "policy": "explicit", "expected_types": ["RECOMMENDED_BY"],
+      "reason": "Both recommendation and colloquial promotion identify who recommended the work, not who possesses it."
+    },
+    {
+      "name": "issuing_authority", "query_ids": ["rel-q34"],
+      "policy": "explicit", "expected_types": ["ISSUED_BY"],
+      "reason": "The requested endpoint is explicitly the issuing institution."
+    },
+    {
+      "name": "issuance_authority_or_location", "query_ids": ["rel-q35"],
+      "policy": "underdetermined",
+      "reason": "Where a document came from can ask about an issuing institution or an issuing location; the question does not uniquely specify ISSUED_BY."
+    },
+    {
+      "name": "unspecified_work_or_origin", "query_ids": ["rel-q38", "rel-q41", "rel-q50"],
+      "policy": "underdetermined",
+      "reason": "Handling something, bringing it home, or having something done does not uniquely establish repair or adoption without context. Gold stored facts must not be supplied implicitly to a scope-free planner."
+    },
+    {
+      "name": "adoption", "query_ids": ["rel-q40"],
+      "policy": "explicit", "expected_types": ["ADOPTED_FROM"],
+      "reason": "Adoption and a source shelter are explicitly requested."
+    },
+    {
+      "name": "loan", "query_ids": ["rel-q47"],
+      "policy": "explicit", "expected_types": ["LOANED_TO"],
+      "reason": "The question explicitly states a loan and asks for its recipient."
+    },
+    {
+      "name": "repair_location", "query_ids": ["rel-q49"],
+      "policy": "explicit", "expected_types": ["REPAIRED_AT"],
+      "reason": "Repair is explicit and the endpoint is a repair shop."
+    },
+    {
+      "name": "renewal_time", "query_ids": ["rel-q64"],
+      "policy": "explicit", "expected_types": ["RENEWED_ON"],
+      "reason": "The query explicitly asks for a renewal date rather than original issuance."
+    },
+    {
+      "name": "ownership", "query_ids": ["rel-q65"],
+      "policy": "explicit", "expected_types": ["OWNED_BY"],
+      "reason": "Belonging to somebody asks ownership rather than physical location or custody."
+    }
+  ],
+  "temporal_reviews": {
+    "rel-q46": {
+      "alternatives": [
+        {
+          "time_from": {
+            "minimum": "2026-08-10T00:00:00Z",
+            "maximum": "2026-08-10T00:00:00Z"
+          }
+        },
+        {
+          "time_from": {
+            "minimum": "2026-08-11T00:00:00Z",
+            "maximum": "2026-08-11T00:00:00Z"
+          }
+        }
+      ],
+      "reason": "After a calendar date expresses an open lower-bounded interval, with inclusive-day versus next-day ambiguity. Both explicit day-boundary readings are recorded. An arbitrary single point on the next day is not equivalent. The old required/forbidden memory labels also need review before interpreting this as retrieval correctness.",
+      "retrieval_gold_needs_review": true
+    }
+  }
+}

@@ -36,6 +36,17 @@
 
 ### Changed
 
+- Harden relation-planner evaluation: fail fast on authentication errors, preflight
+  missing credentials, distinguish unexecuted cases from invalid responses, report
+  zero-denominator metrics as null, and keep only redacted field/code validation
+  diagnostics. Cache-only audits use zero provider calls; replay preserves source
+  failures and checks dataset/request identity. Reports record implementation hashes
+  and a SHA-256 sidecar.
+- Add an opt-in, explicitly post-hoc semantic review overlay for the 65-query
+  relation fixture. It separates observable predicates, conservative abstention,
+  and ambiguous hard filters without modifying storage gold, legacy scores, runtime
+  prompts, or gates. Temporal review checks explicit point/open-interval shapes and
+  flags retrieval gold that still needs review rather than silently accepting it.
 - Split graph relations from generic semantic retrieval. The additive
   `RelationIndex` protocol carries explicit entity anchors and optional relation
   hints; `GraphitiRelationIndex` queries only non-fallback Entity relationships,

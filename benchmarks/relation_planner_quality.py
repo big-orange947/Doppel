@@ -15,12 +15,22 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, get_args
+
+from pydantic import ValidationError
+from pydantic_core.core_schema import ErrorType
 
 from benchmarks.personal_retrieval_ablation import (
     AblationDataset,
     AblationQuery,
+    _git_commit_hash,
+    _git_tracked_dirty_paths,
+    _source_tree_sha256,
     load_ablation_dataset,
+)
+from benchmarks.planner_semantic_review import (
+    PlannerSemanticReview,
+    review_planner_report,
 )
 from doppel_memory import (
     Actor,
@@ -38,6 +48,74 @@ DEFAULT_DATASET = (
     Path(__file__).parent / "datasets" / "personal-relation-ablation-zh-v1.json"
 )
 CACHE_FORMAT_VERSION = 1
+
+
+def _safe_validation_errors(exc: ValidationError) -> list[dict[str, Any]]:
+    """Never serialize model values, arbitrary extra-key names, messages or ctx."""
+    return _safe_diagnostic_rows(
+        [
+            {"location": item["loc"], "type": item["type"]}
+            for item in exc.errors(
+                include_input=False, include_context=False, include_url=False
+            )
+        ]
+    )
+
+
+def _safe_diagnostic_rows(rows: Any) -> list[dict[str, Any]]:
+    fields = set(PersonalMemoryQueryDraft.model_fields)
+    error_types = set(get_args(ErrorType))
+    if not isinstance(rows, list):
+        return []
+    return [
+        {
+            "location": [
+                part
+                if isinstance(part, int) or isinstance(part, str) and part in fields
+                else "<unknown-field>"
+                for part in item["location"]
+            ],
+            "type": item["type"]
+            if item["type"] in error_types
+            else "custom_validation_error",
+        }
+        for item in rows
+        if isinstance(item, dict)
+        and isinstance(item.get("location"), (list, tuple))
+        and isinstance(item.get("type"), str)
+    ]
+
+
+class ReplayedPlannerFailure(RuntimeError):
+    """An original failure, not a newly attempted provider call."""
+
+    def __init__(self, case: dict[str, Any]) -> None:
+        super().__init__("source report contains no valid draft")
+        self.source_error = (
+            str(case.get("error"))
+            if case.get("error")
+            in {
+                "ValidationError",
+                "StructuredOutputProviderError",
+                "PlannerCallBudgetExceeded",
+                "PlannerNotRun",
+            }
+            else "SourceReportError"
+        )
+        self.source_code = (
+            str(case.get("error_code"))
+            if case.get("error_code")
+            in {
+                "authentication_error",
+                "rate_limited",
+                "http_error",
+                "validation_error",
+                "budget_exhausted",
+            }
+            else ""
+        )
+        self.validation_errors = _safe_diagnostic_rows(case.get("validation_errors"))
+        self.source_not_run = case.get("status") == "not_run"
 
 
 class PlannerCallBudgetExceeded(RuntimeError):
@@ -94,9 +172,7 @@ class CachedPlanner:
                 self.hits += 1
                 return draft
         self.misses += 1
-        draft = PersonalMemoryQueryDraft.model_validate(
-            await self._planner.plan(bound)
-        )
+        draft = PersonalMemoryQueryDraft.model_validate(await self._planner.plan(bound))
         if cache_path is not None:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             fd, temporary = tempfile.mkstemp(
@@ -150,24 +226,36 @@ class UsageLedger:
 class ReplayPlanner:
     """Re-score successful drafts from a prior report without provider calls."""
 
-    def __init__(self, report_path: Path) -> None:
+    def __init__(
+        self, report_path: Path, *, dataset: AblationDataset | None = None
+    ) -> None:
         raw = json.loads(report_path.read_text(encoding="utf-8"))
+        if dataset is not None and (
+            (raw.get("dataset") or {}).get("fingerprint") != dataset.fingerprint
+        ):
+            raise ValueError("replay dataset fingerprint mismatch")
         planner = dict(raw.get("planner") or {})
         self.name = str(planner.get("name") or "doppel.replay-planner")
         self.version = str(planner.get("version") or "unknown")
-        self._drafts = {
-            str(item.get("query") or ""): item.get("actual")
-            for item in list(raw.get("cases") or [])
-            if not item.get("error") and item.get("actual") is not None
-        }
+        self._cases: dict[str, dict[str, Any]] = {}
+        for item in list(raw.get("cases") or []):
+            query_text = str(item.get("query") or "")
+            if query_text in self._cases:
+                raise ValueError("replay report contains duplicate query texts")
+            self._cases[query_text] = item
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
     ) -> PersonalMemoryQueryDraft:
-        raw = self._drafts.get(request.query)
-        if raw is None:
+        case = self._cases.get(request.query)
+        if case is None:
             raise KeyError("prior report has no successful draft for this query")
-        return PersonalMemoryQueryDraft.model_validate(raw)
+        fingerprint = case.get("request_fingerprint")
+        if fingerprint and fingerprint != _fingerprint(request.model_dump(mode="json")):
+            raise ValueError("replay request fingerprint mismatch")
+        if case.get("error") or case.get("actual") is None:
+            raise ReplayedPlannerFailure(case)
+        return PersonalMemoryQueryDraft.model_validate(case["actual"])
 
 
 async def run_relation_planner_quality(
@@ -184,15 +272,35 @@ async def run_relation_planner_quality(
         raise ValueError("relation planner quality requires a relation benchmark")
     runner = cache or planner
     cases: list[dict[str, Any]] = []
+    stop_reason = ""
+    stopped_at = ""
     for query in dataset.queries:
         if query.partition == "deferred_cross_subject":
             continue
-        cases.append(await _evaluate_case(runner, dataset, query))
+        if stop_reason:
+            case = _failed_case(
+                dataset,
+                query,
+                error="PlannerNotRun",
+                error_code="previous_fatal_error",
+                status="not_run",
+                error_origin="not_run",
+            )
+        else:
+            case = await _evaluate_case(runner, dataset, query)
+            if (
+                case["error_code"] == "authentication_error"
+                and case.get("error_origin") != "source_report"
+            ):
+                stop_reason = "authentication_error"
+                stopped_at = query.query_id
+        cases.append(case)
 
-    valid = [case for case in cases if not case["error"]]
+    valid = [case for case in cases if case["status"] == "valid"]
     structural_failures = sum(not case["structure_ok"] for case in valid)
     relation_type_failures = sum(not case["relation_type_ok"] for case in valid)
-    provider_errors = sum(bool(case["error"]) for case in cases)
+    provider_errors = sum(case["status"] == "error" for case in cases)
+    not_run = sum(case["status"] == "not_run" for case in cases)
     total_expected_entities = sum(case["expected_entity_count"] for case in valid)
     total_matched_entities = sum(case["matched_entity_count"] for case in valid)
     total_expected_relations = sum(case["expected_relation_count"] for case in valid)
@@ -211,6 +319,7 @@ async def run_relation_planner_quality(
     latencies = sorted(case["latency_ms"] for case in cases)
     return {
         "runner": "doppel.relation-planner-quality.v1",
+        "scoring_version": "2",
         "doppel_version": __version__,
         "generated_at": datetime.now().astimezone().isoformat(),
         "dataset": {
@@ -230,10 +339,20 @@ async def run_relation_planner_quality(
             "python": platform.python_version(),
             "platform": platform.platform(),
         },
+        "execution": {
+            "complete": not not_run and not provider_errors,
+            "stopped_early": bool(stop_reason),
+            "stop_reason": stop_reason,
+            "stopped_at_query_id": stopped_at,
+            "evaluated_case_count": len(cases) - not_run,
+            "not_run_case_count": not_run,
+            "quality_measurement": "available" if valid else "unavailable",
+        },
         "metrics": {
             "case_count": len(cases),
             "valid_case_count": len(valid),
             "provider_error_count": provider_errors,
+            "not_run_case_count": not_run,
             "structural_failure_count": structural_failures,
             "exact_structure_accuracy": _ratio(
                 len(valid) - structural_failures, len(cases)
@@ -269,10 +388,8 @@ async def run_relation_planner_quality(
             "relation_type_recall": _ratio(
                 total_matched_relation_types, total_expected_relation_types
             ),
-            "relation_type_precision": (
-                _ratio(total_matched_relation_types, total_actual_relation_types)
-                if total_actual_relation_types
-                else 0.0
+            "relation_type_precision": _ratio(
+                total_matched_relation_types, total_actual_relation_types
             ),
             "relation_type_failure_count": relation_type_failures,
             "unexpected_relation_type_count": sum(
@@ -312,58 +429,119 @@ async def run_relation_planner_quality(
     }
 
 
-async def _evaluate_case(
-    planner: Any,
-    dataset: AblationDataset,
-    query: AblationQuery,
-) -> dict[str, Any]:
+def _query_request(
+    dataset: AblationDataset, query: AblationQuery
+) -> PersonalMemoryQueryRequest:
     scope = dataset.scopes[query.scopes[0]].to_scope()
-    request = PersonalMemoryQueryRequest(
+    return PersonalMemoryQueryRequest(
         query=query.query,
         now=query.now,
         default_subject=Actor.OWNER,
         default_subject_id=scope.user_id,
         available_relation_types=dataset.relation_types,
     )
+
+
+def _failed_case(
+    dataset: AblationDataset,
+    query: AblationQuery,
+    *,
+    error: str,
+    error_code: str,
+    status: str = "error",
+    error_origin: str = "current_run",
+    latency_ms: float = 0.0,
+    http_status: int | None = None,
+    validation_errors: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "query_id": query.query_id,
+        "partition": query.partition,
+        "category": query.category,
+        "query": query.query,
+        "request_fingerprint": _fingerprint(
+            _query_request(dataset, query).model_dump(mode="json")
+        ),
+        "status": status,
+        "error": error,
+        "error_code": error_code,
+        "error_origin": error_origin,
+        "http_status": http_status,
+        "validation_errors": validation_errors or [],
+        "validation_diagnostics_available": bool(validation_errors),
+        "latency_ms": latency_ms,
+        "structure_ok": False,
+        "intent_ok": False,
+        "intent_semantics_ok": False,
+        "as_of_presence_ok": False,
+        "as_of_date_ok": False,
+        "temporal_plan_ok": False,
+        "subject_binding_ok": False,
+        "expected_entity_count": len(query.entity_mentions),
+        "matched_entity_count": 0,
+        "unexpected_entity_count": 0,
+        "expected_relation_count": len(query.relation_hints),
+        "matched_relation_count": 0,
+        "unexpected_relation_count": 0,
+        "expected_relation_type_count": len(
+            dataset.relation_type_labels.get(query.query_id, [])
+        ),
+        "actual_relation_type_count": 0,
+        "matched_relation_type_count": 0,
+        "unexpected_relation_type_count": 0,
+        "relation_type_ontology_violation_count": 0,
+        "relation_type_ok": False,
+        "typed_structure_ok": False,
+        "unexpected_hard_filter_count": 0,
+        "hard_filter_ok": False,
+        "actual": None,
+    }
+
+
+async def _evaluate_case(
+    planner: Any,
+    dataset: AblationDataset,
+    query: AblationQuery,
+) -> dict[str, Any]:
+    request = _query_request(dataset, query)
     started = perf_counter()
     try:
         draft = PersonalMemoryQueryDraft.model_validate(await planner.plan(request))
     except Exception as exc:  # noqa: BLE001 - report sanitized provider failure only
-        code = exc.code if isinstance(exc, StructuredOutputProviderError) else ""
-        return {
-            "query_id": query.query_id,
-            "partition": query.partition,
-            "category": query.category,
-            "query": query.query,
-            "error": type(exc).__name__,
-            "error_code": code,
-            "latency_ms": round((perf_counter() - started) * 1_000, 3),
-            "structure_ok": False,
-            "intent_ok": False,
-            "intent_semantics_ok": False,
-            "as_of_presence_ok": False,
-            "as_of_date_ok": False,
-            "temporal_plan_ok": False,
-            "subject_binding_ok": False,
-            "expected_entity_count": len(query.entity_mentions),
-            "matched_entity_count": 0,
-            "unexpected_entity_count": 0,
-            "expected_relation_count": len(query.relation_hints),
-            "matched_relation_count": 0,
-            "unexpected_relation_count": 0,
-            "expected_relation_type_count": len(
-                dataset.relation_type_labels.get(query.query_id, [])
+        is_provider = isinstance(exc, StructuredOutputProviderError)
+        is_validation = isinstance(exc, ValidationError)
+        is_budget = isinstance(exc, PlannerCallBudgetExceeded)
+        is_replay = isinstance(exc, ReplayedPlannerFailure)
+        code = (
+            exc.code
+            if is_provider
+            else (
+                "validation_error"
+                if is_validation
+                else "budget_exhausted"
+                if is_budget
+                else ""
+            )
+        )
+        return _failed_case(
+            dataset,
+            query,
+            error=exc.source_error if is_replay else type(exc).__name__,
+            error_code=exc.source_code if is_replay else code,
+            status="not_run"
+            if is_budget or is_replay and exc.source_not_run
+            else "error",
+            error_origin="source_report" if is_replay else "current_run",
+            latency_ms=round((perf_counter() - started) * 1_000, 3),
+            http_status=exc.status_code if is_provider else None,
+            validation_errors=(
+                _safe_validation_errors(exc)
+                if is_validation
+                else exc.validation_errors
+                if is_replay
+                else []
             ),
-            "actual_relation_type_count": 0,
-            "matched_relation_type_count": 0,
-            "unexpected_relation_type_count": 0,
-            "relation_type_ontology_violation_count": 0,
-            "relation_type_ok": False,
-            "typed_structure_ok": False,
-            "unexpected_hard_filter_count": 0,
-            "hard_filter_ok": False,
-            "actual": None,
-        }
+        )
 
     expected_as_of = query.as_of
     actual_as_of = draft.as_of
@@ -373,10 +551,7 @@ async def _evaluate_case(
     as_of_presence_ok = (expected_as_of is None) == (actual_as_of is None)
     as_of_date_ok = as_of_presence_ok and (
         expected_as_of is None
-        or (
-            actual_as_of is not None
-            and actual_as_of.date() == expected_as_of.date()
-        )
+        or (actual_as_of is not None and actual_as_of.date() == expected_as_of.date())
     )
     interval_covers_as_of = bool(
         query.accept_interval_covering_as_of
@@ -412,7 +587,9 @@ async def _evaluate_case(
         actual_relation_type_set == expected_relation_type_set
         and not ontology_violations
     )
-    entity_ok = matched_entities == len(query.entity_mentions) and not unexpected_entities
+    entity_ok = (
+        matched_entities == len(query.entity_mentions) and not unexpected_entities
+    )
     relation_ok = (
         matched_relations == len(query.relation_hints) and not unexpected_relations
     )
@@ -435,8 +612,11 @@ async def _evaluate_case(
         "partition": query.partition,
         "category": query.category,
         "query": query.query,
+        "request_fingerprint": _fingerprint(request.model_dump(mode="json")),
+        "status": "valid",
         "error": "",
         "error_code": "",
+        "error_origin": "",
         "latency_ms": round((perf_counter() - started) * 1_000, 3),
         "structure_ok": structure_ok,
         "intent_ok": intent_ok,
@@ -480,8 +660,10 @@ def _term_matches(expected: list[str], actual: list[str]) -> tuple[int, list[str
         for actual_index, actual_term in enumerate(actual_terms):
             if actual_index in matched_actual:
                 continue
-            if expected_term and actual_term and (
-                expected_term in actual_term or actual_term in expected_term
+            if (
+                expected_term
+                and actual_term
+                and (expected_term in actual_term or actual_term in expected_term)
             ):
                 matched_expected.add(expected_index)
                 matched_actual.add(actual_index)
@@ -527,9 +709,10 @@ def _group_metrics(cases: list[dict[str, Any]], key: str) -> dict[str, Any]:
     return {
         name: {
             "case_count": len(items),
-            "provider_error_count": sum(bool(item["error"]) for item in items),
+            "provider_error_count": sum(item["status"] == "error" for item in items),
+            "not_run_case_count": sum(item["status"] == "not_run" for item in items),
             "structural_failure_count": sum(
-                not item["structure_ok"] for item in items
+                not item["structure_ok"] for item in items if item["status"] == "valid"
             ),
             "exact_structure_accuracy": _ratio(
                 sum(item["structure_ok"] for item in items), len(items)
@@ -545,8 +728,8 @@ def _group_metrics(cases: list[dict[str, Any]], key: str) -> dict[str, Any]:
     }
 
 
-def _ratio(numerator: int, denominator: int) -> float:
-    return round(numerator / denominator, 4) if denominator else 1.0
+def _ratio(numerator: int, denominator: int) -> float | None:
+    return round(numerator / denominator, 4) if denominator else None
 
 
 def _percentile(values: list[float], quantile: float) -> float:
@@ -571,13 +754,25 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument(
+        "--semantic-review",
+        type=Path,
+        help="optional post-hoc diagnostic annotation file; never changes gold scores or drafts",
+    )
+    parser.add_argument(
         "--replay-report",
         type=Path,
         help="re-score successful drafts from a prior report with zero provider calls",
     )
-    parser.add_argument("--cache-dir", type=Path, default=Path("data/doppel/planner-cache"))
+    parser.add_argument(
+        "--cache-dir", type=Path, default=Path("data/doppel/planner-cache")
+    )
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--max-calls", type=int, default=40)
+    parser.add_argument(
+        "--allow-unauthenticated",
+        action="store_true",
+        help="explicit opt-in for a local provider that does not require an API key",
+    )
     parser.add_argument("--max-structural-failures", type=int, default=0)
     parser.add_argument(
         "--max-relation-type-failures",
@@ -604,21 +799,38 @@ def _parser() -> argparse.ArgumentParser:
         choices=("max_completion_tokens", "max_tokens"),
         default="max_completion_tokens",
     )
-    parser.add_argument(
-        "--thinking", choices=("enabled", "disabled"), default=None
-    )
+    parser.add_argument("--thinking", choices=("enabled", "disabled"), default=None)
     return parser
 
 
 async def _async_main(args: argparse.Namespace) -> int:
     dataset = load_ablation_dataset(args.dataset)
+    if args.semantic_review is not None:
+        PlannerSemanticReview.model_validate_json(
+            args.semantic_review.read_bytes()
+        ).validate_dataset(dataset)
     usage = UsageLedger()
     provider: OpenAICompatibleStructuredOutputModel | None = None
     if args.replay_report is not None:
-        base_planner: Any = ReplayPlanner(args.replay_report)
+        if (
+            args.output is not None
+            and args.output.resolve() == args.replay_report.resolve()
+        ):
+            raise ValueError("replay output must not overwrite its source report")
+        base_planner: Any = ReplayPlanner(args.replay_report, dataset=dataset)
     elif args.planner == "reference":
         if not str(args.model or "").strip():
             raise RuntimeError("reference planner requires --model or DOPPEL_MODEL")
+        if (
+            args.max_calls > 0
+            and not args.allow_unauthenticated
+            and not os.environ.get("DOPPEL_API_KEY", "").strip()
+        ):
+            raise RuntimeError(
+                "DOPPEL_API_KEY is missing; set it in this shell before running. "
+                "Use --max-calls 0 for cache-only evaluation, or explicitly opt in "
+                "to --allow-unauthenticated for a provider without authentication."
+            )
         provider = OpenAICompatibleStructuredOutputModel(
             OpenAICompatibleStructuredOutputConfig(
                 model=args.model,
@@ -643,9 +855,7 @@ async def _async_main(args: argparse.Namespace) -> int:
     )
     cache = CachedPlanner(
         budget or base_planner,
-        None
-        if args.no_cache or args.replay_report is not None
-        else args.cache_dir,
+        None if args.no_cache or args.replay_report is not None else args.cache_dir,
     )
     try:
         report = await run_relation_planner_quality(
@@ -670,21 +880,49 @@ async def _async_main(args: argparse.Namespace) -> int:
         if provider is not None:
             await provider.aclose()
 
+    if args.semantic_review is not None:
+        report["semantic_review"] = review_planner_report(
+            report, dataset, args.semantic_review
+        )
+
+    report["implementation"] = {
+        "commit_hash": _git_commit_hash(),
+        "tracked_dirty_paths": _git_tracked_dirty_paths(),
+        "scoring_source_sha256": _fingerprint(
+            {
+                "retrieval_source_sha256": _source_tree_sha256(),
+                "planner_quality": hashlib.sha256(
+                    Path(__file__).read_bytes()
+                ).hexdigest(),
+                "semantic_review": hashlib.sha256(
+                    Path(__file__).with_name("planner_semantic_review.py").read_bytes()
+                ).hexdigest(),
+            }
+        ),
+        "latency_kind": "local_replay"
+        if args.replay_report is not None
+        else "planner_with_cache",
+    }
+
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
+        file_hash = hashlib.sha256(args.output.read_bytes()).hexdigest()
+        args.output.with_suffix(args.output.suffix + ".sha256").write_text(
+            f"{file_hash}  {args.output.name}\n", encoding="utf-8"
+        )
         print(f"relation planner quality result: {args.output}")
     else:
         sys.stdout.write(rendered)
     metrics = report["metrics"]
     return int(
         metrics["provider_error_count"] > 0
+        or metrics["not_run_case_count"] > 0
         or metrics["structural_failure_count"] > args.max_structural_failures
         or (
             args.max_relation_type_failures is not None
-            and metrics["relation_type_failure_count"]
-            > args.max_relation_type_failures
+            and metrics["relation_type_failure_count"] > args.max_relation_type_failures
         )
     )
 

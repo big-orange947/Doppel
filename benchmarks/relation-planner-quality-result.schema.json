@@ -20,6 +20,30 @@
   ],
   "properties": {
     "runner": {"const": "doppel.relation-planner-quality.v1"},
+    "scoring_version": {"const": "2"},
+    "execution": {
+      "type": "object",
+      "required": ["complete", "stopped_early", "stop_reason", "stopped_at_query_id", "evaluated_case_count", "not_run_case_count", "quality_measurement"],
+      "properties": {
+        "complete": {"type": "boolean"},
+        "stopped_early": {"type": "boolean"},
+        "stop_reason": {"type": "string"},
+        "stopped_at_query_id": {"type": "string"},
+        "evaluated_case_count": {"type": "integer", "minimum": 0},
+        "not_run_case_count": {"type": "integer", "minimum": 0},
+        "quality_measurement": {"enum": ["available", "unavailable"]}
+      }
+    },
+    "semantic_review": {
+      "type": "object",
+      "required": ["version", "status", "publication_ready", "sha256", "dataset_fingerprint", "legacy_scores_unchanged", "relation_assessment_counts", "temporal_assessment_counts", "cases"],
+      "properties": {
+        "status": {"const": "posthoc_diagnostic"},
+        "publication_ready": {"const": false},
+        "legacy_scores_unchanged": {"const": true},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
     "doppel_version": {"type": "string"},
     "generated_at": {"type": "string", "format": "date-time"},
     "dataset": {
@@ -82,6 +106,7 @@
         "case_count": {"type": "integer", "minimum": 1},
         "valid_case_count": {"type": "integer", "minimum": 0},
         "provider_error_count": {"type": "integer", "minimum": 0},
+        "not_run_case_count": {"type": "integer", "minimum": 0},
         "structural_failure_count": {"type": "integer", "minimum": 0},
         "exact_structure_accuracy": {"$ref": "#/$defs/ratio"},
         "typed_structure_accuracy": {"$ref": "#/$defs/ratio"},
@@ -170,11 +195,29 @@
           "unexpected_hard_filter_count",
           "hard_filter_ok",
           "actual"
-        ]
+        ],
+        "properties": {
+          "status": {"enum": ["valid", "error", "not_run"]},
+          "request_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "error_origin": {"enum": ["", "current_run", "source_report", "not_run"]},
+          "http_status": {"type": ["integer", "null"]},
+          "validation_diagnostics_available": {"type": "boolean"},
+          "validation_errors": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["location", "type"],
+              "properties": {
+                "location": {"type": "array", "items": {"type": ["integer", "string"]}},
+                "type": {"type": "string"}
+              }
+            }
+          }
+        }
       }
     }
   },
   "$defs": {
-    "ratio": {"type": "number", "minimum": 0, "maximum": 1}
+    "ratio": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
   }
 }

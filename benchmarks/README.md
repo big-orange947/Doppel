@@ -328,20 +328,63 @@ keep their previous behavior. Relation hints are scored against the concise norm
 an overlong phrase containing the gold term does not receive credit because it would
 not satisfy the production relation gate. Successful drafts use a content-addressed disk cache,
 so a rerun does not spend another provider call; failed/invalid responses are never
-cached. `--max-calls` is checked before each cache miss. Provider token usage is an
+cached. `--max-calls` is checked before each reference-provider cache miss; it does
+not limit deterministic local planning. Provider token usage is an
 aggregate content-free ledger. The cache fingerprint includes planner/provider
 version and the complete request but never includes an API key. The result contract is
 [`relation-planner-quality-result.schema.json`](relation-planner-quality-result.schema.json).
 
-A prior paid result can be re-scored after correcting gold semantics without another
-provider request. The replay report records the source path, SHA-256, original dataset
-fingerprint, and `provider_calls=0`:
+A prior paid result can be re-scored without another provider request. Replay now
+requires the same dataset fingerprint and verifies per-case request fingerprints
+when available. Original failure types remain failures with `error_origin=source_report`;
+legacy reports without field diagnostics are explicitly marked as lacking them.
+The replay report records the source path, SHA-256, original dataset fingerprint,
+and `provider_calls=0`. Replay latency is local overhead, not provider latency:
 
 ```bash
 uv run python -m benchmarks.relation_planner_quality `
   --replay-report data/doppel/relation-planner-deepseek.json --no-cache `
   --max-structural-failures 65 `
   --output data/doppel/relation-planner-deepseek-rescored.json
+```
+
+Scoring version 2 distinguishes valid, failed, and not-run cases. An authentication
+failure stops further calls, with remaining cases marked `not_run`; budget misses
+also remain not-run but do not prevent later cache hits. Missing `DOPPEL_API_KEY`
+is rejected before provider setup when calls are enabled. Unauthenticated local
+providers require explicit `--allow-unauthenticated`. `--max-calls 0` is a cache-only
+audit and never sends a provider request. Any error or not-run case keeps the exit
+code nonzero even when quality failure limits are relaxed.
+
+Ratios with no denominator are `null`, not a perfect score. Provider errors and
+not-run counts remain visible and `execution.quality_measurement` is unavailable
+when no draft is valid. Validation diagnostics retain only schema-known field names,
+list indices, and built-in validation codes: input values, unknown extra-key names,
+exception messages, and validation context are not persisted. CLI reports include
+implementation fingerprints and a SHA-256 sidecar; replay cannot overwrite its source.
+
+The optional `--semantic-review` overlay is separate from storage gold. The bundled
+[`relation-planner-semantic-review-zh-v1.json`](datasets/relation-planner-semantic-review-zh-v1.json)
+was authored **after** inspecting typed-v2 and is explicitly `posthoc_diagnostic`,
+not untouched heldout evidence. It never changes provider input, cached drafts,
+strict metrics, retrieval labels, or pass/fail gates. It distinguishes correct/missed
+explicit predicates, conservative abstention on underdetermined questions, and risky
+ambiguous hard filters. A filter matching the hidden stored edge can still be risky;
+an empty type can be valid protocol behavior without demonstrating good retrieval.
+
+Temporal review matches declared shapes and explicit timestamp alternatives. An
+open lower bound is accepted only for an explicitly open-interval expectation, not
+as a generic replacement for a point query. The existing “after August 10” fixture
+also has retrieval gold needing review; the overlay flags that instead of silently
+turning its required/forbidden hits into passes. No corrected overall pass rate is
+derived from this review.
+
+```powershell
+uv run python -m benchmarks.relation_planner_quality `
+  --replay-report data/doppel/relation-planner-deepseek-typed-v2.json --no-cache `
+  --semantic-review benchmarks/datasets/relation-planner-semantic-review-zh-v1.json `
+  --max-structural-failures 65 --max-relation-type-failures 65 `
+  --output data/doppel/relation-planner-deepseek-typed-v2-reviewed.json
 ```
 
 The same successful report can then drive the real Store + pgvector + Neo4j chain

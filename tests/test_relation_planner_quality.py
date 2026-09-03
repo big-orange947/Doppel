@@ -21,7 +21,11 @@ from benchmarks.relation_planner_quality import (
     _term_matches,
     run_relation_planner_quality,
 )
-from doppel_memory import PersonalMemoryQueryDraft, PersonalMemoryQueryRequest
+from doppel_memory import (
+    PersonalMemoryQueryDraft,
+    PersonalMemoryQueryRequest,
+    StructuredOutputProviderError,
+)
 
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[1]
@@ -377,3 +381,169 @@ def test_result_schema_tracks_runner_contract() -> None:
     assert "cases" in schema["required"]
     assert "metrics" in schema["required"]
     assert "usage" in schema["required"]
+
+
+@pytest.mark.asyncio
+async def test_auth_failure_stops_before_next_call_and_scores_are_unavailable() -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+
+    class AuthFailure:
+        name, version = "tests.auth", "1"
+        calls = 0
+
+        async def plan(self, request: PersonalMemoryQueryRequest) -> None:
+            self.calls += 1
+            raise StructuredOutputProviderError(
+                "authentication_error", "do not persist secret text", status_code=401
+            )
+
+    planner = AuthFailure()
+    report = await run_relation_planner_quality(dataset, planner)
+    assert planner.calls == 1
+    assert report["metrics"]["provider_error_count"] == 1
+    assert report["metrics"]["not_run_case_count"] == 64
+    assert report["execution"]["stopped_early"] is True
+    assert report["execution"]["quality_measurement"] == "unavailable"
+    for metric in (
+        "entity_recall",
+        "relation_recall",
+        "relation_type_recall",
+        "relation_type_precision",
+    ):
+        assert report["metrics"][metric] is None
+    assert report["cases"][0]["http_status"] == 401
+    assert "secret text" not in json.dumps(report)
+    assert (
+        sum(item["provider_error_count"] for item in report["by_partition"].values())
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_validation_diagnostics_drop_values_extra_key_names_and_messages() -> (
+    None
+):
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    secret = "sk-test-secret-not-for-report"
+
+    class InvalidPlanner:
+        async def plan(self, request: PersonalMemoryQueryRequest) -> dict[str, Any]:
+            return {"confidence": secret, secret: "sensitive value"}
+
+    case = await _evaluate_case(InvalidPlanner(), dataset, dataset.queries[0])
+    assert case["error"] == "ValidationError"
+    assert case["error_code"] == "validation_error"
+    assert case["validation_diagnostics_available"] is True
+    assert case["validation_errors"] == [
+        {"location": ["confidence"], "type": "float_parsing"},
+        {"location": ["<unknown-field>"], "type": "extra_forbidden"},
+    ]
+    assert secret not in json.dumps(case)
+    assert "sensitive value" not in json.dumps(case)
+
+
+@pytest.mark.asyncio
+async def test_replay_preserves_source_failure_without_inventing_new_provider_errors(
+    tmp_path: Path,
+) -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    report = await run_relation_planner_quality(dataset, _GoldPlanner(dataset))
+    report["cases"][0].update(error="ValidationError", actual=None)
+    path = tmp_path / "source.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    replay = await run_relation_planner_quality(
+        dataset, ReplayPlanner(path, dataset=dataset)
+    )
+    case = replay["cases"][0]
+    assert case["error"] == "ValidationError"
+    assert case["error_origin"] == "source_report"
+    assert case["validation_diagnostics_available"] is False
+    assert replay["metrics"]["valid_case_count"] == 64
+    assert replay["budget"]["calls"] == 0
+    assert replay["execution"]["complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_replay_rejects_changed_request_and_duplicate_queries(
+    tmp_path: Path,
+) -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    report = await run_relation_planner_quality(dataset, _GoldPlanner(dataset))
+    path = tmp_path / "source.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    planner = ReplayPlanner(path, dataset=dataset)
+    query = dataset.queries[0]
+    with pytest.raises(ValueError, match="request fingerprint"):
+        await planner.plan(PersonalMemoryQueryRequest(query=query.query, now=query.now))
+    report["cases"].append(report["cases"][0])
+    path.write_text(json.dumps(report), encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate"):
+        ReplayPlanner(path)
+
+
+@pytest.mark.asyncio
+async def test_missing_key_is_rejected_before_provider_creation(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delenv("DOPPEL_API_KEY", raising=False)
+    args = _parser().parse_args(["--planner", "reference", "--model", "fake"])
+    with pytest.raises(RuntimeError, match="DOPPEL_API_KEY is missing"):
+        await _async_main(args)
+
+
+@pytest.mark.asyncio
+async def test_replay_keeps_safe_diagnostics_but_redacts_untrusted_report_fields(
+    tmp_path: Path,
+) -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    report = await run_relation_planner_quality(dataset, _GoldPlanner(dataset))
+    report["cases"][0].update(
+        error="ValidationError",
+        error_code="validation_error",
+        actual=None,
+        validation_errors=[
+            {"location": ["as_of"], "type": "datetime_parsing", "input": "sk-secret"},
+            {"location": ["sk-secret"], "type": "sk-secret"},
+        ],
+    )
+    path = tmp_path / "source.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    replay = await run_relation_planner_quality(
+        dataset, ReplayPlanner(path, dataset=dataset)
+    )
+    case = replay["cases"][0]
+    assert case["validation_errors"] == [
+        {"location": ["as_of"], "type": "datetime_parsing"},
+        {"location": ["<unknown-field>"], "type": "custom_validation_error"},
+    ]
+    assert "sk-secret" not in json.dumps(case)
+
+
+@pytest.mark.asyncio
+async def test_legacy_all_auth_failure_replay_is_unmeasured_not_a_new_live_run(
+    tmp_path: Path,
+) -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    source = {
+        "dataset": {"fingerprint": dataset.fingerprint},
+        "cases": [
+            {
+                "query": item.query,
+                "actual": None,
+                "error": "StructuredOutputProviderError",
+                "error_code": "authentication_error",
+            }
+            for item in dataset.queries
+        ],
+    }
+    path = tmp_path / "source.json"
+    path.write_text(json.dumps(source), encoding="utf-8")
+    replay = await run_relation_planner_quality(
+        dataset, ReplayPlanner(path, dataset=dataset)
+    )
+    assert replay["execution"]["stopped_early"] is False
+    assert replay["execution"]["quality_measurement"] == "unavailable"
+    assert replay["metrics"]["provider_error_count"] == 65
+    assert replay["metrics"]["entity_recall"] is None
+    assert replay["budget"]["calls"] == 0
+    assert all(item["error_origin"] == "source_report" for item in replay["cases"])
