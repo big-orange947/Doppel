@@ -11,7 +11,7 @@ import platform
 import re
 import sys
 import tempfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +45,7 @@ from doppel_memory import (
     StructuredOutputProviderError,
     __version__,
 )
+from doppel_memory.query import QUERY_TEMPORAL_ERROR_CODES
 
 DEFAULT_DATASET = (
     Path(__file__).parent / "datasets" / "personal-relation-ablation-zh-v1.json"
@@ -66,7 +67,7 @@ def _safe_validation_errors(exc: ValidationError) -> list[dict[str, Any]]:
 
 def _safe_diagnostic_rows(rows: Any) -> list[dict[str, Any]]:
     fields = set(PersonalMemoryQueryDraft.model_fields)
-    error_types = set(get_args(ErrorType))
+    error_types = set(get_args(ErrorType)) | QUERY_TEMPORAL_ERROR_CODES
     if not isinstance(rows, list):
         return []
     return [
@@ -113,11 +114,16 @@ class ReplayedPlannerFailure(RuntimeError):
                 "http_error",
                 "validation_error",
                 "budget_exhausted",
+                "truncated",
             }
             else ""
         )
         self.validation_errors = _safe_diagnostic_rows(case.get("validation_errors"))
         self.source_not_run = case.get("status") == "not_run"
+        status = case.get("http_status")
+        self.source_http_status = (
+            status if type(status) is int and 100 <= status <= 599 else None
+        )
 
 
 class PlannerCallBudgetExceeded(RuntimeError):
@@ -339,6 +345,7 @@ async def run_relation_planner_quality(
     return {
         "runner": "doppel.relation-planner-quality.v1",
         "scoring_version": "2",
+        "output_diagnostics": _output_diagnostics(cases),
         "relation_catalog": _catalog_metadata(relation_type_definitions),
         "doppel_version": __version__,
         "generated_at": datetime.now().astimezone().isoformat(),
@@ -446,6 +453,36 @@ async def run_relation_planner_quality(
             "misses": cache.misses if cache is not None else 0,
         },
         "cases": cases,
+    }
+
+
+def _output_diagnostics(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    lengths = sorted(
+        len(str(case["actual"].get("explanation", "")))
+        for case in cases
+        if case["status"] == "valid"
+    )
+    return {
+        "truncated_count": sum(case["error_code"] == "truncated" for case in cases),
+        "invalid_draft_count": sum(
+            case["error"] == "ValidationError" for case in cases
+        ),
+        "validation_code_counts": dict(
+            sorted(
+                Counter(
+                    row["type"]
+                    for case in cases
+                    for row in _safe_diagnostic_rows(case.get("validation_errors"))
+                ).items()
+            )
+        ),
+        "explanation_chars": {
+            "valid_case_count": len(lengths),
+            "over_80_count": sum(length > 80 for length in lengths),
+            "p50": _percentile(lengths, 0.50) if lengths else None,
+            "p95": _percentile(lengths, 0.95) if lengths else None,
+            "max": max(lengths) if lengths else None,
+        },
     }
 
 
@@ -560,7 +597,11 @@ async def _evaluate_case(
             else "error",
             error_origin="source_report" if is_replay else "current_run",
             latency_ms=round((perf_counter() - started) * 1_000, 3),
-            http_status=exc.status_code if is_provider else None,
+            http_status=exc.status_code
+            if is_provider
+            else exc.source_http_status
+            if is_replay
+            else None,
             validation_errors=(
                 _safe_validation_errors(exc)
                 if is_validation
@@ -759,7 +800,7 @@ def _ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
 
 
-def _percentile(values: list[float], quantile: float) -> float:
+def _percentile(values: Sequence[float], quantile: float) -> float:
     if not values:
         return 0.0
     index = max(0, min(len(values) - 1, int((len(values) - 1) * quantile)))

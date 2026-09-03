@@ -228,6 +228,7 @@ async def run_pair(output_root: Path) -> tuple[int, Path]:
                 "metrics": report["metrics"],
                 "usage": report["usage"],
                 "budget": report["budget"],
+                "output_diagnostics": report["output_diagnostics"],
                 "relation_assessment_counts": report["semantic_review"][
                     "relation_assessment_counts"
                 ],

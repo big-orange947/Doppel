@@ -36,6 +36,15 @@
 
 ### Changed
 
+- Reference Planner v9 distinguishes requested-predicate ambiguity from unknown
+  answers or other relationships of the same entity, uses host endpoint roles and
+  explicit exclusions, retains common-noun anchors, and requests brief/omitted
+  explanations. No ontology/query-specific rules, retrieval/ranking changes,
+  automatic repair, token-cap increases, or quality gains are assumed.
+- Give existing query-time validation constraints distinct content-free error
+  codes and preserve them in redacted benchmark diagnostics/replay. Record output
+  truncations and explanation lengths without new quality gates; retain old
+  unspecified errors and provider truncation/status details rather than guessing.
 - Add a dry-run-by-default, one-command fresh relation catalog comparison with
   hidden process-only credential input, two fixed no-cache/no-retry arms capped at
   130 total calls, input drift checks, unique output directories, and paired

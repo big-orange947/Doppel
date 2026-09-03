@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from benchmarks.personal_retrieval_ablation import load_ablation_dataset
 from benchmarks.relation_planner_quality import (
@@ -17,7 +18,10 @@ from benchmarks.relation_planner_quality import (
     UsageLedger,
     _async_main,
     _evaluate_case,
+    _output_diagnostics,
     _parser,
+    _safe_diagnostic_rows,
+    _safe_validation_errors,
     _term_matches,
     run_relation_planner_quality,
 )
@@ -547,3 +551,125 @@ async def test_legacy_all_auth_failure_replay_is_unmeasured_not_a_new_live_run(
     assert replay["metrics"]["entity_recall"] is None
     assert replay["budget"]["calls"] == 0
     assert all(item["error_origin"] == "source_report" for item in replay["cases"])
+
+
+@pytest.mark.parametrize(
+    "draft,expected_type,location",
+    [
+        ({"intent": "as_of"}, "query_as_of_required", []),
+        (
+            {"time_from": "2030-02-02T00:00:00Z", "time_to": "2030-02-01T00:00:00Z"},
+            "query_time_range_reversed",
+            [],
+        ),
+        ({"as_of": "2030-02-01T00:00:00"}, "query_time_timezone_required", ["as_of"]),
+        (
+            {"time_from": "2030-02-01T00:00:00"},
+            "query_time_timezone_required",
+            ["time_from"],
+        ),
+        (
+            {"time_to": "2030-02-01T00:00:00"},
+            "query_time_timezone_required",
+            ["time_to"],
+        ),
+    ],
+)
+async def test_temporal_constraints_are_distinguishable_without_input_values(
+    draft: dict[str, Any],
+    expected_type: str,
+    location: list[str],
+) -> None:
+    with pytest.raises(ValidationError) as captured:
+        PersonalMemoryQueryDraft.model_validate(
+            {**draft, "explanation": "private-marker"}
+        )
+    assert _safe_validation_errors(captured.value) == [
+        {"location": location, "type": expected_type}
+    ]
+    assert "private-marker" not in json.dumps(_safe_validation_errors(captured.value))
+
+    class InvalidPlanner:
+        async def plan(self, request: Any) -> dict[str, Any]:
+            return draft
+
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    case = await _evaluate_case(InvalidPlanner(), dataset, dataset.queries[0])
+    assert case["validation_errors"] == [{"location": location, "type": expected_type}]
+    diagnostics = _output_diagnostics([case])
+    assert diagnostics["validation_code_counts"] == {expected_type: 1}
+    assert diagnostics["explanation_chars"]["p50"] is None
+
+
+def test_diagnostics_allow_only_closed_custom_codes() -> None:
+    rows = _safe_diagnostic_rows(
+        [
+            {
+                "location": [],
+                "type": "query_as_of_required",
+                "ctx": {"secret": "private"},
+            },
+            {"location": [], "type": "query_time_private-value"},
+            {"location": [], "type": "value_error"},
+        ]
+    )
+    assert rows == [
+        {"location": [], "type": "query_as_of_required"},
+        {"location": [], "type": "custom_validation_error"},
+        {"location": [], "type": "value_error"},
+    ]
+
+
+@pytest.mark.parametrize(
+    "code,validation_errors,http_status",
+    [
+        ("truncated", [], 200),
+        ("validation_error", [{"location": [], "type": "query_as_of_required"}], None),
+        ("validation_error", [{"location": [], "type": "value_error"}], None),
+    ],
+)
+async def test_replay_preserves_failure_detail_without_guessing_old_root_errors(
+    tmp_path: Path,
+    code: str,
+    validation_errors: list[dict[str, Any]],
+    http_status: int | None,
+) -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    report = await run_relation_planner_quality(dataset, _GoldPlanner(dataset))
+    report["cases"][0].update(
+        status="error",
+        actual=None,
+        error_code=code,
+        http_status=http_status,
+        error="ValidationError"
+        if code == "validation_error"
+        else "StructuredOutputProviderError",
+        validation_errors=validation_errors,
+    )
+    path = tmp_path / "source.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    replay = await run_relation_planner_quality(
+        dataset, ReplayPlanner(path, dataset=dataset)
+    )
+    case = replay["cases"][0]
+    assert case["error_code"] == code
+    assert case["http_status"] == http_status
+    assert case["validation_errors"] == validation_errors
+    assert replay["metrics"]["provider_error_count"] == 1
+    assert replay["budget"]["calls"] == 0
+
+
+async def test_explanation_length_is_diagnostic_not_a_new_quality_gate() -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    long = await run_relation_planner_quality(
+        dataset, _StaticPlanner(PersonalMemoryQueryDraft(explanation="x" * 200))
+    )
+    empty = await run_relation_planner_quality(
+        dataset, _StaticPlanner(PersonalMemoryQueryDraft())
+    )
+    for metric, value in long["metrics"].items():
+        if metric != "latency_ms":
+            assert value == empty["metrics"][metric]
+    assert long["output_diagnostics"]["explanation_chars"]["over_80_count"] == 65
+    assert long["output_diagnostics"]["explanation_chars"]["max"] == 200
+    assert empty["output_diagnostics"]["explanation_chars"]["over_80_count"] == 0

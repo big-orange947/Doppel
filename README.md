@@ -1295,14 +1295,22 @@ result = await engine.query(
 
 未提供或为空的 `available_relation_types` 会使用目录名称作为白名单；同时提供非空白名单时，
 目录只能补充其中的类型定义，不得扩大白名单，允许只解释部分标签。重复名称、空定义、非法名称
-和额外字段会在调用 Planner 前被拒绝。只传旧标签列表仍可使用，Reference Planner 的原有
-labels-only 提示词及发送给 provider 的输入保持不变。
+和额外字段会在调用 Planner 前被拒绝。只传旧标签列表仍可使用，发送给 provider 的输入字段保持
+兼容；Reference Planner v9 更新了两种模式共用的语义判断提示词，缓存按版本区分。
 
 这轮定义仅用于 Planner 理解 schema，不改变检索、类型精确过滤或重排分数。定义不是事实，
-不会强迫模型选择类型，也不授权任何 scope、subject、时间或证据状态变更。多个类型仍可能回答
-同一问题时，保留原有空类型策略；候选类型软选择属于后续阶段。接入方应把同一份目录用于抽取
+不会强迫模型选择类型，也不授权任何 scope、subject、时间或证据状态变更。v9 按问句请求的谓词、
+端点角色和明确排除项判断类型：答案未知、事实尚未确认，或同一实体可能存在其他关系，都不自动
+构成谓词歧义。真正无法区分类型时仍留空，不为宽泛问题猜更具体的类型；候选类型软选择属于后续
+阶段。接入方应把同一份目录用于抽取
 和查询适配，但当前不会自动配置 Graphiti 的写入提示词、重标已有边或迁移数据。不要把消息正文、
 测试问句、答案或私有事实放进目录；Reference Planner 会把完整目录发送给其模型 provider。
+
+Reference Planner 还要求保留普通物品名作为实体锚点、不把被否定的关系作为目标谓词，并优先省略
+`explanation` 或只返回不超过 80 字符的短说明。短说明是生成指导，不是新硬门：不会截断已返回的
+草案、拒绝旧报告或自动重试。`PersonalMemoryQueryDraft` 的既有时间约束现在分别返回内容无关的
+`query_as_of_required`、`query_time_range_reversed`、`query_time_timezone_required` 错误码，
+仍然拒绝缺失时点、倒置区间和无时区时间；不会猜时间、修复输出或放宽召回。
 
 高配置部署可以向 `GraphitiRelationIndex` 注入 `RelationReranker`，用于弥补 Planner 输出的关系短语
 与 Graphiti edge 文本之间的同义改写。该协议一次只接收 `query_text`、`relation_hints` 以及每条边的

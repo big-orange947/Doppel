@@ -21,6 +21,26 @@
   "properties": {
     "runner": {"const": "doppel.relation-planner-quality.v1"},
     "scoring_version": {"const": "2"},
+    "output_diagnostics": {
+      "type": "object",
+      "required": ["truncated_count", "invalid_draft_count", "validation_code_counts", "explanation_chars"],
+      "properties": {
+        "truncated_count": {"type": "integer", "minimum": 0},
+        "invalid_draft_count": {"type": "integer", "minimum": 0},
+        "validation_code_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "explanation_chars": {
+          "type": "object",
+          "required": ["valid_case_count", "over_80_count", "p50", "p95", "max"],
+          "properties": {
+            "valid_case_count": {"type": "integer", "minimum": 0},
+            "over_80_count": {"type": "integer", "minimum": 0},
+            "p50": {"type": ["number", "null"], "minimum": 0},
+            "p95": {"type": ["number", "null"], "minimum": 0},
+            "max": {"type": ["integer", "null"], "minimum": 0}
+          }
+        }
+      }
+    },
     "relation_catalog": {
       "type": "object",
       "required": ["mode", "definition_count", "fingerprint", "definitions"],

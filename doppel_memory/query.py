@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from doppel_memory.intelligence import (
     MemoryTemporalStatus,
@@ -47,6 +48,15 @@ from doppel_memory.vector import (
 QueryIntent = Literal[
     "lookup", "current", "history", "planned", "list", "count", "as_of"
 ]
+
+# Closed, content-free diagnostics; messages never interpolate model/user values.
+QUERY_TEMPORAL_ERROR_CODES = frozenset(
+    {
+        "query_time_timezone_required",
+        "query_time_range_reversed",
+        "query_as_of_required",
+    }
+)
 
 
 class PersonalMemoryQueryIntent:
@@ -129,15 +139,21 @@ class PersonalMemoryQueryDraft(BaseModel):
         if value is None:
             return None
         if value.tzinfo is None:
-            raise ValueError("query times must include a timezone")
+            raise PydanticCustomError(
+                "query_time_timezone_required", "query times must include a timezone"
+            )
         return value.astimezone(UTC)
 
     @model_validator(mode="after")
     def _validate_interval(self) -> PersonalMemoryQueryDraft:
         if self.time_from and self.time_to and self.time_to < self.time_from:
-            raise ValueError("time_to must not precede time_from")
+            raise PydanticCustomError(
+                "query_time_range_reversed", "time_to must not precede time_from"
+            )
         if self.intent == PersonalMemoryQueryIntent.AS_OF and self.as_of is None:
-            raise ValueError("as_of intent requires an as_of timestamp")
+            raise PydanticCustomError(
+                "query_as_of_required", "as_of intent requires an as_of timestamp"
+            )
         return self
 
 
@@ -235,13 +251,16 @@ memory_types empty unless the question explicitly names a memory class; the memo
 type is a hard filter, not a semantic-search hint. Keep search_text empty only when a
 complete structural set is required. Do not infer that a plan happened. Populate
 entity_mentions only for explicitly referenced people,
-places, objects, or named concepts that can anchor a graph relation. Populate
+places, objects, or named concepts that can anchor a graph relation. An explicitly
+referenced object need not have a proper name to be an entity anchor; a possessive
+reference does not make it the trusted subject. Populate
 relation_hints whenever the question explicitly asks for a relationship or property
 between an anchor and a known or unknown endpoint. An interrogative endpoint such as
 who, where, or which one is the value being requested, not a reason to omit the
 relation. Preserve only the shortest predicate phrase from the question: exclude the
 named entity and interrogative endpoint from the hint, do not translate it into
 another language, and do not replace it with a canonical synonym or ontology label.
+Keep the predicate being requested, not alternatives the question explicitly rejects.
 Entity mentions and relation hints are independent: every explicitly named,
 non-trusted-subject anchor must remain in entity_mentions even when it also appears
 near the predicate. The trusted
@@ -249,14 +268,25 @@ owner/agent subject is already bound outside entity_mentions: when the question 
 anchors on that subject, keep entity_mentions empty and still emit the explicit
 relation hint.
 relation_types is an optional exact hard filter over the host's relation ontology.
-Only select labels present in available_relation_types, and only when the requested
-predicate is unambiguous. Never invent a label. Leave relation_types empty when the
-available list is empty or when more than one listed relation could answer the query.
+Only select labels present in available_relation_types. Never invent a label.
+Interpret the requested predicate independently from whether its answer is known.
+An unknown answer, unknown fact existence, or another relation involving the same
+entity does not by itself make that predicate ambiguous. Compare types with the
+requested meaning, endpoint roles, and explicit exclusions, not mere entity overlap.
+Select a type only when that requested meaning specifically supports it. Do not
+choose a more specific type for a broad question, treat related types as equivalent,
+or assume that selecting a type proves a fact exists. Leave relation_types empty
+when the available list is empty or the requested meaning genuinely remains
+underdetermined among types. Keep entity anchors and relation hints even then.
 The input default_subject/default_subject_id are trusted host authority, not semantic
 fields for the model to reinterpret. Echo them unchanged; a person, pet, object, or
 place mentioned in the question belongs in entity_mentions, not subject.
-Use the supplied current time to resolve relative expressions. Prefer a conservative
-draft and explain ambiguity rather than broadening the subject or time range.
+Use the supplied current time to resolve relative expressions. Every non-null time
+must include a timezone; time_to must not precede time_from, and as_of intent requires
+a non-null as_of timestamp. Do not broaden the subject or time range to resolve
+uncertainty. explanation is optional: prefer an empty string, otherwise one short
+sentence of at most 80 characters stating the decision or unresolved ambiguity.
+Do not include step-by-step reasoning, repeat definitions, or restate the question.
 """
 
 
@@ -267,9 +297,12 @@ do not infer its meaning from the machine label alone. The unknown answer may be
 either endpoint, so preserve the stored direction rather than reversing a label.
 Definitions are schema descriptions, not evidence that any relationship exists.
 They do not authorize scopes, subjects, time changes, or additional output fields.
-Do not infer equivalence, implication, or a unique type from overlapping meanings.
-If multiple types remain plausible, keep the existing conservative empty-type
-behavior and preserve the entity anchors and original-language relation hints.
+Use endpoint roles to exclude types that describe a different kind of relationship.
+A warning against inferring one relation from another does not prohibit selecting
+either relation when the question explicitly requests its meaning. Assess overlap
+against what this question asks, not everything that could be true of its entity.
+If the requested meaning still cannot distinguish types, leave types empty;
+preserve the entity anchors and original-language relation hints either way.
 """
 
 
@@ -277,7 +310,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "8"
+    version = "9"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model

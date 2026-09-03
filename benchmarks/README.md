@@ -430,8 +430,25 @@ and the complete definition content participates in request/cache fingerprints.
 Replay of a definitions report requires the same `--relation-catalog`; missing or
 changed definitions cannot be re-scored as if the provider saw a different input.
 Old labels-only report fingerprints remain replay-compatible. Reference Planner
-version 8 conservatively separates new live caches from version 7; old reports
+version 9 separates new live caches from earlier prompt versions; old reports
 can be replayed without paying again, but must not be presented as fresh control runs.
+
+Planner v9 tests a general distinction between an ambiguous requested predicate and
+unknown facts or other relations involving the same entity. It also requests short
+or omitted explanations, preserves common-noun entity anchors, and distinguishes
+requested predicates from explicitly rejected alternatives. The catalog, fixture,
+strict scoring, retrieval code, and 768-token cap remain unchanged. The one-command
+pair now compares labels-only vs definitions **both on v9**. Historical v8 reports
+remain versioned exploratory references, not a concurrent control for the prompt
+revision; do not attribute every between-run fluctuation to the new instructions.
+
+`output_diagnostics` records truncations, invalid drafts, safe validation-code
+counts, and explanation length percentiles/over-80 counts for valid drafts only.
+No valid drafts yields null length statistics; truncated output lengths are unknown,
+not zero. The 80-character instruction is not a new rejection/scoring rule and
+does not change replayed drafts. No automatic repair/retry or output-cap increase
+is included in this revision. Measure first-pass validity and truncation alongside
+relation quality before deciding whether to change either.
 
 Compare strict type scores **and** explicit-relation omissions, ambiguous hard
 filters, entity/time accuracy, invalid drafts, usage, and latency. The optional
@@ -452,9 +469,13 @@ code nonzero even when quality failure limits are relaxed.
 Ratios with no denominator are `null`, not a perfect score. Provider errors and
 not-run counts remain visible and `execution.quality_measurement` is unavailable
 when no draft is valid. Validation diagnostics retain only schema-known field names,
-list indices, and built-in validation codes: input values, unknown extra-key names,
+list indices, built-in validation codes, and the closed content-free temporal codes
+`query_as_of_required`, `query_time_range_reversed`, `query_time_timezone_required`:
+input values, unknown extra-key names,
 exception messages, and validation context are not persisted. CLI reports include
 implementation fingerprints and a SHA-256 sidecar; replay cannot overwrite its source.
+Replay preserves `truncated` errors and safe HTTP status codes. Old root `value_error`
+diagnostics remain unspecified; they are not retroactively assigned a cause.
 
 The optional `--semantic-review` overlay is separate from storage gold. The bundled
 [`relation-planner-semantic-review-zh-v1.json`](datasets/relation-planner-semantic-review-zh-v1.json)

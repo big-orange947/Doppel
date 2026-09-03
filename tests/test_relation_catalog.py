@@ -149,7 +149,7 @@ def test_catalog_only_defines_allowlist_and_partial_catalog_never_widens_it() ->
         )
 
 
-async def test_labels_only_provider_input_and_instructions_remain_unchanged() -> None:
+async def test_labels_only_uses_shared_prompt_without_catalog_payload() -> None:
     request = _request(available_relation_types=["CALIBRATED_BY"])
     model = _Model()
     await ReferencePersonalMemoryQueryPlanner(model).plan(request)
@@ -182,6 +182,30 @@ async def test_reference_receives_roles_and_constraints_without_output_schema_ch
     assert draft.subject == "owner"
     assert draft.subject_id == "owner"
     assert draft.relation_types == []  # Descriptions cannot force a type selection.
+
+
+async def test_reference_prompt_distinguishes_predicate_ambiguity_from_unknown_facts() -> (
+    None
+):
+    model = _Model(relation_types=["CALIBRATED_BY"], entity_mentions=["sensor"])
+    planner = ReferencePersonalMemoryQueryPlanner(model)
+    draft = await planner.plan(_request(relation_type_definitions=[_definition()]))
+    request = model.requests[0]
+    assert planner.version.startswith("9.")
+    assert "independently from whether its answer is known" in request.instructions
+    assert (
+        "requested meaning, endpoint roles, and explicit exclusions"
+        in request.instructions
+    )
+    assert "does not prohibit selecting" in request.instructions
+    assert "prefer an empty string" in request.instructions
+    assert "at most 80 characters" in request.instructions
+    assert "proper name" in request.instructions
+    assert request.output_schema == PersonalMemoryQueryDraft.model_json_schema()
+    assert draft.relation_types == ["CALIBRATED_BY"]
+    # The prompt has no built-in vocabulary or fixture-specific entity aliases.
+    for definition in _load_catalog():
+        assert definition.name not in request.instructions
 
 
 async def test_engine_forwards_catalog_without_changing_plan_or_retrieval_contract() -> (
