@@ -186,6 +186,7 @@ from doppel_memory.relation import (
     RelationRerankItem,
     RelationRerankRequest,
     RelationRerankScore,
+    RelationTypeDefinition,
 )
 from doppel_memory.retriever import (
     IdentityReranker,
@@ -384,6 +385,7 @@ __all__ = [
     "RelationRerankRequest",
     "RelationRerankScore",
     "RelationReranker",
+    "RelationTypeDefinition",
     "Reranker",
     "RetrievalStrategy",
     "Retriever",

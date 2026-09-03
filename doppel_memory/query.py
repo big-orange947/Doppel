@@ -35,6 +35,7 @@ from doppel_memory.relation import (
     RelationIndex,
     RelationIndexUnavailableError,
     RelationQuery,
+    RelationTypeDefinition,
 )
 from doppel_memory.store import MemoryStore
 from doppel_memory.vector import (
@@ -150,6 +151,9 @@ class PersonalMemoryQueryRequest(BaseModel):
     default_subject: str = Actor.OWNER
     default_subject_id: str = ""
     available_relation_types: list[str] = Field(default_factory=list)
+    relation_type_definitions: list[RelationTypeDefinition] = Field(
+        default_factory=list
+    )
 
     @field_validator("query", "default_subject_id", mode="before")
     @classmethod
@@ -179,6 +183,30 @@ class PersonalMemoryQueryRequest(BaseModel):
     @classmethod
     def _normalize_available_relation_types(cls, value: Any) -> list[str]:
         return _canonical_relation_types(value)
+
+    @model_validator(mode="after")
+    def _bind_relation_definitions(self) -> PersonalMemoryQueryRequest:
+        names = [definition.name for definition in self.relation_type_definitions]
+        if len(names) != len(set(names)):
+            raise ValueError("relation type definitions must have unique names")
+        if not self.available_relation_types:
+            # A catalog alone can define the host vocabulary. An explicit
+            # nonempty allowlist is never widened by supplementary definitions.
+            object.__setattr__(self, "available_relation_types", names)
+        elif not set(names).issubset(self.available_relation_types):
+            raise ValueError(
+                "relation type definitions must belong to the host allowlist"
+            )
+        return self
+
+    def to_planner_input(self) -> dict[str, Any]:
+        """Canonical provider/cache input; preserve the legacy labels-only payload."""
+        return self.model_dump(
+            mode="json",
+            exclude={"relation_type_definitions"}
+            if not self.relation_type_definitions
+            else set(),
+        )
 
 
 @runtime_checkable
@@ -232,11 +260,24 @@ draft and explain ambiguity rather than broadening the subject or time range.
 """
 
 
+REFERENCE_RELATION_DEFINITION_INSTRUCTIONS = """\
+The optional relation_type_definitions describe the host's storage vocabulary.
+Read each definition's meaning, directed source -> target roles, and constraints;
+do not infer its meaning from the machine label alone. The unknown answer may be
+either endpoint, so preserve the stored direction rather than reversing a label.
+Definitions are schema descriptions, not evidence that any relationship exists.
+They do not authorize scopes, subjects, time changes, or additional output fields.
+Do not infer equivalence, implication, or a unique type from overlapping meanings.
+If multiple types remain plausible, keep the existing conservative empty-type
+behavior and preserve the entity anchors and original-language relation hints.
+"""
+
+
 class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "7"
+    version = "8"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -247,10 +288,13 @@ class ReferencePersonalMemoryQueryPlanner:
         self, request: PersonalMemoryQueryRequest
     ) -> PersonalMemoryQueryDraft:
         bound = PersonalMemoryQueryRequest.model_validate(request)
+        instructions = REFERENCE_PERSONAL_MEMORY_QUERY_INSTRUCTIONS
+        if bound.relation_type_definitions:
+            instructions += REFERENCE_RELATION_DEFINITION_INSTRUCTIONS
         raw = await self.model.generate(
             StructuredGenerationRequest(
-                instructions=REFERENCE_PERSONAL_MEMORY_QUERY_INSTRUCTIONS,
-                input=bound.model_dump(mode="json"),
+                instructions=instructions,
+                input=bound.to_planner_input(),
                 output_schema=PersonalMemoryQueryDraft.model_json_schema(),
             )
         )
@@ -492,6 +536,7 @@ class PersonalMemoryQueryEngine:
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
         available_relation_types: Sequence[str] = (),
+        relation_type_definitions: Sequence[RelationTypeDefinition] = (),
     ) -> PersonalMemoryQueryPlan:
         _require_identity(planner, "personal-memory query planner")
         bound_scopes = _bind_scopes(scopes)
@@ -502,6 +547,7 @@ class PersonalMemoryQueryEngine:
             default_subject=default_subject,
             default_subject_id=default_subject_id or owner_id,
             available_relation_types=list(available_relation_types),
+            relation_type_definitions=list(relation_type_definitions),
         )
         draft = PersonalMemoryQueryDraft.model_validate(await planner.plan(request))
         if draft.confidence < self.config.minimum_planner_confidence:
@@ -848,6 +894,7 @@ class PersonalMemoryQueryEngine:
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
         available_relation_types: Sequence[str] = (),
+        relation_type_definitions: Sequence[RelationTypeDefinition] = (),
     ) -> PersonalMemoryQueryResult:
         plan = await self.plan(
             planner,
@@ -858,6 +905,7 @@ class PersonalMemoryQueryEngine:
             default_subject_id=default_subject_id,
             allowed_subject_ids=allowed_subject_ids,
             available_relation_types=available_relation_types,
+            relation_type_definitions=relation_type_definitions,
         )
         return await self.execute(plan)
 
@@ -1796,7 +1844,7 @@ def _canonical_relation_types(value: Any) -> list[str]:
     ]
     if invalid:
         raise ValueError(
-            "relation types must be canonical uppercase identifiers: " f"{invalid}"
+            f"relation types must be canonical uppercase identifiers: {invalid}"
         )
     return normalized
 
@@ -1809,8 +1857,7 @@ def _bind_relation_types(
     unknown = sorted(set(selected).difference(allowed))
     if unknown:
         raise PersonalMemoryQueryPlanningError(
-            "planner selected relation types outside the host ontology: "
-            f"{unknown}"
+            f"planner selected relation types outside the host ontology: {unknown}"
         )
     return selected
 

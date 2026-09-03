@@ -12,12 +12,13 @@ import re
 import sys
 import tempfile
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 from typing import Any, get_args
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from pydantic_core.core_schema import ErrorType
 
 from benchmarks.personal_retrieval_ablation import (
@@ -40,6 +41,7 @@ from doppel_memory import (
     PersonalMemoryQueryDraft,
     PersonalMemoryQueryRequest,
     ReferencePersonalMemoryQueryPlanner,
+    RelationTypeDefinition,
     StructuredOutputProviderError,
     __version__,
 )
@@ -195,7 +197,7 @@ class CachedPlanner:
             "format_version": CACHE_FORMAT_VERSION,
             "planner": self.name,
             "planner_version": self.version,
-            "request": request.model_dump(mode="json"),
+            "request": request.to_planner_input(),
         }
         digest = _fingerprint(payload)
         return self._cache_dir / digest[:2] / f"{digest}.json"
@@ -227,9 +229,17 @@ class ReplayPlanner:
     """Re-score successful drafts from a prior report without provider calls."""
 
     def __init__(
-        self, report_path: Path, *, dataset: AblationDataset | None = None
+        self,
+        report_path: Path,
+        *,
+        dataset: AblationDataset | None = None,
+        relation_type_definitions: Sequence[RelationTypeDefinition] = (),
     ) -> None:
         raw = json.loads(report_path.read_text(encoding="utf-8"))
+        catalog = _catalog_metadata(relation_type_definitions)
+        source_catalog = raw.get("relation_catalog") or _catalog_metadata(())
+        if source_catalog.get("fingerprint") != catalog["fingerprint"]:
+            raise ValueError("replay relation catalog fingerprint mismatch")
         if dataset is not None and (
             (raw.get("dataset") or {}).get("fingerprint") != dataset.fingerprint
         ):
@@ -251,7 +261,7 @@ class ReplayPlanner:
         if case is None:
             raise KeyError("prior report has no successful draft for this query")
         fingerprint = case.get("request_fingerprint")
-        if fingerprint and fingerprint != _fingerprint(request.model_dump(mode="json")):
+        if fingerprint and fingerprint != _fingerprint(request.to_planner_input()):
             raise ValueError("replay request fingerprint mismatch")
         if case.get("error") or case.get("actual") is None:
             raise ReplayedPlannerFailure(case)
@@ -265,11 +275,14 @@ async def run_relation_planner_quality(
     cache: CachedPlanner | None = None,
     call_budget: PlannerCallBudget | None = None,
     usage: UsageLedger | None = None,
+    relation_type_definitions: Sequence[RelationTypeDefinition] = (),
 ) -> dict[str, Any]:
     """Run one planner over relation gold without executing retrieval."""
 
     if not dataset.requirements.get("relation_benchmark", False):
         raise ValueError("relation planner quality requires a relation benchmark")
+    # Validate host definitions before any provider calls, not as per-case errors.
+    _query_request(dataset, dataset.queries[0], relation_type_definitions)
     runner = cache or planner
     cases: list[dict[str, Any]] = []
     stop_reason = ""
@@ -285,9 +298,15 @@ async def run_relation_planner_quality(
                 error_code="previous_fatal_error",
                 status="not_run",
                 error_origin="not_run",
+                relation_type_definitions=relation_type_definitions,
             )
         else:
-            case = await _evaluate_case(runner, dataset, query)
+            case = await _evaluate_case(
+                runner,
+                dataset,
+                query,
+                relation_type_definitions=relation_type_definitions,
+            )
             if (
                 case["error_code"] == "authentication_error"
                 and case.get("error_origin") != "source_report"
@@ -320,6 +339,7 @@ async def run_relation_planner_quality(
     return {
         "runner": "doppel.relation-planner-quality.v1",
         "scoring_version": "2",
+        "relation_catalog": _catalog_metadata(relation_type_definitions),
         "doppel_version": __version__,
         "generated_at": datetime.now().astimezone().isoformat(),
         "dataset": {
@@ -430,7 +450,9 @@ async def run_relation_planner_quality(
 
 
 def _query_request(
-    dataset: AblationDataset, query: AblationQuery
+    dataset: AblationDataset,
+    query: AblationQuery,
+    relation_type_definitions: Sequence[RelationTypeDefinition] = (),
 ) -> PersonalMemoryQueryRequest:
     scope = dataset.scopes[query.scopes[0]].to_scope()
     return PersonalMemoryQueryRequest(
@@ -439,6 +461,7 @@ def _query_request(
         default_subject=Actor.OWNER,
         default_subject_id=scope.user_id,
         available_relation_types=dataset.relation_types,
+        relation_type_definitions=list(relation_type_definitions),
     )
 
 
@@ -453,6 +476,7 @@ def _failed_case(
     latency_ms: float = 0.0,
     http_status: int | None = None,
     validation_errors: list[dict[str, Any]] | None = None,
+    relation_type_definitions: Sequence[RelationTypeDefinition] = (),
 ) -> dict[str, Any]:
     return {
         "query_id": query.query_id,
@@ -460,7 +484,7 @@ def _failed_case(
         "category": query.category,
         "query": query.query,
         "request_fingerprint": _fingerprint(
-            _query_request(dataset, query).model_dump(mode="json")
+            _query_request(dataset, query, relation_type_definitions).to_planner_input()
         ),
         "status": status,
         "error": error,
@@ -502,8 +526,10 @@ async def _evaluate_case(
     planner: Any,
     dataset: AblationDataset,
     query: AblationQuery,
+    *,
+    relation_type_definitions: Sequence[RelationTypeDefinition] = (),
 ) -> dict[str, Any]:
-    request = _query_request(dataset, query)
+    request = _query_request(dataset, query, relation_type_definitions)
     started = perf_counter()
     try:
         draft = PersonalMemoryQueryDraft.model_validate(await planner.plan(request))
@@ -528,6 +554,7 @@ async def _evaluate_case(
             query,
             error=exc.source_error if is_replay else type(exc).__name__,
             error_code=exc.source_code if is_replay else code,
+            relation_type_definitions=relation_type_definitions,
             status="not_run"
             if is_budget or is_replay and exc.source_not_run
             else "error",
@@ -612,7 +639,7 @@ async def _evaluate_case(
         "partition": query.partition,
         "category": query.category,
         "query": query.query,
-        "request_fingerprint": _fingerprint(request.model_dump(mode="json")),
+        "request_fingerprint": _fingerprint(request.to_planner_input()),
         "status": "valid",
         "error": "",
         "error_code": "",
@@ -746,6 +773,18 @@ def _fingerprint(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _catalog_metadata(
+    definitions: Sequence[RelationTypeDefinition],
+) -> dict[str, Any]:
+    payload = [item.model_dump(mode="json") for item in definitions]
+    return {
+        "mode": "definitions" if payload else "labels_only",
+        "definition_count": len(payload),
+        "fingerprint": _fingerprint(payload),
+        "definitions": payload,
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
@@ -753,6 +792,11 @@ def _parser() -> argparse.ArgumentParser:
         "--planner", choices=("deterministic", "reference"), default="deterministic"
     )
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--relation-catalog",
+        type=Path,
+        help="optional host relation definitions (JSON array), never query answers",
+    )
     parser.add_argument(
         "--semantic-review",
         type=Path,
@@ -805,6 +849,14 @@ def _parser() -> argparse.ArgumentParser:
 
 async def _async_main(args: argparse.Namespace) -> int:
     dataset = load_ablation_dataset(args.dataset)
+    definitions = (
+        TypeAdapter(list[RelationTypeDefinition]).validate_json(
+            args.relation_catalog.read_bytes()
+        )
+        if args.relation_catalog is not None
+        else []
+    )
+    _query_request(dataset, dataset.queries[0], definitions)
     if args.semantic_review is not None:
         PlannerSemanticReview.model_validate_json(
             args.semantic_review.read_bytes()
@@ -817,7 +869,9 @@ async def _async_main(args: argparse.Namespace) -> int:
             and args.output.resolve() == args.replay_report.resolve()
         ):
             raise ValueError("replay output must not overwrite its source report")
-        base_planner: Any = ReplayPlanner(args.replay_report, dataset=dataset)
+        base_planner: Any = ReplayPlanner(
+            args.replay_report, dataset=dataset, relation_type_definitions=definitions
+        )
     elif args.planner == "reference":
         if not str(args.model or "").strip():
             raise RuntimeError("reference planner requires --model or DOPPEL_MODEL")
@@ -864,6 +918,7 @@ async def _async_main(args: argparse.Namespace) -> int:
             cache=cache,
             call_budget=budget,
             usage=usage,
+            relation_type_definitions=definitions,
         )
         if args.replay_report is not None:
             replay_bytes = args.replay_report.read_bytes()

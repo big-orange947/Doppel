@@ -1,0 +1,114 @@
+[
+  {
+    "name": "ADOPTED_FROM",
+    "description": "An adoption origin: the source was adopted from the target.",
+    "source_description": "The adopted individual or animal.",
+    "target_description": "The person, organization, or place from which adoption occurred.",
+    "constraints": ["Acquisition or movement alone does not establish adoption."]
+  },
+  {
+    "name": "BORN_AT",
+    "description": "The place at which the source was born.",
+    "source_description": "The individual or animal whose birth is described.",
+    "target_description": "The birthplace.",
+    "constraints": ["A later residence or acquisition origin is not a birthplace."]
+  },
+  {
+    "name": "CARED_FOR_BY",
+    "description": "The source receives care from the target.",
+    "source_description": "The recipient of care.",
+    "target_description": "The person or organization providing care.",
+    "constraints": ["Care does not establish ownership or physical custody."]
+  },
+  {
+    "name": "EMPLOYED_BY",
+    "description": "The source has an employment relationship with the target.",
+    "source_description": "The employee.",
+    "target_description": "The employer.",
+    "constraints": ["A workplace location, visit, or service relationship alone is not employment."]
+  },
+  {
+    "name": "HELD_BY",
+    "description": "The target holds or has custody of the source.",
+    "source_description": "The item being held or kept in custody.",
+    "target_description": "The custodian, such as a person or organizational custody point.",
+    "constraints": ["Custody does not establish ownership, a loan, or purchase.", "A general location question need not uniquely specify custody."]
+  },
+  {
+    "name": "ISSUED_BY",
+    "description": "The source was issued by the target authority or issuer.",
+    "source_description": "The issued document, credential, or other issued item.",
+    "target_description": "The issuing authority or organization.",
+    "constraints": ["The issuer is not necessarily the issue location, holder, or renewal date."]
+  },
+  {
+    "name": "LOANED_TO",
+    "description": "The source was lent to the target for temporary use.",
+    "source_description": "The item lent.",
+    "target_description": "The borrower receiving the item.",
+    "constraints": ["Possession or use alone does not establish a loan.", "The borrower is not thereby the owner."]
+  },
+  {
+    "name": "LOCATED_AT",
+    "description": "The source is physically located at the target place.",
+    "source_description": "The located entity.",
+    "target_description": "The physical location.",
+    "constraints": ["Location alone does not establish custody, ownership, storage purpose, or an activity at that place.", "Location and storage meanings may overlap; do not assume a unique storage label from a general location question."]
+  },
+  {
+    "name": "OWNED_BY",
+    "description": "The target owns the source.",
+    "source_description": "The owned entity.",
+    "target_description": "The owner.",
+    "constraints": ["Holding, borrowing, purchasing, or caring for an entity does not by itself establish present ownership."]
+  },
+  {
+    "name": "PURCHASED_AT",
+    "description": "The source was purchased at the target venue or outlet.",
+    "source_description": "The purchased item.",
+    "target_description": "The purchase venue or outlet.",
+    "constraints": ["This is the purchase location, not the purchaser or the item's later location."]
+  },
+  {
+    "name": "PURCHASED_BY",
+    "description": "The source was purchased by the target.",
+    "source_description": "The purchased item.",
+    "target_description": "The purchaser.",
+    "constraints": ["The purchaser need not be the present owner or custodian."]
+  },
+  {
+    "name": "RECOMMENDED_BY",
+    "description": "The source was recommended by the target.",
+    "source_description": "The recommended entity or option.",
+    "target_description": "The person or organization making the recommendation.",
+    "constraints": ["Mentioning an entity does not necessarily recommend it.", "A recommendation does not establish purchase, ownership, or custody."]
+  },
+  {
+    "name": "RENEWED_ON",
+    "description": "The source was renewed on the target date or time.",
+    "source_description": "The renewed document, credential, or other renewable entity.",
+    "target_description": "The renewal date or time, not a person or place.",
+    "constraints": ["Renewal is distinct from initial issue or expiry.", "An intended future renewal is not evidence of completed renewal."]
+  },
+  {
+    "name": "REPAIRED_AT",
+    "description": "The source has a repair activity at the target venue.",
+    "source_description": "The item undergoing or associated with repair.",
+    "target_description": "The repair venue.",
+    "constraints": ["This is the repair location, not necessarily the repairer.", "The label alone does not establish that repair is completed or the item is still there."]
+  },
+  {
+    "name": "REPAIRED_BY",
+    "description": "The target carries out repair work on the source.",
+    "source_description": "The item being repaired.",
+    "target_description": "The person or organization performing repair.",
+    "constraints": ["This is the repairer, not necessarily the repair location or owner.", "The label alone does not establish completed repair."]
+  },
+  {
+    "name": "STORED_IN",
+    "description": "The source is kept in the target storage place or container.",
+    "source_description": "The stored item.",
+    "target_description": "The storage place or container.",
+    "constraints": ["A storage location does not identify an owner or custodian.", "Storage and physical location overlap; neither label is universally interchangeable with the other."]
+  }
+]

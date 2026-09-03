@@ -426,6 +426,7 @@ MODEL_FIELDS = {
         "default_subject",
         "default_subject_id",
         "available_relation_types",
+        "relation_type_definitions",
     ),
     "PersonalMemoryQueryResult": (
         "plan",
@@ -460,6 +461,13 @@ MODEL_FIELDS = {
     "RelationRerankItem": ("item_id", "relation_type", "fact"),
     "RelationRerankRequest": ("query_text", "relation_hints", "items"),
     "RelationRerankScore": ("item_id", "score"),
+    "RelationTypeDefinition": (
+        "name",
+        "description",
+        "source_description",
+        "target_description",
+        "constraints",
+    ),
     "RelationQuery": (
         "query_text",
         "entity_mentions",
@@ -727,6 +735,7 @@ SIGNATURES = {
         ("default_subject_id", "KEYWORD_ONLY"),
         ("allowed_subject_ids", "KEYWORD_ONLY"),
         ("available_relation_types", "KEYWORD_ONLY"),
+        ("relation_type_definitions", "KEYWORD_ONLY"),
     ),
     "DoppelClient.materials": (
         ("scope", "POSITIONAL_OR_KEYWORD"),
@@ -1034,6 +1043,7 @@ SIGNATURES = {
         ("default_subject_id", "KEYWORD_ONLY"),
         ("allowed_subject_ids", "KEYWORD_ONLY"),
         ("available_relation_types", "KEYWORD_ONLY"),
+        ("relation_type_definitions", "KEYWORD_ONLY"),
     ),
     "PersonalMemoryQueryEngine.execute": (("plan", "POSITIONAL_OR_KEYWORD"),),
     "PersonalMemoryQueryEngine.query": (
@@ -1045,6 +1055,7 @@ SIGNATURES = {
         ("default_subject_id", "KEYWORD_ONLY"),
         ("allowed_subject_ids", "KEYWORD_ONLY"),
         ("available_relation_types", "KEYWORD_ONLY"),
+        ("relation_type_definitions", "KEYWORD_ONLY"),
     ),
     "audit_store": (
         ("store", "POSITIONAL_OR_KEYWORD"),

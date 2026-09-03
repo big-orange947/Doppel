@@ -16,6 +16,43 @@ class RelationIndexUnavailableError(RuntimeError):
     """A relation candidate source cannot honor the current request."""
 
 
+class RelationTypeDefinition(BaseModel):
+    """Host-owned meaning of a directed source -> target relation.
+
+    Definitions describe a schema, not facts, aliases for particular queries, or
+    authority. Reuse the same definitions in host extraction and query adapters;
+    Doppel does not automatically configure a graph writer or migrate its edges.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,127}$")
+    description: str = Field(min_length=1)
+    source_description: str = Field(min_length=1)
+    target_description: str = Field(min_length=1)
+    constraints: tuple[str, ...] = ()
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
+    @field_validator(
+        "description", "source_description", "target_description", mode="before"
+    )
+    @classmethod
+    def _strip_description(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("constraints")
+    @classmethod
+    def _normalize_constraints(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        items = tuple(item.strip() for item in value)
+        if any(not item for item in items):
+            raise ValueError("relation definition constraints must not be blank")
+        return tuple(dict.fromkeys(items))
+
+
 class RelationQuery(BaseModel):
     """Structured, scope-free relation lookup produced by a trusted query plan."""
 
@@ -56,8 +93,7 @@ class RelationQuery(BaseModel):
         ]
         if invalid:
             raise ValueError(
-                "relation types must be canonical uppercase identifiers: "
-                f"{invalid}"
+                f"relation types must be canonical uppercase identifiers: {invalid}"
             )
         return normalized
 
@@ -228,9 +264,7 @@ class RelationCandidate(BaseModel):
 
     @field_validator("valid_at", "invalid_at")
     @classmethod
-    def _normalize_candidate_time(
-        cls, value: datetime | None
-    ) -> datetime | None:
+    def _normalize_candidate_time(cls, value: datetime | None) -> datetime | None:
         if value is None:
             return None
         if value.tzinfo is None:

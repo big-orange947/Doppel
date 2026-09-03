@@ -164,6 +164,7 @@
       "RelationRerankItem",
       "RelationRerankRequest",
       "RelationRerankScore",
+      "RelationTypeDefinition",
       "ProposalBatchResult",
       "ProposalEvaluator",
       "ProposalWriter",

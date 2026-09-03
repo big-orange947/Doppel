@@ -21,6 +21,30 @@
   "properties": {
     "runner": {"const": "doppel.relation-planner-quality.v1"},
     "scoring_version": {"const": "2"},
+    "relation_catalog": {
+      "type": "object",
+      "required": ["mode", "definition_count", "fingerprint", "definitions"],
+      "properties": {
+        "mode": {"enum": ["labels_only", "definitions"]},
+        "definition_count": {"type": "integer", "minimum": 0},
+        "fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "definitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "description", "source_description", "target_description", "constraints"],
+            "properties": {
+              "name": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,127}$"},
+              "description": {"type": "string", "minLength": 1},
+              "source_description": {"type": "string", "minLength": 1},
+              "target_description": {"type": "string", "minLength": 1},
+              "constraints": {"type": "array", "items": {"type": "string", "minLength": 1}}
+            }
+          }
+        }
+      }
+    },
     "execution": {
       "type": "object",
       "required": ["complete", "stopped_early", "stop_reason", "stopped_at_query_id", "evaluated_case_count", "not_run_case_count", "quality_measurement"],

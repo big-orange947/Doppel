@@ -348,6 +348,69 @@ uv run python -m benchmarks.relation_planner_quality `
   --output data/doppel/relation-planner-deepseek-rescored.json
 ```
 
+### Relation definitions: isolated stage-one ablation
+
+`--relation-catalog` adds host-owned schema descriptions to every Planner request.
+The JSON array is validated as `list[RelationTypeDefinition]`: canonical name,
+meaning, directed source/target roles, and optional constraints. Duplicate or
+out-of-allowlist names fail before provider calls. The opt-in example is
+[`catalogs/personal-relations-v1.json`](catalogs/personal-relations-v1.json), covering
+the fixture's 16 labels. It contains no query IDs, entity instances, per-question
+labels, facts, or answers; the same complete catalog is passed to every query.
+It is a host vocabulary example, **not** a mandatory Doppel ontology. Its definitions
+were authored after the initial evaluation: results on the existing, repeatedly
+inspected 65 questions remain exploratory, not new held-out evidence.
+
+Stage one changes only schema information and accompanying instructions, not draft
+output fields, retrieval/ranking logic, dataset gold, scoring, or quality gates.
+Ambiguous predicates still permit empty types. Definitions describe constraints;
+they do not cause the engine to infer relation equivalence or validate edge endpoint
+types, and do not automatically configure Graphiti extraction.
+
+```powershell
+# Offline wiring check: no Docker, GPU, or provider credentials required.
+.\.venv\Scripts\python.exe -m benchmarks.relation_planner_quality `
+  --planner deterministic --no-cache `
+  --relation-catalog benchmarks/catalogs/personal-relations-v1.json `
+  --max-structural-failures 65 `
+  --output data/doppel/relation-planner-catalog-offline.json
+
+# Real definitions arm: set DOPPEL_API_KEY in this same PowerShell beforehand.
+# Use a NEW output path for each experiment; do not overwrite the old 44.6% report.
+.\.venv\Scripts\python.exe -m benchmarks.relation_planner_quality `
+  --planner reference --model deepseek-v4-flash `
+  --base-url https://api.deepseek.com --schema-mode json_object `
+  --relation-catalog benchmarks/catalogs/personal-relations-v1.json `
+  --max-calls 65 --max-completion-tokens 768 `
+  --max-tokens-parameter max_tokens --thinking disabled `
+  --semantic-review benchmarks/datasets/relation-planner-semantic-review-zh-v1.json `
+  --max-relation-type-failures 0 `
+  --output data/doppel/relation-planner-deepseek-catalog-v1.json
+```
+
+A fresh labels-only control uses the same command with `--relation-catalog` omitted
+and a different output path. Both arms together are at most 130 planner calls; each
+arm has its own 65-call cap, with provider retries still disabled. Keep the model,
+token cap, temperature, questions, and scoring identical. Preserve first-pass
+failures; do not repeatedly retry until success and call that improved reliability.
+The deterministic offline check does **not** demonstrate an LLM quality gain.
+
+Reports include `relation_catalog` (mode, full definitions, count, canonical SHA-256),
+and the complete definition content participates in request/cache fingerprints.
+Replay of a definitions report requires the same `--relation-catalog`; missing or
+changed definitions cannot be re-scored as if the provider saw a different input.
+Old labels-only report fingerprints remain replay-compatible. Reference Planner
+version 8 conservatively separates new live caches from version 7; old reports
+can be replayed without paying again, but must not be presented as fresh control runs.
+
+Compare strict type scores **and** explicit-relation omissions, ambiguous hard
+filters, entity/time accuracy, invalid drafts, usage, and latency. The optional
+semantic overlay remains post-hoc and cannot change strict scores or gates. A
+nonzero quality exit is expected when failures remain; the report is still written.
+Only after this isolated comparison should soft type candidates/ranking changes
+or model replacements be tested. New predeclared held-out data is still required
+before making generalized quality claims.
+
 Scoring version 2 distinguishes valid, failed, and not-run cases. An authentication
 failure stops further calls, with remaining cases marked `not_run`; budget misses
 also remain not-run but do not prevent later cache hits. Missing `DOPPEL_API_KEY`

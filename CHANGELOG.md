@@ -36,6 +36,15 @@
 
 ### Changed
 
+- Add opt-in host-owned `RelationTypeDefinition` catalogs to query requests and
+  engine plan/query calls. Definitions carry meaning, directed endpoint roles,
+  and boundaries; duplicate/unknown labels fail before planning, while labels-only
+  provider inputs remain compatible. Reference Planner v8 reads definitions without
+  changing its output schema, hard filters, authority/time guards, or ranking.
+- Add a relation-planner `--relation-catalog` ablation arm with one global,
+  answer-free example vocabulary, catalog hashes, definition-sensitive caches,
+  and catalog-bound replay. Keep legacy report fingerprints and scores unchanged;
+  this is instrumentation and schema context, not a demonstrated quality gain.
 - Harden relation-planner evaluation: fail fast on authentication errors, preflight
   missing credentials, distinguish unexecuted cases from invalid responses, report
   zero-denominator metrics as null, and keep only redacted field/code validation

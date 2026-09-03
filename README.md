@@ -1271,6 +1271,39 @@ Graphiti/Neo4j 从不成为事实权威。
 没有 ontology 或谓词存在歧义时必须保持为空，由 `relation_hints` 与可选 reranker 负责软匹配。
 类型映射由 host/Planner 决定，Doppel 核心不维护问句、语言或业务领域的特判词典。
 
+为了避免 Planner 仅凭机器标签猜语义，`engine.plan/query(...)` 还支持可选的
+`relation_type_definitions`。每个 `RelationTypeDefinition` 描述含义、固定的
+source → target 方向、两端角色以及适用边界。例如宿主自定义的校准关系：
+
+```python
+from doppel_memory import RelationTypeDefinition
+
+relation_catalog = [
+    RelationTypeDefinition(
+        name="CALIBRATED_BY",
+        description="目标为来源设备提供校准。",
+        source_description="接受校准的设备。",
+        target_description="执行校准的人或机构。",
+        constraints=("校准不代表维修、持有或拥有设备。",),
+    ),
+]
+result = await engine.query(
+    planner, question, authorized_scopes, now=now,
+    relation_type_definitions=relation_catalog,
+)
+```
+
+未提供或为空的 `available_relation_types` 会使用目录名称作为白名单；同时提供非空白名单时，
+目录只能补充其中的类型定义，不得扩大白名单，允许只解释部分标签。重复名称、空定义、非法名称
+和额外字段会在调用 Planner 前被拒绝。只传旧标签列表仍可使用，Reference Planner 的原有
+labels-only 提示词及发送给 provider 的输入保持不变。
+
+这轮定义仅用于 Planner 理解 schema，不改变检索、类型精确过滤或重排分数。定义不是事实，
+不会强迫模型选择类型，也不授权任何 scope、subject、时间或证据状态变更。多个类型仍可能回答
+同一问题时，保留原有空类型策略；候选类型软选择属于后续阶段。接入方应把同一份目录用于抽取
+和查询适配，但当前不会自动配置 Graphiti 的写入提示词、重标已有边或迁移数据。不要把消息正文、
+测试问句、答案或私有事实放进目录；Reference Planner 会把完整目录发送给其模型 provider。
+
 高配置部署可以向 `GraphitiRelationIndex` 注入 `RelationReranker`，用于弥补 Planner 输出的关系短语
 与 Graphiti edge 文本之间的同义改写。该协议一次只接收 `query_text`、`relation_hints` 以及每条边的
 不透明 `item_id + relation_type + fact`；它看不到 scope、subject ID、memory ID、生命周期或时间字段，
