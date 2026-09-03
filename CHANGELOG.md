@@ -36,6 +36,11 @@
 
 ### Changed
 
+- Add a dry-run-by-default, one-command fresh relation catalog comparison with
+  hidden process-only credential input, two fixed no-cache/no-retry arms capped at
+  130 total calls, input drift checks, unique output directories, and paired
+  metric/status reports. Preserve first-pass failures and stop on authentication
+  failures; no live quality gain is claimed until the comparison is executed.
 - Add opt-in host-owned `RelationTypeDefinition` catalogs to query requests and
   engine plan/query calls. Definitions carry meaning, directed endpoint roles,
   and boundaries; duplicate/unknown labels fail before planning, while labels-only

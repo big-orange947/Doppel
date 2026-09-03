@@ -350,6 +350,36 @@ uv run python -m benchmarks.relation_planner_quality `
 
 ### Relation definitions: isolated stage-one ablation
 
+For a fresh two-arm comparison in **one command**, run from the repository root:
+
+```powershell
+# Preview only; zero network calls, no key prompt, no output directory created.
+.\.venv\Scripts\python.exe -m benchmarks.relation_catalog_ablation
+
+# Live: uses DOPPEL_API_KEY if present, otherwise asks for hidden console input.
+.\.venv\Scripts\python.exe -m benchmarks.relation_catalog_ablation --live
+```
+
+The live command runs labels-only then definitions with the same fixed DeepSeek
+settings below, no cached drafts and no provider retries, at most 65 calls per arm
+(130 total). Input files and implementation hashes are checked between arms; do
+not edit source/catalog/dataset files while it runs. A prompted key exists only
+in the child process environment and is restored/removed in `finally`, never
+written in the plan, reports, command arguments, or shell history. Noninteractive
+execution without an environment key fails before any calls.
+
+Each invocation creates a unique directory under `data/doppel/catalog-ablation/`
+with `plan.json`, per-arm reports, and `comparison.json` with SHA-256 sidecars.
+The comparison keeps raw metrics, provider usage, post-hoc ambiguity counts, and
+per-query type-success/status transitions. Existing results are not overwritten.
+Ordinary quality exit 1 does not stop the second arm; authentication failure or
+zero valid drafts stops further arms. `completed` means both reports were produced;
+`quality_gate_passed` remains false when either arm fails the strict quality gate.
+An individual invalid response remains visible, and provider completeness is
+reported independently. Do not rerun merely because the final exit is 1: inspect
+`comparison.json` first. Sequential single runs are exploratory, not randomized
+or repeated trials, and no quality improvement is claimed by the wrapper itself.
+
 `--relation-catalog` adds host-owned schema descriptions to every Planner request.
 The JSON array is validated as `list[RelationTypeDefinition]`: canonical name,
 meaning, directed source/target roles, and optional constraints. Duplicate or
