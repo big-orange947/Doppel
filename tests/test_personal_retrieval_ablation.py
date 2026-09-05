@@ -864,6 +864,63 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(case["temporal_violations"], 1)
 
+    def test_accepted_interval_does_not_use_representative_asof_point(self) -> None:
+        scope = MemoryScope(user_id="user-linz", agent_id="echo")
+        within_year = _hit(
+            "m-september", scope=scope, valid_from="2025-09-12T00:00:00Z"
+        )
+        outside_year = _hit("m-future", scope=scope, valid_from="2027-01-01T00:00:00Z")
+        result = SimpleNamespace(
+            plan=SimpleNamespace(
+                intent="history",
+                as_of=None,
+                time_from=datetime(2025, 1, 1, tzinfo=UTC),
+                time_to=datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC),
+                entity_mentions=[],
+                relation_hints=[],
+                memory_types=[],
+                topic_keys=[],
+            ),
+            hits=[within_year, outside_year],
+            conflicts=[],
+            matched_record_count=2,
+            scanned_record_count=2,
+            scanned_conflict_count=0,
+            count=SimpleNamespace(status="not_requested", value=None),
+            ambiguous=False,
+            warnings=[],
+        )
+        query = _query(as_of="2025-06-15T00:00:00Z").model_copy(
+            update={
+                "accept_interval_covering_as_of": True,
+                "accepted_intents": ["history"],
+                "forbidden_memory_ids": ["m-september"],
+            }
+        )
+        case = _evaluate_result(
+            result,
+            query,
+            "lexical_vector",
+            1.0,
+            allowed_scope_keys={scope.scope_key},
+            mode=PLANNER_MODE_REPORT,
+        )
+        self.assertFalse(case["planner_temporal_miss"])
+        self.assertEqual(case["temporal_violations"], 1)
+        self.assertIn("m-september", case["forbidden"])
+        # Without interval acceptance the wrong planner is still reported; the
+        # evaluator must not quietly bless a broader interval for a point query.
+        query = query.model_copy(update={"accept_interval_covering_as_of": False})
+        case = _evaluate_result(
+            result,
+            query,
+            "lexical_vector",
+            1.0,
+            allowed_scope_keys={scope.scope_key},
+            mode=PLANNER_MODE_REPORT,
+        )
+        self.assertTrue(case["planner_temporal_miss"])
+
     def test_semantic_source_reasons_parsed(self) -> None:
         scope = MemoryScope(user_id="user-linz", agent_id="echo")
         hit = _hit(

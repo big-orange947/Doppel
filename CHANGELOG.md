@@ -36,6 +36,9 @@
 
 ### Changed
 
+- Retrieval evaluation checks accepted interval plans against the interval rather
+  than an arbitrary representative as-of label. Out-of-interval hits still fail;
+  unrelated/forbidden evidence is not excused by temporal overlap.
 - Retrieval report replay preserves explicit failed Planner attempts while executing
   valid drafts, without paid retries. Failed evidence-bearing queries remain in
   recall/MRR denominators and source failures are attributed to Planner hard gates,

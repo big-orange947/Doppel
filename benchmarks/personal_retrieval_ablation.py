@@ -1913,11 +1913,26 @@ def _evaluate_result(
             # planner failures and are never counted here.
             record_valid_from = _optional_time(record.metadata.get("valid_from"))
             record_valid_to = _optional_time(record.metadata.get("valid_to"))
+            # An accepted interval is not the representative gold point. E.g. a
+            # whole-year query may return September even when the fixture uses
+            # a June point to describe an acceptable plan. Relevance is still
+            # evaluated independently; accepting a time interval excuses no hits.
+            evaluation_start = evaluation_end = query.as_of
+            plan_start = getattr(result.plan, "time_from", None)
+            plan_end = getattr(result.plan, "time_to", None)
+            if (
+                query.accept_interval_covering_as_of
+                and plan_as_of is None
+                and plan_start is not None
+                and plan_end is not None
+                and plan_start <= query.as_of <= plan_end
+            ):
+                evaluation_start, evaluation_end = plan_start, plan_end
             if (
                 record_valid_from is not None
-                and record_valid_from > query.as_of
+                and record_valid_from > evaluation_end
                 or record_valid_to is not None
-                and record_valid_to < query.as_of
+                and record_valid_to < evaluation_start
             ):
                 temporal_violations += 1
         if not record.metadata.get("evidence"):
