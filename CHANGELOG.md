@@ -36,6 +36,10 @@
 
 ### Changed
 
+- Retrieval report replay preserves explicit failed Planner attempts while executing
+  valid drafts, without paid retries. Failed evidence-bearing queries remain in
+  recall/MRR denominators and source failures are attributed to Planner hard gates,
+  not retrieval. Missing/duplicate/unclassified attempts remain invalid inputs.
 - Provisional query behavior: planner `relation_types` now bind as candidate types;
   exact filters require the host `required_relation_types` argument. Existing stored
   execution plans retain explicit-filter semantics. Reference Planner v10 describes

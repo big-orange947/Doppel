@@ -117,6 +117,10 @@
         "temporal_violation_count": {"type": "integer", "minimum": 0},
         "provenance_failure_count": {"type": "integer", "minimum": 0},
         "abstention_accuracy": {"type": "number", "minimum": 0, "maximum": 1},
+        "source_planner_failure_count": {"type": "integer", "minimum": 0},
+        "successful_execution_count": {"type": "integer", "minimum": 0},
+        "metric_denominator_policy": {"const": "all_attempts_including_errors"},
+        "latency_population": {"const": "successful_local_executions_excludes_source_llm"},
         "ambiguity_accuracy": {"type": "number", "minimum": 0, "maximum": 1},
         "count_accuracy": {"type": "number", "minimum": 0, "maximum": 1},
         "latency_ms": {"type": "object", "required": ["p50", "p95", "max"]},
@@ -131,6 +135,8 @@
       "required": ["query_id", "profile", "mode", "partition", "category", "error", "latency_ms", "hits", "missing", "forbidden", "scope_leakage", "temporal_violations", "provenance_failures", "abstention_ok", "ambiguity_ok", "count_ok", "hit_top1_ok", "recall_at_1", "recall_at_5", "mrr", "evidence_recall", "intent_ok", "required_evidence", "expected_abstain", "as_of_recognized", "planner_failures", "retrieval_failures", "security_failures"],
       "properties": {
         "error": {"type": "string"},
+        "source_planner_failure": {"type": "boolean"},
+        "failure_stage": {"enum": ["planner", "execution"]},
         "scope_leakage": {"type": "integer", "minimum": 0},
         "forbidden": {"type": "array", "items": {"type": "string"}},
         "hits": {"type": "array", "items": {"type": "string"}}

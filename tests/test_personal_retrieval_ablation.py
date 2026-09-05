@@ -449,10 +449,7 @@ class DatasetTest(unittest.TestCase):
             any(query.category == "scope_collision" for query in dataset.queries)
         )
         self.assertGreaterEqual(
-            sum(
-                query.category == "semantic_paraphrase"
-                for query in dataset.queries
-            ),
+            sum(query.category == "semantic_paraphrase" for query in dataset.queries),
             8,
         )
         self.assertGreaterEqual(
@@ -482,9 +479,7 @@ class DatasetTest(unittest.TestCase):
             AblationDataset.model_validate(duplicate_query)
 
         duplicate_text = dataset.model_dump(mode="python")
-        duplicate_text["queries"][1]["query"] = duplicate_text["queries"][0][
-            "query"
-        ]
+        duplicate_text["queries"][1]["query"] = duplicate_text["queries"][0]["query"]
         with self.assertRaisesRegex(ValueError, "duplicate query texts"):
             AblationDataset.model_validate(duplicate_text)
 
@@ -529,10 +524,7 @@ class DatasetTest(unittest.TestCase):
                 }
             ],
         )
-        dev = {
-            row["threshold"]: row
-            for row in report["sweep_by_partition"]["dev"]
-        }
+        dev = {row["threshold"]: row for row in report["sweep_by_partition"]["dev"]}
         self.assertTrue(report["available"])
         self.assertEqual(dev[0.75]["promoted_required"], 1)
         self.assertEqual(dev[0.75]["promoted_forbidden"], 0)
@@ -1094,6 +1086,129 @@ class DirectScanTest(unittest.IsolatedAsyncioTestCase):
 
 
 class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
+    def _replay_payload(self, dataset: AblationDataset) -> dict[str, Any]:
+        return {
+            "dataset": {"fingerprint": dataset.fingerprint},
+            "cases": [
+                {"query": query.query, "actual": {"intent": "lookup"}, "error": ""}
+                for query in dataset.queries
+                if query.partition != "deferred_cross_subject"
+            ],
+        }
+
+    async def test_report_failure_is_preserved_and_valid_queries_continue(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        payload = self._replay_payload(dataset)
+        payload["cases"][0].update(actual=None, error="secret-provider-message")
+        scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "planner.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            report = await _run_profiles(
+                store=InMemoryStore(),
+                scopes=scopes,
+                dataset=dataset,
+                profiles=("lexical",),
+                semantic_by_source={},
+                relation_index=None,
+                graph=None,
+                planner_modes=(PLANNER_MODE_REPORT,),
+                planner_report=path,
+            )
+            planner = BenchmarkReportPlanner(path, dataset)
+        metrics = report["profiles"][PLANNER_MODE_REPORT]["lexical"]
+        self.assertEqual(metrics["query_count"], len(payload["cases"]))
+        self.assertEqual(metrics["error_count"], 1)
+        self.assertEqual(metrics["source_planner_failure_count"], 1)
+        self.assertEqual(
+            metrics["successful_execution_count"], len(payload["cases"]) - 1
+        )
+        failed = report["cases"][0]
+        self.assertTrue(failed["source_planner_failure"])
+        self.assertEqual(failed["failure_stage"], "planner")
+        self.assertIn(
+            f"{failed['query_id']}:source_planner_failure",
+            report["hard_gates"]["planner_failures"],
+        )
+        self.assertFalse(
+            any(
+                "execution_error" in s
+                for s in report["hard_gates"]["retrieval_failures"]
+            )
+        )
+        self.assertNotIn("secret-provider-message", json.dumps(report))
+        self.assertEqual(planner.source["failed_attempt_count"], 1)
+        self.assertEqual(planner.source["provider_calls_during_replay"], 0)
+        # A failed evidence-bearing attempt must lower recall, not shrink its denominator.
+        failed = dict(failed, required_evidence=True, expected_abstain=False)
+        success = dict(
+            failed,
+            error="",
+            source_planner_failure=False,
+            recall_at_1=1,
+            recall_at_5=1,
+            mrr=1,
+            evidence_recall=1,
+            hit_top1_ok=True,
+        )
+        combined = _aggregate([failed, success])
+        self.assertEqual(combined["expected_evidence_count"], 2)
+        for metric in ("recall_at_1", "recall_at_5", "mrr", "required_evidence_recall"):
+            self.assertEqual(combined[metric], 0.5)
+
+    async def test_report_all_failed_attempts_do_not_abort_warmup(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        payload = self._replay_payload(dataset)
+        for item in payload["cases"]:
+            item.update(actual=None, error="ValidationError")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "planner.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            report = await _run_profiles(
+                store=InMemoryStore(),
+                scopes={name: item.to_scope() for name, item in dataset.scopes.items()},
+                dataset=dataset,
+                profiles=("lexical",),
+                semantic_by_source={},
+                relation_index=None,
+                graph=None,
+                planner_modes=(PLANNER_MODE_REPORT,),
+                planner_report=path,
+            )
+        metrics = report["profiles"][PLANNER_MODE_REPORT]["lexical"]
+        self.assertEqual(metrics["error_count"], len(payload["cases"]))
+        self.assertEqual(metrics["successful_execution_count"], 0)
+        self.assertEqual(metrics["recall_at_1"], 0)
+        self.assertEqual(
+            len(report["hard_gates"]["planner_failures"]), len(payload["cases"])
+        )
+
+    async def test_report_rejects_missing_duplicate_and_unclassified_attempts(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "planner.json"
+            for kind, pattern in (
+                ("missing", "dataset attempts"),
+                ("duplicate", "repeats query"),
+                ("unclassified", "neither a draft nor an error"),
+            ):
+                payload = self._replay_payload(dataset)
+                if kind == "missing":
+                    payload["cases"].pop()
+                elif kind == "duplicate":
+                    payload["cases"][0].update(actual=None, error="failed")
+                    payload["cases"].append(payload["cases"][0])
+                else:
+                    payload["cases"][0]["actual"] = None
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with (
+                    self.subTest(kind=kind),
+                    self.assertRaisesRegex(ValueError, pattern),
+                ):
+                    BenchmarkReportPlanner(path, dataset)
+
     async def test_oracle_plan_injects_intent_and_as_of(self) -> None:
         from benchmarks.personal_retrieval_ablation import BenchmarkOraclePlanner
         from doppel_memory.query import PersonalMemoryQueryRequest
@@ -1372,12 +1487,8 @@ class RelationProfileTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             reranked_metrics["recall_at_1"], relation_metrics["recall_at_1"]
         )
-        self.assertGreater(
-            reranked_metrics["contribution"]["relation_reranker"], 0
-        )
-        self.assertEqual(
-            relation_metrics["contribution"]["relation_reranker"], 0
-        )
+        self.assertGreater(reranked_metrics["contribution"]["relation_reranker"], 0)
+        self.assertEqual(relation_metrics["contribution"]["relation_reranker"], 0)
         self.assertIn(
             "oracle_lexical_relation_reranked_vs_lexical_relation",
             report["comparisons"],

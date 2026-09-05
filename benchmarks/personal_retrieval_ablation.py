@@ -536,8 +536,16 @@ class BenchmarkOraclePlanner:
         )
 
 
+class BenchmarkReportPlannerFailure(ValueError):
+    """An explicitly failed source attempt, not a retrieval execution failure."""
+
+    def __init__(self) -> None:
+        # Do not copy provider messages, model output, or credentials into reports.
+        super().__init__("source planner attempt failed; see hash-bound source report")
+
+
 class BenchmarkReportPlanner:
-    """Replay successful provider drafts from a planner-quality report.
+    """Replay provider drafts and explicit failures from a planner-quality report.
 
     The report must belong to the exact current dataset. This lets one paid planner
     run feed every local retrieval profile without multiplying provider calls.
@@ -568,29 +576,50 @@ class BenchmarkReportPlanner:
             "provider_calls_during_replay": 0,
         }
         drafts: dict[str, PersonalMemoryQueryDraft] = {}
+        failures: set[str] = set()
+        seen: set[str] = set()
         for item in list(raw.get("cases") or []):
             query_text = str(item.get("query") or "").strip()
-            if not query_text or item.get("error") or item.get("actual") is None:
-                continue
-            if query_text in drafts:
+            if not query_text:
+                raise ValueError("planner report contains an empty query")
+            if query_text in seen:
                 raise ValueError(f"planner report repeats query text: {query_text!r}")
+            seen.add(query_text)
+            if item.get("error"):
+                failures.add(query_text)
+                continue
+            if item.get("actual") is None:
+                raise ValueError("planner report case has neither a draft nor an error")
             drafts[query_text] = PersonalMemoryQueryDraft.model_validate(item["actual"])
         required = {
             query.query.strip()
             for query in dataset.queries
             if query.partition != "deferred_cross_subject"
         }
-        missing = sorted(required.difference(drafts))
+        missing = sorted(required.difference(seen))
         if missing:
-            raise ValueError(
-                f"planner report lacks {len(missing)} successful dataset drafts"
-            )
+            raise ValueError(f"planner report lacks {len(missing)} dataset attempts")
         self._drafts = drafts
+        self._failures = failures
+        self.source.update(
+            {
+                "successful_draft_count": len(required.intersection(drafts)),
+                "failed_attempt_count": len(required.intersection(failures)),
+                "failure_policy": "preserve_in_denominator_no_retry",
+                "execution_semantics": "planner_candidates_host_constraints",
+            }
+        )
+
+    def has_successful_draft(self, query: str) -> bool:
+        return query.strip() in self._drafts
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
     ) -> PersonalMemoryQueryDraft:
-        draft = self._drafts.get(str(request.query or "").strip())
+        query_text = str(request.query or "").strip()
+        if query_text in self._failures:
+            raise BenchmarkReportPlannerFailure()
+        draft = self._drafts.get(query_text)
         if draft is None:
             raise ValueError(
                 f"planner report has no draft for query: {request.query!r}"
@@ -1706,6 +1735,7 @@ async def _run_case(
             ),
         )
     except Exception as exc:  # noqa: BLE001 - structured failure
+        source_planner_failure = isinstance(exc, BenchmarkReportPlannerFailure)
         return {
             "query_id": query.query_id,
             "profile": profile,
@@ -1713,6 +1743,8 @@ async def _run_case(
             "partition": query.partition,
             "category": query.category,
             "error": f"{type(exc).__name__}: {exc}",
+            "failure_stage": "planner" if source_planner_failure else "execution",
+            "source_planner_failure": source_planner_failure,
             "latency_ms": round((perf_counter() - started) * 1_000, 3),
             "hits": [],
             "missing": [],
@@ -1737,7 +1769,9 @@ async def _run_case(
             "planner_temporal_miss": False,
             "planner_intent_miss": False,
             "planner_interval_miss": False,
-            "planner_failures": [],
+            "planner_failures": (
+                ["source_planner_failure"] if source_planner_failure else []
+            ),
             "retrieval_failures": [],
             "security_failures": [],
             "contribution": {
@@ -2070,7 +2104,7 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
     valid = [case for case in cases if not case["error"]]
     expected_evidence = [
         case
-        for case in valid
+        for case in cases
         if case["required_evidence"] or not case["expected_abstain"]
     ]
     expected_evidence_total = max(len(expected_evidence), 1)
@@ -2095,6 +2129,12 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
     return {
         "query_count": total,
         "error_count": len(errors),
+        "source_planner_failure_count": sum(
+            bool(case.get("source_planner_failure")) for case in cases
+        ),
+        "successful_execution_count": len(valid),
+        "metric_denominator_policy": "all_attempts_including_errors",
+        "latency_population": "successful_local_executions_excludes_source_llm",
         "expected_evidence_count": len(expected_evidence),
         "hit_at_1": sum(case["hit_top1_ok"] for case in expected_evidence),
         "recall_at_1": round(
@@ -2775,6 +2815,10 @@ async def _run_profiles(
                     query
                     for query in dataset.queries
                     if query.partition != "deferred_cross_subject"
+                    and (
+                        not isinstance(planner, BenchmarkReportPlanner)
+                        or planner.has_successful_draft(query.query)
+                    )
                 ),
                 None,
             )
@@ -2983,6 +3027,11 @@ def _collect_hard_gates(cases: Sequence[dict[str, Any]]) -> dict[str, list[str]]
     }
     for case in cases:
         if case["error"]:
+            if case.get("source_planner_failure"):
+                layered["planner_failures"].append(
+                    f"{case['query_id']}:source_planner_failure"
+                )
+                continue
             layered["retrieval_failures"].append(
                 f"{case['query_id']}:execution_error:{case['error'][:120]}"
             )

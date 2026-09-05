@@ -520,9 +520,20 @@ uv run python -m benchmarks.relation_planner_quality `
   --output data/doppel/relation-planner-deepseek-typed-v2-reviewed.json
 ```
 
-The same successful report can then drive the real Store + pgvector + Neo4j chain
+The same report can then drive the real Store + pgvector + Neo4j chain
 without repeating the paid planner call for every profile. The exact dataset
 fingerprint must match; planner failures and retrieval failures remain separate:
+
+Explicit failed attempts are replayed as `source_planner_failure`, without retries,
+provider error text, or fabricated drafts. Valid attempts continue; missing attempts,
+duplicate queries, and entries with neither a draft nor an error are rejected.
+Recall/MRR/evidence metrics retain failed evidence-bearing attempts in the denominator;
+abstention metrics retain all attempts. Hard gates attribute source failures to the
+Planner, not retrieval. Latency describes successful local replay executions only,
+not the original LLM latency. Report provenance records the source file SHA-256,
+valid/failed attempt counts, zero replay provider calls, and candidate-type execution
+semantics. Replaying an older report tests the current engine with those stored
+drafts; it does not measure the newer Planner prompt.
 
 ```bash
 uv run python -m benchmarks.personal_retrieval_ablation `
