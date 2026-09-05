@@ -6,6 +6,12 @@ retrieval evidence quality, observable style, and semantic-index correctness rem
 separate reports; Doppel does not combine them into a flattering but meaningless
 "memory intelligence" score.
 
+Development results: [2026-09-05 natural Planner replay: relation candidates and
+BGE reranking](reports/relation-candidate-replay-2026-09-05.md). All six local
+profiles executed; quality gates still fail. The report documents the
+recall/false-acceptance tradeoff, an interval-scoring correction, and remaining
+evidence-qualification work rather than claiming publication readiness.
+
 ## Chinese IM memory quality
 
 The v1 quality lab uses a hand-labeled Chinese IM fixture with stable facts, explicit
