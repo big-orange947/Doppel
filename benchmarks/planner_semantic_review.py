@@ -162,7 +162,14 @@ def review_planner_report(
             elif group is not None:
                 if group.policy == "underdetermined":
                     row["relation_assessment"] = (
-                        "ambiguous_hard_filter" if types else "conservative_abstention"
+                        (
+                            "ambiguous_candidate_selection"
+                            if report.get("relation_type_execution_semantics")
+                            == "planner_candidates_host_constraints"
+                            else "ambiguous_hard_filter"
+                        )
+                        if types
+                        else "conservative_abstention"
                     )
                 elif not types:
                     row["relation_assessment"] = "missed_explicit_type"

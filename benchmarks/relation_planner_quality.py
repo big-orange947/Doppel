@@ -345,6 +345,7 @@ async def run_relation_planner_quality(
     return {
         "runner": "doppel.relation-planner-quality.v1",
         "scoring_version": "2",
+        "relation_type_execution_semantics": "planner_candidates_host_constraints",
         "output_diagnostics": _output_diagnostics(cases),
         "relation_catalog": _catalog_metadata(relation_type_definitions),
         "doppel_version": __version__,

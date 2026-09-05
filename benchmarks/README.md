@@ -350,6 +350,25 @@ uv run python -m benchmarks.relation_planner_quality `
 
 ### Relation definitions: isolated stage-one ablation
 
+**Execution semantics after Planner v10:** model `draft.relation_types` are now
+suggestions bound to `plan.candidate_relation_types`. Exact runtime filters come
+only from the host's `required_relation_types` argument (or an explicitly trusted
+stored execution plan). `oracle_typed` now passes fixture gold via this host
+argument in both warm-up and measured runs, preserving its meaning as a known-type
+retrieval ceiling. Normal/report planners never acquire that host privilege.
+Historical model drafts replay with candidate semantics under the new engine;
+compare engine source hashes before attributing changes to a model.
+
+Strict type-set scores remain unchanged and still measure the proposed labels
+against storage gold, not evidence relevance. New planner reports mark
+`relation_type_execution_semantics=planner_candidates_host_constraints`; their
+semantic overlay calls ambiguous nonempty suggestions `ambiguous_candidate_selection`,
+not observed hard-filter/security failures. Old untouched reports keep their
+original labels. Graph candidate expansion, reranker relevance, and final evidence
+quality must be measured through retrieval separately. The existing report-based
+retrieval runner still requires valid drafts for every case; it does not silently
+drop a failed case to obtain a full score.
+
 For a fresh two-arm comparison in **one command**, run from the repository root:
 
 ```powershell

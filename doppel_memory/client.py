@@ -365,6 +365,7 @@ class DoppelClient:
         allowed_subject_ids: Sequence[str] = (),
         available_relation_types: Sequence[str] = (),
         relation_type_definitions: Sequence[RelationTypeDefinition] = (),
+        required_relation_types: Sequence[str] = (),
     ) -> PersonalMemoryQueryResult:
         """Return structured personal-memory evidence and safe aggregation."""
 
@@ -383,6 +384,7 @@ class DoppelClient:
             allowed_subject_ids=allowed_subject_ids,
             available_relation_types=available_relation_types,
             relation_type_definitions=relation_type_definitions,
+            required_relation_types=required_relation_types,
         )
 
     # ---------------------------------------------------------------- 高层 API

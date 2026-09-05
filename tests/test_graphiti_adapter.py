@@ -233,9 +233,7 @@ async def test_semantic_index_uses_stable_episode_and_exact_scope_group() -> Non
     assert second.status == IndexOperationStatus.SKIPPED
     assert fake.add_calls[0]["group_id"] == scope.scope_key
     assert "memory_id=memory-1" in str(fake.add_calls[0]["episode_body"])
-    assert '"entity_name": "DoppelSubject-' in str(
-        fake.add_calls[0]["episode_body"]
-    )
+    assert '"entity_name": "DoppelSubject-' in str(fake.add_calls[0]["episode_body"])
     assert "The owner likes mountain hiking" in str(fake.add_calls[0]["episode_body"])
     assert "untrusted caller content" not in str(fake.add_calls[0]["episode_body"])
     assert (await index.health())["ok"] is True
@@ -417,9 +415,9 @@ async def test_graphiti_upsert_replaces_legacy_projection_episode(
     record = MemoryRecord(memory_id="legacy", scope=scope, content="upgrade me")
     assert (await store.put(record)).accepted
     created = await index.index_record(record)
-    fake.episodes[created.episode_id].name = (
-        f"DoppelMemory:v{legacy_version}:bGVnYWN5:{created.fingerprint}:1"
-    )
+    fake.episodes[
+        created.episode_id
+    ].name = f"DoppelMemory:v{legacy_version}:bGVnYWN5:{created.fingerprint}:1"
 
     upgraded = await index.index_record(record)
 
@@ -620,19 +618,13 @@ async def test_graphiti_projection_and_search_at_preserve_temporal_coordinates()
     call = fake.add_calls[0]
     assert call["reference_time"] == observed_at
     assert '"temporal_status": "current"' in str(call["episode_body"])
-    assert f'"valid_from": "{valid_from.isoformat()}"' in str(
-        call["episode_body"]
-    )
+    assert f'"valid_from": "{valid_from.isoformat()}"' in str(call["episode_body"])
     assert f'"valid_to": "{valid_to.isoformat()}"' in str(call["episode_body"])
     assert '"entity_name": "DoppelSubject-' in str(call["episode_body"])
     assert '"role": "owner"' in str(call["episode_body"])
     assert "person-temporal" not in str(call["episode_body"])
-    assert "trusted temporal metadata" in str(
-        call["custom_extraction_instructions"]
-    )
-    assert "trusted subject metadata" in str(
-        call["custom_extraction_instructions"]
-    )
+    assert "trusted temporal metadata" in str(call["custom_extraction_instructions"])
+    assert "trusted subject metadata" in str(call["custom_extraction_instructions"])
     assert "never replace a subject-object relation with a self-loop" in str(
         call["custom_extraction_instructions"]
     )
@@ -871,7 +863,9 @@ def test_graphiti_relation_reranker_requires_explicit_threshold() -> None:
         )
 
 
-async def test_graphiti_relation_reranker_batches_and_only_promotes_scored_edges() -> None:
+async def test_graphiti_relation_reranker_batches_and_only_promotes_scored_edges() -> (
+    None
+):
     scope = MemoryScope(user_id="rerank-owner", agent_id="bot")
     store = InMemoryStore()
     fake = FakeGraphiti()
@@ -971,6 +965,128 @@ async def test_graphiti_relation_reranker_batches_and_only_promotes_scored_edges
         "minimum_score": 0.75,
         "last_error": None,
     }
+
+
+@pytest.mark.parametrize("hard_types", [[], ["CALIBRATED_BY"]])
+async def test_candidate_type_bank_keeps_neutral_evidence_and_host_constraints(
+    hard_types,
+) -> None:
+    scope = MemoryScope(user_id="candidate-owner", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
+    rows = []
+    for i, relation_type in enumerate(["OWNED_BY", "CALIBRATED_BY"]):
+        record = MemoryRecord(
+            memory_id=f"candidate-{i}",
+            scope=scope,
+            content="sensor",
+            metadata={"evidence": [{"evidence_id": f"evidence-{i}"}]},
+        )
+        await store.put(record)
+        indexed = await semantic.index_record(record)
+        rows.append(
+            {
+                "group_id": scope.scope_key,
+                "edge_id": f"edge-{i}",
+                "relation_type": relation_type,
+                "fact": "sensor",
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": "sensor",
+                "source_entity_name": "sensor",
+                "target_entity_id": f"provider-{i}",
+                "target_entity_name": "provider",
+                "relation_hint_match": 0,
+            }
+        )
+    fake.driver = _RelationDriver(rows)
+    scorer = _RelationReranker([RelationRerankScore(item_id="edge-1", score=0.9)])
+    index = GraphitiRelationIndex(
+        store,
+        graphiti_client=fake,
+        relation_reranker=scorer,
+        minimum_reranker_score=0.75,
+    )
+    candidates = await index.search_relations(
+        RelationQuery(
+            query_text="Who calibrated the sensor?",
+            entity_mentions=["sensor"],
+            candidate_relation_types=["OWNED_BY"],
+            relation_types=hard_types,
+            subject="owner",
+            subject_id=scope.user_id,
+        ),
+        [scope],
+        limit=2,
+    )
+    assert candidates[0].relation_type == "CALIBRATED_BY"
+    assert candidates[0].score > 0.35
+    calls = fake.driver.calls
+    assert calls[0][1]["relation_types"] == hard_types
+    if hard_types:
+        assert len(calls) == 1  # Incompatible suggestion never widens host filter.
+        assert len(candidates) == 1
+    else:
+        assert len(calls) == 2
+        assert calls[1][1]["relation_types"] == ["OWNED_BY"]
+        assert calls[0][1]["limit"] == 4 and calls[1][1]["limit"] == 2
+        assert candidates[-1].relation_type == "OWNED_BY"
+        assert candidates[-1].score == 0.2
+        assert candidates[-1].match_kind == "none"
+    assert len(scorer.requests[0].items) == 2  # Duplicated bank edges scored once.
+    for _, params in calls:
+        assert params["group_ids"] == [scope.scope_key]
+
+
+async def test_suggestion_only_without_reranker_does_not_promote_adjacency() -> None:
+    scope = MemoryScope(user_id="suggestion-only", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    record = MemoryRecord(
+        memory_id="suggestion",
+        scope=scope,
+        content="sensor",
+        metadata={"evidence": [{"evidence_id": "evidence"}]},
+    )
+    await store.put(record)
+    indexed = await GraphitiSemanticIndex(store, graphiti_client=fake).index_record(
+        record
+    )
+    fake.driver = _RelationDriver(
+        [
+            {
+                "group_id": scope.scope_key,
+                "edge_id": "edge",
+                "relation_type": "OWNED_BY",
+                "fact": "sensor",
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": "sensor",
+                "source_entity_name": "sensor",
+                "target_entity_id": "person",
+                "target_entity_name": "person",
+                "relation_hint_match": 0,
+            }
+        ]
+    )
+    candidates = await GraphitiRelationIndex(
+        store, graphiti_client=fake
+    ).search_relations(
+        RelationQuery(
+            query_text="sensor",
+            candidate_relation_types=["OWNED_BY"],
+            subject="owner",
+            subject_id=scope.user_id,
+        ),
+        [scope],
+        limit=2,
+    )
+    assert len(candidates) == 1
+    assert candidates[0].score == 0.2
+    assert candidates[0].match_kind == "none"
 
 
 @pytest.mark.parametrize(

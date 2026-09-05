@@ -265,9 +265,7 @@ class AblationDataset(BaseModel):
             item for item, count in Counter(query_texts).items() if count > 1
         )
         if duplicate_query_texts:
-            raise ValueError(
-                f"duplicate query texts: {duplicate_query_texts}"
-            )
+            raise ValueError(f"duplicate query texts: {duplicate_query_texts}")
         invalid_relation_types = sorted(
             item
             for item in self.relation_types
@@ -830,16 +828,10 @@ class _SentenceTransformersEmbeddingProvider:
     async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
         return await self._encode(texts)
 
-    async def embed_queries(
-        self, texts: Sequence[str]
-    ) -> Sequence[Sequence[float]]:
-        return await self._encode(
-            [f"{self.query_prefix}{text}" for text in texts]
-        )
+    async def embed_queries(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
+        return await self._encode([f"{self.query_prefix}{text}" for text in texts])
 
-    async def _encode(
-        self, texts: Sequence[str]
-    ) -> Sequence[Sequence[float]]:
+    async def _encode(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
         if not texts:
             return []
         model = await self._ensure_model()
@@ -863,9 +855,7 @@ class _SentenceTransformersEmbeddingProvider:
                     sentence_transformers = importlib.import_module(
                         "sentence_transformers"
                     )
-                    sentence_transformer = (
-                        sentence_transformers.SentenceTransformer
-                    )
+                    sentence_transformer = sentence_transformers.SentenceTransformer
 
                     kwargs: dict[str, Any] = {"truncate_dim": self.dimensions}
                     if self.cache_dir is not None:
@@ -1098,8 +1088,7 @@ class _SentenceTransformersRelationReranker:
             request.query_text or " ".join(request.relation_hints)
         )
         pairs = [
-            (query, f"{item.relation_type}\n{item.fact}")
-            for item in request.items
+            (query, f"{item.relation_type}\n{item.fact}") for item in request.items
         ]
 
         def _score() -> list[float]:
@@ -1134,9 +1123,7 @@ class _SentenceTransformersRelationReranker:
                 else raw_score
             )
             if not 0.0 <= normalized <= 1.0:
-                raise RuntimeError(
-                    "identity-normalized reranker score is outside 0..1"
-                )
+                raise RuntimeError("identity-normalized reranker score is outside 0..1")
             scores.append(RelationRerankScore(item_id=item.item_id, score=normalized))
         _record_relation_observation(self._observations, request, scores)
         return scores
@@ -1243,12 +1230,8 @@ def _embedding_runtime_metadata(provider: Any | None) -> dict[str, str]:
         "model": str(getattr(provider, "model_name", "") or ""),
         "dimensions": str(getattr(provider, "dimensions", "") or ""),
         "normalization": str(getattr(provider, "normalization", "") or ""),
-        "query_embedding": str(
-            getattr(provider, "query_embedding", "symmetric") or ""
-        ),
-        "query_prefix_sha256": str(
-            getattr(provider, "query_prefix_sha256", "") or ""
-        ),
+        "query_embedding": str(getattr(provider, "query_embedding", "symmetric") or ""),
+        "query_prefix_sha256": str(getattr(provider, "query_prefix_sha256", "") or ""),
         "device_requested": str(getattr(provider, "device", "") or "auto"),
         "batch_size": str(getattr(provider, "batch_size", "") or ""),
         **_torch_runtime_metadata(backend),
@@ -1278,14 +1261,10 @@ def _relation_reranker_runtime_metadata(
     return {
         "backend": backend,
         "model": str(getattr(provider, "model_name", "") or ""),
-        "query_prefix_sha256": str(
-            getattr(provider, "query_prefix_sha256", "") or ""
-        ),
+        "query_prefix_sha256": str(getattr(provider, "query_prefix_sha256", "") or ""),
         "provider": str(getattr(provider, "name", "") or ""),
         "version": str(getattr(provider, "version", "") or ""),
-        "minimum_score": (
-            str(minimum_score) if minimum_score is not None else ""
-        ),
+        "minimum_score": (str(minimum_score) if minimum_score is not None else ""),
         "score_normalization": str(
             getattr(provider, "score_normalization", "provider-normalized 0..1")
         ),
@@ -1336,9 +1315,7 @@ def _local_model_manifest_metadata(model_name: str) -> dict[str, str]:
         separators=(",", ":"),
     ).encode("utf-8")
     return {
-        "local_model_manifest_sha256": hashlib.sha256(
-            manifest_payload
-        ).hexdigest(),
+        "local_model_manifest_sha256": hashlib.sha256(manifest_payload).hexdigest(),
         "local_model_file_count": str(len(entries)),
         "model_weights_sha256": weights_sha256,
     }
@@ -1721,6 +1698,12 @@ async def _run_case(
             bound_scopes,
             now=query.now,
             available_relation_types=available_relation_types,
+            required_relation_types=(
+                planner._relation_type_labels.get(query.query_id, [])
+                if mode == PLANNER_MODE_ORACLE_TYPED
+                and isinstance(planner, BenchmarkOraclePlanner)
+                else ()
+            ),
         )
     except Exception as exc:  # noqa: BLE001 - structured failure
         return {
@@ -2485,7 +2468,11 @@ async def run_ablation(
     group_ids = [scope.scope_key for scope in scopes.values()]
     vector_requested = require_live_postgres or bool(set(profiles) & VECTOR_PROFILES)
     graph_requested = require_live_neo4j or bool(set(profiles) & GRAPH_PROFILES)
-    if vector_requested and embedding_provider is None and not embedding_provider_reason:
+    if (
+        vector_requested
+        and embedding_provider is None
+        and not embedding_provider_reason
+    ):
         embedding_provider = _LocalEmbeddingProvider()
 
     # v0.9 keeps PostgreSQL authoritative when it is live; SQLite is the
@@ -2798,6 +2785,12 @@ async def _run_profiles(
                     [scopes[name] for name in warmup.scopes],
                     now=warmup.now,
                     available_relation_types=dataset.relation_types,
+                    required_relation_types=(
+                        planner._relation_type_labels.get(warmup.query_id, [])
+                        if mode == PLANNER_MODE_ORACLE_TYPED
+                        and isinstance(planner, BenchmarkOraclePlanner)
+                        else ()
+                    ),
                 )
             cases: list[dict[str, Any]] = []
             for query in dataset.queries:
@@ -2938,10 +2931,7 @@ async def _run_profiles(
                 comparisons[f"{mode}_{reranked_name}_vs_{base_name}"] = _delta(
                     reranked, base
                 )
-    if (
-        PLANNER_MODE_ORACLE in per_mode
-        and PLANNER_MODE_ORACLE_TYPED in per_mode
-    ):
+    if PLANNER_MODE_ORACLE in per_mode and PLANNER_MODE_ORACLE_TYPED in per_mode:
         for profile in PROFILE_EXECUTION:
             untyped = per_mode[PLANNER_MODE_ORACLE].get(profile)
             typed = per_mode[PLANNER_MODE_ORACLE_TYPED].get(profile)
@@ -3406,9 +3396,7 @@ def build_relation_reranker_threshold_sweep(
             scored_forbidden = forbidden_pairs.intersection(scores)
             promoted_forbidden = forbidden_pairs.intersection(promoted)
             abstain_false_promotions = {
-                query_id
-                for query_id, _ in promoted
-                if query_id in abstain_query_ids
+                query_id for query_id, _ in promoted if query_id in abstain_query_ids
             }
             sweep[partition].append(
                 {
@@ -3425,12 +3413,14 @@ def build_relation_reranker_threshold_sweep(
                     "required_gold": len(required_pairs),
                     "promoted_forbidden": len(promoted_forbidden),
                     "scored_forbidden": len(scored_forbidden),
-                    "abstention_false_promotion_queries": len(
-                        abstain_false_promotions
-                    ),
+                    "abstention_false_promotion_queries": len(abstain_false_promotions),
                     "abstention_queries": len(abstain_query_ids),
                     "promoted_candidate_pairs": len(
-                        {key for key in promoted if key[0] in {q.query_id for q in queries}}
+                        {
+                            key
+                            for key in promoted
+                            if key[0] in {q.query_id for q in queries}
+                        }
                     ),
                 }
             )
@@ -3637,9 +3627,7 @@ def _parser() -> argparse.ArgumentParser:
             "scores or sigmoid for raw logits"
         ),
     )
-    parser.add_argument(
-        "--relation-reranker-trust-remote-code", action="store_true"
-    )
+    parser.add_argument("--relation-reranker-trust-remote-code", action="store_true")
     parser.add_argument("--no-metamorphic", action="store_true")
     return parser
 
@@ -3780,11 +3768,7 @@ def _sanitized_command(argv: Sequence[str]) -> str:
             index += 2
             continue
         matching_flag = next(
-            (
-                flag
-                for flag in hashed_value_flags
-                if item.startswith(flag + "=")
-            ),
+            (flag for flag in hashed_value_flags if item.startswith(flag + "=")),
             "",
         )
         if matching_flag:
@@ -3853,9 +3837,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         else:
             try:
                 if args.relation_reranker_backend == "sentence-transformers":
-                    score_normalization = (
-                        args.relation_reranker_score_normalization
-                    )
+                    score_normalization = args.relation_reranker_score_normalization
                     if score_normalization not in ("identity", "sigmoid"):
                         raise ValueError(
                             "sentence-transformers reranker requires identity "

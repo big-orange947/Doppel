@@ -394,7 +394,9 @@ async def test_as_of_query_uses_explicit_validity_intervals() -> None:
     assert [hit.record.memory_id for hit in result.hits] == ["home-beijing-2024"]
 
 
-async def test_history_query_can_read_superseded_record_with_explicit_interval() -> None:
+async def test_history_query_can_read_superseded_record_with_explicit_interval() -> (
+    None
+):
     store = InMemoryStore()
     await _put(
         store,
@@ -537,7 +539,9 @@ async def test_as_of_query_can_read_superseded_record_only_inside_interval() -> 
     assert outside.hits == []
 
 
-async def test_historical_expired_record_requires_interval_and_rejected_is_never_visible() -> None:
+async def test_historical_expired_record_requires_interval_and_rejected_is_never_visible() -> (
+    None
+):
     store = InMemoryStore()
     await _put(
         store,
@@ -598,7 +602,9 @@ async def test_historical_expired_record_requires_interval_and_rejected_is_never
     assert current.hits == []
 
 
-async def test_human_candidates_remain_visible_but_agent_output_cannot_be_owner_fact() -> None:
+async def test_human_candidates_remain_visible_but_agent_output_cannot_be_owner_fact() -> (
+    None
+):
     store = InMemoryStore()
     await _put(
         store,
@@ -1169,9 +1175,7 @@ class _TemporalSemanticIndex:
         self.search_calls += 1
         return []
 
-    async def search_at(
-        self, query, scopes, *, valid_at, filters=None, limit=10
-    ):
+    async def search_at(self, query, scopes, *, valid_at, filters=None, limit=10):
         del query, filters, limit
         self.search_at_calls.append(valid_at)
         return [
@@ -1189,17 +1193,13 @@ class _RelationIndex:
         self.candidates = candidates
         self.calls: list[tuple[Any, list[MemoryScope], Any, int]] = []
 
-    async def search_relations(
-        self, request, scopes, *, filters=None, limit=10
-    ):
+    async def search_relations(self, request, scopes, *, filters=None, limit=10):
         self.calls.append((request, list(scopes), filters, limit))
         return self.candidates
 
 
 class _FailingRelationIndex:
-    async def search_relations(
-        self, request, scopes, *, filters=None, limit=10
-    ):
+    async def search_relations(self, request, scopes, *, filters=None, limit=10):
         del request, scopes, filters, limit
         raise RelationIndexUnavailableError("synthetic relation outage")
 
@@ -1263,6 +1263,7 @@ async def test_exact_relation_types_are_host_bound_and_defensively_enforced() ->
         [SCOPE],
         now=NOW,
         available_relation_types=["PURCHASED_BY", "LOCATED_AT"],
+        required_relation_types=["LOCATED_AT"],
     )
 
     request = relation_index.calls[0][0]
@@ -1290,6 +1291,89 @@ async def test_planner_cannot_invent_relation_types_outside_host_ontology() -> N
         )
 
 
+async def test_suggested_type_cannot_exclude_other_types_or_promote_wrong_evidence() -> (
+    None
+):
+    store = InMemoryStore()
+    for memory_id in ("calibration", "ownership"):
+        await _put(
+            store,
+            _record(
+                memory_id,
+                "sensor",
+                memory_type="fact",
+                temporal_status="current",
+                day=1,
+                state=MemoryState.CONFIRMED,
+            ),
+        )
+    index = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="ownership",
+                source="graphiti_relation",
+                score=1.0,
+                relation_type="OWNED_BY",
+                match_kind="type",
+                edge_id="owner-edge",
+                episode_ids=["owner-episode"],
+            ),
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="calibration",
+                source="graphiti_relation",
+                score=0.8,
+                relation_type="CALIBRATED_BY",
+                match_kind="reranker",
+                edge_id="calibration-edge",
+                episode_ids=["calibration-episode"],
+            ),
+        ]
+    )
+    result = await PersonalMemoryQueryEngine(store, relation_index=index).query(
+        _DraftPlanner(
+            search_text="sensor",
+            entity_mentions=["sensor"],
+            relation_types=["OWNED_BY"],
+        ),
+        "Who calibrated the sensor?",
+        [SCOPE],
+        now=NOW,
+        available_relation_types=["OWNED_BY", "CALIBRATED_BY"],
+    )
+    assert result.plan.relation_types == []
+    assert result.plan.candidate_relation_types == ["OWNED_BY"]
+    assert index.calls[0][0].relation_types == []
+    assert index.calls[0][0].candidate_relation_types == ["OWNED_BY"]
+    assert [hit.record.memory_id for hit in result.hits] == ["calibration"]
+    assert result.hits[0].relation_score == 0.8
+
+
+async def test_host_constraint_stays_independent_from_planner_suggestions() -> None:
+    planner = _DraftPlanner(relation_types=["OWNED_BY"])
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+    plan = await engine.plan(
+        planner,
+        "sensor",
+        [SCOPE],
+        now=NOW,
+        available_relation_types=["OWNED_BY", "CALIBRATED_BY"],
+        required_relation_types=["CALIBRATED_BY"],
+    )
+    assert plan.relation_types == ["CALIBRATED_BY"]
+    assert plan.candidate_relation_types == ["OWNED_BY"]
+    with pytest.raises(PersonalMemoryQueryPlanningError):
+        await engine.plan(
+            planner,
+            "sensor",
+            [SCOPE],
+            now=NOW,
+            required_relation_types=["UNKNOWN"],
+            available_relation_types=["OWNED_BY"],
+        )
+
+
 async def test_empty_relation_types_preserve_pre_extension_plan_ids() -> None:
     engine = PersonalMemoryQueryEngine(InMemoryStore())
     plan = await engine.plan(
@@ -1301,6 +1385,7 @@ async def test_empty_relation_types_preserve_pre_extension_plan_ids() -> None:
     legacy_payload = plan.model_dump(mode="json")
     legacy_payload.pop("plan_id")
     legacy_payload.pop("relation_types")
+    legacy_payload.pop("candidate_relation_types")
     encoded = json.dumps(
         legacy_payload,
         ensure_ascii=False,
@@ -1324,9 +1409,7 @@ async def test_semantic_and_relation_sources_execute_concurrently() -> None:
             return []
 
     class _CoordinatedRelationIndex:
-        async def search_relations(
-            self, request, scopes, *, filters=None, limit=10
-        ):
+        async def search_relations(self, request, scopes, *, filters=None, limit=10):
             del request, scopes, filters, limit
             relation_started.set()
             await semantic_started.wait()
@@ -1690,9 +1773,7 @@ async def test_time_range_matches_state_validity_overlap_not_only_start_time() -
         now=NOW,
     )
 
-    assert [hit.record.memory_id for hit in result.hits] == [
-        "state-overlapping-june"
-    ]
+    assert [hit.record.memory_id for hit in result.hits] == ["state-overlapping-june"]
 
 
 async def test_relation_candidates_cannot_bypass_scope_or_authority_gate() -> None:
@@ -1999,9 +2080,7 @@ async def test_composite_semantic_sources_are_exposed_as_query_reasons() -> None
         {"vector": _SemanticIndex(), "graph": _SemanticIndex()}, rrf_k=10
     )
 
-    result = await PersonalMemoryQueryEngine(
-        store, semantic_index=composite
-    ).query(
+    result = await PersonalMemoryQueryEngine(store, semantic_index=composite).query(
         DeterministicPersonalMemoryQueryPlanner(),
         "蓉城之旅",
         [SCOPE],

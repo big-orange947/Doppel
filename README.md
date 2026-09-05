@@ -1266,10 +1266,23 @@ Graphiti/Neo4j 从不成为事实权威。
 
 如果 host 使用稳定的关系 ontology，还可以在调用 `engine.query(...)` 时通过
 `available_relation_types` 提供允许的机器标签。Planner 只能从该白名单选择
-`relation_types`；执行层与 Graphiti adapter 都会再次按标签精确过滤，未知标签直接拒绝绑定。
-这是一条比自然语言相似度更强的关系资格门，适合 `LOCATED_AT`、`HELD_BY` 这类已治理的边；
-没有 ontology 或谓词存在歧义时必须保持为空，由 `relation_hints` 与可选 reranker 负责软匹配。
+草案中的 `relation_types`。从 Reference Planner v10 对应的执行层修订开始，所有 Planner
+草案中的这些标签绑定为 `plan.candidate_relation_types`，用于补充召回候选，不能直接证明相关性。
+宿主若需要精确过滤，通过 `engine.plan/query` 或 `client.query_personal_memory` 的
+`required_relation_types=[...]` 参数传入；它绑定为 `plan.relation_types`，执行层与 Graphiti
+adapter 继续按白名单和标签验证。即使 Planner 给出不同类型，也不能扩大该宿主约束。
 类型映射由 host/Planner 决定，Doppel 核心不维护问句、语言或业务领域的特判词典。
+
+**迁移说明（provisional API 行为变更）：** 自定义 Planner 或旧模型报告返回的
+`draft.relation_types` 现在也只产生候选。此前依赖其硬过滤行为的接入方，需要由可信宿主显式
+传入 `required_relation_types`，不能自动把模型的输出原样提升为宿主约束。已保存的执行计划
+`plan.relation_types` 仍按显式约束解释；不要将不可信 JSON 直接作为宿主执行计划。
+
+Graphiti 每次先取最多 `2 × limit` 条受授权 scope、实体锚点和时间限制的基础候选，再按建议
+类型补取最多 `limit` 条，按 edge ID 去重后一起交给相关性判断/重排，总计最多 `3 × limit`。
+建议类型不会从基础候选中排除其他类型；与宿主硬约束冲突的建议不会扩大查询范围。标签匹配
+本身不增加候选分数；没有关系提示或合格重排分数时，仅有建议类型的边保持低分。当前补充读取
+可能增加一次图查询，候选集合仍然有界，不能保证任意规模图上的召回完整性。
 
 为了避免 Planner 仅凭机器标签猜语义，`engine.plan/query(...)` 还支持可选的
 `relation_type_definitions`。每个 `RelationTypeDefinition` 描述含义、固定的
@@ -1298,11 +1311,11 @@ result = await engine.query(
 和额外字段会在调用 Planner 前被拒绝。只传旧标签列表仍可使用，发送给 provider 的输入字段保持
 兼容；Reference Planner v9 更新了两种模式共用的语义判断提示词，缓存按版本区分。
 
-这轮定义仅用于 Planner 理解 schema，不改变检索、类型精确过滤或重排分数。定义不是事实，
+定义用于 Planner 理解 schema，本身不会把候选提升为精确约束。定义不是事实，
 不会强迫模型选择类型，也不授权任何 scope、subject、时间或证据状态变更。v9 按问句请求的谓词、
 端点角色和明确排除项判断类型：答案未知、事实尚未确认，或同一实体可能存在其他关系，都不自动
-构成谓词歧义。真正无法区分类型时仍留空，不为宽泛问题猜更具体的类型；候选类型软选择属于后续
-阶段。接入方应把同一份目录用于抽取
+构成谓词歧义。候选类型交由实际关系证据和重排判断，宽泛问题仍可留空。
+接入方应把同一份目录用于抽取
 和查询适配，但当前不会自动配置 Graphiti 的写入提示词、重标已有边或迁移数据。不要把消息正文、
 测试问句、答案或私有事实放进目录；Reference Planner 会把完整目录发送给其模型 provider。
 

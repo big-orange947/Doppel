@@ -267,7 +267,8 @@ near the predicate. The trusted
 owner/agent subject is already bound outside entity_mentions: when the question only
 anchors on that subject, keep entity_mentions empty and still emit the explicit
 relation hint.
-relation_types is an optional exact hard filter over the host's relation ontology.
+relation_types contains optional candidate types inferred from the question.
+These are retrieval suggestions, never exact filters or proof of relevance.
 Only select labels present in available_relation_types. Never invent a label.
 Interpret the requested predicate independently from whether its answer is known.
 An unknown answer, unknown fact existence, or another relation involving the same
@@ -310,7 +311,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "9"
+    version = "10"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -438,6 +439,7 @@ class PersonalMemoryQueryPlan(BaseModel):
     entity_mentions: list[str] = Field(default_factory=list)
     relation_hints: list[str] = Field(default_factory=list)
     relation_types: list[str] = Field(default_factory=list)
+    candidate_relation_types: list[str] = Field(default_factory=list)
     subject: str
     subject_id: str
     as_of: datetime | None = None
@@ -570,6 +572,7 @@ class PersonalMemoryQueryEngine:
         allowed_subject_ids: Sequence[str] = (),
         available_relation_types: Sequence[str] = (),
         relation_type_definitions: Sequence[RelationTypeDefinition] = (),
+        required_relation_types: Sequence[str] = (),
     ) -> PersonalMemoryQueryPlan:
         _require_identity(planner, "personal-memory query planner")
         bound_scopes = _bind_scopes(scopes)
@@ -581,6 +584,9 @@ class PersonalMemoryQueryEngine:
             default_subject_id=default_subject_id or owner_id,
             available_relation_types=list(available_relation_types),
             relation_type_definitions=list(relation_type_definitions),
+        )
+        required_types = _bind_relation_types(
+            required_relation_types, request.available_relation_types
         )
         draft = PersonalMemoryQueryDraft.model_validate(await planner.plan(request))
         if draft.confidence < self.config.minimum_planner_confidence:
@@ -614,7 +620,8 @@ class PersonalMemoryQueryEngine:
             temporal_statuses=temporal_statuses,
             entity_mentions=draft.entity_mentions,
             relation_hints=draft.relation_hints,
-            relation_types=_bind_relation_types(
+            relation_types=required_types,
+            candidate_relation_types=_bind_relation_types(
                 draft.relation_types,
                 request.available_relation_types,
             ),
@@ -661,7 +668,12 @@ class PersonalMemoryQueryEngine:
         ) = None
         if (
             self._relation_index is not None
-            and (bound.entity_mentions or bound.relation_hints or bound.relation_types)
+            and (
+                bound.entity_mentions
+                or bound.relation_hints
+                or bound.relation_types
+                or bound.candidate_relation_types
+            )
             and bound.intent != PersonalMemoryQueryIntent.COUNT
         ):
             relation_task = asyncio.create_task(self._read_relation_candidates(bound))
@@ -713,7 +725,11 @@ class PersonalMemoryQueryEngine:
                 warnings.extend(relation_warnings)
                 require_relation_match = (
                     self.config.relation_hints_require_match
-                    and bool(bound.relation_hints or bound.relation_types)
+                    and bool(
+                        bound.relation_hints
+                        or bound.relation_types
+                        or bound.candidate_relation_types
+                    )
                     and relation_available
                 )
                 if require_relation_match:
@@ -928,6 +944,7 @@ class PersonalMemoryQueryEngine:
         allowed_subject_ids: Sequence[str] = (),
         available_relation_types: Sequence[str] = (),
         relation_type_definitions: Sequence[RelationTypeDefinition] = (),
+        required_relation_types: Sequence[str] = (),
     ) -> PersonalMemoryQueryResult:
         plan = await self.plan(
             planner,
@@ -939,6 +956,7 @@ class PersonalMemoryQueryEngine:
             allowed_subject_ids=allowed_subject_ids,
             available_relation_types=available_relation_types,
             relation_type_definitions=relation_type_definitions,
+            required_relation_types=required_relation_types,
         )
         return await self.execute(plan)
 
@@ -1140,6 +1158,7 @@ class PersonalMemoryQueryEngine:
             entity_mentions=plan.entity_mentions,
             relation_hints=plan.relation_hints,
             relation_types=plan.relation_types,
+            candidate_relation_types=plan.candidate_relation_types,
             subject=plan.subject,
             subject_id=plan.subject_id,
             valid_at=valid_at,
@@ -1195,6 +1214,10 @@ class PersonalMemoryQueryEngine:
             score = min(max(float(candidate.score), 0.0), 1.0)
             if required_relation_types:
                 score = 1.0
+            elif candidate.match_kind == "type":
+                # A derived index cannot turn a planner suggestion into a hard
+                # relation match. Type-only evidence remains below the gate.
+                score = min(score, 0.2)
             current = details.get(key)
             if current is None or score > current[0]:
                 details[key] = (
@@ -1857,6 +1880,8 @@ def _plan_payload(plan: PersonalMemoryQueryPlan) -> dict[str, Any]:
     # no exact relation constraint is selected.
     if not payload.get("relation_types"):
         payload.pop("relation_types", None)
+    if not payload.get("candidate_relation_types"):
+        payload.pop("candidate_relation_types", None)
     return payload
 
 

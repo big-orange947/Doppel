@@ -62,6 +62,7 @@ class RelationQuery(BaseModel):
     entity_mentions: list[str] = Field(default_factory=list)
     relation_hints: list[str] = Field(default_factory=list)
     relation_types: list[str] = Field(default_factory=list)
+    candidate_relation_types: list[str] = Field(default_factory=list)
     subject: str
     subject_id: str
     valid_at: datetime | None = None
@@ -79,7 +80,7 @@ class RelationQuery(BaseModel):
         terms = [str(item or "").strip() for item in _list_items(value)]
         return list(dict.fromkeys(item for item in terms if item))
 
-    @field_validator("relation_types", mode="before")
+    @field_validator("relation_types", "candidate_relation_types", mode="before")
     @classmethod
     def _normalize_relation_types(cls, value: object) -> list[str]:
         relation_types = [

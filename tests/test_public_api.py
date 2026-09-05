@@ -409,6 +409,7 @@ MODEL_FIELDS = {
         "entity_mentions",
         "relation_hints",
         "relation_types",
+        "candidate_relation_types",
         "subject",
         "subject_id",
         "as_of",
@@ -473,6 +474,7 @@ MODEL_FIELDS = {
         "entity_mentions",
         "relation_hints",
         "relation_types",
+        "candidate_relation_types",
         "subject",
         "subject_id",
         "valid_at",
@@ -736,6 +738,7 @@ SIGNATURES = {
         ("allowed_subject_ids", "KEYWORD_ONLY"),
         ("available_relation_types", "KEYWORD_ONLY"),
         ("relation_type_definitions", "KEYWORD_ONLY"),
+        ("required_relation_types", "KEYWORD_ONLY"),
     ),
     "DoppelClient.materials": (
         ("scope", "POSITIONAL_OR_KEYWORD"),
@@ -1044,6 +1047,7 @@ SIGNATURES = {
         ("allowed_subject_ids", "KEYWORD_ONLY"),
         ("available_relation_types", "KEYWORD_ONLY"),
         ("relation_type_definitions", "KEYWORD_ONLY"),
+        ("required_relation_types", "KEYWORD_ONLY"),
     ),
     "PersonalMemoryQueryEngine.execute": (("plan", "POSITIONAL_OR_KEYWORD"),),
     "PersonalMemoryQueryEngine.query": (
@@ -1056,6 +1060,7 @@ SIGNATURES = {
         ("allowed_subject_ids", "KEYWORD_ONLY"),
         ("available_relation_types", "KEYWORD_ONLY"),
         ("relation_type_definitions", "KEYWORD_ONLY"),
+        ("required_relation_types", "KEYWORD_ONLY"),
     ),
     "audit_store": (
         ("store", "POSITIONAL_OR_KEYWORD"),

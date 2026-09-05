@@ -269,9 +269,7 @@ class GraphitiSemanticIndex:
                     GRAPHITI_TEMPORAL_EXTRACTION_INSTRUCTIONS
                 ),
             )
-            actual_episode_id = str(
-                getattr(result.episode, "uuid", "") or episode_id
-            )
+            actual_episode_id = str(getattr(result.episode, "uuid", "") or episode_id)
             if actual_episode_id != episode_id:
                 raise RuntimeError(
                     "Graphiti returned an episode UUID different from the requested ID"
@@ -634,9 +632,7 @@ class GraphitiRelationIndex:
         minimum_reranker_score: float | None = None,
     ) -> None:
         if relation_reranker is None and minimum_reranker_score is not None:
-            raise ValueError(
-                "minimum_reranker_score requires a relation_reranker"
-            )
+            raise ValueError("minimum_reranker_score requires a relation_reranker")
         if relation_reranker is not None and minimum_reranker_score is None:
             raise ValueError(
                 "relation_reranker requires an explicit minimum_reranker_score"
@@ -697,7 +693,7 @@ class GraphitiRelationIndex:
             driver = getattr(graphiti, "driver", None)
             if driver is None or not hasattr(driver, "execute_query"):
                 raise RuntimeError("Graphiti client does not expose a graph driver")
-            raw = await driver.execute_query(
+            cypher = (
                 "MATCH (source:Entity)-[edge:RELATES_TO]->(target:Entity) "
                 "WHERE edge.group_id IN $group_ids "
                 "AND source.group_id = edge.group_id "
@@ -730,18 +726,41 @@ class GraphitiRelationIndex:
                 "relation_hint_match AS relation_hint_match "
                 "ORDER BY relation_hint_match DESC, "
                 "coalesce(edge.valid_at, edge.created_at) DESC, edge.uuid "
-                "LIMIT $limit",
-                group_ids=list(scope_by_key),
-                anchors=anchors,
-                relation_hints=relation_hints,
-                relation_types=relation_types,
-                fallback_name=GRAPHITI_FALLBACK_EDGE_NAME,
-                valid_at=bound.valid_at,
-                time_from=bound.time_from,
-                time_to=bound.time_to,
-                limit=limit * 2,
+                "LIMIT $limit"
             )
-            rows = _graph_query_records(raw)
+            parameters = {
+                "group_ids": list(scope_by_key),
+                "anchors": anchors,
+                "relation_hints": relation_hints,
+                "relation_types": relation_types,
+                "fallback_name": GRAPHITI_FALLBACK_EDGE_NAME,
+                "valid_at": bound.valid_at,
+                "time_from": bound.time_from,
+                "time_to": bound.time_to,
+                "limit": limit * 2,
+            }
+            raw = await driver.execute_query(cypher, **parameters)
+            rows = _graph_query_records(raw)[:limit * 2]
+            # Reserve a neutral bank before admitting suggested types. A wrong
+            # suggestion cannot remove candidates from the neutral query.
+            suggested = [
+                name
+                for name in bound.candidate_relation_types
+                if not relation_type_set or name in relation_type_set
+            ]
+            if suggested:
+                extra = await driver.execute_query(
+                    cypher,
+                    **{**parameters, "relation_types": suggested, "limit": limit},
+                )
+                seen = {str(row["edge_id"]) for row in rows}
+                for row in _graph_query_records(extra)[:limit]:
+                    edge_id = str(row["edge_id"])
+                    if edge_id not in seen:
+                        rows.append(row)
+                        seen.add(edge_id)
+            # Merge by textual evidence, not by the source bank or suggested label.
+            rows.sort(key=lambda row: -int(bool(row["relation_hint_match"] or 0)))
         except Exception as exc:
             if isinstance(exc, RelationIndexUnavailableError):
                 raise
@@ -783,9 +802,7 @@ class GraphitiRelationIndex:
         source_by_episode = {
             str(getattr(episode, "uuid", "") or ""): (
                 str(getattr(episode, "group_id", "") or ""),
-                _memory_id_from_episode_name(
-                    str(getattr(episode, "name", "") or "")
-                ),
+                _memory_id_from_episode_name(str(getattr(episode, "name", "") or "")),
             )
             for episode in episodes
         }
@@ -823,7 +840,7 @@ class GraphitiRelationIndex:
             )
             match_kind = (
                 "adjacency"
-                if not raw_relation_hints
+                if not raw_relation_hints and not bound.candidate_relation_types
                 else "lexical"
                 if relation_hint_match
                 else "reranker"
@@ -862,11 +879,11 @@ class GraphitiRelationIndex:
                     score=_relation_candidate_score(
                         rank,
                         len(rows),
-                        hints_present=bool(raw_relation_hints),
+                        hints_present=bool(
+                            raw_relation_hints or bound.candidate_relation_types
+                        ),
                         hint_match=(
-                            relation_type_match
-                            or relation_hint_match
-                            or reranker_match
+                            relation_type_match or relation_hint_match or reranker_match
                         ),
                     ),
                     relation_type=relation_type,
@@ -1364,7 +1381,8 @@ def _graphiti_reference_time(record: MemoryRecord) -> datetime:
     evidence = record.metadata.get("evidence", [])
     evidence_times = [
         parsed
-        for item in evidence if isinstance(evidence, list) and isinstance(item, dict)
+        for item in evidence
+        if isinstance(evidence, list) and isinstance(item, dict)
         if (parsed := _optional_datetime(item.get("at"))) is not None
     ]
     return max(evidence_times, default=record.created_at)
@@ -1386,9 +1404,7 @@ def _graphiti_subject(record: MemoryRecord) -> tuple[str, str]:
     return _graphiti_subject_identity(record.scope, subject_id)
 
 
-def _graphiti_subject_identity(
-    scope: MemoryScope, subject_id: str
-) -> tuple[str, str]:
+def _graphiti_subject_identity(scope: MemoryScope, subject_id: str) -> tuple[str, str]:
     """Bind a trusted query subject to its scope-salted Graphiti entity."""
 
     normalized_subject = str(subject_id or "").strip()
@@ -1539,13 +1555,15 @@ def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
         "observed_at": reference_time.isoformat(),
         "temporal_status": str(
             record.metadata.get("temporal_status", "unknown") or "unknown"
-        ).strip().lower(),
+        )
+        .strip()
+        .lower(),
         "valid_from": valid_from.isoformat() if valid_from is not None else None,
         "valid_to": valid_to.isoformat() if valid_to is not None else None,
     }
-    subject_role = str(
-        record.metadata.get("subject") or record.actor or ""
-    ).strip() or "owner"
+    subject_role = (
+        str(record.metadata.get("subject") or record.actor or "").strip() or "owner"
+    )
     subject_entity_name, subject_ref = _graphiti_subject(record)
     subject = {
         "entity_name": subject_entity_name,
@@ -1563,8 +1581,7 @@ def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
             header,
             "DOPPEL_TEMPORAL "
             + json.dumps(temporal, ensure_ascii=False, sort_keys=True),
-            "DOPPEL_SUBJECT "
-            + json.dumps(subject, ensure_ascii=False, sort_keys=True),
+            "DOPPEL_SUBJECT " + json.dumps(subject, ensure_ascii=False, sort_keys=True),
             record.content,
         )
     )
@@ -1714,9 +1731,7 @@ def _decode_memory_id(encoded: str) -> str:
         return ""
 
 
-def _core_record_matches_filter(
-    record: MemoryRecord, filters: MemoryFilter
-) -> bool:
+def _core_record_matches_filter(record: MemoryRecord, filters: MemoryFilter) -> bool:
     if filters.states is not None:
         if record.state not in filters.states:
             return False
@@ -1744,14 +1759,10 @@ def _core_record_matches_filter(
         return False
     if filters.time_from is not None and record.created_at < filters.time_from:
         return False
-    return not (
-        filters.time_to is not None and record.created_at > filters.time_to
-    )
+    return not (filters.time_to is not None and record.created_at > filters.time_to)
 
 
-def _core_record_valid_at(
-    record: MemoryRecord, valid_at: datetime | None
-) -> bool:
+def _core_record_valid_at(record: MemoryRecord, valid_at: datetime | None) -> bool:
     if valid_at is None:
         return True
     valid_from = _record_valid_from(record)
@@ -1761,9 +1772,7 @@ def _core_record_valid_at(
     return not (valid_to is not None and valid_to < valid_at)
 
 
-def _core_record_valid_for_relation(
-    record: MemoryRecord, query: RelationQuery
-) -> bool:
+def _core_record_valid_for_relation(record: MemoryRecord, query: RelationQuery) -> bool:
     if query.valid_at is not None:
         return _core_record_valid_at(record, query.valid_at)
     if query.time_from is None and query.time_to is None:

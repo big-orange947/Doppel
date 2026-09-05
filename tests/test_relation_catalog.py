@@ -191,7 +191,7 @@ async def test_reference_prompt_distinguishes_predicate_ambiguity_from_unknown_f
     planner = ReferencePersonalMemoryQueryPlanner(model)
     draft = await planner.plan(_request(relation_type_definitions=[_definition()]))
     request = model.requests[0]
-    assert planner.version.startswith("9.")
+    assert planner.version.startswith("10.")
     assert "independently from whether its answer is known" in request.instructions
     assert (
         "requested meaning, endpoint roles, and explicit exclusions"
@@ -320,7 +320,8 @@ async def test_client_facade_forwards_definitions() -> None:
         now=NOW,
         relation_type_definitions=[_definition()],
     )
-    assert result.plan.relation_types == ["CALIBRATED_BY"]
+    assert result.plan.relation_types == []
+    assert result.plan.candidate_relation_types == ["CALIBRATED_BY"]
     assert planner.requests[0].relation_type_definitions == [_definition()]
 
 

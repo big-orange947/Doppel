@@ -36,6 +36,14 @@
 
 ### Changed
 
+- Provisional query behavior: planner `relation_types` now bind as candidate types;
+  exact filters require the host `required_relation_types` argument. Existing stored
+  execution plans retain explicit-filter semantics. Reference Planner v10 describes
+  suggestions, and typed-oracle benchmarks explicitly bind host gold constraints.
+- Graphiti reserves a neutral candidate bank plus a bounded suggested-type bank,
+  deduplicates edges before reranking, and never promotes an inferred type by label
+  alone. Exact scope/time/provenance and Store gates remain in force. Reports mark
+  the new execution semantics so ambiguous suggestions are not labeled hard filters.
 - Reference Planner v9 distinguishes requested-predicate ambiguity from unknown
   answers or other relationships of the same entity, uses host endpoint roles and
   explicit exclusions, retains common-noun anchors, and requests brief/omitted

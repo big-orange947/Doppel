@@ -21,6 +21,7 @@
   "properties": {
     "runner": {"const": "doppel.relation-planner-quality.v1"},
     "scoring_version": {"const": "2"},
+    "relation_type_execution_semantics": {"const": "planner_candidates_host_constraints"},
     "output_diagnostics": {
       "type": "object",
       "required": ["truncated_count", "invalid_draft_count", "validation_code_counts", "explanation_chars"],
