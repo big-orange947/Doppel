@@ -594,6 +594,26 @@ for hit in result.hits:
     print(hit.record.content, hit.reasons)
 ~~~
 
+需要排查漏召/错召时，宿主可显式启用有上限的诊断记录：
+
+~~~python
+result = await memory.query_personal_memory(
+    "我现在住在哪里？",
+    [scope.user_scope()],
+    trace_limit=200,
+)
+if result.trace is not None:
+    print(result.trace.counts)
+    for event in result.trace.events:
+        print(event.stage, event.reason, event.memory_id)
+~~~
+
+`trace_limit=0` 默认关闭；上限为 10000。诊断不改变分数、阈值、查询 plan 或召回结果，
+也不复制问句、记忆正文、模型输出或异常原文。越权与不存在的候选只记匿名计数。
+当前覆盖引擎边界，不能解释索引内部未返回的记录；数量统计不是唯一记忆数，也不应作为
+“记忆质量分数”。诊断含授权 scope 内的记忆 ID，应作为宿主排障数据而非默认注入 Agent。
+详见 [查询诊断协议](docs/query-diagnostics.md)。
+
 默认 DeterministicPersonalMemoryQueryPlanner 只提供透明的时间、统计与查询形态规则，不包含饮食、
 工作、居住、宠物等领域词典；需要更开放的结构规划时，
 注入 ReferencePersonalMemoryQueryPlanner(MyStructuredModel())。planner 只能输出 scope-free draft，

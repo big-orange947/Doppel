@@ -151,6 +151,8 @@
       "PersonalMemoryQueryReadLimitError",
       "PersonalMemoryQueryRequest",
       "PersonalMemoryQueryResult",
+      "PersonalMemoryQueryTrace",
+      "PersonalMemoryQueryTraceEvent",
       "PersonalMemoryRevisionKind",
       "PersonalMemoryType",
       "ReferencePersonalMemoryAnalyzer",

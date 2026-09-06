@@ -202,6 +202,12 @@ recovery from real Planner paraphrases, repeat the same profiles with
 `--planner-modes report --planner-report <cached-report>`; report replay makes zero LLM
 calls and preserves Planner failures as a separate attribution bucket.
 
+Add `--query-trace-limit 200` to record bounded engine-stage diagnostics in each
+successful case. This does not change ranking or retry failed source drafts. Trace
+coverage is `engine_boundary`: it does not reveal index-internal discarded edges.
+Keep diagnostic latency separate from uninstrumented baseline timing; see
+[query diagnostics](../docs/query-diagnostics.md).
+
 Model selection is deliberately an ablation, not a framework constant. The current
 FastEmbed harness supports `BAAI/bge-reranker-base`, so it remains the small,
 reproducible operational baseline. The next comparison matrix is:

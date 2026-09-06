@@ -135,6 +135,7 @@
       "required": ["query_id", "profile", "mode", "partition", "category", "error", "latency_ms", "hits", "missing", "forbidden", "scope_leakage", "temporal_violations", "provenance_failures", "abstention_ok", "ambiguity_ok", "count_ok", "hit_top1_ok", "recall_at_1", "recall_at_5", "mrr", "evidence_recall", "intent_ok", "required_evidence", "expected_abstain", "as_of_recognized", "planner_failures", "retrieval_failures", "security_failures"],
       "properties": {
         "error": {"type": "string"},
+        "trace": {"type": ["object", "null"]},
         "source_planner_failure": {"type": "boolean"},
         "failure_stage": {"enum": ["planner", "execution"]},
         "scope_leakage": {"type": "integer", "minimum": 0},

@@ -36,6 +36,12 @@
 
 ### Changed
 
+- Add opt-in bounded personal-query traces (`trace_limit=0` by default) on engine
+  query/execute and client query methods, with provisional trace models and an
+  optional result field. Engine source/reload/qualification/ranking events preserve
+  ranking behavior and plan fingerprints; identifiers from foreign or orphan
+  candidates and raw text/errors are not copied. The benchmark exposes
+  `--query-trace-limit`; index-internal rejection coverage is explicitly excluded.
 - Retrieval evaluation checks accepted interval plans against the interval rather
   than an arbitrary representative as-of label. Out-of-interval hits still fail;
   unrelated/forbidden evidence is not excused by temporal overlap.

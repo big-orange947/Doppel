@@ -440,6 +440,25 @@ MODEL_FIELDS = {
         "ambiguous",
         "warnings",
         "complete",
+        "trace",
+    ),
+    "PersonalMemoryQueryTrace": (
+        "schema_version",
+        "coverage",
+        "events",
+        "counts",
+        "event_limit",
+        "events_seen",
+        "dropped_events",
+    ),
+    "PersonalMemoryQueryTraceEvent": (
+        "stage",
+        "source",
+        "reason",
+        "scope_key",
+        "memory_id",
+        "count",
+        "scores",
     ),
     "RelationCandidate": (
         "scope",
@@ -739,6 +758,7 @@ SIGNATURES = {
         ("available_relation_types", "KEYWORD_ONLY"),
         ("relation_type_definitions", "KEYWORD_ONLY"),
         ("required_relation_types", "KEYWORD_ONLY"),
+        ("trace_limit", "KEYWORD_ONLY"),
     ),
     "DoppelClient.materials": (
         ("scope", "POSITIONAL_OR_KEYWORD"),
@@ -1049,7 +1069,10 @@ SIGNATURES = {
         ("relation_type_definitions", "KEYWORD_ONLY"),
         ("required_relation_types", "KEYWORD_ONLY"),
     ),
-    "PersonalMemoryQueryEngine.execute": (("plan", "POSITIONAL_OR_KEYWORD"),),
+    "PersonalMemoryQueryEngine.execute": (
+        ("plan", "POSITIONAL_OR_KEYWORD"),
+        ("trace_limit", "KEYWORD_ONLY"),
+    ),
     "PersonalMemoryQueryEngine.query": (
         ("planner", "POSITIONAL_OR_KEYWORD"),
         ("query", "POSITIONAL_OR_KEYWORD"),
@@ -1061,6 +1084,7 @@ SIGNATURES = {
         ("available_relation_types", "KEYWORD_ONLY"),
         ("relation_type_definitions", "KEYWORD_ONLY"),
         ("required_relation_types", "KEYWORD_ONLY"),
+        ("trace_limit", "KEYWORD_ONLY"),
     ),
     "audit_store": (
         ("store", "POSITIONAL_OR_KEYWORD"),

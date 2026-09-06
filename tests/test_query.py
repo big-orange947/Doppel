@@ -1204,6 +1204,334 @@ class _FailingRelationIndex:
         raise RelationIndexUnavailableError("synthetic relation outage")
 
 
+async def test_query_trace_explains_relation_gate_without_changing_results() -> None:
+    store = InMemoryStore()
+    for name in ("kept", "excluded"):
+        await _put(
+            store,
+            _record(
+                name,
+                "sensor PRIVATE_CONTENT",
+                memory_type="fact",
+                temporal_status="current",
+                day=1,
+                state=MemoryState.CONFIRMED,
+            ),
+        )
+
+    class Index:
+        async def search(self, query, scopes, *, filters=None, limit=10):
+            return [
+                RecallResult(
+                    fact="PRIVATE_INDEX_FACT",
+                    memory_id=name,
+                    scope=SCOPE,
+                    similarity=0.99,
+                )
+                for name in ("kept", "excluded")
+            ]
+
+    relation = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id=name,
+                source="graphiti_relation",
+                score=score,
+                relation_type="MEASURED_BY",
+                match_kind="lexical",
+                edge_id="edge-" + name,
+                episode_ids=["ep-" + name],
+            )
+            for name, score in (("kept", 0.95), ("excluded", 0.2))
+        ]
+    )
+    engine = PersonalMemoryQueryEngine(
+        store, semantic_index=Index(), relation_index=relation
+    )
+    planner = _DraftPlanner(
+        search_text="sensor", entity_mentions=["sensor"], relation_hints=["measured"]
+    )
+    plain = await engine.query(planner, "PRIVATE_QUERY", [SCOPE], now=NOW)
+    traced = await engine.query(
+        planner, "PRIVATE_QUERY", [SCOPE], now=NOW, trace_limit=100
+    )
+    assert plain.trace is None
+    assert plain.model_dump(exclude={"trace"}) == traced.model_dump(exclude={"trace"})
+    assert traced.trace is not None
+    assert traced.trace.counts["discovery:semantic:candidate_loaded"] == 2
+    assert (
+        traced.trace.counts["relation_gate:engine:nonrelation_candidate_excluded"] == 1
+    )
+    assert any(
+        e.memory_id == "excluded" and e.reason == "below_relation_threshold"
+        for e in traced.trace.events
+    )
+    serialized = traced.trace.model_dump_json()
+    for private in ("PRIVATE_QUERY", "PRIVATE_CONTENT", "PRIVATE_INDEX_FACT"):
+        assert private not in serialized
+    assert traced.trace.coverage == "engine_boundary"
+    assert traced.trace.dropped_events == 0
+
+
+async def test_query_trace_redacts_foreign_and_orphan_candidates() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "agent",
+            "PRIVATE_AGENT_OUTPUT",
+            memory_type="fact",
+            temporal_status="current",
+            day=1,
+            authority=FactAuthority.AGENT_OUTPUT,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    relation = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=scope,
+                memory_id=name,
+                source="private_source",
+                score=0.99,
+                relation_type="MEASURED_BY",
+                edge_id="PRIVATE_EDGE",
+                episode_ids=["PRIVATE_EPISODE"],
+            )
+            for scope, name in (
+                (OTHER_SCOPE, "PRIVATE_FOREIGN_ID"),
+                (SCOPE, "PRIVATE_ORPHAN_ID"),
+                (SCOPE, "agent"),
+            )
+        ]
+    )
+    result = await PersonalMemoryQueryEngine(store, relation_index=relation).query(
+        _DraftPlanner(search_text="sensor", relation_hints=["measured"]),
+        "PRIVATE_QUESTION",
+        [SCOPE],
+        now=NOW,
+        trace_limit=100,
+    )
+    assert result.hits == []
+    assert result.trace is not None
+    assert result.trace.counts["store_validation:relation:missing_record"] == 1
+    assert (
+        result.trace.counts[
+            "store_validation:relation:ineligible_authority_or_lifecycle"
+        ]
+        == 1
+    )
+    serialized = result.trace.model_dump_json()
+    assert "PRIVATE_" not in serialized
+    assert "private_source" not in serialized
+    assert OTHER_SCOPE.scope_key not in serialized
+
+
+async def test_query_trace_is_bounded_and_rank_cutoff_is_observable() -> None:
+    store = InMemoryStore()
+    for day in range(1, 6):
+        await _put(
+            store,
+            _record(
+                str(day),
+                "sensor",
+                memory_type="fact",
+                temporal_status="current",
+                day=day,
+                state=MemoryState.CONFIRMED,
+            ),
+        )
+    engine = PersonalMemoryQueryEngine(store, PersonalMemoryQueryConfig(limit=1))
+    plan = await engine.plan(
+        _DraftPlanner(search_text="sensor"), "sensor", [SCOPE], now=NOW
+    )
+    full = await engine.execute(plan, trace_limit=100)
+    limited = await engine.execute(plan, trace_limit=2)
+    assert full.trace is not None and limited.trace is not None
+    assert full.model_dump(exclude={"trace"}) == limited.model_dump(exclude={"trace"})
+    assert len(limited.trace.events) == 2
+    assert limited.trace.counts == full.trace.counts
+    assert limited.trace.dropped_events == limited.trace.events_seen - 2
+    assert limited.trace.counts["ranking:engine:limit_excluded"] == 4
+    assert limited.trace.counts["ranking:engine:selected"] == 1
+
+
+async def test_client_trace_redacts_semantic_foreign_and_missing_ids() -> None:
+    from doppel_memory import DoppelClient, PersonalMemoryQueryTrace
+
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "known",
+            "sensor PRIVATE_CONTENT",
+            memory_type="fact",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    class Index:
+        async def search(self, query, scopes, *, filters=None, limit=10):
+            return [
+                RecallResult(
+                    fact="PRIVATE_INDEX_FACT",
+                    memory_id=name,
+                    scope=scope,
+                    similarity=0.99,
+                )
+                for scope, name in (
+                    (SCOPE, "known"),
+                    (SCOPE, "PRIVATE_ORPHAN_ID"),
+                    (OTHER_SCOPE, "PRIVATE_FOREIGN_ID"),
+                )
+            ]
+
+    result = await DoppelClient(store=store).query_personal_memory(
+        "sensor",
+        [SCOPE],
+        planner=_DraftPlanner(search_text="sensor"),
+        semantic_index=Index(),
+        now=NOW,
+        trace_limit=100,
+    )
+    assert result.trace is not None
+    assert result.trace.counts["store_validation:engine:missing_record"] == 1
+    assert result.trace.counts["store_validation:engine:unbound_candidate"] == 1
+    assert result.trace.counts["discovery:semantic:candidate_loaded"] == 1
+    serialized = result.trace.model_dump_json()
+    assert "PRIVATE_" not in serialized
+    assert OTHER_SCOPE.scope_key not in serialized
+    assert PersonalMemoryQueryTrace.model_validate_json(serialized) == result.trace
+
+
+async def test_trace_does_not_add_source_calls_during_semantic_outage() -> None:
+    class Index:
+        def __init__(self):
+            self.calls = 0
+
+        async def search(self, query, scopes, *, filters=None, limit=10):
+            self.calls += 1
+            raise RuntimeError("PRIVATE_OUTAGE_TEXT")
+
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "known",
+            "sensor",
+            memory_type="fact",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    indexes = [Index(), Index()]
+    results = []
+    for index, limit in zip(indexes, (0, 100), strict=True):
+        results.append(
+            await PersonalMemoryQueryEngine(store, semantic_index=index).query(
+                _DraftPlanner(search_text="sensor"),
+                "sensor",
+                [SCOPE],
+                now=NOW,
+                trace_limit=limit,
+            )
+        )
+    assert indexes[0].calls == indexes[1].calls
+    assert results[0].model_dump(exclude={"trace"}) == results[1].model_dump(
+        exclude={"trace"}
+    )
+    trace = results[1].trace
+    assert trace is not None
+    assert trace.counts["discovery:semantic:source_unavailable"] == indexes[1].calls
+    assert "PRIVATE_OUTAGE_TEXT" not in trace.model_dump_json()
+
+
+async def test_query_trace_reports_temporal_rejection_and_outage() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "future",
+            "sensor",
+            memory_type="state",
+            temporal_status="current",
+            day=1,
+            state=MemoryState.CONFIRMED,
+            valid_from=datetime(2027, 1, 1, tzinfo=UTC),
+        ),
+    )
+    result = await PersonalMemoryQueryEngine(
+        store, relation_index=_FailingRelationIndex()
+    ).query(
+        _DraftPlanner(
+            intent="current", search_text="sensor", relation_hints=["measured"]
+        ),
+        "sensor",
+        [SCOPE],
+        now=NOW,
+        trace_limit=100,
+    )
+    assert result.trace is not None
+    assert result.trace.counts["discovery:relation:source_unavailable"] == 1
+    assert result.trace.counts["structural_gate:engine:not_yet_valid"] == 1
+    assert "synthetic relation outage" not in result.trace.model_dump_json()
+
+
+@pytest.mark.parametrize("limit", [-1, 10001, True, 1.5])
+async def test_invalid_trace_limit_fails_before_planner_call(limit) -> None:
+    class NeverPlanner:
+        async def plan(self, request):
+            raise AssertionError("planner must not be called")
+
+    with pytest.raises(ValueError, match="trace_limit"):
+        await PersonalMemoryQueryEngine(InMemoryStore()).query(
+            NeverPlanner(),
+            "sensor",
+            [SCOPE],
+            now=NOW,
+            trace_limit=limit,
+        )
+
+
+async def test_query_trace_is_isolated_between_concurrent_scopes() -> None:
+    store = InMemoryStore()
+    for scope in (SCOPE, OTHER_SCOPE):
+        await _put(
+            store,
+            _record(
+                scope.user_id,
+                "sensor",
+                memory_type="fact",
+                temporal_status="current",
+                day=1,
+                scope=scope,
+                state=MemoryState.CONFIRMED,
+            ),
+        )
+    engine = PersonalMemoryQueryEngine(store)
+    results = await asyncio.gather(
+        *(
+            engine.query(
+                _DraftPlanner(search_text="sensor"),
+                "sensor",
+                [scope],
+                now=NOW,
+                trace_limit=100,
+            )
+            for scope in (SCOPE, OTHER_SCOPE)
+        )
+    )
+    for result, scope in zip(results, (SCOPE, OTHER_SCOPE), strict=True):
+        assert result.trace is not None
+        assert {e.scope_key for e in result.trace.events if e.scope_key} == {
+            scope.scope_key
+        }
+
+
 async def test_exact_relation_types_are_host_bound_and_defensively_enforced() -> None:
     store = InMemoryStore()
     for record in (

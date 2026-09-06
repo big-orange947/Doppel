@@ -32,6 +32,12 @@ from doppel_memory.models import (
     MemoryScope,
     MemoryState,
 )
+from doppel_memory.query_trace import (
+    PersonalMemoryQueryTrace,
+    TraceSource,
+    _QueryTraceCollector,
+    validate_trace_limit,
+)
 from doppel_memory.relation import (
     RelationIndex,
     RelationIndexUnavailableError,
@@ -530,6 +536,7 @@ class PersonalMemoryQueryResult(BaseModel):
     ambiguous: bool = False
     warnings: list[str] = Field(default_factory=list)
     complete: bool = True
+    trace: PersonalMemoryQueryTrace | None = None
 
 
 class PersonalMemoryQueryPlanningError(ValueError):
@@ -640,9 +647,17 @@ class PersonalMemoryQueryEngine:
             update={"plan_id": "pmq_" + _fingerprint(_plan_payload(plan))}
         )
 
-    async def execute(self, plan: PersonalMemoryQueryPlan) -> PersonalMemoryQueryResult:
+    async def execute(
+        self, plan: PersonalMemoryQueryPlan, *, trace_limit: int = 0
+    ) -> PersonalMemoryQueryResult:
+        validate_trace_limit(trace_limit)
         bound = PersonalMemoryQueryPlan.model_validate(plan)
         self._validate_plan(bound)
+        trace = (
+            _QueryTraceCollector(trace_limit, {s.scope_key for s in bound.scopes})
+            if trace_limit
+            else None
+        )
         records: list[MemoryRecord] = []
         conflict_records: list[MemoryRecord] = []
         warnings: list[str] = []
@@ -676,22 +691,24 @@ class PersonalMemoryQueryEngine:
             )
             and bound.intent != PersonalMemoryQueryIntent.COUNT
         ):
-            relation_task = asyncio.create_task(self._read_relation_candidates(bound))
+            relation_task = asyncio.create_task(
+                self._read_relation_candidates(bound, trace)
+            )
         try:
             if (
                 self._semantic_index is not None
                 and bound.search_text
                 and bound.intent != PersonalMemoryQueryIntent.COUNT
             ):
-                candidate_result = await self._read_candidates(bound)
+                candidate_result = await self._read_candidates(bound, trace)
                 if candidate_result is None:
                     for scope in bound.scopes:
-                        records.extend(await self._read_scope(scope, bound))
+                        records.extend(await self._read_scope(scope, bound, trace))
                     (
                         semantic_scores,
                         semantic_sources,
                         semantic_warnings,
-                    ) = await self._semantic_scores(bound, records)
+                    ) = await self._semantic_scores(bound, records, trace)
                     warnings.extend(semantic_warnings)
                 else:
                     (
@@ -704,7 +721,7 @@ class PersonalMemoryQueryEngine:
                     complete = False
             else:
                 for scope in bound.scopes:
-                    records.extend(await self._read_scope(scope, bound))
+                    records.extend(await self._read_scope(scope, bound, trace))
                 # A SemanticIndex is a bounded top-k interface. It may improve lookup
                 # recall, but it cannot define an exhaustive set for an exact count.
                 # Counts therefore use only the complete structural/lexical scan.
@@ -713,7 +730,7 @@ class PersonalMemoryQueryEngine:
                         semantic_scores,
                         semantic_sources,
                         semantic_warnings,
-                    ) = await self._semantic_scores(bound, records)
+                    ) = await self._semantic_scores(bound, records, trace)
                     warnings.extend(semantic_warnings)
             if relation_task is not None:
                 (
@@ -738,6 +755,30 @@ class PersonalMemoryQueryEngine:
                         for key, detail in relation_details.items()
                         if detail[0] >= self.config.minimum_relation_score
                     }
+                    if trace is not None:
+                        for record in records:
+                            if (
+                                record.scope.scope_key,
+                                record.memory_id,
+                            ) not in accepted_relation_keys:
+                                trace.add(
+                                    "relation_gate",
+                                    "engine",
+                                    "nonrelation_candidate_excluded",
+                                    record,
+                                )
+                        for record in relation_records:
+                            key = (record.scope.scope_key, record.memory_id)
+                            detail = relation_details.get(key)
+                            trace.add(
+                                "relation_gate",
+                                "relation",
+                                "qualified"
+                                if key in accepted_relation_keys
+                                else "below_relation_threshold",
+                                record,
+                                scores={"relation": detail[0]} if detail else {},
+                            )
                     records = [
                         record
                         for record in relation_records
@@ -795,7 +836,7 @@ class PersonalMemoryQueryEngine:
                 "future as_of returns present evidence only; future actual state is unknown"
             )
         for record in records:
-            structural = _structural_match(record, bound)
+            structural = _structural_match(record, bound, trace)
             if structural is None:
                 continue
             effective_at, reasons = structural
@@ -833,7 +874,31 @@ class PersonalMemoryQueryEngine:
                 and semantic_score < self.config.minimum_semantic_score
                 and relation_score < self.config.minimum_relation_score
             ):
+                if trace is not None:
+                    trace.add(
+                        "score_gate",
+                        "engine",
+                        "below_thresholds",
+                        record,
+                        scores={
+                            "lexical": lexical_score,
+                            "semantic": semantic_score,
+                            "relation": relation_score,
+                        },
+                    )
                 continue
+            if trace is not None:
+                trace.add(
+                    "score_gate",
+                    "engine",
+                    "qualified",
+                    record,
+                    scores={
+                        "lexical": lexical_score,
+                        "semantic": semantic_score,
+                        "relation": relation_score,
+                    },
+                )
             if lexical_score >= self.config.minimum_lexical_score:
                 reasons.append("lexical_match")
             if semantic_score >= self.config.minimum_semantic_score:
@@ -917,6 +982,14 @@ class PersonalMemoryQueryEngine:
             ) in matched[: self.config.limit]
         ]
         count = _count_result(bound, [item[0] for item in matched])
+        if trace is not None:
+            for rank, item in enumerate(matched):
+                trace.add(
+                    "ranking",
+                    "engine",
+                    "selected" if rank < self.config.limit else "limit_excluded",
+                    item[0],
+                )
         if count.status == PersonalMemoryCountStatus.INDETERMINATE:
             warnings.append(count.reason)
         return PersonalMemoryQueryResult(
@@ -930,6 +1003,7 @@ class PersonalMemoryQueryEngine:
             ambiguous=ambiguous,
             warnings=list(dict.fromkeys(warnings)),
             complete=complete,
+            trace=trace.result() if trace is not None else None,
         )
 
     async def query(
@@ -945,7 +1019,9 @@ class PersonalMemoryQueryEngine:
         available_relation_types: Sequence[str] = (),
         relation_type_definitions: Sequence[RelationTypeDefinition] = (),
         required_relation_types: Sequence[str] = (),
+        trace_limit: int = 0,
     ) -> PersonalMemoryQueryResult:
+        validate_trace_limit(trace_limit)
         plan = await self.plan(
             planner,
             query,
@@ -958,10 +1034,13 @@ class PersonalMemoryQueryEngine:
             relation_type_definitions=relation_type_definitions,
             required_relation_types=required_relation_types,
         )
-        return await self.execute(plan)
+        return await self.execute(plan, trace_limit=trace_limit)
 
     async def _read_scope(
-        self, scope: MemoryScope, plan: PersonalMemoryQueryPlan
+        self,
+        scope: MemoryScope,
+        plan: PersonalMemoryQueryPlan,
+        trace: _QueryTraceCollector | None = None,
     ) -> list[MemoryRecord]:
         records: list[MemoryRecord] = []
         cursor = ""
@@ -980,6 +1059,10 @@ class PersonalMemoryQueryEngine:
                 limit=min(self.config.page_size, remaining),
             )
             records.extend(page.records)
+            if trace is not None:
+                trace.add(
+                    "discovery", "store", "records_returned", count=len(page.records)
+                )
             if not page.has_more:
                 return records
             cursor = page.next_cursor
@@ -1018,7 +1101,7 @@ class PersonalMemoryQueryEngine:
                 )
 
     async def _read_candidates(
-        self, plan: PersonalMemoryQueryPlan
+        self, plan: PersonalMemoryQueryPlan, trace: _QueryTraceCollector | None = None
     ) -> (
         tuple[
             list[MemoryRecord],
@@ -1048,9 +1131,22 @@ class PersonalMemoryQueryEngine:
         if isinstance(lexical_result, BaseException):
             raise lexical_result
         if isinstance(semantic_result, BaseException):
+            if trace is not None:
+                trace.add("discovery", "semantic", "source_unavailable")
             if not self.config.semantic_fallback_to_lexical:
                 raise semantic_result
             return None
+
+        if trace is not None:
+            trace.add(
+                "discovery", "store", "candidates_returned", count=len(lexical_result)
+            )
+            trace.add(
+                "discovery",
+                "semantic",
+                "candidates_returned",
+                count=len(semantic_result),
+            )
 
         allowed_scopes = {scope.scope_key: scope for scope in plan.scopes}
         candidates: dict[tuple[str, str], MemoryScope] = {}
@@ -1060,6 +1156,8 @@ class PersonalMemoryQueryEngine:
             scope = candidate.scope
             memory_id = str(candidate.memory_id or "").strip()
             if scope is None or scope.scope_key not in allowed_scopes or not memory_id:
+                if trace is not None:
+                    trace.add("store_validation", "engine", "unbound_candidate")
                 continue
             candidates.setdefault(
                 (scope.scope_key, memory_id), allowed_scopes[scope.scope_key]
@@ -1093,6 +1191,25 @@ class PersonalMemoryQueryEngine:
             and record.scope.scope_key in allowed_scopes
             and _is_query_record_eligible(record, plan)
         ]
+        if trace is not None:
+            _trace_loaded_records(trace, loaded, plan, "engine")
+            by_key = {(r.scope.scope_key, r.memory_id): r for r in records}
+            for source, batch in (
+                ("store", lexical_result),
+                ("semantic", semantic_result),
+            ):
+                for candidate in batch:
+                    if candidate.scope is not None:
+                        record = by_key.get(
+                            (candidate.scope.scope_key, candidate.memory_id)
+                        )
+                        if record is not None:
+                            trace.add(
+                                "discovery",
+                                "store" if source == "store" else "semantic",
+                                "candidate_loaded",
+                                record,
+                            )
         known_ids = {(record.scope.scope_key, record.memory_id) for record in records}
         semantic_scores = {
             key: score for key, score in semantic_scores.items() if key in known_ids
@@ -1139,7 +1256,7 @@ class PersonalMemoryQueryEngine:
         )
 
     async def _read_relation_candidates(
-        self, plan: PersonalMemoryQueryPlan
+        self, plan: PersonalMemoryQueryPlan, trace: _QueryTraceCollector | None = None
     ) -> tuple[
         list[MemoryRecord],
         dict[
@@ -1173,6 +1290,8 @@ class PersonalMemoryQueryEngine:
                 limit=self.config.relation_candidate_limit,
             )
         except Exception as exc:
+            if trace is not None:
+                trace.add("discovery", "relation", "source_unavailable")
             if not self.config.relation_fallback_to_nonrelation:
                 raise
             error_name = type(exc).__name__
@@ -1188,6 +1307,11 @@ class PersonalMemoryQueryEngine:
                     )
                 ],
                 False,
+            )
+
+        if trace is not None:
+            trace.add(
+                "discovery", "relation", "candidates_returned", count=len(candidates)
             )
 
         allowed_scopes = {scope.scope_key: scope for scope in plan.scopes}
@@ -1208,6 +1332,12 @@ class PersonalMemoryQueryEngine:
                     and relation_type not in required_relation_types
                 )
             ):
+                if trace is not None:
+                    trace.add(
+                        "store_validation",
+                        "relation",
+                        "unbound_or_type_mismatched_candidate",
+                    )
                 continue
             key = (scope_key, memory_id)
             candidate_scopes.setdefault(key, allowed_scopes[scope_key])
@@ -1242,6 +1372,26 @@ class PersonalMemoryQueryEngine:
             and record.scope.scope_key in allowed_scopes
             and _is_query_record_eligible(record, plan)
         ]
+        if trace is not None:
+            _trace_loaded_records(trace, loaded, plan, "relation")
+            for record in records:
+                detail = details.get((record.scope.scope_key, record.memory_id))
+                if detail is not None:
+                    scores = {"relation": detail[0]}
+                    if detail[5] is not None:
+                        scores["reranker"] = detail[5]
+                    kind = (
+                        detail[4]
+                        if detail[4] in {"type", "lexical", "reranker", "adjacency"}
+                        else "none"
+                    )
+                    trace.add(
+                        "relation_gate",
+                        "relation",
+                        f"match_{kind}",
+                        record,
+                        scores=scores,
+                    )
         known = {(record.scope.scope_key, record.memory_id) for record in records}
         return (
             records,
@@ -1268,6 +1418,7 @@ class PersonalMemoryQueryEngine:
         self,
         plan: PersonalMemoryQueryPlan,
         records: Sequence[MemoryRecord],
+        trace: _QueryTraceCollector | None = None,
     ) -> tuple[
         dict[tuple[str, str], float],
         dict[tuple[str, str], tuple[str, ...]],
@@ -1281,6 +1432,8 @@ class PersonalMemoryQueryEngine:
                 _query_memory_filter(plan),
             )
         except Exception as exc:
+            if trace is not None:
+                trace.add("discovery", "semantic", "source_unavailable")
             if not self.config.semantic_fallback_to_lexical:
                 raise
             return (
@@ -1292,6 +1445,15 @@ class PersonalMemoryQueryEngine:
             )
         allowed_scopes = {scope.scope_key for scope in plan.scopes}
         known_ids = {(record.scope.scope_key, record.memory_id) for record in records}
+        known_records = (
+            {(record.scope.scope_key, record.memory_id): record for record in records}
+            if trace is not None
+            else {}
+        )
+        if trace is not None:
+            trace.add(
+                "discovery", "semantic", "candidates_returned", count=len(candidates)
+            )
         scores: dict[tuple[str, str], float] = {}
         sources: dict[tuple[str, str], list[str]] = {}
         for candidate in candidates:
@@ -1306,7 +1468,18 @@ class PersonalMemoryQueryEngine:
                 or not memory_id
                 or candidate_key not in known_ids
             ):
+                if trace is not None:
+                    trace.add(
+                        "store_validation", "semantic", "unbound_or_unknown_candidate"
+                    )
                 continue
+            if trace is not None:
+                trace.add(
+                    "discovery",
+                    "semantic",
+                    "candidate_loaded",
+                    known_records.get(candidate_key),
+                )
             score = min(max(float(candidate.similarity), 0.0), 1.0)
             scores[candidate_key] = max(scores.get(candidate_key, 0.0), score)
             source_names = sources.setdefault(candidate_key, [])
@@ -1366,44 +1539,65 @@ def _bind_subject_id(
     return requested
 
 
-def _structural_match(
+def _trace_loaded_records(
+    trace: _QueryTraceCollector,
+    loaded: Sequence[MemoryRecord | None],
+    plan: PersonalMemoryQueryPlan,
+    source: TraceSource,
+) -> None:
+    for record in loaded:
+        if record is None:
+            trace.add("store_validation", source, "missing_record")
+        elif record.scope.scope_key not in trace.scope_keys:
+            trace.add("store_validation", source, "out_of_scope")
+        elif "personal-memory" not in record.tags:
+            trace.add("store_validation", source, "not_personal_memory", record)
+        elif not _is_query_record_eligible(record, plan):
+            trace.add(
+                "store_validation", source, "ineligible_authority_or_lifecycle", record
+            )
+        else:
+            trace.add("store_validation", source, "eligible", record)
+
+
+def _structural_rejection_reason(
     record: MemoryRecord, plan: PersonalMemoryQueryPlan
-) -> tuple[datetime, list[str]] | None:
+) -> str:
     if not _is_query_record_eligible(record, plan):
-        return None
+        return "ineligible_authority_or_lifecycle"
     if _metadata_text(record, "subject") != plan.subject:
-        return None
+        return "subject_mismatch"
     if _metadata_text(record, "subject_id") != plan.subject_id.lower():
-        return None
+        return "subject_id_mismatch"
     memory_type = _metadata_text(record, "personal_memory_type")
     if plan.memory_types and memory_type not in plan.memory_types:
-        return None
+        return "memory_type_mismatch"
     topic_key = _metadata_text(record, "topic_key")
     if plan.topic_keys and topic_key not in plan.topic_keys:
-        return None
+        return "topic_mismatch"
     temporal_status = _metadata_text(record, "temporal_status")
     if plan.temporal_statuses and temporal_status not in plan.temporal_statuses:
-        return None
+        return "temporal_status_mismatch"
     if (
         plan.as_of is not None
         and temporal_status == MemoryTemporalStatus.PLANNED
         and MemoryTemporalStatus.PLANNED not in plan.temporal_statuses
     ):
-        return None
+        return "planned_not_actual"
 
     valid_from = _metadata_time(record, "valid_from")
     valid_to = _metadata_time(record, "valid_to")
     effective_at = valid_from or record.created_at
     if plan.intent == PersonalMemoryQueryIntent.CURRENT:
         if valid_from is not None and valid_from > plan.now:
-            return None
+            return "not_yet_valid"
         if valid_to is not None and valid_to < plan.now:
-            return None
+            return "no_longer_valid"
     if plan.as_of is not None:
         if valid_from is not None and valid_from > plan.as_of:
-            return None
+            return "not_yet_valid"
         if valid_to is not None and valid_to < plan.as_of:
-            return None
+            return "no_longer_valid"
         if (
             valid_from is None
             and valid_to is None
@@ -1413,18 +1607,35 @@ def _structural_match(
                 MemoryTemporalStatus.CURRENT,
             }
         ):
-            return None
+            return "missing_validity"
     if plan.time_from is not None or plan.time_to is not None:
         interval_start = valid_from or effective_at
         interval_end = valid_to or (effective_at if valid_from is None else None)
         if plan.time_to is not None and interval_start > plan.time_to:
-            return None
+            return "outside_time_interval"
         if (
             plan.time_from is not None
             and interval_end is not None
             and interval_end < plan.time_from
         ):
-            return None
+            return "outside_time_interval"
+
+    return ""
+
+
+def _structural_match(
+    record: MemoryRecord,
+    plan: PersonalMemoryQueryPlan,
+    trace: _QueryTraceCollector | None = None,
+) -> tuple[datetime, list[str]] | None:
+    rejection = _structural_rejection_reason(record, plan)
+    if trace is not None:
+        trace.add("structural_gate", "engine", rejection or "qualified", record)
+    if rejection:
+        return None
+    valid_from = _metadata_time(record, "valid_from")
+    valid_to = _metadata_time(record, "valid_to")
+    effective_at = valid_from or record.created_at
 
     reasons = ["exact_scope", "active_personal_memory", "subject"]
     if plan.memory_types:

@@ -1716,6 +1716,7 @@ async def _run_case(
     profile: str,
     mode: str = PLANNER_MODE_DETERMINISTIC,
     available_relation_types: Sequence[str] = (),
+    trace_limit: int = 0,
 ) -> dict[str, Any]:
     started = perf_counter()
     bound_scopes = [scopes[name] for name in query.scopes]
@@ -1727,6 +1728,7 @@ async def _run_case(
             bound_scopes,
             now=query.now,
             available_relation_types=available_relation_types,
+            trace_limit=trace_limit,
             required_relation_types=(
                 planner._relation_type_labels.get(query.query_id, [])
                 if mode == PLANNER_MODE_ORACLE_TYPED
@@ -2041,6 +2043,7 @@ def _evaluate_result(
             contribution["relation"] += 1
         if "relation_match_kind:reranker" in hit.reasons:
             contribution["relation_reranker"] += 1
+    query_trace = getattr(result, "trace", None)
     return {
         "query_id": query.query_id,
         "profile": profile,
@@ -2048,6 +2051,9 @@ def _evaluate_result(
         "partition": query.partition,
         "category": query.category,
         "error": "",
+        "trace": query_trace.model_dump(mode="json")
+        if query_trace is not None
+        else None,
         "latency_ms": latency_ms,
         "actual_intent": str(result.plan.intent),
         "hits": [hit.record.memory_id for hit in hits],
@@ -2490,7 +2496,11 @@ async def run_ablation(
     relation_reranker: Any | None = None,
     minimum_reranker_score: float | None = None,
     relation_reranker_reason: str = "",
+    trace_limit: int = 0,
 ) -> dict[str, Any]:
+    from doppel_memory.query_trace import validate_trace_limit
+
+    validate_trace_limit(trace_limit)
     unknown = set(profiles).difference(ALL_PROFILES)
     if unknown:
         raise ValueError(f"unknown profiles: {sorted(unknown)}")
@@ -2640,6 +2650,7 @@ async def run_ablation(
             graph=graph,
             planner_modes=planner_modes,
             planner_report=planner_report,
+            trace_limit=trace_limit,
         )
         report["runtime"] = {
             "store": {
@@ -2739,6 +2750,7 @@ async def _run_profiles(
     relation_reranked_index: Any | None = None,
     planner_modes: Sequence[str] = PLANNER_MODES,
     planner_report: Path | None = None,
+    trace_limit: int = 0,
 ) -> dict[str, Any]:
     unknown_modes = set(planner_modes).difference(ALL_PLANNER_MODES)
     if unknown_modes:
@@ -2865,6 +2877,7 @@ async def _run_profiles(
                         profile=profile,
                         mode=mode,
                         available_relation_types=dataset.relation_types,
+                        trace_limit=trace_limit,
                     )
                 )
             per_profile[profile] = _aggregate(cases)
@@ -3693,6 +3706,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--relation-reranker-trust-remote-code", action="store_true")
     parser.add_argument("--no-metamorphic", action="store_true")
+    parser.add_argument(
+        "--query-trace-limit",
+        type=int,
+        default=0,
+        help="opt-in engine trace events per query (0 disables; max 10000)",
+    )
     return parser
 
 
@@ -3940,6 +3959,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         relation_reranker=relation_reranker,
         minimum_reranker_score=args.relation_reranker_threshold,
         relation_reranker_reason=relation_reranker_reason,
+        trace_limit=args.query_trace_limit,
     )
     if not args.no_metamorphic:
         scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}

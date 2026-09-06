@@ -1143,6 +1143,51 @@ class DirectScanTest(unittest.IsolatedAsyncioTestCase):
 
 
 class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
+    async def test_report_trace_preserves_replay_results_and_source_failure(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        payload = self._replay_payload(dataset)
+        payload["cases"][0].update(actual=None, error="ValidationError")
+        scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
+        store = InMemoryStore()
+        for item in dataset.fixtures:
+            await store.put(_memory_record(item, scopes[item.scope], utc_now()))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "planner.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            plain = await _run_profiles(
+                store=store,
+                scopes=scopes,
+                dataset=dataset,
+                profiles=("lexical",),
+                semantic_by_source={},
+                relation_index=None,
+                graph=None,
+                planner_modes=(PLANNER_MODE_REPORT,),
+                planner_report=path,
+            )
+            traced = await _run_profiles(
+                store=store,
+                scopes=scopes,
+                dataset=dataset,
+                profiles=("lexical",),
+                semantic_by_source={},
+                relation_index=None,
+                graph=None,
+                planner_modes=(PLANNER_MODE_REPORT,),
+                planner_report=path,
+                trace_limit=100,
+            )
+        for before, after in zip(plain["cases"], traced["cases"], strict=True):
+            assert {
+                k: v for k, v in before.items() if k not in {"trace", "latency_ms"}
+            } == {k: v for k, v in after.items() if k not in {"trace", "latency_ms"}}
+            if not after["error"]:
+                assert after["trace"]["coverage"] == "engine_boundary"
+                assert after["trace"]["event_limit"] == 100
+        assert traced["cases"][0]["source_planner_failure"]
+
     def _replay_payload(self, dataset: AblationDataset) -> dict[str, Any]:
         return {
             "dataset": {"fingerprint": dataset.fingerprint},

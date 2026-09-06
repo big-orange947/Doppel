@@ -177,6 +177,10 @@ from doppel_memory.query import (
     PersonalMemoryQueryResult,
     ReferencePersonalMemoryQueryPlanner,
 )
+from doppel_memory.query_trace import (
+    PersonalMemoryQueryTrace,
+    PersonalMemoryQueryTraceEvent,
+)
 from doppel_memory.relation import (
     RelationCandidate,
     RelationIndex,
@@ -360,6 +364,8 @@ __all__ = [
     "PersonalMemoryQueryReadLimitError",
     "PersonalMemoryQueryRequest",
     "PersonalMemoryQueryResult",
+    "PersonalMemoryQueryTrace",
+    "PersonalMemoryQueryTraceEvent",
     "PersonalMemoryRevisionKind",
     "PersonalMemoryType",
     "PostgreSQLStore",
