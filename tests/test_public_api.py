@@ -368,6 +368,7 @@ MODEL_FIELDS = {
         "relation_hints_require_match",
         "semantic_fallback_to_lexical",
         "relation_fallback_to_nonrelation",
+        "candidate_fusion",
     ),
     "PersonalMemoryQueryDraft": (
         "intent",

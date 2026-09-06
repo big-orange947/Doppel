@@ -62,6 +62,7 @@ from doppel_memory import (
     MemoryRecord,
     MemoryScope,
     MemoryState,
+    PersonalMemoryQueryConfig,
     PersonalMemoryQueryEngine,
     RelationRerankItem,
     RelationRerankRequest,
@@ -2570,10 +2571,12 @@ async def run_ablation(
     minimum_reranker_score: float | None = None,
     relation_reranker_reason: str = "",
     trace_limit: int = 0,
+    candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
 ) -> dict[str, Any]:
     from doppel_memory.query_trace import validate_trace_limit
 
     validate_trace_limit(trace_limit)
+    PersonalMemoryQueryConfig(candidate_fusion=candidate_fusion)
     unknown = set(profiles).difference(ALL_PROFILES)
     if unknown:
         raise ValueError(f"unknown profiles: {sorted(unknown)}")
@@ -2724,6 +2727,7 @@ async def run_ablation(
             planner_modes=planner_modes,
             planner_report=planner_report,
             trace_limit=trace_limit,
+            candidate_fusion=candidate_fusion,
         )
         report["runtime"] = {
             "store": {
@@ -2824,6 +2828,7 @@ async def _run_profiles(
     planner_modes: Sequence[str] = PLANNER_MODES,
     planner_report: Path | None = None,
     trace_limit: int = 0,
+    candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
 ) -> dict[str, Any]:
     unknown_modes = set(planner_modes).difference(ALL_PLANNER_MODES)
     if unknown_modes:
@@ -2909,7 +2914,7 @@ async def _run_profiles(
                     "reason": f"{' + '.join(missing)} source unavailable (see runtime)",
                 }
                 continue
-            engine = _engines(store, semantic, relation)
+            engine = _engines(store, semantic, relation, candidate_fusion=candidate_fusion)
             warmup = next(
                 (
                     query
@@ -3114,6 +3119,7 @@ async def _run_profiles(
     report["relation_final_hit_attribution"] = _build_relation_final_hit_attribution(
         report=report, dataset=dataset
     )
+    report["candidate_fusion"] = candidate_fusion
     return report
 
 
@@ -3356,9 +3362,12 @@ def _engines(
     store: Any,
     semantic: Any | None,
     relation: Any | None = None,
+    *,
+    candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
 ) -> PersonalMemoryQueryEngine:
     return PersonalMemoryQueryEngine(
         store,
+        PersonalMemoryQueryConfig(candidate_fusion=candidate_fusion),
         semantic_index=semantic,
         relation_index=relation,
     )
@@ -3802,6 +3811,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--relation-reranker-trust-remote-code", action="store_true")
     parser.add_argument("--no-metamorphic", action="store_true")
+    parser.add_argument("--candidate-fusion", choices=["relation_gate", "union"],
+                        default="relation_gate")
     parser.add_argument(
         "--query-trace-limit",
         type=int,
@@ -4056,6 +4067,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         minimum_reranker_score=args.relation_reranker_threshold,
         relation_reranker_reason=relation_reranker_reason,
         trace_limit=args.query_trace_limit,
+        candidate_fusion=args.candidate_fusion,
     )
     if not args.no_metamorphic:
         scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}

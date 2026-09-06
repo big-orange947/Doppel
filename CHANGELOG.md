@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add opt-in `candidate_fusion="union"` for personal retrieval and a matching
+  ablation CLI switch/report field. Keep independent vector candidates when
+  relations are soft hints; preserve explicit host relation constraints and
+  fail closed on unavailable hard-constrained relation lookup. Defaults, weights
+  and legacy plan fingerprints are unchanged. Live quality gains are unmeasured.
+
 - Add explicitly annotated, pool-relative nDCG@5 to retrieval benchmarks with
   unavailable/coverage accounting; preserve legacy exclusions, empty-output
   metrics, safety gates and unannotated dataset fingerprints. Correct unnamed

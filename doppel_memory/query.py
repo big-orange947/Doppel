@@ -429,10 +429,14 @@ class PersonalMemoryQueryConfig(BaseModel):
     relation_hints_require_match: bool = True
     semantic_fallback_to_lexical: bool = True
     relation_fallback_to_nonrelation: bool = True
+    candidate_fusion: Literal["relation_gate", "union"] = "relation_gate"
 
     @property
     def fingerprint(self) -> str:
-        return _fingerprint(self.model_dump(mode="json"))
+        payload = self.model_dump(mode="json")
+        if self.candidate_fusion == "relation_gate":
+            payload.pop("candidate_fusion")
+        return _fingerprint(payload)
 
 
 class PersonalMemoryQueryPlan(BaseModel):
@@ -666,6 +670,11 @@ class PersonalMemoryQueryEngine:
         validate_trace_limit(trace_limit)
         bound = PersonalMemoryQueryPlan.model_validate(plan)
         self._validate_plan(bound)
+        if (self.config.candidate_fusion == "union" and bound.relation_types
+                and (self._relation_index is None or bound.intent == "count")):
+            raise NotImplementedError(
+                "explicit relation constraints require a relation lookup index"
+            )
         if self._evidence_verifier is not None and bound.intent == "count":
             raise NotImplementedError("evidence verification does not support exact counts")
         trace = (
@@ -755,8 +764,15 @@ class PersonalMemoryQueryEngine:
                     relation_available,
                 ) = await relation_task
                 warnings.extend(relation_warnings)
+                if (self.config.candidate_fusion == "union"
+                        and bound.relation_types and not relation_available):
+                    raise RelationIndexUnavailableError(
+                        "explicit relation constraints cannot fall back to untyped retrieval"
+                    )
                 require_relation_match = (
-                    self.config.relation_hints_require_match
+                    (self.config.relation_hints_require_match
+                     if self.config.candidate_fusion == "relation_gate"
+                     else bool(bound.relation_types))
                     and bool(
                         bound.relation_hints
                         or bound.relation_types
@@ -822,6 +838,10 @@ class PersonalMemoryQueryEngine:
                             "relation evidence"
                         )
                 else:
+                    if trace is not None and self.config.candidate_fusion == "union":
+                        for record in records:
+                            trace.add("relation_gate", "engine",
+                                      "independent_candidate_retained", record)
                     records_by_key = {
                         (record.scope.scope_key, record.memory_id): record
                         for record in records
