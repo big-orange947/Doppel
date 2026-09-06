@@ -111,6 +111,12 @@ Current report limitations must not be hidden:
 
 ## Next development sequence
 
+**Superseded planning note:** the sequence below records the original plan.
+Following the retrieval/context responsibility clarification, evidence verification
+is no longer a prerequisite for fusion. See
+[metric semantics v2 and revised sequence](retrieval-metric-semantics-v2.md).
+The historical results and failure observations above are unchanged.
+
 1. Add general stage-level retrieval traces: candidate source, discovery, exact
    scope/provenance/time eligibility, predicate/role qualification, rejection reason,
    and final promotion. Repair replay/source attribution without changing scores.

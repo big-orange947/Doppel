@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add explicitly annotated, pool-relative nDCG@5 to retrieval benchmarks with
+  unavailable/coverage accounting; preserve legacy exclusions, empty-output
+  metrics, safety gates and unannotated dataset fingerprints. Correct unnamed
+  single-index source contribution and expose relation attribution by planner
+  mode. No retrieval algorithm or dataset gold changes in this step.
+
 ### Optional evidence verification
 
 - Add an opt-in, exclusion-only evidence-support gate to personal queries, with

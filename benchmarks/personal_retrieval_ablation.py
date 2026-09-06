@@ -206,6 +206,9 @@ class AblationQuery(BaseModel):
     relation_hints: list[str] = Field(default_factory=list)
     required_memory_ids: list[str] = Field(default_factory=list)
     forbidden_memory_ids: list[str] = Field(default_factory=list)
+    # Independent, explicitly reviewed relevance judgments. Never infer these
+    # grades from legacy forbidden/required lists or pass them to the planner.
+    relevance_grades: dict[str, Literal[0, 1, 2]] = Field(default_factory=dict)
     expected_abstain: bool = False
     expected_ambiguous: bool = False
     expected_count: int | None = None
@@ -296,6 +299,9 @@ class AblationDataset(BaseModel):
                     f"ontology: {unknown_types}"
                 )
         known = set(self.scopes)
+        for query in self.queries:
+            if set(query.relevance_grades).difference(fixture_ids):
+                raise ValueError("relevance grades reference unknown fixture IDs")
         unknown_fixtures = sorted(
             {item.scope for item in self.fixtures}.difference(known)
         )
@@ -321,6 +327,11 @@ class AblationDataset(BaseModel):
     @property
     def fingerprint(self) -> str:
         payload = self.model_dump(mode="json")
+        # Absent new judgments must not invalidate existing paid-planner caches.
+        # Any actual annotation change still changes the dataset fingerprint.
+        for query in payload["queries"]:
+            if not query["relevance_grades"]:
+                query.pop("relevance_grades")
         return hashlib.sha256(
             json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
@@ -1875,6 +1886,25 @@ def _planner_term_matches(
     return len(matched_expected), unexpected
 
 
+def _graded_relevance(query: AblationQuery, hit_ids: list[str]) -> dict[str, Any]:
+    """Pool-relative nDCG; incomplete judgments are unavailable, not implicit zeros."""
+    grades = query.relevance_grades
+    unjudged = sorted(set(hit_ids[:5]).difference(grades))
+    ideal = sorted(grades.values(), reverse=True)[:5]
+    idcg = sum((2 ** grade - 1) / math.log2(rank + 2)
+               for rank, grade in enumerate(ideal))
+    available = bool(grades) and not unjudged and idcg > 0
+    dcg = sum((2 ** grades.get(memory_id, 0) - 1) / math.log2(rank + 2)
+              for rank, memory_id in enumerate(hit_ids[:5]))
+    return {
+        "available": available,
+        "ndcg_at_5": round(dcg / idcg, 6) if available else None,
+        "unjudged_top5": unjudged,
+        "judgment_count": len(grades),
+        "basis": "explicit_judgment_pool_not_exhaustive_corpus",
+    }
+
+
 def _evaluate_result(
     result: PersonalMemoryQueryResult,
     query: AblationQuery,
@@ -2033,6 +2063,17 @@ def _evaluate_result(
         ]
         has_vector = SOURCE_VECTOR in hit_sources
         has_graph = SOURCE_GRAPH in hit_sources
+        # These profiles have exactly one semantic index. Positive engine scores
+        # identify its accepted contribution even if the adapter omits its name.
+        # Never infer a source for composite profiles or from profile name alone.
+        if not hit_sources and hit.semantic_score > 0:
+            if profile in {
+                "lexical_vector", "lexical_vector_relation",
+                "lexical_vector_relation_reranked",
+            }:
+                has_vector = True
+            elif profile == "lexical_graph":
+                has_graph = True
         if has_vector and has_graph:
             contribution["both"] += 1
         elif has_vector:
@@ -2073,6 +2114,15 @@ def _evaluate_result(
         ],
         "missing": missing,
         "forbidden": forbidden,
+        "evaluation_semantics": {
+            "version": 2,
+            "legacy_forbidden": "dataset_exclusions_not_automatic_security_violations",
+            "legacy_abstention": "empty_output_agreement_not_answer_correctness",
+            "answer_quality": "not_measured",
+        },
+        "graded_relevance": _graded_relevance(
+            query, [hit.record.memory_id for hit in hits]
+        ),
         "scope_leakage": scope_leakage,
         "temporal_violations": temporal_violations,
         "provenance_failures": provenance_failures,
@@ -2178,6 +2228,29 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
             4,
         ),
         "forbidden_hit_count": sum(len(case["forbidden"]) for case in valid),
+        "graded_relevance": {
+            "evaluated_count": sum(
+                bool(case.get("graded_relevance", {}).get("available"))
+                for case in valid
+            ),
+            "unavailable_or_failed_count": total - sum(
+                bool(case.get("graded_relevance", {}).get("available"))
+                for case in valid
+            ),
+            "mean_ndcg_at_5": (
+                round(sum(
+                    case["graded_relevance"]["ndcg_at_5"]
+                    for case in valid
+                    if case.get("graded_relevance", {}).get("available")
+                ) / sum(
+                    bool(case.get("graded_relevance", {}).get("available"))
+                    for case in valid
+                ), 6)
+                if any(case.get("graded_relevance", {}).get("available")
+                       for case in valid) else None
+            ),
+            "population": "explicitly_judged_successful_queries_only",
+        },
         "scope_leakage_count": sum(case["scope_leakage"] for case in valid),
         "temporal_violation_count": sum(case["temporal_violations"] for case in valid),
         "provenance_failure_count": sum(case["provenance_failures"] for case in valid),
@@ -3077,14 +3150,35 @@ def _build_relation_final_hit_attribution(
     *,
     report: dict[str, Any],
     dataset: AblationDataset,
+    mode: str | None = None,
 ) -> dict[str, Any]:
     """Count accepted relation-ranked hits against query gold, never raw edges."""
 
+    if mode is None:
+        modes = sorted({
+            case.get("mode", PLANNER_MODE_DETERMINISTIC)
+            for case in report.get("cases", [])
+            if case.get("profile") in PROFILE_RELATION and not case.get("error")
+        })
+        per_mode = {
+            name: _build_relation_final_hit_attribution(
+                report=report, dataset=dataset, mode=name
+            ) for name in modes
+        }
+        # Keep old aggregate fields oracle-only. Do not conflate planner modes.
+        legacy = per_mode.get(PLANNER_MODE_ORACLE, {})
+        return {
+            **legacy,
+            "available": bool(per_mode),
+            "legacy_oracle_available": bool(legacy),
+            "per_mode": per_mode,
+            "reason": "" if modes else "no successful relation profile executions",
+        }
     query_by_id = {query.query_id: query for query in dataset.queries}
     oracle_cases = [
         case
         for case in report.get("cases", [])
-        if case.get("mode") == PLANNER_MODE_ORACLE
+        if case.get("mode") == mode
         and case.get("profile") in PROFILE_RELATION
         and not case.get("error")
     ]
@@ -3117,9 +3211,11 @@ def _build_relation_final_hit_attribution(
     return {
         "available": True,
         "method": (
-            "oracle final accepted hits carrying relation_match, checked against "
-            "required/forbidden labels after Store revalidation"
+            "mode-specific final accepted hits carrying relation_match, checked "
+            "against legacy required/forbidden labels after Store revalidation; "
+            "incorrect links are not automatically security violations"
         ),
+        "mode": mode,
         "correct_relation_final_hit_links": len(correct_links),
         "incorrect_relation_final_hit_links": len(incorrect_links),
         "unique_profile_queries_with_relation_hit": len(relation_queries),
