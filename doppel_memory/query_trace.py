@@ -15,6 +15,7 @@ TraceStage = Literal[
     "relation_gate",
     "structural_gate",
     "score_gate",
+    "evidence_gate",
     "ranking",
 ]
 

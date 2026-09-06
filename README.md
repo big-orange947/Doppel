@@ -614,6 +614,11 @@ if result.trace is not None:
 “记忆质量分数”。诊断含授权 scope 内的记忆 ID，应作为宿主排障数据而非默认注入 Agent。
 详见 [查询诊断协议](docs/query-diagnostics.md)。
 
+可选的 [证据支持校验](docs/evidence-verification.md) 可在现有安全门之后，
+检查候选是否真正支持问题所问的关系，而不仅是主题相关。默认关闭；
+由接入方提供模型，只能剔除候选，不改变 scope、时间门或排名权重。
+目前完成离线协议验证，尚未证明真实模型的准确率收益，不支持精确计数查询。
+
 默认 DeterministicPersonalMemoryQueryPlanner 只提供透明的时间、统计与查询形态规则，不包含饮食、
 工作、居住、宠物等领域词典；需要更开放的结构规划时，
 注入 ReferencePersonalMemoryQueryPlanner(MyStructuredModel())。planner 只能输出 scope-free draft，

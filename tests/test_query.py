@@ -56,6 +56,52 @@ OTHER_SCOPE = MemoryScope(user_id="other", agent_id="personal-agent")
 NOW = datetime(2026, 8, 28, 12, tzinfo=UTC)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("verdict", ["supported", "unsupported", "uncertain", "error"])
+async def test_optional_evidence_gate(verdict):
+    from doppel_memory.evidence import EvidenceDecision, EvidenceResponse
+
+    calls = []
+
+    class Verifier:
+        async def verify(self, request):
+            calls.append(request)
+            if verdict == "error":
+                raise RuntimeError("private-secret")
+            return EvidenceResponse(decisions=[
+                EvidenceDecision(item_id=i.item_id, verdict=verdict)
+                for i in request.items
+            ])
+
+    store = InMemoryStore()
+    await _put(store, *[
+        _record(name, "camera", memory_type="profile", temporal_status="current",
+                day=1, state=MemoryState.CONFIRMED, scope=scope)
+        for name, scope in [("allowed", SCOPE), ("foreign", OTHER_SCOPE)]
+    ])
+    engine = PersonalMemoryQueryEngine(store, evidence_verifier=Verifier())
+    result = await engine.query(_DraftPlanner(search_text="camera"),
+                                "camera", [SCOPE], now=NOW, trace_limit=50)
+    assert len(calls) == 1
+    assert calls[0].model_dump() == {
+        "question": "camera", "items": [{"item_id": "item_0", "content": "camera"}]
+    }
+    assert [h.record.memory_id for h in result.hits] == (
+        ["allowed"] if verdict == "supported" else []
+    )
+    assert result.evidence_verification is not None
+    assert result.evidence_verification.status == (
+        "unavailable" if verdict == "error" else "completed"
+    )
+    assert "private-secret" not in result.model_dump_json()
+    if verdict == "error":
+        assert not result.complete
+    assert result.trace and any(e.stage == "evidence_gate" for e in result.trace.events)
+    with pytest.raises(NotImplementedError, match="exact counts"):
+        await engine.query(_DraftPlanner(intent="count"), "count", [SCOPE], now=NOW)
+    assert len(calls) == 1
+
+
 def _record(
     memory_id: str,
     content: str,

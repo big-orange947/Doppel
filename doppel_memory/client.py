@@ -38,6 +38,10 @@ from doppel_memory.consolidation import (
     ConsolidationRunResult,
     MemoryConsolidator,
 )
+from doppel_memory.evidence import (
+    EvidenceVerificationConfig,
+    EvidenceVerifier,
+)
 from doppel_memory.governance import (
     DeterministicMemoryGovernancePolicy,
     MemoryGovernanceCheckpoint,
@@ -360,6 +364,8 @@ class DoppelClient:
         config: PersonalMemoryQueryConfig | None = None,
         semantic_index: SemanticIndex | None = None,
         relation_index: RelationIndex | None = None,
+        evidence_verifier: EvidenceVerifier | None = None,
+        verification_config: EvidenceVerificationConfig | None = None,
         default_subject: str = "owner",
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
@@ -375,6 +381,8 @@ class DoppelClient:
             config,
             semantic_index=semantic_index,
             relation_index=relation_index,
+            evidence_verifier=evidence_verifier,
+            verification_config=verification_config,
         ).query(
             planner or DeterministicPersonalMemoryQueryPlanner(),
             query,

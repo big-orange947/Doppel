@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Optional evidence verification
+
+- Add an opt-in, exclusion-only evidence-support gate to personal queries, with
+  a provider-neutral protocol and Reference StructuredOutputModel adapter in
+  `doppel_memory.evidence`. Defaults and ranking weights remain unchanged.
+- Bound candidate count, input characters, batch size and total timeout; validate
+  all decision IDs and fail closed on provider/format failures. Return structured
+  verification status and content-free diagnostic events. Exact counts are
+  explicitly unsupported when verification is enabled.
+- Add offline contract and engine regression tests. These do not establish real
+  model quality; paired live evaluation is required before default enablement.
+
 ### Direction
 
 - Freeze Doppel's ownership boundary as the authoritative long-term memory core for

@@ -16,6 +16,14 @@ from typing import Any, Literal, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from doppel_memory.evidence import (
+    EvidenceItem,
+    EvidenceRequest,
+    EvidenceVerificationConfig,
+    EvidenceVerificationSummary,
+    EvidenceVerifier,
+    verify_evidence,
+)
 from doppel_memory.intelligence import (
     MemoryTemporalStatus,
     PersonalMemoryType,
@@ -537,6 +545,7 @@ class PersonalMemoryQueryResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     complete: bool = True
     trace: PersonalMemoryQueryTrace | None = None
+    evidence_verification: EvidenceVerificationSummary | None = None
 
 
 class PersonalMemoryQueryPlanningError(ValueError):
@@ -557,6 +566,8 @@ class PersonalMemoryQueryEngine:
         *,
         semantic_index: SemanticIndex | None = None,
         relation_index: RelationIndex | None = None,
+        evidence_verifier: EvidenceVerifier | None = None,
+        verification_config: EvidenceVerificationConfig | None = None,
     ) -> None:
         if not store.capabilities.pagination:
             raise NotImplementedError(
@@ -566,6 +577,8 @@ class PersonalMemoryQueryEngine:
         self.config = config or PersonalMemoryQueryConfig()
         self._semantic_index = semantic_index
         self._relation_index = relation_index
+        self._evidence_verifier = evidence_verifier
+        self._verification_config = verification_config or EvidenceVerificationConfig()
 
     async def plan(
         self,
@@ -653,6 +666,8 @@ class PersonalMemoryQueryEngine:
         validate_trace_limit(trace_limit)
         bound = PersonalMemoryQueryPlan.model_validate(plan)
         self._validate_plan(bound)
+        if self._evidence_verifier is not None and bound.intent == "count":
+            raise NotImplementedError("evidence verification does not support exact counts")
         trace = (
             _QueryTraceCollector(trace_limit, {s.scope_key for s in bound.scopes})
             if trace_limit
@@ -930,6 +945,29 @@ class PersonalMemoryQueryEngine:
                 )
             )
 
+        evidence_verification = None
+        if self._evidence_verifier is not None:
+            allowed_scopes = {s.scope_key for s in bound.scopes}
+            matched = [item for item in matched if item[0].scope.scope_key in allowed_scopes]
+            decisions, evidence_verification = await verify_evidence(
+                self._evidence_verifier,
+                EvidenceRequest(question=bound.query, items=[
+                    EvidenceItem(item_id=f"item_{i}", content=item[0].content)
+                    for i, item in enumerate(matched)
+                ]),
+                self._verification_config,
+            )
+            if evidence_verification.status in {"unavailable", "limit_exceeded"}:
+                complete = False
+                warnings.append("evidence_verification_" + evidence_verification.status)
+            if trace is not None:
+                for i, item in enumerate(matched):
+                    trace.add("evidence_gate", "engine",
+                              decisions.get(f"item_{i}", evidence_verification.status),
+                              item[0])
+            matched = [item for i, item in enumerate(matched)
+                       if decisions.get(f"item_{i}") == "supported"]
+
         conflicts = _relevant_conflicts(bound, records, matched, conflict_records)
         ambiguous, ambiguity_warnings = _detect_ambiguity(bound, matched)
         ambiguous = ambiguous or bool(conflicts)
@@ -1004,6 +1042,7 @@ class PersonalMemoryQueryEngine:
             warnings=list(dict.fromkeys(warnings)),
             complete=complete,
             trace=trace.result() if trace is not None else None,
+            evidence_verification=evidence_verification,
         )
 
     async def query(

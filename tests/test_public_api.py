@@ -441,6 +441,7 @@ MODEL_FIELDS = {
         "warnings",
         "complete",
         "trace",
+        "evidence_verification",
     ),
     "PersonalMemoryQueryTrace": (
         "schema_version",
@@ -752,6 +753,8 @@ SIGNATURES = {
         ("config", "KEYWORD_ONLY"),
         ("semantic_index", "KEYWORD_ONLY"),
         ("relation_index", "KEYWORD_ONLY"),
+        ("evidence_verifier", "KEYWORD_ONLY"),
+        ("verification_config", "KEYWORD_ONLY"),
         ("default_subject", "KEYWORD_ONLY"),
         ("default_subject_id", "KEYWORD_ONLY"),
         ("allowed_subject_ids", "KEYWORD_ONLY"),
@@ -1056,6 +1059,8 @@ SIGNATURES = {
         ("config", "POSITIONAL_OR_KEYWORD"),
         ("semantic_index", "KEYWORD_ONLY"),
         ("relation_index", "KEYWORD_ONLY"),
+        ("evidence_verifier", "KEYWORD_ONLY"),
+        ("verification_config", "KEYWORD_ONLY"),
     ),
     "PersonalMemoryQueryEngine.plan": (
         ("planner", "POSITIONAL_OR_KEYWORD"),
