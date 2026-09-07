@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- In opt-in candidate-union mode, preserve independent semantic recall when a
+  structured non-count Planner draft has entity/relation anchors but an empty
+  `search_text`: the raw question is used only for bounded candidate discovery and
+  the fallback is surfaced in warnings/traces. The bound plan and all authority,
+  temporal, lifecycle, provenance, score, and Store-reload gates remain unchanged;
+  legacy `relation_gate` behavior is unchanged.
 - Add an opt-in `FallbackPersonalMemoryQueryPlanner` that tries a primary planner
   exactly once and then invokes a host-chosen fallback. Fallback use is preserved in
   the bound plan explanation with content-free planner/error identities; raw provider

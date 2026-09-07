@@ -811,6 +811,31 @@ class PersonalMemoryQueryEngine:
             ]
             | None
         ) = None
+        candidate_search_text = bound.search_text
+        if (
+            not candidate_search_text
+            and self.config.candidate_fusion == "union"
+            and bound.intent
+            in {
+                PersonalMemoryQueryIntent.LOOKUP,
+                PersonalMemoryQueryIntent.CURRENT,
+                PersonalMemoryQueryIntent.HISTORY,
+                PersonalMemoryQueryIntent.PLANNED,
+                PersonalMemoryQueryIntent.AS_OF,
+            }
+            and (
+                bound.entity_mentions
+                or bound.relation_hints
+                or bound.candidate_relation_types
+            )
+        ):
+            candidate_search_text = bound.query
+            warnings.append(
+                "planner search_text was empty; used the raw query only for "
+                "independent union candidate discovery"
+            )
+            if trace is not None:
+                trace.add("discovery", "engine", "raw_query_candidate_fallback")
         if (
             self._relation_index is not None
             and (
@@ -827,10 +852,14 @@ class PersonalMemoryQueryEngine:
         try:
             if (
                 self._semantic_index is not None
-                and bound.search_text
+                and candidate_search_text
                 and bound.intent != PersonalMemoryQueryIntent.COUNT
             ):
-                candidate_result = await self._read_candidates(bound, trace)
+                candidate_result = await self._read_candidates(
+                    bound,
+                    trace,
+                    search_text=candidate_search_text,
+                )
                 if candidate_result is None:
                     for scope in bound.scopes:
                         records.extend(await self._read_scope(scope, bound, trace))
@@ -1266,7 +1295,11 @@ class PersonalMemoryQueryEngine:
                 )
 
     async def _read_candidates(
-        self, plan: PersonalMemoryQueryPlan, trace: _QueryTraceCollector | None = None
+        self,
+        plan: PersonalMemoryQueryPlan,
+        trace: _QueryTraceCollector | None = None,
+        *,
+        search_text: str,
     ) -> (
         tuple[
             list[MemoryRecord],
@@ -1285,12 +1318,12 @@ class PersonalMemoryQueryEngine:
         filters = _query_memory_filter(plan)
         lexical_result, semantic_result = await asyncio.gather(
             self._store.search(
-                plan.search_text,
+                search_text,
                 list(plan.scopes),
                 filters=filters,
                 limit=self.config.semantic_candidate_limit,
             ),
-            self._search_semantic_candidates(plan, filters),
+            self._search_semantic_candidates(plan, filters, search_text=search_text),
             return_exceptions=True,
         )
         if isinstance(lexical_result, BaseException):
@@ -1397,7 +1430,11 @@ class PersonalMemoryQueryEngine:
         )
 
     async def _search_semantic_candidates(
-        self, plan: PersonalMemoryQueryPlan, filters: MemoryFilter
+        self,
+        plan: PersonalMemoryQueryPlan,
+        filters: MemoryFilter,
+        *,
+        search_text: str,
     ) -> Sequence[Any]:
         assert self._semantic_index is not None
         valid_at = plan.as_of
@@ -1407,14 +1444,14 @@ class PersonalMemoryQueryEngine:
             self._semantic_index, TemporalSemanticIndex
         ):
             return await self._semantic_index.search_at(
-                plan.search_text,
+                search_text,
                 plan.scopes,
                 valid_at=valid_at,
                 filters=filters,
                 limit=self.config.semantic_candidate_limit,
             )
         return await self._semantic_index.search(
-            plan.search_text,
+            search_text,
             plan.scopes,
             filters=filters,
             limit=self.config.semantic_candidate_limit,
@@ -1595,6 +1632,7 @@ class PersonalMemoryQueryEngine:
             candidates = await self._search_semantic_candidates(
                 plan,
                 _query_memory_filter(plan),
+                search_text=plan.search_text,
             )
         except Exception as exc:
             if trace is not None:

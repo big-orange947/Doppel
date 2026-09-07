@@ -149,6 +149,13 @@ aggregate gate across every executed profile.
 The fixture remains `frozen=false` and `publication_ready=false`; it is an engineering
 baseline, not public numerical evidence yet.
 
+With opt-in `--candidate-fusion union`, an evidence lookup whose model draft has
+entity/relation anchors but empty `search_text` uses the raw question only for bounded
+lexical/semantic candidate discovery. Reports expose the fallback in warnings and
+query traces. This does not repair the Planner draft, change its intent/time, or grant
+relation/scope authority; Planner-quality metrics must still count the empty-field
+failure separately. Count queries and the default relation-gate mode are unchanged.
+
 The relation dataset also carries a closed, host-owned relation ontology and one
 canonical relation-type label per query. `oracle_typed` selects those labels through
 the same public `available_relation_types` / `relation_types` binding used by a real

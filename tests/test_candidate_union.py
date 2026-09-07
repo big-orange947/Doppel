@@ -23,6 +23,18 @@ class Vector:
                                     ("orphan", SCOPE), ("rejected", SCOPE)]]
 
 
+class RecordingVector:
+    def __init__(self):
+        self.queries = []
+
+    async def search(self, query, scopes, *, filters=None, limit=10):
+        del filters, limit
+        self.queries.append(query)
+        return [RecallResult(
+            fact="untrusted", memory_id="vector", scope=scopes[0], similarity=.95,
+        )]
+
+
 async def setup():
     store = InMemoryStore()
     for name in ["vector", "relation", "rejected"]:
@@ -93,6 +105,55 @@ async def test_union_recovers_independent_vector_without_unsafe_candidates():
     assert results["union"].trace.counts[
         "relation_gate:engine:independent_candidate_retained"
     ] == 1
+
+
+@pytest.mark.asyncio
+async def test_union_uses_raw_query_for_candidates_when_planner_search_is_empty():
+    store, _ = await setup()
+    vector = RecordingVector()
+    engine = PersonalMemoryQueryEngine(
+        store, PersonalMemoryQueryConfig(candidate_fusion="union"),
+        semantic_index=vector, relation_index=_RelationIndex([]),
+    )
+
+    result = await engine.query(
+        _DraftPlanner(
+            intent="lookup",
+            search_text="",
+            entity_mentions=["camera"],
+            relation_hints=["where"],
+        ),
+        "Where was the camera last year?",
+        [SCOPE],
+        now=NOW,
+        trace_limit=100,
+    )
+
+    assert vector.queries == ["Where was the camera last year?"]
+    assert [hit.record.memory_id for hit in result.hits] == ["vector"]
+    assert result.plan.search_text == ""
+    assert any("raw query" in warning for warning in result.warnings)
+    assert result.trace is not None
+    assert result.trace.counts[
+        "discovery:engine:raw_query_candidate_fallback"
+    ] == 1
+
+
+@pytest.mark.asyncio
+async def test_default_fusion_preserves_empty_search_without_vector_call():
+    store, _ = await setup()
+    vector = RecordingVector()
+    result = await PersonalMemoryQueryEngine(
+        store, semantic_index=vector, relation_index=_RelationIndex([]),
+    ).query(
+        _DraftPlanner(search_text="", entity_mentions=["camera"]),
+        "Where is the camera?",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert vector.queries == []
+    assert not result.hits
 
 
 @pytest.mark.asyncio
