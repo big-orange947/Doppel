@@ -430,7 +430,7 @@ class DatasetTest(unittest.TestCase):
 
     def test_relation_dataset_has_edge_gold_and_adversarial_coverage(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
-        self.assertEqual(dataset.suite_version, "1.4.0-draft")
+        self.assertEqual(dataset.suite_version, "1.5.0-draft")
         self.assertEqual(len(dataset.queries), 65)
         self.assertEqual(len(dataset.fixtures), 28)
         self.assertGreaterEqual(len(dataset.scopes), 5)
@@ -482,7 +482,14 @@ class DatasetTest(unittest.TestCase):
         self,
     ) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
-        interval_ids = {"rel-q03", "rel-q07", "rel-q10", "rel-q45", "rel-q46"}
+        interval_ids = {
+            "rel-q03",
+            "rel-q07",
+            "rel-q10",
+            "rel-q45",
+            "rel-q46",
+            "rel-q49",
+        }
         intervals = [
             query for query in dataset.queries if query.query_id in interval_ids
         ]
@@ -491,6 +498,23 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(all(query.intent == "history" for query in intervals))
         self.assertTrue(all(query.as_of is None for query in intervals))
         self.assertTrue(all(query.time_from is not None for query in intervals))
+        last_year = next(
+            query for query in intervals if query.query_id == "rel-q49"
+        )
+        self.assertEqual(last_year.time_from, datetime(2025, 1, 1, tzinfo=UTC))
+        self.assertEqual(
+            last_year.time_to,
+            datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC),
+        )
+
+    def test_completed_renewal_date_is_enduring_lookup_gold(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        query = next(item for item in dataset.queries if item.query_id == "rel-q64")
+
+        self.assertEqual(query.intent, "lookup")
+        self.assertIsNone(query.as_of)
+        self.assertIsNone(query.time_from)
+        self.assertIsNone(query.time_to)
 
     def test_relation_dataset_validator_rejects_mixed_point_and_interval_gold(
         self,

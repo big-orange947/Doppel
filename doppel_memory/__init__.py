@@ -161,6 +161,7 @@ from doppel_memory.processing import (
 )
 from doppel_memory.query import (
     DeterministicPersonalMemoryQueryPlanner,
+    FallbackPersonalMemoryQueryPlanner,
     PersonalMemoryConflictHit,
     PersonalMemoryCountResult,
     PersonalMemoryCountStatus,
@@ -282,6 +283,7 @@ __all__ = [
     "EmbeddingProviderError",
     "EventProcessor",
     "FactAuthority",
+    "FallbackPersonalMemoryQueryPlanner",
     "GuardedHistoryReader",
     "HistoryPage",
     "HistoryReaderAuditReport",

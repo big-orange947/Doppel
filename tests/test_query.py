@@ -29,6 +29,7 @@ from doppel_memory.models import (
 )
 from doppel_memory.query import (
     DeterministicPersonalMemoryQueryPlanner,
+    FallbackPersonalMemoryQueryPlanner,
     PersonalMemoryCountStatus,
     PersonalMemoryQueryConfig,
     PersonalMemoryQueryDraft,
@@ -2586,6 +2587,81 @@ async def test_reference_projection_keeps_temporal_cross_field_validation() -> N
         await ReferencePersonalMemoryQueryPlanner(model).plan(
             PersonalMemoryQueryRequest(query="昨天相机在哪里？", now=NOW)
         )
+
+
+async def test_fallback_planner_uses_primary_once_and_marks_degradation(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingPlanner:
+        name = "tests.primary-planner"
+        version = "7"
+        calls = 0
+
+        async def plan(self, request: PersonalMemoryQueryRequest):
+            self.calls += 1
+            raise ValidationError.from_exception_data("query draft", [])
+
+    primary = FailingPlanner()
+    fallback = DeterministicPersonalMemoryQueryPlanner()
+    planner = FallbackPersonalMemoryQueryPlanner(primary, fallback)
+
+    plan = await PersonalMemoryQueryEngine(InMemoryStore()).plan(
+        planner,
+        "相机在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert primary.calls == 1
+    assert plan.planner == FallbackPersonalMemoryQueryPlanner.name
+    assert plan.planner_version == planner.version
+    assert plan.explanation.startswith(
+        "fallback_used:tests.primary-planner->"
+        "doppel.deterministic-personal-memory-query-planner:ValidationError"
+    )
+    assert "using fallback" in caplog.text
+
+
+async def test_fallback_planner_does_not_call_fallback_after_primary_success() -> None:
+    class NeverPlanner:
+        name = "tests.never-planner"
+        version = "1"
+
+        async def plan(self, request: PersonalMemoryQueryRequest):
+            raise AssertionError("fallback must not run")
+
+    planner = FallbackPersonalMemoryQueryPlanner(_DraftPlanner(), NeverPlanner())
+
+    draft = await planner.plan(
+        PersonalMemoryQueryRequest(query="相机在哪里？", now=NOW)
+    )
+
+    assert draft.intent == "lookup"
+    assert "fallback_used:" not in draft.explanation
+
+
+async def test_fallback_planner_reports_both_failures_without_private_messages() -> None:
+    class BrokenPlanner:
+        name = "tests.broken-planner"
+        version = "1"
+
+        def __init__(self, error: Exception) -> None:
+            self.error = error
+
+        async def plan(self, request: PersonalMemoryQueryRequest):
+            raise self.error
+
+    planner = FallbackPersonalMemoryQueryPlanner(
+        BrokenPlanner(RuntimeError("primary-private-secret")),
+        BrokenPlanner(ValueError("fallback-private-secret")),
+    )
+
+    with pytest.raises(PersonalMemoryQueryPlanningError) as captured:
+        await planner.plan(PersonalMemoryQueryRequest(query="相机在哪里？", now=NOW))
+
+    message = str(captured.value)
+    assert "RuntimeError, ValueError" in message
+    assert "private-secret" not in message
 
 
 def test_query_draft_normalizes_common_temporal_status_aliases() -> None:

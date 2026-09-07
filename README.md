@@ -625,6 +625,11 @@ if result.trace is not None:
 不能选择读哪些用户、memory ID、Store 操作或最终答案。engine 会把它重新绑定到 host 明确传入的
 exact scopes 和可信 subject，同一次查询禁止跨 user_id。
 
+线上接入可以显式用 `FallbackPersonalMemoryQueryPlanner(reference, deterministic)`
+包住模型 Planner。它只调用主 Planner 一次；主调用或 schema 校验失败后才执行宿主选择的
+fallback，并把 `fallback_used:<primary>-><fallback>:<error type>` 写入最终 plan 的
+`explanation` 供审计。它不会复制异常正文、修改 scope/subject 权限，默认也不会自动启用。
+
 执行顺序是结构化门禁优先：subject → personal memory type → topic → temporal status →
 valid_from/valid_to，之后才进行中文字符词法和可选语义评分。配置 SemanticIndex 的普通查询使用
 index-first：先取有界 lexical/semantic 候选，再从 authoritative Store 的 exact scope 逐条重载和

@@ -398,6 +398,71 @@ def _project_reference_query_draft(raw: Any) -> PersonalMemoryQueryDraft:
     return PersonalMemoryQueryDraft.model_validate(projected)
 
 
+class FallbackPersonalMemoryQueryPlanner:
+    """Try one planner once, then expose an explicit deterministic fallback.
+
+    The wrapper is deliberately opt-in. It never retries the primary planner and
+    it catches no ``BaseException`` subclasses, so cancellation still propagates.
+    When fallback is used, the returned draft's explanation carries a content-free
+    audit marker naming both planners and the primary exception type.
+    """
+
+    name = "doppel.fallback-personal-memory-query-planner"
+    _version = "1"
+
+    def __init__(
+        self,
+        primary: PersonalMemoryQueryPlanner,
+        fallback: PersonalMemoryQueryPlanner,
+    ) -> None:
+        _require_identity(primary, "primary personal-memory query planner")
+        _require_identity(fallback, "fallback personal-memory query planner")
+        self.primary = primary
+        self.fallback = fallback
+        self.version = (
+            f"{self._version}."
+            + _fingerprint(
+                {
+                    "primary": {"name": primary.name, "version": primary.version},
+                    "fallback": {"name": fallback.name, "version": fallback.version},
+                }
+            )[:16]
+        )
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryQueryDraft:
+        bound = PersonalMemoryQueryRequest.model_validate(request)
+        try:
+            primary = await self.primary.plan(bound)
+            return PersonalMemoryQueryDraft.model_validate(primary)
+        # This opt-in resilience boundary intentionally accepts arbitrary planner
+        # implementations. ``BaseException`` (including cancellation) is excluded.
+        except Exception as primary_error:  # noqa: BLE001
+            error_type = type(primary_error).__name__
+            logger.warning(
+                "primary personal-memory query planner failed with %s; using fallback",
+                error_type,
+            )
+
+        try:
+            fallback = PersonalMemoryQueryDraft.model_validate(
+                await self.fallback.plan(bound)
+            )
+        except Exception as fallback_error:
+            raise PersonalMemoryQueryPlanningError(
+                "primary and fallback personal-memory query planners failed "
+                f"({error_type}, {type(fallback_error).__name__})"
+            ) from fallback_error
+
+        audit = (
+            "fallback_used:"
+            f"{self.primary.name}->{self.fallback.name}:{error_type}"
+        )
+        explanation = f"{audit}; {fallback.explanation}" if fallback.explanation else audit
+        return fallback.model_copy(update={"explanation": explanation})
+
+
 class DeterministicPersonalMemoryQueryPlanner:
     """Domain-neutral baseline for temporal and aggregation structure only."""
 

@@ -504,6 +504,13 @@ object with no recognized field remains invalid. Historical v8-v11 reports remai
 versioned exploratory references, not concurrent controls for v12; do not attribute
 every between-run fluctuation to the new instructions.
 
+Dataset v1.5 corrects two gold-label defects found by the first v12 live run: the
+“last year” repair query now requires the complete 2025 interval, and the passport
+renewal-date query is an enduring lookup rather than history. Query text, relation
+gold, fixtures, and provider inputs are unchanged, so this is a scoring correction,
+not a prompt improvement. See the immutable run note in
+[`reports/relation-planner-v12-live-2026-09-08.md`](reports/relation-planner-v12-live-2026-09-08.md).
+
 `output_diagnostics` records truncations, invalid drafts, safe validation-code
 counts, and explanation length percentiles/over-80 counts for valid drafts only.
 No valid drafts yields null length statistics; truncated output lengths are unknown,

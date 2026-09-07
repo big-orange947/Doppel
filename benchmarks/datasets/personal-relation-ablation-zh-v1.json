@@ -1,6 +1,6 @@
 {
   "suite": "doppel-personal-relation-ablation-zh-v1",
-  "suite_version": "1.4.0-draft",
+  "suite_version": "1.5.0-draft",
   "language": "zh-CN",
   "status": "draft",
   "frozen": false,
@@ -318,7 +318,7 @@
     {"query_id":"rel-q46","query":"8月10日以后小提琴交给谁了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","time_from":"2026-08-11T00:00:00Z","accepted_time_from":["2026-08-10T00:00:00Z","2026-08-11T00:00:00Z"],"entity_mentions":["小提琴"],"relation_hints":["交给"],"required_memory_ids":["rel-a-violin-wang-current"],"forbidden_memory_ids":["rel-a-violin-zhou-history"],"category":"temporal_boundary","partition":"heldout"},
     {"query_id":"rel-q47","query":"折叠自行车借给谁了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["折叠自行车"],"relation_hints":["借给"],"required_memory_ids":["rel-a-bike-loaned-zhao"],"forbidden_memory_ids":["rel-a-bike-repaired-ruixing"],"category":"same_entity_multi_relation","partition":"dev"},
     {"query_id":"rel-q48","query":"我的折叠车这阵子给谁骑着呢？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["折叠自行车"],"relation_hints":["给谁骑"],"required_memory_ids":["rel-a-bike-loaned-zhao"],"forbidden_memory_ids":["rel-a-bike-repaired-ruixing"],"category":"semantic_paraphrase","partition":"heldout"},
-    {"query_id":"rel-q49","query":"折叠自行车去年在哪家车行维修？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["折叠自行车"],"relation_hints":["维修"],"required_memory_ids":["rel-a-bike-repaired-ruixing"],"forbidden_memory_ids":["rel-a-bike-loaned-zhao"],"category":"same_entity_multi_relation","partition":"dev"},
+    {"query_id":"rel-q49","query":"折叠自行车去年在哪家车行维修？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","time_from":"2025-01-01T00:00:00Z","time_to":"2025-12-31T23:59:59Z","entity_mentions":["折叠自行车"],"relation_hints":["维修"],"required_memory_ids":["rel-a-bike-repaired-ruixing"],"forbidden_memory_ids":["rel-a-bike-loaned-zhao"],"category":"same_entity_multi_relation","partition":"dev"},
     {"query_id":"rel-q50","query":"折叠车的变速器之前在哪儿弄过？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["折叠自行车"],"relation_hints":["弄过"],"required_memory_ids":["rel-a-bike-repaired-ruixing"],"forbidden_memory_ids":["rel-a-bike-loaned-zhao"],"category":"semantic_paraphrase","partition":"adversarial"},
     {"query_id":"rel-q51","query":"十月了，折叠自行车还在赵晨那里吗？","scopes":["owner_a"],"now":"2026-10-01T12:00:00Z","intent":"current","entity_mentions":["折叠自行车","赵晨"],"relation_hints":["还在"],"forbidden_memory_ids":["rel-a-bike-loaned-zhao","rel-a-bike-repaired-ruixing"],"expected_abstain":true,"category":"expired_relation","partition":"adversarial"},
     {"query_id":"rel-q52","query":"门禁卡现在还在公司前台吗？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["门禁卡","公司前台"],"relation_hints":["还在"],"forbidden_memory_ids":["rel-a-access-card-reception-history"],"expected_abstain":true,"category":"expired_relation","partition":"adversarial"},
@@ -333,7 +333,7 @@
     {"query_id":"rel-q61","query":"快递包裹现在在哪个驿站？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["快递包裹"],"relation_hints":["驿站"],"expected_abstain":true,"category":"unknown_entity","partition":"heldout"},
     {"query_id":"rel-q62","query":"纪念戒指交给谁保管了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["纪念戒指"],"relation_hints":["保管"],"expected_abstain":true,"category":"unknown_entity","partition":"adversarial"},
     {"query_id":"rel-q63","query":"陈明把《银河帝国》放在哪里了？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["《银河帝国》","陈明"],"relation_hints":["放在"],"forbidden_memory_ids":["rel-a-book-recommended-chen","rel-a-book-linxiao-current"],"expected_abstain":true,"category":"entity_relation_composition","partition":"adversarial","adversarial_note":"Both entities exist, but no edge states that Chen stores the book."},
-    {"query_id":"rel-q64","query":"护照是什么时候续签的？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"history","entity_mentions":["护照"],"relation_hints":["续签"],"forbidden_memory_ids":["rel-a-passport-issued-entry","rel-a-passport-drawer-current"],"expected_abstain":true,"category":"wrong_relation","partition":"heldout"},
+    {"query_id":"rel-q64","query":"护照是什么时候续签的？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"lookup","entity_mentions":["护照"],"relation_hints":["续签"],"forbidden_memory_ids":["rel-a-passport-issued-entry","rel-a-passport-drawer-current"],"expected_abstain":true,"category":"wrong_relation","partition":"heldout"},
     {"query_id":"rel-q65","query":"旧笔记本电脑属于谁？","scopes":["owner_a"],"now":"2026-08-30T12:00:00Z","intent":"current","entity_mentions":["旧笔记本电脑"],"relation_hints":["属于"],"forbidden_memory_ids":["rel-a-laptop-repair-current","rel-a-laptop-repaired-gao"],"expected_abstain":true,"category":"wrong_relation","partition":"adversarial"}
   ],
   "requirements": {

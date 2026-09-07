@@ -89,6 +89,7 @@
       "DeterministicPersonalMemoryQueryPlanner",
       "EmbeddingProvider",
       "EmbeddingProviderError",
+      "FallbackPersonalMemoryQueryPlanner",
       "GuardedHistoryReader",
       "HistoryPage",
       "HistoryReaderAuditReport",

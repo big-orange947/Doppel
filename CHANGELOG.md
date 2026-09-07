@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an opt-in `FallbackPersonalMemoryQueryPlanner` that tries a primary planner
+  exactly once and then invokes a host-chosen fallback. Fallback use is preserved in
+  the bound plan explanation with content-free planner/error identities; raw provider
+  errors are neither copied nor logged. Scope, subject, and relation authority remain
+  bound by the query engine.
+- Correct two post-run relation benchmark labels and bump the draft dataset to v1.5:
+  “last year” now carries its complete calendar interval, while asking when a passport
+  was renewed is an enduring event lookup rather than a superseded-state query.
 - Clarify Reference personal-query Planner v12 around mutable present state versus
   enduring attribution/provenance, explicit points versus historical intervals, and
   minimal relation-type candidate sets. Unknown provider fields are projected out as

@@ -808,6 +808,13 @@ SIGNATURES = {
     "DeterministicPersonalMemoryQueryPlanner.plan": (
         ("request", "POSITIONAL_OR_KEYWORD"),
     ),
+    "FallbackPersonalMemoryQueryPlanner.__init__": (
+        ("primary", "POSITIONAL_OR_KEYWORD"),
+        ("fallback", "POSITIONAL_OR_KEYWORD"),
+    ),
+    "FallbackPersonalMemoryQueryPlanner.plan": (
+        ("request", "POSITIONAL_OR_KEYWORD"),
+    ),
     "MemoryBatchTask.propose": (("context", "POSITIONAL_OR_KEYWORD"),),
     "MemoryConsolidator.consolidate": (("input", "POSITIONAL_OR_KEYWORD"),),
     "MemoryGovernancePolicy.evaluate": (("input", "POSITIONAL_OR_KEYWORD"),),
