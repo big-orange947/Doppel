@@ -20,7 +20,7 @@
   ],
   "properties": {
     "runner": {"const": "doppel.relation-planner-quality.v1"},
-    "scoring_version": {"const": "2"},
+    "scoring_version": {"const": "3"},
     "relation_type_execution_semantics": {"const": "planner_candidates_host_constraints"},
     "output_diagnostics": {
       "type": "object",
@@ -132,6 +132,8 @@
         "intent_semantics_accuracy",
         "as_of_presence_accuracy",
         "as_of_date_accuracy",
+        "time_range_presence_accuracy",
+        "time_range_boundary_accuracy",
         "temporal_plan_accuracy",
         "subject_binding_accuracy",
         "entity_recall",
@@ -159,6 +161,8 @@
         "intent_semantics_accuracy": {"$ref": "#/$defs/ratio"},
         "as_of_presence_accuracy": {"$ref": "#/$defs/ratio"},
         "as_of_date_accuracy": {"$ref": "#/$defs/ratio"},
+        "time_range_presence_accuracy": {"$ref": "#/$defs/ratio"},
+        "time_range_boundary_accuracy": {"$ref": "#/$defs/ratio"},
         "temporal_plan_accuracy": {"$ref": "#/$defs/ratio"},
         "subject_binding_accuracy": {"$ref": "#/$defs/ratio"},
         "entity_recall": {"$ref": "#/$defs/ratio"},
@@ -222,6 +226,8 @@
           "intent_semantics_ok",
           "as_of_presence_ok",
           "as_of_date_ok",
+          "time_range_presence_ok",
+          "time_range_boundary_ok",
           "temporal_plan_ok",
           "subject_binding_ok",
           "expected_entity_count",
@@ -257,7 +263,12 @@
                 "type": {"type": "string"}
               }
             }
-          }
+          },
+          "as_of_presence_ok": {"type": "boolean"},
+          "as_of_date_ok": {"type": "boolean"},
+          "time_range_presence_ok": {"type": "boolean"},
+          "time_range_boundary_ok": {"type": "boolean"},
+          "temporal_plan_ok": {"type": "boolean"}
         }
       }
     }

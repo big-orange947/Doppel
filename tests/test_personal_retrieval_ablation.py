@@ -430,7 +430,7 @@ class DatasetTest(unittest.TestCase):
 
     def test_relation_dataset_has_edge_gold_and_adversarial_coverage(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
-        self.assertEqual(dataset.suite_version, "1.3.0-draft")
+        self.assertEqual(dataset.suite_version, "1.4.0-draft")
         self.assertEqual(len(dataset.queries), 65)
         self.assertEqual(len(dataset.fixtures), 28)
         self.assertGreaterEqual(len(dataset.scopes), 5)
@@ -477,6 +477,41 @@ class DatasetTest(unittest.TestCase):
         }))
         self.assertTrue(any("exclusively current/timeless gold" in item
                             for item in failures))
+
+    def test_relation_dataset_uses_intervals_for_imprecise_calendar_periods(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        interval_ids = {"rel-q03", "rel-q07", "rel-q10", "rel-q45", "rel-q46"}
+        intervals = [
+            query for query in dataset.queries if query.query_id in interval_ids
+        ]
+
+        self.assertEqual({query.query_id for query in intervals}, interval_ids)
+        self.assertTrue(all(query.intent == "history" for query in intervals))
+        self.assertTrue(all(query.as_of is None for query in intervals))
+        self.assertTrue(all(query.time_from is not None for query in intervals))
+
+    def test_relation_dataset_validator_rejects_mixed_point_and_interval_gold(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        query = next(item for item in dataset.queries if item.query_id == "rel-q25")
+        broken = query.model_copy(
+            update={"time_from": datetime(2026, 6, 1, tzinfo=UTC)}
+        )
+        failures = validate_dataset_semantics(
+            dataset.model_copy(
+                update={
+                    "queries": [
+                        broken if item.query_id == query.query_id else item
+                        for item in dataset.queries
+                    ]
+                }
+            )
+        )
+
+        self.assertTrue(any("cannot be combined" in item for item in failures))
 
     def test_dataset_model_rejects_duplicate_gold_ids(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)

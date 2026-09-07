@@ -491,18 +491,18 @@ Reports include `relation_catalog` (mode, full definitions, count, canonical SHA
 and the complete definition content participates in request/cache fingerprints.
 Replay of a definitions report requires the same `--relation-catalog`; missing or
 changed definitions cannot be re-scored as if the provider saw a different input.
-Old labels-only report fingerprints remain replay-compatible. Reference Planner
-version 9 separates new live caches from earlier prompt versions; old reports
-can be replayed without paying again, but must not be presented as fresh control runs.
+Old labels-only report fingerprints remain replay-compatible only with their original
+dataset and Planner versions. Historical v9 reports can be replayed without paying
+again, but must not be presented as fresh control runs.
 
-Planner v9 tests a general distinction between an ambiguous requested predicate and
-unknown facts or other relations involving the same entity. It also requests short
-or omitted explanations, preserves common-noun entity anchors, and distinguishes
-requested predicates from explicitly rejected alternatives. The catalog, fixture,
-strict scoring, retrieval code, and 768-token cap remain unchanged. The one-command
-pair now compares labels-only vs definitions **both on v9**. Historical v8 reports
-remain versioned exploratory references, not a concurrent control for the prompt
-revision; do not attribute every between-run fluctuation to the new instructions.
+Planner v12 additionally distinguishes mutable present state from enduring
+attribution/provenance, represents imprecise calendar periods as intervals, and asks
+for the smallest supported relation-type candidate set. Its Reference boundary treats
+provider output as untrusted: schema-known fields are projected, unknown fields are
+inert, and recognized values still undergo strict type and temporal validation. An
+object with no recognized field remains invalid. Historical v8-v11 reports remain
+versioned exploratory references, not concurrent controls for v12; do not attribute
+every between-run fluctuation to the new instructions.
 
 `output_diagnostics` records truncations, invalid drafts, safe validation-code
 counts, and explanation length percentiles/over-80 counts for valid drafts only.
@@ -520,7 +520,11 @@ Only after this isolated comparison should soft type candidates/ranking changes
 or model replacements be tested. New predeclared held-out data is still required
 before making generalized quality claims.
 
-Scoring version 2 distinguishes valid, failed, and not-run cases. An authentication
+Scoring version 3 distinguishes point-in-time accuracy from interval presence and
+boundary accuracy; a calendar month/year can no longer pass by choosing an arbitrary
+representative date. Reviewed alternative open-interval day boundaries remain
+explicit dataset gold. It also preserves the v2 distinction between valid, failed,
+and not-run cases. An authentication
 failure stops further calls, with remaining cases marked `not_run`; budget misses
 also remain not-run but do not prevent later cache hits. Missing `DOPPEL_API_KEY`
 is rejected before provider setup when calls are enabled. Unauthenticated local
@@ -550,9 +554,9 @@ an empty type can be valid protocol behavior without demonstrating good retrieva
 
 Temporal review matches declared shapes and explicit timestamp alternatives. An
 open lower bound is accepted only for an explicitly open-interval expectation, not
-as a generic replacement for a point query. The existing “after August 10” fixture
-also has retrieval gold needing review; the overlay flags that instead of silently
-turning its required/forbidden hits into passes. No corrected overall pass rate is
+as a generic replacement for a point query. Dataset v1.4 reviews the “after August
+10” fixture as an open interval and records both inclusive-day and next-day lower
+bound readings. No corrected overall pass rate is
 derived from this review.
 
 ```powershell

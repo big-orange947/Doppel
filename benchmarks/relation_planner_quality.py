@@ -13,7 +13,7 @@ import sys
 import tempfile
 from collections import Counter, defaultdict
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 from typing import Any, get_args
@@ -344,7 +344,7 @@ async def run_relation_planner_quality(
     latencies = sorted(case["latency_ms"] for case in cases)
     return {
         "runner": "doppel.relation-planner-quality.v1",
-        "scoring_version": "2",
+        "scoring_version": "3",
         "relation_type_execution_semantics": "planner_candidates_host_constraints",
         "output_diagnostics": _output_diagnostics(cases),
         "relation_catalog": _catalog_metadata(relation_type_definitions),
@@ -399,6 +399,12 @@ async def run_relation_planner_quality(
             ),
             "as_of_date_accuracy": _ratio(
                 sum(case["as_of_date_ok"] for case in valid), len(cases)
+            ),
+            "time_range_presence_accuracy": _ratio(
+                sum(case["time_range_presence_ok"] for case in valid), len(cases)
+            ),
+            "time_range_boundary_accuracy": _ratio(
+                sum(case["time_range_boundary_ok"] for case in valid), len(cases)
             ),
             "temporal_plan_accuracy": _ratio(
                 sum(case["temporal_plan_ok"] for case in valid), len(cases)
@@ -537,6 +543,8 @@ def _failed_case(
         "intent_semantics_ok": False,
         "as_of_presence_ok": False,
         "as_of_date_ok": False,
+        "time_range_presence_ok": False,
+        "time_range_boundary_ok": False,
         "temporal_plan_ok": False,
         "subject_binding_ok": False,
         "expected_entity_count": len(query.entity_mentions),
@@ -614,6 +622,8 @@ async def _evaluate_case(
 
     expected_as_of = query.as_of
     actual_as_of = draft.as_of
+    expected_has_range = query.time_from is not None or query.time_to is not None
+    actual_has_range = draft.time_from is not None or draft.time_to is not None
     intent_ok = draft.intent == query.intent
     accepted_intents = set(query.accepted_intents or [query.intent])
     intent_semantics_ok = draft.intent in accepted_intents
@@ -622,6 +632,13 @@ async def _evaluate_case(
         expected_as_of is None
         or (actual_as_of is not None and actual_as_of.date() == expected_as_of.date())
     )
+    time_range_presence_ok = expected_has_range == actual_has_range
+    time_range_boundary_ok = time_range_presence_ok and (
+        _same_boundary_date(
+            query.time_from, draft.time_from, query.accepted_time_from
+        )
+        and _same_boundary_date(query.time_to, draft.time_to, query.accepted_time_to)
+    )
     interval_covers_as_of = bool(
         query.accept_interval_covering_as_of
         and expected_as_of is not None
@@ -629,7 +646,12 @@ async def _evaluate_case(
         and draft.time_to is not None
         and draft.time_from <= expected_as_of <= draft.time_to
     )
-    temporal_plan_ok = as_of_date_ok or interval_covers_as_of
+    if expected_as_of is not None:
+        temporal_plan_ok = as_of_date_ok or interval_covers_as_of
+    elif expected_has_range:
+        temporal_plan_ok = actual_as_of is None and time_range_boundary_ok
+    else:
+        temporal_plan_ok = as_of_date_ok and not actual_has_range
     subject_binding_ok = (
         draft.subject == request.default_subject
         and draft.subject_id == request.default_subject_id
@@ -692,6 +714,8 @@ async def _evaluate_case(
         "intent_semantics_ok": intent_semantics_ok,
         "as_of_presence_ok": as_of_presence_ok,
         "as_of_date_ok": as_of_date_ok,
+        "time_range_presence_ok": time_range_presence_ok,
+        "time_range_boundary_ok": time_range_boundary_ok,
         "temporal_plan_ok": temporal_plan_ok,
         "subject_binding_ok": subject_binding_ok,
         "interval_covers_as_of": interval_covers_as_of,
@@ -799,6 +823,18 @@ def _group_metrics(cases: list[dict[str, Any]], key: str) -> dict[str, Any]:
 
 def _ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
+
+
+def _same_boundary_date(
+    expected: datetime | None,
+    actual: datetime | None,
+    alternatives: Sequence[datetime] = (),
+) -> bool:
+    if expected is None or actual is None:
+        return expected is actual
+    accepted = alternatives or (expected,)
+    actual_date = actual.astimezone(UTC).date()
+    return any(item.astimezone(UTC).date() == actual_date for item in accepted)
 
 
 def _percentile(values: Sequence[float], quantile: float) -> float:

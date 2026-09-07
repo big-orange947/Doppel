@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Clarify Reference personal-query Planner v12 around mutable present state versus
+  enduring attribution/provenance, explicit points versus historical intervals, and
+  minimal relation-type candidate sets. Unknown provider fields are projected out as
+  inert at the Reference boundary without weakening validation of recognized values;
+  all authority and scope binding remains host-owned.
+- Bump the draft relation dataset to v1.4 after a full intent/temporal-shape review.
+  Calendar months and years now use interval gold, the reviewed “after” query keeps
+  both legitimate lower-day readings, and scoring v3 reports interval presence and
+  boundary accuracy instead of accepting an arbitrary representative point.
+
 - Add an offline whole-candidate reranking replay benchmark. It validates exact
   source/dataset identity, sends opaque candidate IDs, requires a full score
   permutation, never changes candidate membership, and compares raw questions

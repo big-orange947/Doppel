@@ -99,7 +99,7 @@ def test_open_interval_matches_only_an_explicit_open_interval_contract() -> None
     assert not point_contract.accepts(PersonalMemoryQueryDraft(time_from=start))
 
 
-def test_open_time_review_does_not_relabel_retrieval_gold() -> None:
+def test_open_time_review_matches_reviewed_interval_gold() -> None:
     dataset = load_ablation_dataset(DEFAULT_DATASET)
     query = next(item for item in dataset.queries if item.query_id == "rel-q46")
     original = query.model_dump(mode="json")
@@ -118,7 +118,7 @@ def test_open_time_review_does_not_relabel_retrieval_gold() -> None:
     }
     result = review_planner_report(report, dataset, REVIEW_PATH)
     assert result["cases"][0]["temporal_assessment"] == "matches_reviewed_shape"
-    assert result["cases"][0]["retrieval_gold_needs_review"] is True
+    assert result["cases"][0]["retrieval_gold_needs_review"] is False
     assert query.model_dump(mode="json") == original
 
 

@@ -1,9 +1,9 @@
 {
-  "version": "1.1.0-draft",
-  "dataset_fingerprint": "07e01ff865db4de156b692f4e31aac96348a1fc23bc4d3659807620dfacc6619",
+  "version": "1.2.0-draft",
+  "dataset_fingerprint": "122bff5d5951f808b5758d6ffe84843e09511b7e45db84c86f1cbb5ea05ff35d",
   "status": "posthoc_diagnostic",
   "publication_ready": false,
-  "note": "Authored after inspecting the typed-v2 run and rebound after the v1.3 intent-label review; query texts and relation judgments are unchanged. This is an engineering diagnosis, not untouched heldout validation. It reviews query observability using the host's label names, not hidden memory IDs or stored edge facts. It never changes provider inputs or relation gold. Ambiguous hard filters are risks, not accepted answers.",
+  "note": "Authored after inspecting the typed-v2 run and rebound after the v1.4 temporal-shape and intent review; query texts and relation judgments are unchanged. This is an engineering diagnosis, not untouched heldout validation. It reviews query observability using the host's label names, not hidden memory IDs or stored edge facts. It never changes provider inputs or relation gold. Ambiguous hard filters are risks, not accepted answers.",
   "relation_groups": [
     {
       "name": "explicit_custody",
@@ -125,8 +125,8 @@
           }
         }
       ],
-      "reason": "After a calendar date expresses an open lower-bounded interval, with inclusive-day versus next-day ambiguity. Both explicit day-boundary readings are recorded. An arbitrary single point on the next day is not equivalent. The old required/forbidden memory labels also need review before interpreting this as retrieval correctness.",
-      "retrieval_gold_needs_review": true
+      "reason": "After a calendar date expresses an open lower-bounded interval, with inclusive-day versus next-day ambiguity. Both reviewed day-boundary readings are accepted. An arbitrary single point is not equivalent. Dataset v1.4 represents the query as an interval and its required/forbidden evidence has been reviewed against that interval.",
+      "retrieval_gold_needs_review": false
     }
   }
 }

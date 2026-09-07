@@ -59,6 +59,8 @@ class _GoldPlanner:
             relation_hints=item.relation_hints,
             relation_types=self.dataset.relation_type_labels[item.query_id],
             as_of=item.as_of,
+            time_from=item.time_from,
+            time_to=item.time_to,
             subject=request.default_subject,
             subject_id=request.default_subject_id,
         )
@@ -147,7 +149,7 @@ async def test_relation_type_mismatch_and_ontology_violation_are_independent() -
 
 
 @pytest.mark.asyncio
-async def test_interval_covering_gold_asof_is_a_valid_temporal_plan() -> None:
+async def test_historical_interval_requires_matching_range_boundaries() -> None:
     dataset = load_ablation_dataset(DEFAULT_DATASET)
     query = next(item for item in dataset.queries if item.query_id == "rel-q03")
     planner = _StaticPlanner(
@@ -164,12 +166,79 @@ async def test_interval_covering_gold_asof_is_a_valid_temporal_plan() -> None:
 
     case = await _evaluate_case(planner, dataset, query)
 
-    assert case["intent_ok"] is False
+    assert case["intent_ok"] is True
+    assert case["intent_semantics_ok"] is True
+    assert case["as_of_date_ok"] is True
+    assert case["time_range_presence_ok"] is True
+    assert case["time_range_boundary_ok"] is True
+    assert case["interval_covers_as_of"] is False
+    assert case["temporal_plan_ok"] is True
+    assert case["structure_ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_historical_interval_rejects_arbitrary_representative_point() -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    query = next(item for item in dataset.queries if item.query_id == "rel-q03")
+    planner = _StaticPlanner(
+        PersonalMemoryQueryDraft(
+            intent="as_of",
+            as_of=datetime(2026, 5, 31, 23, 59, tzinfo=UTC),
+            entity_mentions=["银河帝国"],
+            relation_hints=["手里"],
+            subject_id=dataset.scopes[query.scopes[0]].user_id,
+        )
+    )
+
+    case = await _evaluate_case(planner, dataset, query)
+
+    assert case["time_range_presence_ok"] is False
+    assert case["time_range_boundary_ok"] is False
+    assert case["temporal_plan_ok"] is False
+    assert case["structure_ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_point_in_time_still_accepts_covering_interval() -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    query = next(item for item in dataset.queries if item.query_id == "rel-q25")
+    planner = _StaticPlanner(
+        PersonalMemoryQueryDraft(
+            intent="history",
+            time_from=datetime(2026, 6, 30, tzinfo=UTC),
+            time_to=datetime(2026, 6, 30, 23, 59, tzinfo=UTC),
+            entity_mentions=["银河帝国"],
+            relation_hints=["手里"],
+            subject_id=dataset.scopes[query.scopes[0]].user_id,
+        )
+    )
+
+    case = await _evaluate_case(planner, dataset, query)
+
     assert case["intent_semantics_ok"] is True
     assert case["as_of_date_ok"] is False
     assert case["interval_covers_as_of"] is True
     assert case["temporal_plan_ok"] is True
-    assert case["structure_ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_reviewed_open_interval_accepts_either_day_boundary() -> None:
+    dataset = load_ablation_dataset(DEFAULT_DATASET)
+    query = next(item for item in dataset.queries if item.query_id == "rel-q46")
+    planner = _StaticPlanner(
+        PersonalMemoryQueryDraft(
+            intent="history",
+            time_from=datetime(2026, 8, 10, tzinfo=UTC),
+            entity_mentions=["小提琴"],
+            relation_hints=["交给"],
+            subject_id=dataset.scopes[query.scopes[0]].user_id,
+        )
+    )
+
+    case = await _evaluate_case(planner, dataset, query)
+
+    assert case["time_range_boundary_ok"] is True
+    assert case["temporal_plan_ok"] is True
 
 
 @pytest.mark.asyncio
@@ -382,9 +451,13 @@ def test_result_schema_tracks_runner_contract() -> None:
     assert schema["properties"]["runner"]["const"] == (
         "doppel.relation-planner-quality.v1"
     )
+    assert schema["properties"]["scoring_version"]["const"] == "3"
     assert "cases" in schema["required"]
     assert "metrics" in schema["required"]
     assert "usage" in schema["required"]
+    assert "time_range_boundary_accuracy" in schema["properties"]["metrics"][
+        "required"
+    ]
 
 
 @pytest.mark.asyncio

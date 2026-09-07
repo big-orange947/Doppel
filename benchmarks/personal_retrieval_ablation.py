@@ -204,6 +204,8 @@ class AblationQuery(BaseModel):
     accept_interval_covering_as_of: bool = False
     time_from: datetime | None = None
     time_to: datetime | None = None
+    accepted_time_from: list[datetime] = Field(default_factory=list)
+    accepted_time_to: list[datetime] = Field(default_factory=list)
     entity_mentions: list[str] = Field(default_factory=list)
     relation_hints: list[str] = Field(default_factory=list)
     required_memory_ids: list[str] = Field(default_factory=list)
@@ -412,6 +414,58 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
         if query.accepted_intents and query.intent not in query.accepted_intents:
             failures.append(
                 f"{query.query_id}: accepted_intents must include primary intent"
+            )
+        temporal_values = {
+            "as_of": query.as_of,
+            "time_from": query.time_from,
+            "time_to": query.time_to,
+        }
+        for field_name, value in temporal_values.items():
+            if value is not None and value.tzinfo is None:
+                failures.append(
+                    f"{query.query_id}: {field_name} must include a timezone"
+                )
+        for field_name, values in (
+            ("accepted_time_from", query.accepted_time_from),
+            ("accepted_time_to", query.accepted_time_to),
+        ):
+            if any(value.tzinfo is None for value in values):
+                failures.append(
+                    f"{query.query_id}: {field_name} values must include a timezone"
+                )
+        if (
+            query.time_from is not None
+            and query.time_to is not None
+            and query.time_to < query.time_from
+        ):
+            failures.append(f"{query.query_id}: time_to precedes time_from")
+        if query.intent == PersonalMemoryQueryIntent.AS_OF and query.as_of is None:
+            failures.append(f"{query.query_id}: as_of intent requires as_of gold")
+        if query.as_of is not None and (
+            query.time_from is not None or query.time_to is not None
+        ):
+            failures.append(
+                f"{query.query_id}: point-in-time and interval gold cannot be combined"
+            )
+        for field_name, primary, alternatives in (
+            ("time_from", query.time_from, query.accepted_time_from),
+            ("time_to", query.time_to, query.accepted_time_to),
+        ):
+            if alternatives and primary is None:
+                failures.append(
+                    f"{query.query_id}: accepted_{field_name} requires primary "
+                    f"{field_name} gold"
+                )
+            if alternatives and primary not in alternatives:
+                failures.append(
+                    f"{query.query_id}: accepted_{field_name} must include primary "
+                    f"{field_name} gold"
+                )
+        if relation_benchmark and (
+            query.time_from is not None or query.time_to is not None
+        ) and query.intent != PersonalMemoryQueryIntent.HISTORY:
+            failures.append(
+                f"{query.query_id}: past relation interval requires history intent"
             )
         required_fixtures = [
             fixtures_by_id[memory_id]

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from doppel_memory.consolidation import (
     ConsolidationRunner,
@@ -2533,10 +2534,58 @@ async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> 
     assert "interrogative endpoint from the hint" in request.instructions
     assert "Echo them unchanged" in request.instructions
     assert "Grammatical past tense" in request.instructions
-    assert "enduring fact or" in request.instructions
-    assert planner.version.startswith("11.")
+    assert "enduring attribution" in request.instructions
+    assert planner.version.startswith("12.")
     assert request.output_schema["title"] == "PersonalMemoryQueryDraft"
     assert "scopes" not in request.output_schema["properties"]
+
+
+async def test_reference_planner_projects_unknown_model_fields_without_authority(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    model = _StubStructuredModel(
+        {
+            "intent": "current",
+            "entity_mentions": ["相机"],
+            "scopes": ["other-owner"],
+            "answer": "private-output-marker",
+        }
+    )
+
+    draft = await ReferencePersonalMemoryQueryPlanner(model).plan(
+        PersonalMemoryQueryRequest(
+            query="相机在哪里？",
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.intent == "current"
+    assert draft.entity_mentions == ["相机"]
+    assert draft.subject == "owner"
+    assert draft.subject_id == "owner"
+    assert "scopes" not in draft.model_dump()
+    assert "other-owner" not in caplog.text
+    assert "private-output-marker" not in caplog.text
+    assert "discarded 2 unknown output field(s)" in caplog.text
+
+
+async def test_reference_planner_rejects_output_with_no_known_fields() -> None:
+    model = _StubStructuredModel({"plan": {"intent": "current"}})
+
+    with pytest.raises(ValidationError):
+        await ReferencePersonalMemoryQueryPlanner(model).plan(
+            PersonalMemoryQueryRequest(query="相机在哪里？", now=NOW)
+        )
+
+
+async def test_reference_projection_keeps_temporal_cross_field_validation() -> None:
+    model = _StubStructuredModel({"intent": "as_of", "debug": "discard-me"})
+
+    with pytest.raises(ValidationError, match="as_of timestamp"):
+        await ReferencePersonalMemoryQueryPlanner(model).plan(
+            PersonalMemoryQueryRequest(query="昨天相机在哪里？", now=NOW)
+        )
 
 
 def test_query_draft_normalizes_common_temporal_status_aliases() -> None:

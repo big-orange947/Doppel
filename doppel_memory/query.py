@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import math
 import re
 import unicodedata
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -58,6 +59,8 @@ from doppel_memory.vector import (
     SemanticIndex,
     TemporalSemanticIndex,
 )
+
+logger = logging.getLogger(__name__)
 
 QueryIntent = Literal[
     "lookup", "current", "history", "planned", "list", "count", "as_of"
@@ -254,13 +257,19 @@ class PersonalMemoryQueryPlanner(Protocol):
 REFERENCE_PERSONAL_MEMORY_QUERY_INSTRUCTIONS = """\
 Plan retrieval over already-extracted personal memories. Return one structured query
 draft and never choose read scopes, Store operations, memory IDs, lifecycle actions, or
-an answer. Use current for facts true now, planned only for unfulfilled future plans,
-history only when the user asks for superseded or ended prior states, or completed
-historical occurrences; use list for episode enumeration, count for episode counts,
-and as_of only with an explicit point in time. Use lookup for an enduring fact or
-relationship that is presently known, even when it was established in the past.
-Grammatical past tense or asking about origin, authorship, attribution, or who
-performed an action does not by itself make a query history. Preserve a concise semantic search_text for
+an answer. Use current for a mutable state or relationship whose unqualified question
+normally asks what is true now, even when the question omits a word such as "now".
+Use lookup for an enduring attribution, provenance, identity, or other fact whose answer
+does not become historical merely because it was established by a completed action.
+Grammatical past tense or asking about origin, authorship, recommendation, purchase,
+issuance, birth, or who performed an action does not by itself make a query history.
+Use history only when the user asks for a superseded or ended prior state, a completed
+occurrence in an explicitly historical context, or an explicit past interval. Use
+planned only for unfulfilled future plans, list for episode enumeration, and count for
+episode counts. Use as_of only for an explicit point in time. A calendar year or month
+without a day is an interval, not an arbitrary representative point: express it with
+time_from/time_to and a compatible intent. Likewise preserve before, after, and during
+as interval bounds instead of inventing one as_of instant. Preserve a concise semantic search_text for
 ordinary lookup/list questions. Omit topic_keys unless the host's extracted memories
 use one explicit stable slot that the question names exactly; topic_keys are hard
 filters, not guesses or synonyms. Use episode memory type only for occurrence
@@ -294,7 +303,10 @@ entity does not by itself make that predicate ambiguous. Compare types with the
 requested meaning, endpoint roles, and explicit exclusions, not mere entity overlap.
 Select a type only when that requested meaning specifically supports it. Do not
 choose a more specific type for a broad question, treat related types as equivalent,
-or assume that selecting a type proves a fact exists. Leave relation_types empty
+or assume that selecting a type proves a fact exists. For one requested predicate,
+emit the smallest supported candidate set: normally one type when one definition fits,
+not every neighboring type that might retrieve indirect evidence. Emit multiple types
+only when the question itself asks for multiple predicates. Leave relation_types empty
 when the available list is empty or the requested meaning genuinely remains
 underdetermined among types. Keep entity anchors and relation hints even then.
 The input default_subject/default_subject_id are trusted host authority, not semantic
@@ -329,7 +341,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "11"
+    version = "12"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -352,13 +364,38 @@ class ReferencePersonalMemoryQueryPlanner:
         )
         if isinstance(raw, BaseModel):
             raw = raw.model_dump(warnings=False)
-        draft = PersonalMemoryQueryDraft.model_validate(raw)
+        draft = _project_reference_query_draft(raw)
         return draft.model_copy(
             update={
                 "subject": bound.default_subject,
                 "subject_id": bound.default_subject_id,
             }
         )
+
+
+def _project_reference_query_draft(raw: Any) -> PersonalMemoryQueryDraft:
+    """Remove model-invented fields without granting them execution authority.
+
+    ``json_object`` providers guarantee JSON syntax, not JSON Schema conformance.
+    Host projection makes unknown fields inert, while all recognized values and
+    cross-field temporal constraints still pass through the strict public model.
+    An object containing no recognized field is rejected instead of silently
+    becoming the all-default query draft.
+    """
+
+    if not isinstance(raw, Mapping):
+        return PersonalMemoryQueryDraft.model_validate(raw)
+    known = PersonalMemoryQueryDraft.model_fields.keys()
+    projected = {name: raw[name] for name in known if name in raw}
+    unknown_count = len(raw) - len(projected)
+    if not projected:
+        return PersonalMemoryQueryDraft.model_validate(raw)
+    if unknown_count:
+        logger.warning(
+            "reference query planner discarded %d unknown output field(s)",
+            unknown_count,
+        )
+    return PersonalMemoryQueryDraft.model_validate(projected)
 
 
 class DeterministicPersonalMemoryQueryPlanner:
