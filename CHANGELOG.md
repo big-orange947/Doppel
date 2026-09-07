@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add an offline whole-candidate reranking replay benchmark. It validates exact
+  source/dataset identity, sends opaque candidate IDs, requires a full score
+  permutation, never changes candidate membership, and compares raw questions
+  with separately reported model-suggested Planner context. No runtime default
+  changes and no external LLM calls are implied by this diagnostic.
+
 - Clarify Reference personal-query Planner v11 intent semantics: past-tense
   attribution/origin questions remain ordinary lookup unless the user requests
   a prior state or historical occurrence. Add dataset validation for lookup gold

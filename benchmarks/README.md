@@ -301,6 +301,37 @@ recall, then choose the smallest threshold among ties. Reports also disclose tra
 dirty paths and hash the benchmark plus the complete `doppel_memory` Python source
 tree, so an uncommitted implementation cannot masquerade as the recorded HEAD.
 
+### Offline whole-candidate reranking replay
+
+`personal_candidate_rerank_replay.py` reorders, but never adds or removes, the
+authorized final candidates from one existing retrieval profile. It is useful for
+testing whether a cross-encoder should become a memory-level ranker before adding a
+new runtime API. The source report and exact historical dataset must share a
+fingerprint. A Git revision can supply a historical dataset without overwriting the
+current draft:
+
+```powershell
+$env:HF_HUB_OFFLINE = "1"
+$env:TRANSFORMERS_OFFLINE = "1"
+python -m benchmarks.personal_candidate_rerank_replay `
+  --source-report data/doppel/candidate-union-experiment-20260906.json `
+  --dataset benchmarks/datasets/personal-relation-ablation-zh-v1.json `
+  --dataset-git-revision 6f316c3c0629ad2ad39bce4642d6862b61a4d44e `
+  --planner-report data/doppel/catalog-ablation/20260903T083605Z-a794943e/definitions.json `
+  --profile lexical_vector_relation_reranked `
+  --model D:/project/.doppel-eval-models/bge-reranker-v2-m3 `
+  --device cuda --batch-size 16 --include-planner-context `
+  --output data/doppel/personal-candidate-rerank-replay.json
+```
+
+The reranker receives opaque item IDs plus authorized memory content and extracted
+relation type. It cannot change the candidate set; malformed/missing score bindings
+abort the run. `raw_question` and `planner_context` are separate arms. Planner context
+is model-suggested retrieval context, not authority. The CLI uses a local
+SentenceTransformers model and records zero external LLM calls. Report latency is
+order-sensitive: the first arm includes model loading/cold start. Metrics retain the
+source dataset's development/post-hoc limitations and do not measure answer quality.
+
 ### Natural-language relation planner quality
 
 Retrieval ablation uses an oracle plan so graph quality is not confused with planner
