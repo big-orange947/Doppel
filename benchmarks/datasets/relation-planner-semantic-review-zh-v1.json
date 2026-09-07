@@ -1,9 +1,9 @@
 {
-  "version": "1.0.0-draft",
-  "dataset_fingerprint": "00faec11ddb3ce5c84dcaeb0251cc6e118bbac8f1f1da5c42eaf5fcc503f1ffd",
+  "version": "1.1.0-draft",
+  "dataset_fingerprint": "07e01ff865db4de156b692f4e31aac96348a1fc23bc4d3659807620dfacc6619",
   "status": "posthoc_diagnostic",
   "publication_ready": false,
-  "note": "Authored after inspecting the typed-v2 run. This is an engineering diagnosis, not untouched heldout validation. It reviews query observability using the host's label names, not hidden memory IDs or stored edge facts. It never changes the legacy scores, provider inputs, or retrieval gold. Ambiguous hard filters are risks, not accepted answers.",
+  "note": "Authored after inspecting the typed-v2 run and rebound after the v1.3 intent-label review; query texts and relation judgments are unchanged. This is an engineering diagnosis, not untouched heldout validation. It reviews query observability using the host's label names, not hidden memory IDs or stored edge facts. It never changes provider inputs or relation gold. Ambiguous hard filters are risks, not accepted answers.",
   "relation_groups": [
     {
       "name": "explicit_custody",

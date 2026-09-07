@@ -2,6 +2,11 @@
 
 ## Scope and reproducibility
 
+> Historical artifact note (2026-09-07): this report evaluated dataset v1.2 at
+> commit `6f316c3`. The working dataset later advanced to v1.3 after q31/q32/q60
+> intent-label review. Use the evaluated commit and recorded fingerprint to
+> reproduce these numbers; the v9 Planner report must not be rebound to v1.3.
+
 - Evaluated code: `6f316c3c0629ad2ad39bce4642d6862b61a4d44e`.
 - Dataset: personal-relation-ablation-zh-v1, 28 memories / 65 queries / 5 owners.
   Development 20, inspected heldout 23, adversarial 22. This is not unseen evidence
@@ -66,8 +71,9 @@ collection, and is not a randomized steady-state performance claim.
 
 1. q54's historical access-card memory is recovered and ranked first by union.
 2. q60's correct memory is discovered by both semantic and relation paths, but
-   trace records `temporal_status_mismatch` at the structural gate. Inspect the
-   plan/fixture time-status semantics; do not loosen time filters to pass this ID.
+   trace records `temporal_status_mismatch` at the structural gate. Follow-up review
+   identified a Planner/data-label defect: a currently known recommendation fact
+   was incorrectly allowed to use history intent. Runtime time filters remain strict.
 3. q36 ranks the correct passport-location memory first in union relation-reranked,
    but second when vector is added, behind passport-issuer information. Independent
    candidate recovery is solved here; unified ranking remains an open issue.

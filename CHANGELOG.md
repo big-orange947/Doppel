@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Clarify Reference personal-query Planner v11 intent semantics: past-tense
+  attribution/origin questions remain ordinary lookup unless the user requests
+  a prior state or historical occurrence. Add dataset validation for lookup gold
+  that incorrectly accepts history despite exclusively current/timeless targets;
+  correct seven attribution/origin queries and bump the relation draft to v1.3.
+
 - Add opt-in `candidate_fusion="union"` for personal retrieval and a matching
   ablation CLI switch/report field. Keep independent vector candidates when
   relations are soft hints; preserve explicit host relation constraints and

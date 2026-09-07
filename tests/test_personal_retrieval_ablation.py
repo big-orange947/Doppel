@@ -57,6 +57,7 @@ from benchmarks.personal_retrieval_ablation import (
     build_relation_reranker_threshold_sweep,
     load_ablation_dataset,
     substitute,
+    validate_dataset_semantics,
 )
 from doppel_memory import (
     DeterministicPersonalMemoryQueryPlanner,
@@ -429,6 +430,7 @@ class DatasetTest(unittest.TestCase):
 
     def test_relation_dataset_has_edge_gold_and_adversarial_coverage(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        self.assertEqual(dataset.suite_version, "1.3.0-draft")
         self.assertEqual(len(dataset.queries), 65)
         self.assertEqual(len(dataset.fixtures), 28)
         self.assertGreaterEqual(len(dataset.scopes), 5)
@@ -464,6 +466,17 @@ class DatasetTest(unittest.TestCase):
         )
         partitions = {query.partition for query in dataset.queries}
         self.assertEqual(partitions, {"dev", "heldout", "adversarial"})
+
+    def test_lookup_gold_does_not_accept_history_for_only_current_facts(self) -> None:
+        dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        query = next(item for item in dataset.queries if item.query_id == "rel-q60")
+        broken = query.model_copy(update={"accepted_intents": ["lookup", "history"]})
+        failures = validate_dataset_semantics(dataset.model_copy(update={
+            "queries": [broken if item.query_id == query.query_id else item
+                        for item in dataset.queries]
+        }))
+        self.assertTrue(any("exclusively current/timeless gold" in item
+                            for item in failures))
 
     def test_dataset_model_rejects_duplicate_gold_ids(self) -> None:
         dataset = load_ablation_dataset(RELATION_DATASET_PATH)

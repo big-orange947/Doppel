@@ -255,8 +255,12 @@ REFERENCE_PERSONAL_MEMORY_QUERY_INSTRUCTIONS = """\
 Plan retrieval over already-extracted personal memories. Return one structured query
 draft and never choose read scopes, Store operations, memory IDs, lifecycle actions, or
 an answer. Use current for facts true now, planned only for unfulfilled future plans,
-history for prior facts, list for episode enumeration, count for episode counts, and
-as_of only with an explicit point in time. Preserve a concise semantic search_text for
+history only when the user asks for superseded or ended prior states, or completed
+historical occurrences; use list for episode enumeration, count for episode counts,
+and as_of only with an explicit point in time. Use lookup for an enduring fact or
+relationship that is presently known, even when it was established in the past.
+Grammatical past tense or asking about origin, authorship, attribution, or who
+performed an action does not by itself make a query history. Preserve a concise semantic search_text for
 ordinary lookup/list questions. Omit topic_keys unless the host's extracted memories
 use one explicit stable slot that the question names exactly; topic_keys are hard
 filters, not guesses or synonyms. Use episode memory type only for occurrence
@@ -325,7 +329,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "10"
+    version = "11"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model

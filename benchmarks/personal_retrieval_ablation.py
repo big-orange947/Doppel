@@ -74,6 +74,7 @@ from doppel_memory.models import WriteStatus, utc_now
 from doppel_memory.query import (
     PersonalMemoryQueryDraft,
     PersonalMemoryQueryHit,
+    PersonalMemoryQueryIntent,
     PersonalMemoryQueryRequest,
     PersonalMemoryQueryResult,
     QueryIntent,
@@ -363,6 +364,7 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     """
     failures: list[str] = []
     scope_ids = {name: item.user_id for name, item in dataset.scopes.items()}
+    fixtures_by_id = {item.memory_id: item for item in dataset.fixtures}
     relation_benchmark = bool(dataset.requirements.get("relation_benchmark", False))
     for item in dataset.fixtures:
         scope_user = scope_ids.get(item.scope, "")
@@ -410,6 +412,28 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
         if query.accepted_intents and query.intent not in query.accepted_intents:
             failures.append(
                 f"{query.query_id}: accepted_intents must include primary intent"
+            )
+        required_fixtures = [
+            fixtures_by_id[memory_id]
+            for memory_id in query.required_memory_ids
+            if memory_id in fixtures_by_id
+        ]
+        if (
+            query.intent == PersonalMemoryQueryIntent.LOOKUP
+            and PersonalMemoryQueryIntent.HISTORY in query.accepted_intents
+            and required_fixtures
+            and query.as_of is None
+            and query.time_from is None
+            and query.time_to is None
+            and all(
+                item.temporal_status
+                in {MemoryTemporalStatus.CURRENT, MemoryTemporalStatus.TIMELESS}
+                for item in required_fixtures
+            )
+        ):
+            failures.append(
+                f"{query.query_id}: history intent cannot be accepted for exclusively "
+                "current/timeless gold without an explicit historical time constraint"
             )
         if query.accept_interval_covering_as_of and query.as_of is None:
             failures.append(

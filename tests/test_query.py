@@ -542,6 +542,41 @@ async def test_intent_supplies_missing_domain_neutral_temporal_filter() -> None:
     assert [hit.record.memory_id for hit in current.hits] == ["current-home"]
 
 
+async def test_enduring_attribution_fact_uses_lookup_not_history() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "known-origin",
+            "该物品的来源人是联系人。",
+            memory_type="fact",
+            temporal_status="current",
+            day=1,
+            valid_from=datetime(2025, 1, 1, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+    engine = PersonalMemoryQueryEngine(store)
+
+    lookup = await engine.query(
+        _DraftPlanner(intent="lookup", search_text="来源人 联系人"),
+        "该物品的来源人是谁？",
+        [SCOPE],
+        now=NOW,
+    )
+    mistaken_history = await engine.query(
+        _DraftPlanner(intent="history", search_text="来源人 联系人"),
+        "该物品的来源人是谁？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in lookup.hits] == ["known-origin"]
+    assert lookup.plan.temporal_statuses == []
+    assert mistaken_history.hits == []
+    assert mistaken_history.plan.temporal_statuses == ["historical"]
+
+
 async def test_as_of_query_can_read_superseded_record_only_inside_interval() -> None:
     store = InMemoryStore()
     await _put(
@@ -2497,6 +2532,9 @@ async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> 
     assert "already bound outside entity_mentions" in request.instructions
     assert "interrogative endpoint from the hint" in request.instructions
     assert "Echo them unchanged" in request.instructions
+    assert "Grammatical past tense" in request.instructions
+    assert "enduring fact or" in request.instructions
+    assert planner.version.startswith("11.")
     assert request.output_schema["title"] == "PersonalMemoryQueryDraft"
     assert "scopes" not in request.output_schema["properties"]
 
