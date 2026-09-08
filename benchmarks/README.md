@@ -168,6 +168,11 @@ checked-in generator output with:
 python -m benchmarks.build_personal_relation_v2 --check
 ```
 
+The first no-LLM live structural diagnostic is recorded in
+[personal relation v2 structural retrieval](reports/personal-relation-v2-structural-2026-09-09.md).
+It separates direct evidence, related context, and true no-evidence behavior; its
+typed-oracle result is a retrieval ceiling, not production Planner quality.
+
 The v2 split is preassigned, not secret: the public generator and gold remain
 `frozen=false` and `publication_ready=false` until an independent semantic review.
 Do not tune runtime code against its held-out/adversarial cases or describe them as a
