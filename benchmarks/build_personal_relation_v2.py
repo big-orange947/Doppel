@@ -658,9 +658,11 @@ def build_dataset() -> dict[str, Any]:
                     grades[memory_id] = 1
             if grade_kind == "current":
                 grades[scenario["ids"]["current"]] = 2
+                grades[scenario["ids"]["history"]] = 0
                 forbidden.add(scenario["ids"]["history"])
             elif grade_kind == "history":
                 grades[scenario["ids"]["history"]] = 2
+                grades[scenario["ids"]["current"]] = 0
                 forbidden.add(scenario["ids"]["current"])
             elif grade_kind == "secondary":
                 grades[scenario["ids"]["secondary"]] = 2
@@ -703,6 +705,7 @@ def build_dataset() -> dict[str, Any]:
             "min_scopes": 12,
             "complete_relevance_judgments": True,
             "complete_relation_type_labels": True,
+            "validate_direct_relation_evidence": True,
             "relevance_rubric": "0=irrelevant_or_unauthorized;1=related_context_not_proof;2=direct_answer_evidence",
             "related_context_categories": ["related_but_insufficient"],
             "partition_minimums": {"dev": 72, "heldout": 96, "adversarial": 72},

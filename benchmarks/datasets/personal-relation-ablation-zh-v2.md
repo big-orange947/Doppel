@@ -75,12 +75,15 @@ does not execute the generator. Semantic validation requires:
 - cross-scope memories to have grade 0;
 - every related-context case to contain grade 1 and no grade 2;
 - a relation-type label for every query;
+- every grade-2 memory to match the labeled relation and named entity;
+- every grade-2 memory to be valid at the query point or overlap its interval;
+- every forbidden memory to have relevance grade 0;
 - the declared minimum partition sizes.
 
 Draft.1 fingerprint:
 
 ```text
-b899720a02646cf316672dafd1cae3286ff4518a9406127e67cc07f646078d45
+b25528a20d6db8f798f528ecd0cbeedef55953f15db462711ee67045477d3805
 ```
 
 ## Before freezing

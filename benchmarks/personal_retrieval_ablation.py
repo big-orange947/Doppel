@@ -379,6 +379,9 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     complete_relation_labels = bool(
         dataset.requirements.get("complete_relation_type_labels", False)
     )
+    validate_direct_relation_evidence = bool(
+        dataset.requirements.get("validate_direct_relation_evidence", False)
+    )
     related_context_categories = {
         str(item)
         for item in dataset.requirements.get("related_context_categories", [])
@@ -432,6 +435,16 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     for query in dataset.queries:
         if query.partition == "deferred_cross_subject":
             continue
+        unknown_gold_ids = sorted(
+            set(query.required_memory_ids)
+            .union(query.forbidden_memory_ids)
+            .difference(fixture_id_set)
+        )
+        if unknown_gold_ids:
+            failures.append(
+                f"{query.query_id}: gold references unknown memories: "
+                f"{unknown_gold_ids[:5]}"
+            )
         if complete_relevance:
             judged_ids = set(query.relevance_grades)
             if judged_ids != fixture_id_set:
@@ -456,6 +469,16 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
                 failures.append(
                     f"{query.query_id}: cross-scope memories must have relevance "
                     f"grade 0: {leaked_positive[:5]}"
+                )
+            forbidden_positive = sorted(
+                memory_id
+                for memory_id in query.forbidden_memory_ids
+                if query.relevance_grades.get(memory_id, 0) > 0
+            )
+            if forbidden_positive:
+                failures.append(
+                    f"{query.query_id}: forbidden memories must have relevance "
+                    f"grade 0: {forbidden_positive[:5]}"
                 )
             if query.category in related_context_categories:
                 if query.required_memory_ids:
@@ -489,6 +512,85 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
                 f"{query.query_id}: relation benchmark query requires an entity "
                 "or relation anchor"
             )
+        if validate_direct_relation_evidence:
+            relation_labels = set(
+                dataset.relation_type_labels.get(query.query_id, [])
+            )
+            if not relation_labels:
+                failures.append(
+                    f"{query.query_id}: direct relation validation requires at "
+                    "least one relation type label"
+                )
+            direct_ids = {
+                memory_id
+                for memory_id, grade in query.relevance_grades.items()
+                if grade == 2
+            }
+            for memory_id in sorted(direct_ids.intersection(fixture_id_set)):
+                memory = fixtures_by_id[memory_id]
+                if memory.relation is None:
+                    failures.append(
+                        f"{query.query_id}: direct evidence {memory_id} requires "
+                        "relation gold"
+                    )
+                    continue
+                if memory.relation.relation_type not in relation_labels:
+                    failures.append(
+                        f"{query.query_id}: direct evidence {memory_id} relation "
+                        f"type {memory.relation.relation_type!r} is outside query "
+                        f"labels {sorted(relation_labels)}"
+                    )
+                if (
+                    query.entity_mentions
+                    and memory.relation.source_entity not in query.entity_mentions
+                ):
+                    failures.append(
+                        f"{query.query_id}: direct evidence {memory_id} source "
+                        f"entity {memory.relation.source_entity!r} is outside query "
+                        f"entities {query.entity_mentions}"
+                    )
+                if query.as_of is not None and (
+                    (
+                        memory.valid_from is not None
+                        and query.as_of < memory.valid_from
+                    )
+                    or (
+                        memory.valid_to is not None
+                        and query.as_of > memory.valid_to
+                    )
+                ):
+                    failures.append(
+                        f"{query.query_id}: direct evidence {memory_id} is not "
+                        "valid at as_of"
+                    )
+                if query.time_from is not None and query.time_to is not None and (
+                    (
+                        memory.valid_from is not None
+                        and memory.valid_from > query.time_to
+                    )
+                    or (
+                        memory.valid_to is not None
+                        and memory.valid_to < query.time_from
+                    )
+                ):
+                    failures.append(
+                        f"{query.query_id}: direct evidence {memory_id} does not "
+                        "overlap the query interval"
+                    )
+                if query.intent == PersonalMemoryQueryIntent.CURRENT and (
+                    (
+                        memory.valid_from is not None
+                        and query.now < memory.valid_from
+                    )
+                    or (
+                        memory.valid_to is not None
+                        and query.now > memory.valid_to
+                    )
+                ):
+                    failures.append(
+                        f"{query.query_id}: direct evidence {memory_id} is not "
+                        "valid at query now"
+                    )
         if query.accepted_intents and query.intent not in query.accepted_intents:
             failures.append(
                 f"{query.query_id}: accepted_intents must include primary intent"

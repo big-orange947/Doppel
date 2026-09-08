@@ -480,7 +480,7 @@ class DatasetTest(unittest.TestCase):
             )
         self.assertEqual(
             dataset.fingerprint,
-            "b899720a02646cf316672dafd1cae3286ff4518a9406127e67cc07f646078d45",
+            "b25528a20d6db8f798f528ecd0cbeedef55953f15db462711ee67045477d3805",
         )
 
     def test_expanded_relation_v2_distinguishes_context_from_answer_evidence(
@@ -583,6 +583,54 @@ class DatasetTest(unittest.TestCase):
                             for item in missing_failures))
         self.assertTrue(any("cross-scope memories" in item
                             for item in leaked_failures))
+
+    def test_direct_relation_validator_rejects_wrong_relation_and_time(self) -> None:
+        dataset = load_ablation_dataset(RELATION_V2_DATASET_PATH)
+        relation_query = next(
+            query for query in dataset.queries if query.query_id.endswith("q05")
+        )
+        relation_memory_id = relation_query.required_memory_ids[0]
+        relation_memory = next(
+            item for item in dataset.fixtures
+            if item.memory_id == relation_memory_id
+        )
+        assert relation_memory.relation is not None
+        wrong_relation = relation_memory.model_copy(update={
+            "relation": relation_memory.relation.model_copy(update={
+                "relation_type": "BORROWED_FROM"
+            })
+        })
+        relation_failures = validate_dataset_semantics(dataset.model_copy(update={
+            "fixtures": [
+                wrong_relation if item.memory_id == relation_memory_id else item
+                for item in dataset.fixtures
+            ]
+        }))
+
+        temporal_query = next(
+            query for query in dataset.queries if query.query_id.endswith("q04")
+        )
+        temporal_memory_id = temporal_query.required_memory_ids[0]
+        temporal_memory = next(
+            item for item in dataset.fixtures
+            if item.memory_id == temporal_memory_id
+        )
+        assert temporal_query.as_of is not None
+        wrong_time = temporal_memory.model_copy(update={
+            "valid_from": temporal_query.as_of.replace(year=2027),
+            "valid_to": None,
+        })
+        time_failures = validate_dataset_semantics(dataset.model_copy(update={
+            "fixtures": [
+                wrong_time if item.memory_id == temporal_memory_id else item
+                for item in dataset.fixtures
+            ]
+        }))
+
+        self.assertTrue(any("outside query labels" in item
+                            for item in relation_failures))
+        self.assertTrue(any("not valid at as_of" in item
+                            for item in time_failures))
 
     def test_reproducibility_command_hashes_model_query_prefixes(self) -> None:
         command = _sanitized_command(

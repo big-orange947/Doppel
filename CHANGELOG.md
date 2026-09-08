@@ -8,8 +8,9 @@
   predicates, unknown entities, and context-without-proof cases. Every query carries
   complete corpus-wide 0/1/2 relevance judgments so future runs can report nDCG
   without treating missing labels as irrelevant. A deterministic checked-in generator,
-  semantic integrity gates, and annotation notes keep it reproducible; it remains
-  explicitly unfrozen pending independent review.
+  semantic integrity gates, and annotation notes keep it reproducible. Direct evidence
+  is checked against relation, entity, and query time, while forbidden evidence must
+  remain grade 0; the dataset remains explicitly unfrozen pending independent review.
 - Add a domain-neutral explicit-calendar grounding layer between Planner output and
   trusted plan binding. One numeric full date or month/day becomes an `as_of` point;
   one numeric calendar month or year becomes a closed interval. Existing provider
