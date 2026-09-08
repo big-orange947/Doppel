@@ -13,6 +13,11 @@
 - Bump the deterministic personal-memory Planner to v5. It shares the same calendar
   parser, contains no entity/domain vocabulary, and removes recognized calendar text
   from lexical search text without introducing benchmark-specific query rules.
+- Split replay-benchmark attribution between the immutable source Planner draft and
+  the effective bound plan. Planner hard gates continue to expose original intent,
+  temporal, entity, relation, and hard-filter misses, while retrieval attribution
+  uses the post-binding structure. Reports count calendar-grounding recoveries rather
+  than incorrectly crediting those repairs to the source Planner.
 - Add an opt-in, bounded personal-memory reranking protocol after authoritative
   Store reload and all scope, subject, authority, lifecycle, temporal, score, and
   optional evidence gates. It exposes only the raw question, opaque request-local

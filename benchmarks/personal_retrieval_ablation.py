@@ -78,6 +78,7 @@ from doppel_memory.query import (
     PersonalMemoryQueryDraft,
     PersonalMemoryQueryHit,
     PersonalMemoryQueryIntent,
+    PersonalMemoryQueryPlan,
     PersonalMemoryQueryRequest,
     PersonalMemoryQueryResult,
     QueryIntent,
@@ -705,6 +706,11 @@ class BenchmarkReportPlanner:
 
     def has_successful_draft(self, query: str) -> bool:
         return query.strip() in self._drafts
+
+    def source_draft(self, query: str) -> PersonalMemoryQueryDraft | None:
+        """Return the immutable replay input for source/effective attribution."""
+
+        return self._drafts.get(query.strip())
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
@@ -1853,6 +1859,12 @@ async def _run_case(
     started = perf_counter()
     bound_scopes = [scopes[name] for name in query.scopes]
     allowed_scope_keys = {scope.scope_key for scope in bound_scopes}
+    source_planner_draft = (
+        planner.source_draft(query.query)
+        if mode == PLANNER_MODE_REPORT
+        and isinstance(planner, BenchmarkReportPlanner)
+        else None
+    )
     try:
         result = await engine.query(
             planner,
@@ -1906,6 +1918,8 @@ async def _run_case(
             "planner_failures": (
                 ["source_planner_failure"] if source_planner_failure else []
             ),
+            "effective_plan_failures": [],
+            "time_grounding_recovered": False,
             "retrieval_failures": [],
             "security_failures": [],
             "contribution": {
@@ -1924,56 +1938,62 @@ async def _run_case(
         latency_ms,
         allowed_scope_keys=allowed_scope_keys,
         mode=mode,
+        source_planner_draft=source_planner_draft,
     )
+
+
+def _intent_ok(actual_intent: str, query: AblationQuery) -> bool:
+    accepted = query.accepted_intents or list(
+        INTENT_ALIASES.get(query.intent, (query.intent,))
+    )
+    return str(actual_intent) in accepted
 
 
 def _expected_intent_ok(
     result: PersonalMemoryQueryResult, query: AblationQuery
 ) -> bool:
-    accepted = query.accepted_intents or list(
-        INTENT_ALIASES.get(query.intent, (query.intent,))
-    )
-    return str(result.plan.intent) in accepted
+    return _intent_ok(str(result.plan.intent), query)
 
 
-def _planner_report_failures(
-    result: PersonalMemoryQueryResult, query: AblationQuery
+def _planner_structure_failures(
+    plan: PersonalMemoryQueryDraft | PersonalMemoryQueryPlan,
+    query: AblationQuery,
 ) -> list[str]:
-    """Compare a replayed natural-language plan with labeled query structure."""
+    """Compare one source/effective structure with labeled query semantics."""
 
     failures: list[str] = []
-    if not _expected_intent_ok(result, query):
+    if not _intent_ok(str(plan.intent), query):
         failures.append("planner_intent_miss")
     temporal_ok = True
     if query.as_of is not None:
-        plan_as_of = result.plan.as_of
+        plan_as_of = plan.as_of
         point_ok = plan_as_of is not None and plan_as_of.date() == query.as_of.date()
         interval_ok = bool(
             query.accept_interval_covering_as_of
-            and result.plan.time_from is not None
-            and result.plan.time_to is not None
-            and result.plan.time_from <= query.as_of <= result.plan.time_to
+            and plan.time_from is not None
+            and plan.time_to is not None
+            and plan.time_from <= query.as_of <= plan.time_to
         )
         temporal_ok = point_ok or interval_ok
-    elif result.plan.as_of is not None:
+    elif plan.as_of is not None:
         temporal_ok = False
     if query.time_from is not None:
-        temporal_ok = temporal_ok and result.plan.time_from == query.time_from
+        temporal_ok = temporal_ok and plan.time_from == query.time_from
     if query.time_to is not None:
-        temporal_ok = temporal_ok and result.plan.time_to == query.time_to
+        temporal_ok = temporal_ok and plan.time_to == query.time_to
     if not temporal_ok:
         failures.append("planner_temporal_miss")
     expected_entities, unexpected_entities = _planner_term_matches(
-        query.entity_mentions, list(result.plan.entity_mentions)
+        query.entity_mentions, list(plan.entity_mentions)
     )
     if expected_entities != len(query.entity_mentions) or unexpected_entities:
         failures.append("planner_entity_miss")
     expected_relations, unexpected_relations = _planner_term_matches(
-        query.relation_hints, list(result.plan.relation_hints), exact=True
+        query.relation_hints, list(plan.relation_hints), exact=True
     )
     if expected_relations != len(query.relation_hints) or unexpected_relations:
         failures.append("planner_relation_miss")
-    if result.plan.memory_types or result.plan.topic_keys:
+    if plan.memory_types or plan.topic_keys:
         failures.append("planner_hard_filter_miss")
     return failures
 
@@ -2034,6 +2054,7 @@ def _evaluate_result(
     *,
     allowed_scope_keys: set[str],
     mode: str = PLANNER_MODE_DETERMINISTIC,
+    source_planner_draft: PersonalMemoryQueryDraft | None = None,
 ) -> dict[str, Any]:
     hits: list[PersonalMemoryQueryHit] = list(result.hits)
     hit_set = {hit.record.memory_id for hit in hits}
@@ -2046,15 +2067,22 @@ def _evaluate_result(
     agent_output_hits = 0
     plan_as_of = result.plan.as_of
     as_of_recognized = plan_as_of is not None
-    report_planner_failures = (
-        _planner_report_failures(result, query) if mode == PLANNER_MODE_REPORT else []
+    effective_report_plan_failures = (
+        _planner_structure_failures(result.plan, query)
+        if mode == PLANNER_MODE_REPORT
+        else []
+    )
+    source_report_planner_failures = (
+        _planner_structure_failures(source_planner_draft, query)
+        if mode == PLANNER_MODE_REPORT and source_planner_draft is not None
+        else effective_report_plan_failures
     )
     temporal_plan_is_trusted = mode in {
         PLANNER_MODE_ORACLE,
         PLANNER_MODE_ORACLE_TYPED,
     } or (
         mode == PLANNER_MODE_REPORT
-        and "planner_temporal_miss" not in report_planner_failures
+        and "planner_temporal_miss" not in effective_report_plan_failures
     )
     for hit in hits:
         record = hit.record
@@ -2093,6 +2121,9 @@ def _evaluate_result(
         inactive_is_invalid = record.state == MemoryState.REJECTED or (
             record.state in {MemoryState.EXPIRED, MemoryState.SUPERSEDED}
             and result.plan.intent not in {"history", "as_of"}
+            and result.plan.as_of is None
+            and getattr(result.plan, "time_from", None) is None
+            and getattr(result.plan, "time_to", None) is None
         )
         if inactive_is_invalid:
             inactive_rejections += 1
@@ -2133,12 +2164,22 @@ def _evaluate_result(
     if planner_intent_miss:
         planner_failures.append("planner_intent_miss")
     if mode == PLANNER_MODE_REPORT:
-        planner_failures = report_planner_failures
+        planner_failures = source_report_planner_failures
         planner_temporal_miss = "planner_temporal_miss" in planner_failures
         planner_interval_miss = False
         planner_intent_miss = "planner_intent_miss" in planner_failures
+    effective_plan_failures = (
+        effective_report_plan_failures
+        if mode == PLANNER_MODE_REPORT
+        else list(planner_failures)
+    )
+    time_grounding_recovered = bool(
+        {"planner_intent_miss", "planner_temporal_miss"}.intersection(
+            planner_failures
+        ).difference(effective_plan_failures)
+    )
     retrieval_failures: list[str] = []
-    retrieval_plan_is_trusted = mode != PLANNER_MODE_REPORT or not planner_failures
+    retrieval_plan_is_trusted = not effective_plan_failures
     if temporal_plan_is_trusted and temporal_violations:
         retrieval_failures.append("retrieval_temporal_failure")
     if forbidden and retrieval_plan_is_trusted:
@@ -2279,6 +2320,8 @@ def _evaluate_result(
         "planner_relation_miss": "planner_relation_miss" in planner_failures,
         "planner_hard_filter_miss": "planner_hard_filter_miss" in planner_failures,
         "planner_failures": planner_failures,
+        "effective_plan_failures": effective_plan_failures,
+        "time_grounding_recovered": time_grounding_recovered,
         "retrieval_failures": retrieval_failures,
         "security_failures": security_failures,
         "ambiguous": bool(result.ambiguous),
@@ -2339,6 +2382,15 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "error_count": len(errors),
         "source_planner_failure_count": sum(
             bool(case.get("source_planner_failure")) for case in cases
+        ),
+        "planner_structure_failure_case_count": sum(
+            bool(case.get("planner_failures")) for case in cases
+        ),
+        "effective_plan_failure_case_count": sum(
+            bool(case.get("effective_plan_failures")) for case in cases
+        ),
+        "time_grounding_recovery_count": sum(
+            bool(case.get("time_grounding_recovered")) for case in cases
         ),
         "successful_execution_count": len(valid),
         "metric_denominator_policy": "all_attempts_including_errors",

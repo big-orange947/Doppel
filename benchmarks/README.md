@@ -612,6 +612,14 @@ valid/failed attempt counts, zero replay provider calls, and candidate-type exec
 semantics. Replaying an older report tests the current engine with those stored
 drafts; it does not measure the newer Planner prompt.
 
+Replay cases keep two structural views. `planner_failures` is evaluated against the
+immutable source draft, so an engine-side calendar repair cannot make the source
+Planner look more accurate. `effective_plan_failures` evaluates the bound plan used by
+retrieval, and `time_grounding_recovered`/`time_grounding_recovery_count` identifies
+cases where generic calendar grounding removed a source intent/time failure. Temporal
+and retrieval failures are attributed against the effective plan, while Planner hard
+gates continue to report the original model error.
+
 ```bash
 uv run python -m benchmarks.personal_retrieval_ablation `
   --dataset benchmarks/datasets/personal-relation-ablation-zh-v1.json `

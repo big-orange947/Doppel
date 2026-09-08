@@ -1244,6 +1244,64 @@ class DirectScanTest(unittest.IsolatedAsyncioTestCase):
 
 
 class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
+    async def test_report_keeps_source_planner_miss_after_time_grounding(self) -> None:
+        source_dataset = load_ablation_dataset(RELATION_DATASET_PATH)
+        query = next(
+            item for item in source_dataset.queries if item.query_id == "rel-q54"
+        )
+        dataset = source_dataset.model_copy(update={"queries": [query]})
+        payload = {
+            "dataset": {"fingerprint": dataset.fingerprint},
+            "planner": {"name": "tests.source-planner", "version": "1"},
+            "cases": [
+                {
+                    "query": query.query,
+                    "actual": {
+                        "intent": "current",
+                        "search_text": "门禁卡",
+                        "temporal_statuses": ["current", "timeless"],
+                        "entity_mentions": query.entity_mentions,
+                        "relation_hints": query.relation_hints,
+                    },
+                    "error": "",
+                }
+            ],
+        }
+        scopes = {name: item.to_scope() for name, item in dataset.scopes.items()}
+        store = InMemoryStore()
+        for item in dataset.fixtures:
+            await store.put(_memory_record(item, scopes[item.scope], utc_now()))
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "planner.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            report = await _run_profiles(
+                store=store,
+                scopes=scopes,
+                dataset=dataset,
+                profiles=("lexical",),
+                semantic_by_source={},
+                relation_index=None,
+                graph=None,
+                planner_modes=(PLANNER_MODE_REPORT,),
+                planner_report=path,
+            )
+
+        case = report["cases"][0]
+        assert case["actual_intent"] == "as_of"
+        assert case["as_of_recognized"]
+        assert case["missing"] == []
+        assert case["planner_failures"] == [
+            "planner_intent_miss",
+            "planner_temporal_miss",
+        ]
+        assert case["effective_plan_failures"] == []
+        assert case["time_grounding_recovered"]
+        metrics = report["profiles"][PLANNER_MODE_REPORT]["lexical"]
+        assert metrics["planner_structure_failure_case_count"] == 1
+        assert metrics["effective_plan_failure_case_count"] == 0
+        assert metrics["time_grounding_recovery_count"] == 1
+
     async def test_report_trace_preserves_replay_results_and_source_failure(
         self,
     ) -> None:
