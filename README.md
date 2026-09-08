@@ -632,6 +632,13 @@ Store 回源、scope/主体/权限/生命周期/时间门以及可选证据校�
 不能选择读哪些用户、memory ID、Store 操作或最终答案。engine 会把它重新绑定到 host 明确传入的
 exact scopes 和可信 subject，同一次查询禁止跨 user_id。
 
+Planner 输出与可信 plan 绑定之间还有一层领域无关的显式日历校验。它只处理单个数字日期表达式：
+完整日期以及缺年份的“月日”绑定为 `as_of`（后者从可信 `now` 取得年份），单个月或年份绑定为
+闭区间；如果模型已经给出时间坐标，则不覆盖坐标，只修正 `current + 过去区间` 这类自相矛盾的
+查询形态。`count/list/planned` 保留原意图但仍应用时间坐标。非法日期或包含多个日期的复杂问句
+不会被这一层猜成某个范围，仍交给完整 Planner 处理。这里不读取物品、人名或业务词，因此不是
+针对 benchmark 问句的关键词补丁。
+
 线上接入可以显式用 `FallbackPersonalMemoryQueryPlanner(reference, deterministic)`
 包住模型 Planner。它只调用主 Planner 一次；主调用或 schema 校验失败后才执行宿主选择的
 fallback，并把 `fallback_used:<primary>-><fallback>:<error type>` 写入最终 plan 的

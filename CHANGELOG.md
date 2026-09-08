@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add a domain-neutral explicit-calendar grounding layer between Planner output and
+  trusted plan binding. One numeric full date or month/day becomes an `as_of` point;
+  one numeric calendar month or year becomes a closed interval. Existing provider
+  coordinates are never overwritten, while contradictory lookup/current/history
+  shapes are canonicalized before temporal gates. Count/list/planned intent stays
+  intact, historical interval aggregation can inspect eligible inactive evidence,
+  and relation retrieval receives the interval instead of silently querying `now`.
+  Invalid or multiple date expressions remain Planner-owned rather than guessed.
+- Bump the deterministic personal-memory Planner to v5. It shares the same calendar
+  parser, contains no entity/domain vocabulary, and removes recognized calendar text
+  from lexical search text without introducing benchmark-specific query rules.
 - Add an opt-in, bounded personal-memory reranking protocol after authoritative
   Store reload and all scope, subject, authority, lifecycle, temporal, score, and
   optional evidence gates. It exposes only the raw question, opaque request-local

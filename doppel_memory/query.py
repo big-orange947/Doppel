@@ -9,6 +9,7 @@ import logging
 import math
 import re
 import unicodedata
+from calendar import monthrange
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -475,7 +476,7 @@ class DeterministicPersonalMemoryQueryPlanner:
     """Domain-neutral baseline for temporal and aggregation structure only."""
 
     name = "doppel.deterministic-personal-memory-query-planner"
-    version = "4"
+    version = "5"
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
@@ -495,6 +496,22 @@ class DeterministicPersonalMemoryQueryPlanner:
         if intent == PersonalMemoryQueryIntent.COUNT:
             memory_types = [PersonalMemoryType.EPISODE]
 
+        as_of: datetime | None = None
+        time_from: datetime | None = None
+        time_to: datetime | None = None
+        calendar_expression = _explicit_calendar_expression(query, now=bound.now)
+        if calendar_expression is not None:
+            expression_kind, expression_start, expression_end = calendar_expression
+            if expression_kind == "point":
+                as_of = expression_start
+                if intent in _GROUNDABLE_TEMPORAL_INTENTS:
+                    intent = PersonalMemoryQueryIntent.AS_OF
+            else:
+                time_from = expression_start
+                time_to = expression_end
+                if intent in _GROUNDABLE_TEMPORAL_INTENTS:
+                    intent = PersonalMemoryQueryIntent.HISTORY
+
         if intent == PersonalMemoryQueryIntent.CURRENT:
             temporal_statuses = [
                 MemoryTemporalStatus.CURRENT,
@@ -502,13 +519,10 @@ class DeterministicPersonalMemoryQueryPlanner:
             ]
         elif intent == PersonalMemoryQueryIntent.PLANNED:
             temporal_statuses = [MemoryTemporalStatus.PLANNED]
-        elif intent == PersonalMemoryQueryIntent.HISTORY:
+        elif intent == PersonalMemoryQueryIntent.HISTORY and not (
+            time_from is not None or time_to is not None
+        ):
             temporal_statuses = [MemoryTemporalStatus.HISTORICAL]
-
-        as_of = _explicit_as_of(query)
-        if as_of is not None:
-            intent = PersonalMemoryQueryIntent.AS_OF
-            temporal_statuses = []
 
         return PersonalMemoryQueryDraft(
             intent=intent,
@@ -519,6 +533,8 @@ class DeterministicPersonalMemoryQueryPlanner:
             subject=bound.default_subject,
             subject_id=bound.default_subject_id,
             as_of=as_of,
+            time_from=time_from,
+            time_to=time_to,
             explanation="domain-neutral temporal and aggregation rules",
         )
 
@@ -735,6 +751,7 @@ class PersonalMemoryQueryEngine:
             required_relation_types, request.available_relation_types
         )
         draft = PersonalMemoryQueryDraft.model_validate(await planner.plan(request))
+        draft = _ground_explicit_query_time(draft, request)
         if draft.confidence < self.config.minimum_planner_confidence:
             raise PersonalMemoryQueryPlanningError(
                 f"planner confidence {draft.confidence} is below minimum "
@@ -1544,7 +1561,12 @@ class PersonalMemoryQueryEngine:
     ]:
         assert self._relation_index is not None
         valid_at = plan.as_of
-        if valid_at is None and plan.intent != PersonalMemoryQueryIntent.HISTORY:
+        if (
+            valid_at is None
+            and plan.intent != PersonalMemoryQueryIntent.HISTORY
+            and plan.time_from is None
+            and plan.time_to is None
+        ):
             valid_at = plan.now
         request = RelationQuery(
             query_text=plan.query,
@@ -1947,6 +1969,8 @@ def _visible_memory_states(plan: PersonalMemoryQueryPlan) -> frozenset[MemorySta
             PersonalMemoryQueryIntent.AS_OF,
         }
         or plan.as_of is not None
+        or plan.time_from is not None
+        or plan.time_to is not None
     ):
         return frozenset(
             {
@@ -2025,7 +2049,9 @@ def _is_query_record_eligible(
     valid_to = _metadata_time(record, "valid_to")
     if valid_from is None and valid_to is None:
         return False
-    if plan.intent == PersonalMemoryQueryIntent.HISTORY:
+    if plan.intent == PersonalMemoryQueryIntent.HISTORY or (
+        plan.time_from is not None or plan.time_to is not None
+    ):
         return _metadata_text(record, "temporal_status") == (
             MemoryTemporalStatus.HISTORICAL
         )
@@ -2272,9 +2298,147 @@ def _detect_intent(query: str) -> QueryIntent:
     return PersonalMemoryQueryIntent.LOOKUP
 
 
+_GROUNDABLE_TEMPORAL_INTENTS = frozenset(
+    {
+        PersonalMemoryQueryIntent.LOOKUP,
+        PersonalMemoryQueryIntent.CURRENT,
+        PersonalMemoryQueryIntent.HISTORY,
+        PersonalMemoryQueryIntent.AS_OF,
+    }
+)
+
+_CALENDAR_EXPRESSION_PATTERN = re.compile(
+    r"(?P<full_date>"
+    r"(?P<full_year>20\d{2})\s*(?:年|[-/])\s*"
+    r"(?P<full_month>\d{1,2})\s*(?:月|[-/])\s*"
+    r"(?P<full_day>\d{1,2})\s*日?"
+    r")"
+    r"|(?P<year_month>"
+    r"(?P<ym_year>20\d{2})\s*(?:年|[-/])\s*"
+    r"(?P<ym_month>\d{1,2})\s*月?"
+    r")"
+    r"|(?P<month_day>"
+    r"(?<!\d)(?P<md_month>\d{1,2})\s*月\s*"
+    r"(?P<md_day>\d{1,2})\s*日"
+    r")"
+    r"|(?P<year_only>(?<!\d)(?P<year>20\d{2})\s*年)"
+)
+
+
+def _explicit_calendar_expression(
+    query: str, *, now: datetime
+) -> tuple[Literal["point", "interval"], datetime, datetime] | None:
+    """Parse one unambiguous numeric calendar expression without domain semantics.
+
+    Multiple expressions are intentionally left to a full Planner because they may
+    denote a range, alternatives, comparisons, or separate events. Month/day forms
+    inherit the trusted query year; month and year forms produce closed UTC intervals.
+    """
+
+    normalized = unicodedata.normalize("NFKC", query)
+    matches = list(_CALENDAR_EXPRESSION_PATTERN.finditer(normalized))
+    if len(matches) != 1:
+        return None
+    match = matches[0]
+    try:
+        if match.group("full_date") is not None:
+            point = datetime(
+                int(match.group("full_year")),
+                int(match.group("full_month")),
+                int(match.group("full_day")),
+                12,
+                tzinfo=UTC,
+            )
+            return "point", point, point
+        if match.group("month_day") is not None:
+            point = datetime(
+                now.year,
+                int(match.group("md_month")),
+                int(match.group("md_day")),
+                12,
+                tzinfo=UTC,
+            )
+            return "point", point, point
+        if match.group("year_month") is not None:
+            year = int(match.group("ym_year"))
+            month = int(match.group("ym_month"))
+            last_day = monthrange(year, month)[1]
+            return (
+                "interval",
+                datetime(year, month, 1, tzinfo=UTC),
+                datetime(year, month, last_day, 23, 59, 59, tzinfo=UTC),
+            )
+        year = int(match.group("year"))
+        return (
+            "interval",
+            datetime(year, 1, 1, tzinfo=UTC),
+            datetime(year, 12, 31, 23, 59, 59, tzinfo=UTC),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _ground_explicit_query_time(
+    draft: PersonalMemoryQueryDraft,
+    request: PersonalMemoryQueryRequest,
+) -> PersonalMemoryQueryDraft:
+    """Bind explicit calendar coordinates and repair contradictory time shapes.
+
+    Provider-supplied coordinates are never overwritten. The binder only canonicalizes
+    lookup/current/history/as_of intent around those coordinates, or fills coordinates
+    when the provider omitted all of them and the raw query contains exactly one
+    unambiguous numeric calendar expression. Count/list/planned intent is preserved.
+    """
+
+    updates: dict[str, Any] = {}
+    marker = ""
+    has_as_of = draft.as_of is not None
+    has_interval = draft.time_from is not None or draft.time_to is not None
+
+    if has_as_of and not has_interval:
+        if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS and draft.intent != (
+            PersonalMemoryQueryIntent.AS_OF
+        ):
+            updates["intent"] = PersonalMemoryQueryIntent.AS_OF
+            updates["temporal_statuses"] = []
+            marker = "explicit_time_grounded:point"
+    elif has_interval and not has_as_of:
+        if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS and draft.intent != (
+            PersonalMemoryQueryIntent.HISTORY
+        ):
+            updates["intent"] = PersonalMemoryQueryIntent.HISTORY
+            updates["temporal_statuses"] = []
+            marker = "explicit_time_grounded:interval"
+    elif not has_as_of and not has_interval:
+        expression = _explicit_calendar_expression(request.query, now=request.now)
+        if expression is not None:
+            expression_kind, expression_start, expression_end = expression
+            if expression_kind == "point":
+                updates["as_of"] = expression_start
+                if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS:
+                    updates["intent"] = PersonalMemoryQueryIntent.AS_OF
+                    updates["temporal_statuses"] = []
+                marker = "explicit_time_grounded:point"
+            else:
+                updates["time_from"] = expression_start
+                updates["time_to"] = expression_end
+                if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS:
+                    updates["intent"] = PersonalMemoryQueryIntent.HISTORY
+                    updates["temporal_statuses"] = []
+                marker = "explicit_time_grounded:interval"
+
+    if not updates:
+        return draft
+    explanation = draft.explanation
+    if marker:
+        explanation = f"{explanation}; {marker}" if explanation else marker
+        updates["explanation"] = explanation
+    return draft.model_copy(update=updates)
+
+
 def _search_text(query: str) -> str:
     cleaned = unicodedata.normalize("NFKC", query).lower()
-    cleaned = re.sub(r"20\d{2}(?:[-/年]\d{1,2})?(?:[-/月]\d{1,2})?日?", "", cleaned)
+    cleaned = _CALENDAR_EXPRESSION_PATTERN.sub("", cleaned)
     for phrase in (
         "我",
         "用户",
@@ -2312,27 +2476,6 @@ def _search_text(query: str) -> str:
     ):
         cleaned = cleaned.replace(phrase, "")
     return re.sub(r"[\s，。！？；：、,.!?;:]+", "", cleaned).strip()
-
-
-def _explicit_as_of(query: str) -> datetime | None:
-    iso_match = re.search(
-        r"(?P<year>20\d{2})\s*[-/年]\s*"
-        r"(?P<month>\d{1,2})\s*[-/月]\s*"
-        r"(?P<day>\d{1,2})\s*日?",
-        query,
-    )
-    if iso_match is None:
-        return None
-    try:
-        return datetime(
-            int(iso_match.group("year")),
-            int(iso_match.group("month")),
-            int(iso_match.group("day")),
-            12,
-            tzinfo=UTC,
-        )
-    except ValueError:
-        return None
 
 
 def _metadata_text(record: MemoryRecord, key: str) -> str:

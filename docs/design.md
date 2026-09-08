@@ -783,6 +783,12 @@ ID、生命周期或答案；plan 绑定提问时刻、全部 exact scopes、sub
 多个 scope 可以属于同一个人，但一个 query 不允许跨 user ID。
 contact/custom subject ID 必须由 host 显式授权。
 
+在 draft 与 plan 之间，binder 对单个明确的数字日历表达式执行领域无关 grounding：日级表达式
+绑定为 point-in-time，月/年级表达式绑定为闭区间；缺年份的月日使用可信 `now` 的年份。已有
+provider 时间坐标不会被覆盖，但与坐标矛盾的 lookup/current/history/as_of 形态会先规范化，再进入
+时间门。count/list/planned 不被改写成别的意图。多个日期、非法日期、相对时间和自然语言范围
+保持 Planner-owned，binder 不依赖实体、关系或业务领域词典。
+
 默认 deterministic planner 只识别 current/history/planned/as_of/list/count 等封闭结构，不维护
 饮食、工作、居住、宠物、颜色等领域关键词到 topic_key 的映射。领域概念留在 search_text，由
 lexical/semantic retrieval 处理；固定 benchmark 文本不得反向进入查询代码。

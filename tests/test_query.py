@@ -984,13 +984,61 @@ async def test_deterministic_planner_parses_explicit_complete_dates(
 
 
 @pytest.mark.parametrize(
-    "query",
+    ("query", "expected_from", "expected_to"),
     [
-        "2024 年 6 月我住在哪里？",
-        "2024 年 2 月 30 日我住在哪里？",
+        (
+            "2024 年 6 月某设备归谁？",
+            datetime(2024, 6, 1, tzinfo=UTC),
+            datetime(2024, 6, 30, 23, 59, 59, tzinfo=UTC),
+        ),
+        (
+            "2024年某设备归谁？",
+            datetime(2024, 1, 1, tzinfo=UTC),
+            datetime(2024, 12, 31, 23, 59, 59, tzinfo=UTC),
+        ),
     ],
 )
-async def test_deterministic_planner_does_not_guess_incomplete_or_invalid_dates(
+async def test_deterministic_planner_parses_calendar_intervals(
+    query: str,
+    expected_from: datetime,
+    expected_to: datetime,
+) -> None:
+    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
+        PersonalMemoryQueryRequest(
+            query=query,
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.intent == PersonalMemoryQueryIntent.HISTORY
+    assert draft.as_of is None
+    assert draft.time_from == expected_from
+    assert draft.time_to == expected_to
+
+
+async def test_deterministic_planner_resolves_month_day_against_trusted_now() -> None:
+    draft = await DeterministicPersonalMemoryQueryPlanner().plan(
+        PersonalMemoryQueryRequest(
+            query="3月14日某设备在哪里？",
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.intent == PersonalMemoryQueryIntent.AS_OF
+    assert draft.as_of == datetime(2026, 3, 14, 12, tzinfo=UTC)
+    assert "3月14日" not in draft.search_text
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "2024 年 2 月 30 日某设备在哪里？",
+        "6月1日至7月1日某设备在哪里？",
+    ],
+)
+async def test_deterministic_planner_does_not_guess_invalid_or_multiple_dates(
     query: str,
 ) -> None:
     draft = await DeterministicPersonalMemoryQueryPlanner().plan(
@@ -1001,8 +1049,193 @@ async def test_deterministic_planner_does_not_guess_incomplete_or_invalid_dates(
         )
     )
 
-    assert draft.intent != PersonalMemoryQueryIntent.AS_OF
+    assert draft.intent == PersonalMemoryQueryIntent.LOOKUP
     assert draft.as_of is None
+    assert draft.time_from is None
+    assert draft.time_to is None
+
+
+@pytest.mark.parametrize("intent", ["count", "list", "planned"])
+async def test_explicit_calendar_grounding_preserves_non_temporal_intent(
+    intent: str,
+) -> None:
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+    plan = await engine.plan(
+        _DraftPlanner(intent=intent, search_text="任意实体"),
+        "2025年任意实体有哪些记录？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert plan.intent == intent
+    assert plan.time_from == datetime(2025, 1, 1, tzinfo=UTC)
+    assert plan.time_to == datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC)
+    assert plan.explanation == "explicit_time_grounded:interval"
+
+
+async def test_explicit_interval_count_can_read_superseded_episode() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "past-episode",
+            "任意实体发生过一次事件。",
+            memory_type="episode",
+            temporal_status="historical",
+            event_key="event-1",
+            day=1,
+            valid_from=datetime(2025, 4, 1, tzinfo=UTC),
+            valid_to=datetime(2025, 4, 1, 23, 59, 59, tzinfo=UTC),
+            state=MemoryState.SUPERSEDED,
+        ),
+    )
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(intent="count", search_text="", memory_types=["episode"]),
+        "2025年任意实体发生了几次？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.plan.intent == PersonalMemoryQueryIntent.COUNT
+    assert result.count.status == PersonalMemoryCountStatus.EXACT
+    assert result.count.value == 1
+    assert [hit.record.memory_id for hit in result.hits] == ["past-episode"]
+
+
+async def test_engine_repairs_provider_interval_intent_without_overwriting_time() -> None:
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+    expected_from = datetime(2024, 3, 1, tzinfo=UTC)
+    expected_to = datetime(2024, 3, 31, 23, 59, 59, tzinfo=UTC)
+    plan = await engine.plan(
+        _DraftPlanner(
+            intent="current",
+            search_text="任意实体",
+            temporal_statuses=["current"],
+            time_from=expected_from,
+            time_to=expected_to,
+            explanation="provider output",
+        ),
+        "任意实体当时在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert plan.intent == PersonalMemoryQueryIntent.HISTORY
+    assert plan.time_from == expected_from
+    assert plan.time_to == expected_to
+    assert plan.temporal_statuses == []
+    assert plan.explanation == (
+        "provider output; explicit_time_grounded:interval"
+    )
+
+
+async def test_engine_grounds_omitted_month_day_and_recovers_historical_record() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "earlier-holder",
+            "编号物件当时位于甲处。",
+            memory_type="state",
+            temporal_status="historical",
+            day=1,
+            valid_from=datetime(2026, 8, 1, tzinfo=UTC),
+            valid_to=datetime(2026, 8, 25, 23, 59, 59, tzinfo=UTC),
+            state=MemoryState.SUPERSEDED,
+        ),
+        _record(
+            "current-holder",
+            "编号物件现在位于乙处。",
+            memory_type="state",
+            temporal_status="current",
+            day=2,
+            valid_from=datetime(2026, 8, 26, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="",
+            temporal_statuses=["current", "timeless"],
+        ),
+        "8月20日编号物件在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.plan.intent == PersonalMemoryQueryIntent.AS_OF
+    assert result.plan.as_of == datetime(2026, 8, 20, 12, tzinfo=UTC)
+    assert result.plan.temporal_statuses == []
+    assert result.plan.explanation == "explicit_time_grounded:point"
+    assert [hit.record.memory_id for hit in result.hits] == ["earlier-holder"]
+
+
+async def test_engine_repairs_interval_shape_before_temporal_gate() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "interval-holder",
+            "编号物件在目标月份位于甲处。",
+            memory_type="state",
+            temporal_status="historical",
+            day=1,
+            valid_from=datetime(2026, 6, 1, tzinfo=UTC),
+            valid_to=datetime(2026, 6, 30, 23, 59, 59, tzinfo=UTC),
+            state=MemoryState.SUPERSEDED,
+        ),
+        _record(
+            "later-holder",
+            "编号物件后来位于乙处。",
+            memory_type="state",
+            temporal_status="current",
+            day=2,
+            valid_from=datetime(2026, 7, 1, tzinfo=UTC),
+            state=MemoryState.CONFIRMED,
+        ),
+    )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="current",
+            search_text="",
+            temporal_statuses=["current"],
+            time_from=datetime(2026, 6, 1, tzinfo=UTC),
+            time_to=datetime(2026, 6, 30, 23, 59, 59, tzinfo=UTC),
+        ),
+        "2026年6月编号物件在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert result.plan.intent == PersonalMemoryQueryIntent.HISTORY
+    assert result.plan.temporal_statuses == []
+    assert [hit.record.memory_id for hit in result.hits] == ["interval-holder"]
+
+
+async def test_relation_lookup_receives_interval_instead_of_present_instant() -> None:
+    relation_index = _RelationIndex([])
+    await PersonalMemoryQueryEngine(
+        InMemoryStore(), relation_index=relation_index
+    ).query(
+        _DraftPlanner(
+            intent="list",
+            search_text="任意实体",
+            entity_mentions=["任意实体"],
+        ),
+        "2025年任意实体有哪些记录？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    relation_request = relation_index.calls[0][0]
+    assert relation_request.valid_at is None
+    assert relation_request.time_from == datetime(2025, 1, 1, tzinfo=UTC)
+    assert relation_request.time_to == datetime(
+        2025, 12, 31, 23, 59, 59, tzinfo=UTC
+    )
 
 
 @pytest.mark.parametrize(
