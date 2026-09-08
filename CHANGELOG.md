@@ -8,6 +8,11 @@
   IDs, and authorized content; it can reorder but never add/remove candidates or
   participate in exact counts. Strict score binding, timeout/input bounds, stable
   ties, content-free diagnostics, and baseline-order fallback are covered by tests.
+- Wire the local benchmark cross-encoder into that runtime protocol and record a
+  paired PostgreSQL + pgvector + Neo4j/Graphiti + CUDA run. On the draft v1.5
+  relation set, candidate membership stayed identical while Recall@1 changed from
+  0.88 to 0.92 and MRR from 0.91 to 0.93; p50 changed from 97.608 ms to 204.837 ms.
+  All scope, temporal, provenance, and inactive-record safety counts stayed zero.
 - In opt-in candidate-union mode, preserve independent semantic recall when a
   structured non-count Planner draft has entity/relation anchors but an empty
   `search_text`: the raw question is used only for bounded candidate discovery and

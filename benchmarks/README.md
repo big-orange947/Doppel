@@ -348,6 +348,13 @@ runtime call. The report records whether the stage was requested and available p
 each case's content-free reranking summary; no profile may silently claim execution
 when the requested scorer is unavailable.
 
+The first paired live runtime result is recorded in
+[personal-memory-reranking-runtime-2026-09-08.md](reports/personal-memory-reranking-runtime-2026-09-08.md):
+on the draft v1.5 relation set, the scorer changed no candidate membership and moved
+Recall@1 from 0.88 to 0.92 and MRR from 0.91 to 0.93, while p50 latency moved from
+97.608 ms to 204.837 ms. Scope, temporal, provenance, and inactive-record failures
+remained zero. These are development results, not publication-ready claims.
+
 ### Natural-language relation planner quality
 
 Retrieval ablation uses an oracle plan so graph quality is not confused with planner
