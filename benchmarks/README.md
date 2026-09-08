@@ -311,11 +311,11 @@ tree, so an uncommitted implementation cannot masquerade as the recorded HEAD.
 ### Offline whole-candidate reranking replay
 
 `personal_candidate_rerank_replay.py` reorders, but never adds or removes, the
-authorized final candidates from one existing retrieval profile. It is useful for
-testing whether a cross-encoder should become a memory-level ranker before adding a
-new runtime API. The source report and exact historical dataset must share a
-fingerprint. A Git revision can supply a historical dataset without overwriting the
-current draft:
+authorized final candidates from one existing retrieval profile. It was used to
+decide whether a cross-encoder merited the provisional runtime
+`PersonalMemoryReranker` API; the replay remains the isolated before/after diagnostic.
+The source report and exact historical dataset must share a fingerprint. A Git
+revision can supply a historical dataset without overwriting the current draft:
 
 ```powershell
 $env:HF_HUB_OFFLINE = "1"
@@ -338,6 +338,15 @@ is model-suggested retrieval context, not authority. The CLI uses a local
 SentenceTransformers model and records zero external LLM calls. Report latency is
 order-sensitive: the first arm includes model loading/cold start. Metrics retain the
 source dataset's development/post-hoc limitations and do not measure answer quality.
+
+The main ablation runner can now exercise the same algorithm through the real runtime
+protocol by adding `--memory-reranker`. It reuses the explicitly configured local
+`--relation-reranker-model` and normalization, while keeping edge-level relation
+calibration observations separate. `--memory-reranker-max-candidates`,
+`--memory-reranker-max-input-chars`, and `--memory-reranker-timeout-seconds` bind the
+runtime call. The report records whether the stage was requested and available plus
+each case's content-free reranking summary; no profile may silently claim execution
+when the requested scorer is unavailable.
 
 ### Natural-language relation planner quality
 

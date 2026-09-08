@@ -41,6 +41,14 @@ from doppel_memory.models import (
     MemoryScope,
     MemoryState,
 )
+from doppel_memory.personal_rerank import (
+    PersonalMemoryRerankConfig,
+    PersonalMemoryReranker,
+    PersonalMemoryRerankItem,
+    PersonalMemoryRerankRequest,
+    PersonalMemoryRerankSummary,
+    score_personal_memories,
+)
 from doppel_memory.query_trace import (
     PersonalMemoryQueryTrace,
     TraceSource,
@@ -586,6 +594,9 @@ class PersonalMemoryQueryHit(BaseModel):
     lexical_score: float = Field(ge=0.0, le=1.0)
     semantic_score: float = Field(ge=0.0, le=1.0)
     relation_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    memory_reranker_score: float | None = Field(
+        default=None, ge=0.0, le=1.0, allow_inf_nan=False
+    )
     effective_at: datetime
     reasons: list[str] = Field(default_factory=list)
 
@@ -656,6 +667,7 @@ class PersonalMemoryQueryResult(BaseModel):
     complete: bool = True
     trace: PersonalMemoryQueryTrace | None = None
     evidence_verification: EvidenceVerificationSummary | None = None
+    memory_reranking: PersonalMemoryRerankSummary | None = None
 
 
 class PersonalMemoryQueryPlanningError(ValueError):
@@ -678,6 +690,8 @@ class PersonalMemoryQueryEngine:
         relation_index: RelationIndex | None = None,
         evidence_verifier: EvidenceVerifier | None = None,
         verification_config: EvidenceVerificationConfig | None = None,
+        memory_reranker: PersonalMemoryReranker | None = None,
+        rerank_config: PersonalMemoryRerankConfig | None = None,
     ) -> None:
         if not store.capabilities.pagination:
             raise NotImplementedError(
@@ -689,6 +703,8 @@ class PersonalMemoryQueryEngine:
         self._relation_index = relation_index
         self._evidence_verifier = evidence_verifier
         self._verification_config = verification_config or EvidenceVerificationConfig()
+        self._memory_reranker = memory_reranker
+        self._rerank_config = rerank_config or PersonalMemoryRerankConfig()
 
     async def plan(
         self,
@@ -1147,6 +1163,60 @@ class PersonalMemoryQueryEngine:
             ),
             reverse=True,
         )
+        memory_reranking = None
+        memory_rerank_scores: dict[tuple[str, str], float] = {}
+        if self._memory_reranker is not None:
+            rerank_window = (
+                []
+                if bound.intent == PersonalMemoryQueryIntent.COUNT
+                else matched[: self._rerank_config.max_candidates]
+            )
+            rerank_scores, memory_reranking = await score_personal_memories(
+                self._memory_reranker,
+                PersonalMemoryRerankRequest(
+                    question=bound.query,
+                    items=[
+                        PersonalMemoryRerankItem(
+                            item_id=f"item_{index}", content=item[0].content
+                        )
+                        for index, item in enumerate(rerank_window)
+                    ],
+                ),
+                self._rerank_config,
+                total_candidates=len(matched),
+            )
+            if memory_reranking.status == "completed":
+                ranked_window = sorted(
+                    enumerate(rerank_window),
+                    key=lambda indexed: (
+                        -rerank_scores[f"item_{indexed[0]}"],
+                        indexed[0],
+                    ),
+                )
+                rerank_window = [item for _, item in ranked_window]
+                matched = [*rerank_window, *matched[len(rerank_window) :]]
+                for index, item in ranked_window:
+                    score = rerank_scores[f"item_{index}"]
+                    memory_rerank_scores[
+                        (item[0].scope.scope_key, item[0].memory_id)
+                    ] = score
+                    item[5].append(f"memory_reranker_score:{score:.6f}")
+                    if trace is not None:
+                        trace.add(
+                            "ranking",
+                            "engine",
+                            "memory_reranker_scored",
+                            item[0],
+                            scores={"memory_reranker": score},
+                        )
+            elif memory_reranking.status != "not_run":
+                warnings.append("memory_reranking_" + memory_reranking.status)
+                if trace is not None:
+                    trace.add(
+                        "ranking",
+                        "engine",
+                        "memory_reranking_" + memory_reranking.status,
+                    )
         hits = [
             PersonalMemoryQueryHit(
                 record=record,
@@ -1162,6 +1232,9 @@ class PersonalMemoryQueryEngine:
                 lexical_score=lexical_score,
                 semantic_score=semantic_score,
                 relation_score=relation_score,
+                memory_reranker_score=memory_rerank_scores.get(
+                    (record.scope.scope_key, record.memory_id)
+                ),
                 effective_at=effective_at,
                 reasons=reasons,
             )
@@ -1198,6 +1271,7 @@ class PersonalMemoryQueryEngine:
             complete=complete,
             trace=trace.result() if trace is not None else None,
             evidence_verification=evidence_verification,
+            memory_reranking=memory_reranking,
         )
 
     async def query(

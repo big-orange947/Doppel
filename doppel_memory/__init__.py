@@ -144,6 +144,14 @@ from doppel_memory.persona import (
     PromptRenderer,
     ScopePolicy,
 )
+from doppel_memory.personal_rerank import (
+    PersonalMemoryRerankConfig,
+    PersonalMemoryReranker,
+    PersonalMemoryRerankItem,
+    PersonalMemoryRerankRequest,
+    PersonalMemoryRerankScore,
+    PersonalMemoryRerankSummary,
+)
 from doppel_memory.postgres_store import PostgreSQLStore
 from doppel_memory.processing import (
     EventProcessor,
@@ -368,6 +376,12 @@ __all__ = [
     "PersonalMemoryQueryResult",
     "PersonalMemoryQueryTrace",
     "PersonalMemoryQueryTraceEvent",
+    "PersonalMemoryRerankConfig",
+    "PersonalMemoryRerankItem",
+    "PersonalMemoryRerankRequest",
+    "PersonalMemoryRerankScore",
+    "PersonalMemoryRerankSummary",
+    "PersonalMemoryReranker",
     "PersonalMemoryRevisionKind",
     "PersonalMemoryType",
     "PostgreSQLStore",

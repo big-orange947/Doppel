@@ -619,6 +619,13 @@ if result.trace is not None:
 由接入方提供模型，只能剔除候选，不改变 scope、时间门或排名权重。
 目前完成离线协议验证，尚未证明真实模型的准确率收益，不支持精确计数查询。
 
+最高质量配置还可启用 [个人记忆级重排](docs/personal-memory-reranking.md)。它位于
+Store 回源、scope/主体/权限/生命周期/时间门以及可选证据校验之后，只把原始问题、匿名
+`item_N` 和已授权正文交给宿主提供的 cross-encoder。它只能调整有界候选窗口的顺序，不能增删
+候选或绕过门禁；异常、超时或 ID 绑定错误会保留原排序。默认关闭，精确计数不调用它。
+离线整候选重排实验在不改变候选集合的前提下提高了排序指标，因此这里提供协议和运行时落点，
+具体模型仍需在扩大后的 held-out/adversarial 数据上校准。
+
 默认 DeterministicPersonalMemoryQueryPlanner 只提供透明的时间、统计与查询形态规则，不包含饮食、
 工作、居住、宠物等领域词典；需要更开放的结构规划时，
 注入 ReferencePersonalMemoryQueryPlanner(MyStructuredModel())。planner 只能输出 scope-free draft，

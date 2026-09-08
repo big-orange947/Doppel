@@ -64,6 +64,9 @@ from doppel_memory import (
     MemoryState,
     PersonalMemoryQueryConfig,
     PersonalMemoryQueryEngine,
+    PersonalMemoryRerankConfig,
+    PersonalMemoryRerankRequest,
+    PersonalMemoryRerankScore,
     RelationRerankItem,
     RelationRerankRequest,
     RelationRerankScore,
@@ -1286,6 +1289,45 @@ def _record_relation_observation(
     )
 
 
+class _PersonalMemoryRerankerAdapter:
+    """Reuse one local cross-encoder without exposing memory authority fields."""
+
+    def __init__(self, provider: Any) -> None:
+        self._provider = provider
+        self.name = f"{provider.name}:personal-memory"
+        self.version = str(provider.version)
+
+    async def rerank(
+        self, request: PersonalMemoryRerankRequest
+    ) -> Sequence[PersonalMemoryRerankScore]:
+        raw_observations = getattr(self._provider, "_observations", None)
+        observations: list[dict[str, Any]] | None = (
+            raw_observations if isinstance(raw_observations, list) else None
+        )
+        before = len(observations) if observations is not None else None
+        raw_scores = await self._provider.rerank(
+            RelationRerankRequest(
+                query_text=request.question,
+                items=[
+                    RelationRerankItem(
+                        item_id=item.item_id,
+                        relation_type="PERSONAL_MEMORY_CANDIDATE",
+                        fact=item.content,
+                    )
+                    for item in request.items
+                ],
+            )
+        )
+        # Relation threshold calibration is edge-only. Do not mix this separate
+        # final-memory scoring stage into the provider's edge observations.
+        if observations is not None and before is not None and len(observations) == before + 1:
+            del observations[before:]
+        return [
+            PersonalMemoryRerankScore(item_id=item.item_id, score=item.score)
+            for item in raw_scores
+        ]
+
+
 def _scalar_float(value: Any) -> float:
     if hasattr(value, "item"):
         return float(value.item())
@@ -2187,6 +2229,15 @@ def _evaluate_result(
                     float(getattr(hit, "relation_score", 0.0)),
                     6,
                 ),
+                "memory_reranker_score": (
+                    round(float(memory_reranker_score), 6)
+                    if (
+                        memory_reranker_score := getattr(
+                            hit, "memory_reranker_score", None
+                        )
+                    ) is not None
+                    else None
+                ),
                 "reasons": list(hit.reasons),
             }
             for hit in hits
@@ -2233,6 +2284,13 @@ def _evaluate_result(
         "ambiguous": bool(result.ambiguous),
         "contribution": contribution,
         "warnings": list(result.warnings),
+        "memory_reranking": (
+            memory_reranking.model_dump(mode="json")
+            if (
+                memory_reranking := getattr(result, "memory_reranking", None)
+            ) is not None
+            else None
+        ),
     }
 
 
@@ -2648,6 +2706,10 @@ async def run_ablation(
     relation_reranker: Any | None = None,
     minimum_reranker_score: float | None = None,
     relation_reranker_reason: str = "",
+    memory_reranker: Any | None = None,
+    memory_reranker_requested: bool = False,
+    memory_reranker_reason: str = "",
+    memory_rerank_config: PersonalMemoryRerankConfig | None = None,
     trace_limit: int = 0,
     candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
 ) -> dict[str, Any]:
@@ -2680,6 +2742,12 @@ async def run_ablation(
         and minimum_reranker_score is None
     ):
         relation_reranker_reason = "relation reranker threshold is not configured"
+    if (
+        memory_reranker_requested
+        and memory_reranker is None
+        and not memory_reranker_reason
+    ):
+        memory_reranker_reason = "memory reranker model is not configured"
     started = perf_counter()
     store_dir = tempfile.mkdtemp(prefix="doppel-ablation-store-")
     store_path = Path(store_dir) / "store.sqlite3"
@@ -2801,6 +2869,10 @@ async def run_ablation(
             semantic_by_source=semantic_by_source,
             relation_index=relation_index,
             relation_reranked_index=relation_reranked_index,
+            memory_reranker=memory_reranker,
+            memory_reranker_requested=memory_reranker_requested,
+            memory_reranker_reason=memory_reranker_reason,
+            memory_rerank_config=memory_rerank_config,
             graph=graph,
             planner_modes=planner_modes,
             planner_report=planner_report,
@@ -2859,6 +2931,23 @@ async def run_ablation(
                     minimum_reranker_score,
                 ),
             },
+            "memory_reranker": {
+                "kind": "personal_memory_cross_encoder",
+                "requested": memory_reranker_requested,
+                "available": memory_reranker is not None,
+                "reason": (
+                    "not requested"
+                    if not memory_reranker_requested
+                    else memory_reranker_reason
+                ),
+                "metadata": {
+                    **_relation_reranker_runtime_metadata(relation_reranker, None),
+                    "config": (
+                        memory_rerank_config or PersonalMemoryRerankConfig()
+                    ).model_dump(mode="json"),
+                    "authority": "reorder_only_after_all_engine_gates",
+                },
+            },
         }
         report["elapsed_seconds"] = round(perf_counter() - started, 3)
         report["doppel_version"] = __version__
@@ -2903,6 +2992,10 @@ async def _run_profiles(
     relation_index: Any | None,
     graph: Any | None,
     relation_reranked_index: Any | None = None,
+    memory_reranker: Any | None = None,
+    memory_reranker_requested: bool = False,
+    memory_reranker_reason: str = "",
+    memory_rerank_config: PersonalMemoryRerankConfig | None = None,
     planner_modes: Sequence[str] = PLANNER_MODES,
     planner_report: Path | None = None,
     trace_limit: int = 0,
@@ -2975,6 +3068,14 @@ async def _run_profiles(
             }
             relation_required = profile in PROFILE_RELATION
             reranker_required = profile in PROFILE_RELATION_RERANKED
+            if memory_reranker_requested and memory_reranker is None:
+                per_profile[profile] = {
+                    "query_count": len(dataset.queries),
+                    "error_count": len(dataset.queries),
+                    "unavailable": True,
+                    "reason": memory_reranker_reason or "memory_reranker unavailable",
+                }
+                continue
             if (semantic_required and semantic is None) or (
                 relation_required and relation is None
             ):
@@ -2992,7 +3093,14 @@ async def _run_profiles(
                     "reason": f"{' + '.join(missing)} source unavailable (see runtime)",
                 }
                 continue
-            engine = _engines(store, semantic, relation, candidate_fusion=candidate_fusion)
+            engine = _engines(
+                store,
+                semantic,
+                relation,
+                candidate_fusion=candidate_fusion,
+                memory_reranker=memory_reranker,
+                memory_rerank_config=memory_rerank_config,
+            )
             warmup = next(
                 (
                     query
@@ -3198,6 +3306,9 @@ async def _run_profiles(
         report=report, dataset=dataset
     )
     report["candidate_fusion"] = candidate_fusion
+    report["memory_reranking_enabled"] = bool(
+        memory_reranker_requested and memory_reranker is not None
+    )
     return report
 
 
@@ -3442,12 +3553,16 @@ def _engines(
     relation: Any | None = None,
     *,
     candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
+    memory_reranker: Any | None = None,
+    memory_rerank_config: PersonalMemoryRerankConfig | None = None,
 ) -> PersonalMemoryQueryEngine:
     return PersonalMemoryQueryEngine(
         store,
         PersonalMemoryQueryConfig(candidate_fusion=candidate_fusion),
         semantic_index=semantic,
         relation_index=relation,
+        memory_reranker=memory_reranker,
+        rerank_config=memory_rerank_config,
     )
 
 
@@ -3888,6 +4003,17 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--relation-reranker-trust-remote-code", action="store_true")
+    parser.add_argument(
+        "--memory-reranker",
+        action="store_true",
+        help=(
+            "also use the configured local relation-reranker model for the "
+            "final authorized personal-memory candidate window"
+        ),
+    )
+    parser.add_argument("--memory-reranker-max-candidates", type=int, default=64)
+    parser.add_argument("--memory-reranker-max-input-chars", type=int, default=100_000)
+    parser.add_argument("--memory-reranker-timeout-seconds", type=float, default=30)
     parser.add_argument("--no-metamorphic", action="store_true")
     parser.add_argument("--candidate-fusion", choices=["relation_gate", "union"],
                         default="relation_gate")
@@ -4083,10 +4209,13 @@ async def _async_main(args: argparse.Namespace) -> int:
 
     relation_reranker: Any | None = None
     relation_reranker_reason = ""
-    if set(profiles) & set(PROFILE_RELATION_RERANKED):
+    relation_profile_reranker_requested = bool(
+        set(profiles) & set(PROFILE_RELATION_RERANKED)
+    )
+    if relation_profile_reranker_requested or args.memory_reranker:
         if not str(args.relation_reranker_model or "").strip():
             relation_reranker_reason = "relation reranker model is not configured"
-        elif args.relation_reranker_threshold is None:
+        elif relation_profile_reranker_requested and args.relation_reranker_threshold is None:
             relation_reranker_reason = "relation reranker threshold is not configured"
         elif (
             args.relation_reranker_backend == "sentence-transformers"
@@ -4131,6 +4260,18 @@ async def _async_main(args: argparse.Namespace) -> int:
                 await relation_reranker.warmup()
             except Exception as exc:  # noqa: BLE001 - structured unavailability
                 relation_reranker_reason = f"{type(exc).__name__}: {exc}"
+    memory_reranker = (
+        _PersonalMemoryRerankerAdapter(relation_reranker)
+        if args.memory_reranker
+        and relation_reranker is not None
+        and not relation_reranker_reason
+        else None
+    )
+    memory_rerank_config = PersonalMemoryRerankConfig(
+        max_candidates=args.memory_reranker_max_candidates,
+        max_input_chars=args.memory_reranker_max_input_chars,
+        timeout_seconds=args.memory_reranker_timeout_seconds,
+    )
     report = await run_ablation(
         dataset,
         profiles=profiles,
@@ -4144,6 +4285,10 @@ async def _async_main(args: argparse.Namespace) -> int:
         relation_reranker=relation_reranker,
         minimum_reranker_score=args.relation_reranker_threshold,
         relation_reranker_reason=relation_reranker_reason,
+        memory_reranker=memory_reranker,
+        memory_reranker_requested=args.memory_reranker,
+        memory_reranker_reason=relation_reranker_reason,
+        memory_rerank_config=memory_rerank_config,
         trace_limit=args.query_trace_limit,
         candidate_fusion=args.candidate_fusion,
     )

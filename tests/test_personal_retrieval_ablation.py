@@ -45,6 +45,7 @@ from benchmarks.personal_retrieval_ablation import (
     _FastEmbedRelationReranker,
     _local_model_manifest_metadata,
     _memory_record,
+    _PersonalMemoryRerankerAdapter,
     _relation_reranker_runtime_metadata,
     _run_case,
     _run_profiles,
@@ -65,6 +66,8 @@ from doppel_memory import (
     MemoryScope,
     PersonalMemoryQueryEngine,
     PersonalMemoryQueryRequest,
+    PersonalMemoryRerankItem,
+    PersonalMemoryRerankRequest,
     RelationCandidate,
     RelationRerankItem,
     RelationRerankRequest,
@@ -165,6 +168,32 @@ def _hit(
 
 
 class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
+    async def test_personal_memory_adapter_reuses_scorer_without_edge_observation(self):
+        class FakeCrossEncoder:
+            def predict(self, pairs, **kwargs):
+                del kwargs
+                return [2.0 if document.endswith("相关事实") else -2.0
+                        for _, document in pairs]
+
+        provider = _SentenceTransformersRelationReranker(
+            "fixture/reranker",
+            score_normalization="sigmoid",
+        )
+        provider._model = FakeCrossEncoder()
+        adapter = _PersonalMemoryRerankerAdapter(provider)
+
+        scores = await adapter.rerank(PersonalMemoryRerankRequest(
+            question="哪个事实相关？",
+            items=[
+                PersonalMemoryRerankItem(item_id="item_0", content="无关"),
+                PersonalMemoryRerankItem(item_id="item_1", content="相关事实"),
+            ],
+        ))
+
+        self.assertLess(scores[0].score, scores[1].score)
+        self.assertEqual(provider.observations, [])
+        self.assertIn("personal-memory", adapter.name)
+
     def test_local_model_manifest_is_content_addressed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             model_path = Path(directory)
@@ -1876,6 +1905,13 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
                 "data/models",
                 "--relation-reranker-batch-size",
                 "16",
+                "--memory-reranker",
+                "--memory-reranker-max-candidates",
+                "48",
+                "--memory-reranker-max-input-chars",
+                "80000",
+                "--memory-reranker-timeout-seconds",
+                "45",
             ]
         )
         self.assertEqual(args.planner_modes, PLANNER_MODE_REPORT)
@@ -1886,6 +1922,10 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args.relation_reranker_threshold, 0.75)
         self.assertEqual(args.relation_reranker_cache_dir, Path("data/models"))
         self.assertEqual(args.relation_reranker_batch_size, 16)
+        self.assertTrue(args.memory_reranker)
+        self.assertEqual(args.memory_reranker_max_candidates, 48)
+        self.assertEqual(args.memory_reranker_max_input_chars, 80_000)
+        self.assertEqual(args.memory_reranker_timeout_seconds, 45)
 
     def test_profile_gate_is_not_failed_by_control_profile(self) -> None:
         from benchmarks.personal_retrieval_ablation import _parser, _validate_report

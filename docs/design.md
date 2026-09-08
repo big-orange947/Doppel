@@ -772,6 +772,8 @@ temporal status、validity interval 或 event identity。v0.8.0 因此以组合�
             ├─ deterministic Chinese lexical score
             └─ optional SemanticIndex scores for known authorized IDs only
             ▼
+    optional evidence exclusion → optional bounded memory-level reranking
+            ▼
     evidence hits · ambiguity · warnings · conservative count
 
 planner intent 是 lookup/current/history/planned/list/count/as_of。模型不能选择 scope、Store、memory
@@ -830,6 +832,13 @@ Planner draft 中的 `relation_types` 必须是该集合的子集；绑定器拒
 count 始终使用稳定分页完整读取每个 scope；达到 max_records_per_scope 时失败，不用截断集合回答
 “一共几次”。SemanticIndex 是 top-k 协议，因此不参与 exact count 的集合定义；计数只使用完整
 结构/词法扫描。普通查询中，结构化条件仍是硬门禁，lexical/semantic 只能筛选或排序候选。
+
+最终候选还可以选择性进入独立 `PersonalMemoryReranker`。该协议不同于通用
+`RecallResult` reranker，也不同于 Graphiti edge 的 `RelationReranker`：它只看到原始问题与已经通过
+所有权威门禁的匿名正文候选，不接收 scope、用户/主体/memory ID、状态或 provenance。返回值必须
+对每个匿名 ID 提供且只提供一个 0..1 分数；引擎只重排有界前缀，不改变候选集合，平分保持原顺序。
+超时、异常、越界或绑定不完整时保留基础融合排序，并返回内容无关的状态/告警。精确 count 不调用
+该阶段。默认关闭，远程模型的数据授权仍由 host 承担。
 
 history/as_of 可以读取 confirmed 以及带明确有效区间的 superseded/expired 历史记录；rejected 在任何
 个人事实查询中都不可见，current/lookup 不会把 inactive lifecycle 当成当前事实。as_of 使用

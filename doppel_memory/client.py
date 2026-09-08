@@ -65,6 +65,10 @@ from doppel_memory.models import (
     utc_now,
 )
 from doppel_memory.persona import MaterialBundle, PersonaMaterialsBuilder
+from doppel_memory.personal_rerank import (
+    PersonalMemoryRerankConfig,
+    PersonalMemoryReranker,
+)
 from doppel_memory.postgres_store import PostgreSQLStore
 from doppel_memory.processing import (
     MemoryPipeline,
@@ -366,6 +370,8 @@ class DoppelClient:
         relation_index: RelationIndex | None = None,
         evidence_verifier: EvidenceVerifier | None = None,
         verification_config: EvidenceVerificationConfig | None = None,
+        memory_reranker: PersonalMemoryReranker | None = None,
+        rerank_config: PersonalMemoryRerankConfig | None = None,
         default_subject: str = "owner",
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
@@ -383,6 +389,8 @@ class DoppelClient:
             relation_index=relation_index,
             evidence_verifier=evidence_verifier,
             verification_config=verification_config,
+            memory_reranker=memory_reranker,
+            rerank_config=rerank_config,
         ).query(
             planner or DeterministicPersonalMemoryQueryPlanner(),
             query,

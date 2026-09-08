@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add an opt-in, bounded personal-memory reranking protocol after authoritative
+  Store reload and all scope, subject, authority, lifecycle, temporal, score, and
+  optional evidence gates. It exposes only the raw question, opaque request-local
+  IDs, and authorized content; it can reorder but never add/remove candidates or
+  participate in exact counts. Strict score binding, timeout/input bounds, stable
+  ties, content-free diagnostics, and baseline-order fallback are covered by tests.
 - In opt-in candidate-union mode, preserve independent semantic recall when a
   structured non-count Planner draft has entity/relation anchors but an empty
   `search_text`: the raw question is used only for bounded candidate discovery and

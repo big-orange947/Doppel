@@ -34,7 +34,8 @@
         "store": {"$ref": "#/$defs/source"},
         "vector": {"$ref": "#/$defs/source"},
         "graph": {"$ref": "#/$defs/source"},
-        "relation_reranker": {"$ref": "#/$defs/source"}
+        "relation_reranker": {"$ref": "#/$defs/source"},
+        "memory_reranker": {"$ref": "#/$defs/source"}
       }
     },
     "planner_modes": {"type": "array", "items": {"enum": ["oracle", "oracle_typed", "deterministic", "report"]}},
@@ -68,6 +69,7 @@
     "metamorphic": {"type": "object"},
     "threshold_sweep": {"type": "object"},
     "relation_reranker_threshold_sweep": {"type": "object"},
+    "memory_reranking_enabled": {"type": "boolean"},
     "reproducibility": {
       "type": "object",
       "required": ["output_path", "command", "commit_hash", "tracked_worktree_dirty", "tracked_dirty_paths", "source_tree_sha256", "planner_modes", "requested_profiles", "gate_profiles", "executed_profiles", "unavailable_profiles", "dataset_fingerprint", "canonical_payload_sha256", "file_sha256_sidecar"]
@@ -136,6 +138,7 @@
       "properties": {
         "error": {"type": "string"},
         "trace": {"type": ["object", "null"]},
+        "memory_reranking": {"type": ["object", "null"]},
         "source_planner_failure": {"type": "boolean"},
         "failure_stage": {"enum": ["planner", "execution"]},
         "scope_leakage": {"type": "integer", "minimum": 0},
