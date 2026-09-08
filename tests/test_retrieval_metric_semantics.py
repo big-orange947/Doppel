@@ -29,6 +29,7 @@ def test_unannotated_dataset_fingerprint_unchanged():
     original = dataset.model_dump(mode="json")
     for query in original["queries"]:
         query.pop("relevance_grades")
+        query.pop("retrieval_expectation")
     assert dataset.fingerprint == hashlib.sha256(json.dumps(
         original, ensure_ascii=False, sort_keys=True
     ).encode()).hexdigest()
@@ -38,6 +39,12 @@ def test_unannotated_dataset_fingerprint_unchanged():
         }}), *dataset.queries[1:]
     ]})
     assert modified.fingerprint != dataset.fingerprint
+    explicit_expectation = dataset.model_copy(update={"queries": [
+        dataset.queries[0].model_copy(update={
+            "retrieval_expectation": "no_evidence"
+        }), *dataset.queries[1:]
+    ]})
+    assert explicit_expectation.fingerprint != dataset.fingerprint
 
 
 def test_single_source_attribution_requires_positive_score_not_just_profile():

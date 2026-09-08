@@ -151,13 +151,16 @@ baseline, not public numerical evidence yet.
 
 The expanded candidate dataset
 `datasets/personal-relation-ablation-zh-v2.json` is intentionally separate from the
-65-query v1 fixture that influenced runtime development. Draft.1 contains 72 memories,
+65-query v1 fixture that influenced runtime development. Draft.2 contains 72 memories,
 240 queries, 12 exact owner scopes, and a fixed 72/96/72 dev/held-out/adversarial
 split. Every query explicitly grades the entire 72-memory corpus as 0 (irrelevant or
 unauthorized), 1 (useful related context but not proof), or 2 (direct answer evidence),
 so nDCG can distinguish “retrieved a useful clue” from “retrieved evidence that answers
 the question.” Twenty-four queries specifically have related context but no direct
-answer; twenty-four use unknown entities. See the
+answer; twenty-four use unknown entities. Draft.2 additionally labels retrieval intent
+as `direct_evidence`, `related_context`, or `no_evidence`. Reports therefore expose
+related-context Recall@1/5 and no-evidence abstention separately instead of treating
+answer-layer uncertainty as a reason for the retriever to hide useful context. See the
 [v2 annotation notes](datasets/personal-relation-ablation-zh-v2.md) and verify the
 checked-in generator output with:
 

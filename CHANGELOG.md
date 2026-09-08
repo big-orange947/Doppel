@@ -10,7 +10,9 @@
   without treating missing labels as irrelevant. A deterministic checked-in generator,
   semantic integrity gates, and annotation notes keep it reproducible. Direct evidence
   is checked against relation, entity, and query time, while forbidden evidence must
-  remain grade 0; the dataset remains explicitly unfrozen pending independent review.
+  remain grade 0. Explicit direct/context/empty retrieval expectations keep useful
+  context recall separate from downstream answer abstention; the dataset remains
+  explicitly unfrozen pending independent review.
 - Add a domain-neutral explicit-calendar grounding layer between Planner output and
   trusted plan binding. One numeric full date or month/day becomes an `as_of` point;
   one numeric calendar month or year becomes a closed interval. Existing provider

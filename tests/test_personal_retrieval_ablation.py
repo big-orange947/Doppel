@@ -457,7 +457,7 @@ class DatasetTest(unittest.TestCase):
             for name in ("dev", "heldout", "adversarial")
         }
 
-        self.assertEqual(dataset.suite_version, "2.0.0-draft.1")
+        self.assertEqual(dataset.suite_version, "2.0.0-draft.2")
         self.assertEqual(len(dataset.fixtures), 72)
         self.assertEqual(len(dataset.queries), 240)
         self.assertEqual(len(dataset.scopes), 12)
@@ -480,7 +480,7 @@ class DatasetTest(unittest.TestCase):
             )
         self.assertEqual(
             dataset.fingerprint,
-            "b25528a20d6db8f798f528ecd0cbeedef55953f15db462711ee67045477d3805",
+            "f62c9d21fb3d7a472eb9e6cc14d007654943afcede500dd1874f04f0c21b7d41",
         )
 
     def test_expanded_relation_v2_distinguishes_context_from_answer_evidence(
@@ -502,13 +502,22 @@ class DatasetTest(unittest.TestCase):
             self.assertEqual(query.required_memory_ids, [])
             self.assertNotIn(2, query.relevance_grades.values())
             self.assertIn(1, query.relevance_grades.values())
+            self.assertEqual(query.retrieval_expectation, "related_context")
             self.assertTrue(query.expected_abstain)
             self.assertEqual(query.forbidden_memory_ids, sorted(
                 query.forbidden_memory_ids
             ))
         for query in unknown_queries:
             self.assertEqual(set(query.relevance_grades.values()), {0})
+            self.assertEqual(query.retrieval_expectation, "no_evidence")
             self.assertTrue(query.expected_abstain)
+        direct_queries = [
+            query
+            for query in dataset.queries
+            if query.retrieval_expectation == "direct_evidence"
+        ]
+        self.assertEqual(len(direct_queries), 192)
+        self.assertTrue(all(query.required_memory_ids for query in direct_queries))
 
     def test_expanded_relation_v2_has_balanced_scenario_matrix(self) -> None:
         dataset = load_ablation_dataset(RELATION_V2_DATASET_PATH)
@@ -1045,6 +1054,52 @@ class DatasetTest(unittest.TestCase):
 
 
 class EvaluationTest(unittest.IsolatedAsyncioTestCase):
+    def test_retrieval_expectations_separate_context_from_empty(self) -> None:
+        scope = MemoryScope(user_id="user-linz", agent_id="echo")
+
+        def result(hits: list[SimpleNamespace]) -> SimpleNamespace:
+            return SimpleNamespace(
+                plan=SimpleNamespace(intent="current", as_of=None),
+                hits=hits,
+                conflicts=[],
+                matched_record_count=len(hits),
+                scanned_record_count=len(hits),
+                scanned_conflict_count=0,
+                count=SimpleNamespace(status="not_requested", value=None),
+                ambiguous=False,
+                warnings=[],
+            )
+
+        context_query = _query(expected_abstain=True).model_copy(update={
+            "retrieval_expectation": "related_context",
+            "relevance_grades": {"m-context": 1},
+        })
+        context_case = _evaluate_result(
+            result([_hit("m-context", scope=scope)]),
+            context_query,
+            "lexical_vector",
+            1.0,
+            allowed_scope_keys={scope.scope_key},
+        )
+        empty_query = _query(query_id="q-empty", expected_abstain=True).model_copy(
+            update={
+                "retrieval_expectation": "no_evidence",
+                "relevance_grades": {"m-context": 0},
+            }
+        )
+        empty_case = _evaluate_result(
+            result([]),
+            empty_query,
+            "lexical_vector",
+            1.0,
+            allowed_scope_keys={scope.scope_key},
+        )
+
+        metrics = _aggregate([context_case, empty_case])["retrieval_expectations"]
+        self.assertEqual(metrics["related_context_recall_at_1"], 1.0)
+        self.assertEqual(metrics["related_context_recall_at_5"], 1.0)
+        self.assertEqual(metrics["no_evidence_abstention_accuracy"], 1.0)
+
     async def test_exact_scope_identity_reports_leakage(self) -> None:
         scope = MemoryScope(user_id="user-linz", agent_id="echo")
         foreign_scope = MemoryScope(user_id="user-wangv", agent_id="echo")

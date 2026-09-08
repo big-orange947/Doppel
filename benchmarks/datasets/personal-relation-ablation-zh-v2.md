@@ -47,12 +47,22 @@ memories are always grade 0 even when entity names are identical. A current and 
 state may be grade 2/1 depending on the requested time. A different true relation on
 the same entity is normally grade 1; an explicitly negated relation is grade 0.
 
+Retrieval behavior is labeled independently from downstream answerability:
+
+- `direct_evidence` expects grade-2 evidence;
+- `related_context` expects at least one grade-1 item in the retrieval window even
+  though an answer model should not invent a definitive answer;
+- `no_evidence` expects an empty result.
+
+This prevents answer-layer abstention from incorrectly rewarding a memory retriever
+for hiding useful but insufficient context.
+
 The 24 `related_but_insufficient` queries intentionally have no grade-2 evidence and
 at least one grade-1 memory. For example, a location/custody memory can be useful
 context for a question asking who lent an item, but it cannot prove the lender. These
-cases retain legacy `expected_abstain=true` so old empty/nonempty metrics remain
-comparable; nDCG is the authoritative signal for whether related context was ranked
-usefully. This known tension is why legacy abstention is not answer correctness.
+cases retain legacy `expected_abstain=true` so old reports remain comparable. New
+reports score `related_context_recall_at_1/5` separately; legacy abstention is not
+answer correctness and is not authoritative for this population.
 
 The 24 `unknown_entity` cases have only grade-0 judgments. They test genuine
 abstention and are excluded from nDCG when the ideal gain is zero.
@@ -78,12 +88,14 @@ does not execute the generator. Semantic validation requires:
 - every grade-2 memory to match the labeled relation and named entity;
 - every grade-2 memory to be valid at the query point or overlap its interval;
 - every forbidden memory to have relevance grade 0;
+- every query to declare a direct/context/empty retrieval expectation consistent
+  with its 0/1/2 judgments;
 - the declared minimum partition sizes.
 
-Draft.1 fingerprint:
+Draft.2 fingerprint:
 
 ```text
-b25528a20d6db8f798f528ecd0cbeedef55953f15db462711ee67045477d3805
+f62c9d21fb3d7a472eb9e6cc14d007654943afcede500dd1874f04f0c21b7d41
 ```
 
 ## Before freezing

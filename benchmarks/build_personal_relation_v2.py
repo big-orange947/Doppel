@@ -431,6 +431,7 @@ def _query_base(
         "relation_hints": [relation_hint],
         "category": category,
         "partition": partition,
+        "retrieval_expectation": "direct_evidence",
         "_relation_type": relation_type,
     }
 
@@ -607,6 +608,7 @@ def _scenario_queries(scenario: dict[str, Any], unknown_entity: str) -> list[dic
             row["required_memory_ids"] = [ids["secondary"]]
             row["_grade_kind"] = "secondary"
         elif number == 8:
+            row["retrieval_expectation"] = "related_context"
             row["expected_abstain"] = True
             row["abstain_reason"] = (
                 "No direct borrowing evidence; same-entity memories remain useful "
@@ -614,6 +616,7 @@ def _scenario_queries(scenario: dict[str, Any], unknown_entity: str) -> list[dic
             )
             row["_grade_kind"] = "context"
         else:
+            row["retrieval_expectation"] = "no_evidence"
             row["entity_mentions"] = [unknown_entity]
             row["expected_abstain"] = True
             row["abstain_reason"] = "No memory exists for the explicitly named entity."
@@ -682,7 +685,7 @@ def build_dataset() -> dict[str, Any]:
     assert all(memory_id in fixture_by_id for memory_id in fixture_ids)
     return {
         "suite": "doppel-personal-relation-ablation-zh-v2",
-        "suite_version": "2.0.0-draft.1",
+        "suite_version": "2.0.0-draft.2",
         "language": "zh-CN",
         "status": "draft",
         "frozen": False,
@@ -706,6 +709,7 @@ def build_dataset() -> dict[str, Any]:
             "complete_relevance_judgments": True,
             "complete_relation_type_labels": True,
             "validate_direct_relation_evidence": True,
+            "complete_retrieval_expectations": True,
             "relevance_rubric": "0=irrelevant_or_unauthorized;1=related_context_not_proof;2=direct_answer_evidence",
             "related_context_categories": ["related_but_insufficient"],
             "partition_minimums": {"dev": 72, "heldout": 96, "adversarial": 72},

@@ -217,6 +217,9 @@ class AblationQuery(BaseModel):
     # Independent, explicitly reviewed relevance judgments. Never infer these
     # grades from legacy forbidden/required lists or pass them to the planner.
     relevance_grades: dict[str, Literal[0, 1, 2]] = Field(default_factory=dict)
+    retrieval_expectation: Literal[
+        "legacy", "direct_evidence", "related_context", "no_evidence"
+    ] = "legacy"
     expected_abstain: bool = False
     expected_ambiguous: bool = False
     expected_count: int | None = None
@@ -340,6 +343,8 @@ class AblationDataset(BaseModel):
         for query in payload["queries"]:
             if not query["relevance_grades"]:
                 query.pop("relevance_grades")
+            if query.get("retrieval_expectation") == "legacy":
+                query.pop("retrieval_expectation")
         return hashlib.sha256(
             json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
@@ -381,6 +386,9 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     )
     validate_direct_relation_evidence = bool(
         dataset.requirements.get("validate_direct_relation_evidence", False)
+    )
+    complete_retrieval_expectations = bool(
+        dataset.requirements.get("complete_retrieval_expectations", False)
     )
     related_context_categories = {
         str(item)
@@ -496,6 +504,35 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
                         f"{query.query_id}: related-context query requires at least "
                         "one grade-1 memory"
                     )
+        if complete_retrieval_expectations:
+            if query.retrieval_expectation == "legacy":
+                failures.append(
+                    f"{query.query_id}: retrieval expectation must be explicit"
+                )
+            elif query.retrieval_expectation == "direct_evidence":
+                if not query.required_memory_ids:
+                    failures.append(
+                        f"{query.query_id}: direct-evidence retrieval requires "
+                        "required memory gold"
+                    )
+            elif query.retrieval_expectation == "related_context":
+                if 1 not in query.relevance_grades.values():
+                    failures.append(
+                        f"{query.query_id}: related-context retrieval requires "
+                        "grade-1 context"
+                    )
+                if 2 in query.relevance_grades.values():
+                    failures.append(
+                        f"{query.query_id}: related-context retrieval cannot carry "
+                        "direct answer evidence"
+                    )
+            elif query.retrieval_expectation == "no_evidence" and any(
+                query.relevance_grades.values()
+            ):
+                failures.append(
+                    f"{query.query_id}: no-evidence retrieval requires all "
+                    "relevance grades to be 0"
+                )
         overlap = sorted(
             set(query.required_memory_ids).intersection(query.forbidden_memory_ids)
         )
@@ -2373,6 +2410,28 @@ def _evaluate_result(
         security_failures.append("agent_output_accepted_as_owner_fact")
 
     required_set = set(query.required_memory_ids)
+    top_five_ids = [hit.record.memory_id for hit in hits[:5]]
+    related_context_recall_at_1 = (
+        int(
+            bool(top_five_ids)
+            and query.relevance_grades.get(top_five_ids[0], 0) > 0
+        )
+        if query.retrieval_expectation == "related_context"
+        else None
+    )
+    related_context_recall_at_5 = (
+        int(
+            any(
+                query.relevance_grades.get(memory_id, 0) > 0
+                for memory_id in top_five_ids
+            )
+        )
+        if query.retrieval_expectation == "related_context"
+        else None
+    )
+    no_evidence_abstention_ok = (
+        not hit_set if query.retrieval_expectation == "no_evidence" else None
+    )
     hit_top1_ok = bool(hits and hits[0].record.memory_id in required_set)
     recall_at_1 = int(any(hit.record.memory_id in required_set for hit in hits[:1]))
     recall_at_5 = int(any(hit.record.memory_id in required_set for hit in hits[:5]))
@@ -2462,9 +2521,13 @@ def _evaluate_result(
         "missing": missing,
         "forbidden": forbidden,
         "evaluation_semantics": {
-            "version": 2,
+            "version": 3,
             "legacy_forbidden": "dataset_exclusions_not_automatic_security_violations",
             "legacy_abstention": "empty_output_agreement_not_answer_correctness",
+            "retrieval_expectation": (
+                "direct evidence, related context, and no evidence are scored "
+                "as separate retrieval populations"
+            ),
             "answer_quality": "not_measured",
         },
         "graded_relevance": _graded_relevance(
@@ -2485,6 +2548,10 @@ def _evaluate_result(
         "recall_at_5": recall_at_5,
         "mrr": mrr,
         "evidence_recall": evidence_recall,
+        "retrieval_expectation": query.retrieval_expectation,
+        "related_context_recall_at_1": related_context_recall_at_1,
+        "related_context_recall_at_5": related_context_recall_at_5,
+        "no_evidence_abstention_ok": no_evidence_abstention_ok,
         "intent_ok": intent_ok,
         "required_evidence": bool(query.required_memory_ids),
         "expected_abstain": query.expected_abstain,
@@ -2535,6 +2602,16 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
         if case["required_evidence"] or not case["expected_abstain"]
     ]
     expected_evidence_total = max(len(expected_evidence), 1)
+    related_context = [
+        case
+        for case in valid
+        if case.get("retrieval_expectation") == "related_context"
+    ]
+    no_evidence = [
+        case
+        for case in valid
+        if case.get("retrieval_expectation") == "no_evidence"
+    ]
     latencies = [case["latency_ms"] for case in valid]
     sorted_latencies = sorted(latencies)
     p50 = sorted_latencies[len(sorted_latencies) // 2] if sorted_latencies else 0.0
@@ -2615,6 +2692,49 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
                        for case in valid) else None
             ),
             "population": "explicitly_judged_successful_queries_only",
+        },
+        "retrieval_expectations": {
+            "direct_evidence_query_count": sum(
+                case.get("retrieval_expectation") == "direct_evidence"
+                for case in valid
+            ),
+            "related_context_query_count": len(related_context),
+            "related_context_recall_at_1": (
+                round(
+                    sum(
+                        case["related_context_recall_at_1"]
+                        for case in related_context
+                    )
+                    / len(related_context),
+                    4,
+                )
+                if related_context
+                else None
+            ),
+            "related_context_recall_at_5": (
+                round(
+                    sum(
+                        case["related_context_recall_at_5"]
+                        for case in related_context
+                    )
+                    / len(related_context),
+                    4,
+                )
+                if related_context
+                else None
+            ),
+            "no_evidence_query_count": len(no_evidence),
+            "no_evidence_abstention_accuracy": (
+                round(
+                    sum(
+                        case["no_evidence_abstention_ok"] for case in no_evidence
+                    )
+                    / len(no_evidence),
+                    4,
+                )
+                if no_evidence
+                else None
+            ),
         },
         "scope_leakage_count": sum(case["scope_leakage"] for case in valid),
         "temporal_violation_count": sum(case["temporal_violations"] for case in valid),

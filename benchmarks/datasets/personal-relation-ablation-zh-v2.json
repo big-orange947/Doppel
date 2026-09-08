@@ -1,6 +1,6 @@
 {
   "suite": "doppel-personal-relation-ablation-zh-v2",
-  "suite_version": "2.0.0-draft.1",
+  "suite_version": "2.0.0-draft.2",
   "language": "zh-CN",
   "status": "draft",
   "frozen": false,
@@ -2433,6 +2433,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s01-primary-current"
       ],
@@ -2533,6 +2534,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s01-primary-current"
       ],
@@ -2633,6 +2635,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s01-primary-history"
       ],
@@ -2733,6 +2736,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s01-primary-history"
       ],
@@ -2839,6 +2843,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s01-secondary"
       ],
@@ -2938,6 +2943,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s01-secondary"
       ],
@@ -3037,6 +3043,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s01-primary-current"
       ],
@@ -3138,6 +3145,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -3236,6 +3244,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -3334,6 +3343,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s01-primary-history"
       ],
@@ -3436,6 +3446,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s02-primary-current"
       ],
@@ -3536,6 +3547,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s02-primary-current"
       ],
@@ -3636,6 +3648,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s02-primary-history"
       ],
@@ -3736,6 +3749,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s02-primary-history"
       ],
@@ -3842,6 +3856,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s02-secondary"
       ],
@@ -3941,6 +3956,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s02-secondary"
       ],
@@ -4040,6 +4056,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s02-primary-current"
       ],
@@ -4141,6 +4158,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -4239,6 +4257,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -4337,6 +4356,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s02-primary-history"
       ],
@@ -4439,6 +4459,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s03-primary-current"
       ],
@@ -4539,6 +4560,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s03-primary-current"
       ],
@@ -4639,6 +4661,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s03-primary-history"
       ],
@@ -4739,6 +4762,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s03-primary-history"
       ],
@@ -4845,6 +4869,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s03-secondary"
       ],
@@ -4944,6 +4969,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s03-secondary"
       ],
@@ -5043,6 +5069,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s03-primary-current"
       ],
@@ -5144,6 +5171,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -5242,6 +5270,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -5340,6 +5369,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s03-primary-history"
       ],
@@ -5442,6 +5472,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s04-primary-current"
       ],
@@ -5542,6 +5573,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s04-primary-current"
       ],
@@ -5642,6 +5674,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s04-primary-history"
       ],
@@ -5742,6 +5775,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s04-primary-history"
       ],
@@ -5848,6 +5882,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s04-secondary"
       ],
@@ -5947,6 +5982,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s04-secondary"
       ],
@@ -6046,6 +6082,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s04-primary-current"
       ],
@@ -6147,6 +6184,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -6245,6 +6283,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -6343,6 +6382,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s04-primary-history"
       ],
@@ -6445,6 +6485,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s05-primary-current"
       ],
@@ -6545,6 +6586,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s05-primary-current"
       ],
@@ -6645,6 +6687,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s05-primary-history"
       ],
@@ -6745,6 +6788,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s05-primary-history"
       ],
@@ -6851,6 +6895,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s05-secondary"
       ],
@@ -6950,6 +6995,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s05-secondary"
       ],
@@ -7049,6 +7095,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s05-primary-current"
       ],
@@ -7150,6 +7197,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -7248,6 +7296,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -7346,6 +7395,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s05-primary-history"
       ],
@@ -7448,6 +7498,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s06-primary-current"
       ],
@@ -7548,6 +7599,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s06-primary-current"
       ],
@@ -7648,6 +7700,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s06-primary-history"
       ],
@@ -7748,6 +7801,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s06-primary-history"
       ],
@@ -7854,6 +7908,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s06-secondary"
       ],
@@ -7953,6 +8008,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s06-secondary"
       ],
@@ -8052,6 +8108,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s06-primary-current"
       ],
@@ -8153,6 +8210,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -8251,6 +8309,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -8349,6 +8408,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s06-primary-history"
       ],
@@ -8451,6 +8511,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s07-primary-current"
       ],
@@ -8551,6 +8612,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s07-primary-current"
       ],
@@ -8651,6 +8713,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s07-primary-history"
       ],
@@ -8751,6 +8814,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s07-primary-history"
       ],
@@ -8857,6 +8921,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s07-secondary"
       ],
@@ -8956,6 +9021,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s07-secondary"
       ],
@@ -9055,6 +9121,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s07-primary-current"
       ],
@@ -9156,6 +9223,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -9254,6 +9322,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -9352,6 +9421,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s07-primary-history"
       ],
@@ -9454,6 +9524,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s08-primary-current"
       ],
@@ -9554,6 +9625,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s08-primary-current"
       ],
@@ -9654,6 +9726,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s08-primary-history"
       ],
@@ -9754,6 +9827,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s08-primary-history"
       ],
@@ -9860,6 +9934,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s08-secondary"
       ],
@@ -9959,6 +10034,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s08-secondary"
       ],
@@ -10058,6 +10134,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s08-primary-current"
       ],
@@ -10159,6 +10236,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -10257,6 +10335,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -10355,6 +10434,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s08-primary-history"
       ],
@@ -10457,6 +10537,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s09-primary-current"
       ],
@@ -10557,6 +10638,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s09-primary-current"
       ],
@@ -10657,6 +10739,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s09-primary-history"
       ],
@@ -10757,6 +10840,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s09-primary-history"
       ],
@@ -10863,6 +10947,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s09-secondary"
       ],
@@ -10962,6 +11047,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s09-secondary"
       ],
@@ -11061,6 +11147,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s09-primary-current"
       ],
@@ -11162,6 +11249,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -11260,6 +11348,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -11358,6 +11447,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s09-primary-history"
       ],
@@ -11460,6 +11550,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s10-primary-current"
       ],
@@ -11560,6 +11651,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s10-primary-current"
       ],
@@ -11660,6 +11752,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s10-primary-history"
       ],
@@ -11760,6 +11853,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s10-primary-history"
       ],
@@ -11866,6 +11960,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s10-secondary"
       ],
@@ -11965,6 +12060,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s10-secondary"
       ],
@@ -12064,6 +12160,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s10-primary-current"
       ],
@@ -12165,6 +12262,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -12263,6 +12361,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -12361,6 +12460,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s10-primary-history"
       ],
@@ -12463,6 +12563,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s11-primary-current"
       ],
@@ -12563,6 +12664,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s11-primary-current"
       ],
@@ -12663,6 +12765,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s11-primary-history"
       ],
@@ -12763,6 +12866,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s11-primary-history"
       ],
@@ -12869,6 +12973,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s11-secondary"
       ],
@@ -12968,6 +13073,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s11-secondary"
       ],
@@ -13067,6 +13173,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s11-primary-current"
       ],
@@ -13168,6 +13275,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -13266,6 +13374,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -13364,6 +13473,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s11-primary-history"
       ],
@@ -13466,6 +13576,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s12-primary-current"
       ],
@@ -13566,6 +13677,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s12-primary-current"
       ],
@@ -13666,6 +13778,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s12-primary-history"
       ],
@@ -13766,6 +13879,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s12-primary-history"
       ],
@@ -13872,6 +13986,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s12-secondary"
       ],
@@ -13971,6 +14086,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s12-secondary"
       ],
@@ -14070,6 +14186,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s12-primary-current"
       ],
@@ -14171,6 +14288,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -14269,6 +14387,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -14367,6 +14486,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s12-primary-history"
       ],
@@ -14469,6 +14589,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s13-primary-current"
       ],
@@ -14569,6 +14690,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s13-primary-current"
       ],
@@ -14669,6 +14791,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s13-primary-history"
       ],
@@ -14769,6 +14892,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s13-primary-history"
       ],
@@ -14875,6 +14999,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s13-secondary"
       ],
@@ -14974,6 +15099,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s13-secondary"
       ],
@@ -15073,6 +15199,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s13-primary-current"
       ],
@@ -15174,6 +15301,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -15272,6 +15400,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -15370,6 +15499,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s13-primary-history"
       ],
@@ -15472,6 +15602,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s14-primary-current"
       ],
@@ -15572,6 +15703,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s14-primary-current"
       ],
@@ -15672,6 +15804,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s14-primary-history"
       ],
@@ -15772,6 +15905,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s14-primary-history"
       ],
@@ -15878,6 +16012,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s14-secondary"
       ],
@@ -15977,6 +16112,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s14-secondary"
       ],
@@ -16076,6 +16212,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s14-primary-current"
       ],
@@ -16177,6 +16314,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -16275,6 +16413,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -16373,6 +16512,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s14-primary-history"
       ],
@@ -16475,6 +16615,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s15-primary-current"
       ],
@@ -16575,6 +16716,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s15-primary-current"
       ],
@@ -16675,6 +16817,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s15-primary-history"
       ],
@@ -16775,6 +16918,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s15-primary-history"
       ],
@@ -16881,6 +17025,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s15-secondary"
       ],
@@ -16980,6 +17125,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s15-secondary"
       ],
@@ -17079,6 +17225,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s15-primary-current"
       ],
@@ -17180,6 +17327,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -17278,6 +17426,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -17376,6 +17525,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s15-primary-history"
       ],
@@ -17478,6 +17628,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s16-primary-current"
       ],
@@ -17578,6 +17729,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s16-primary-current"
       ],
@@ -17678,6 +17830,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s16-primary-history"
       ],
@@ -17778,6 +17931,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s16-primary-history"
       ],
@@ -17884,6 +18038,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s16-secondary"
       ],
@@ -17983,6 +18138,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s16-secondary"
       ],
@@ -18082,6 +18238,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s16-primary-current"
       ],
@@ -18183,6 +18340,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -18281,6 +18439,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -18379,6 +18538,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s16-primary-history"
       ],
@@ -18481,6 +18641,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s17-primary-current"
       ],
@@ -18581,6 +18742,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s17-primary-current"
       ],
@@ -18681,6 +18843,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s17-primary-history"
       ],
@@ -18781,6 +18944,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s17-primary-history"
       ],
@@ -18887,6 +19051,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s17-secondary"
       ],
@@ -18986,6 +19151,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s17-secondary"
       ],
@@ -19085,6 +19251,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s17-primary-current"
       ],
@@ -19186,6 +19353,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -19284,6 +19452,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -19382,6 +19551,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s17-primary-history"
       ],
@@ -19484,6 +19654,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s18-primary-current"
       ],
@@ -19584,6 +19755,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s18-primary-current"
       ],
@@ -19684,6 +19856,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s18-primary-history"
       ],
@@ -19784,6 +19957,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s18-primary-history"
       ],
@@ -19890,6 +20064,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s18-secondary"
       ],
@@ -19989,6 +20164,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s18-secondary"
       ],
@@ -20088,6 +20264,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s18-primary-current"
       ],
@@ -20189,6 +20366,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -20287,6 +20465,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -20385,6 +20564,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s18-primary-history"
       ],
@@ -20487,6 +20667,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s19-primary-current"
       ],
@@ -20587,6 +20768,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s19-primary-current"
       ],
@@ -20687,6 +20869,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s19-primary-history"
       ],
@@ -20787,6 +20970,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s19-primary-history"
       ],
@@ -20893,6 +21077,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s19-secondary"
       ],
@@ -20992,6 +21177,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s19-secondary"
       ],
@@ -21091,6 +21277,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s19-primary-current"
       ],
@@ -21192,6 +21379,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -21290,6 +21478,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -21388,6 +21577,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s19-primary-history"
       ],
@@ -21490,6 +21680,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s20-primary-current"
       ],
@@ -21590,6 +21781,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s20-primary-current"
       ],
@@ -21690,6 +21882,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s20-primary-history"
       ],
@@ -21790,6 +21983,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s20-primary-history"
       ],
@@ -21896,6 +22090,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s20-secondary"
       ],
@@ -21995,6 +22190,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s20-secondary"
       ],
@@ -22094,6 +22290,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s20-primary-current"
       ],
@@ -22195,6 +22392,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -22293,6 +22491,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -22391,6 +22590,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s20-primary-history"
       ],
@@ -22493,6 +22693,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s21-primary-current"
       ],
@@ -22593,6 +22794,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s21-primary-current"
       ],
@@ -22693,6 +22895,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s21-primary-history"
       ],
@@ -22793,6 +22996,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s21-primary-history"
       ],
@@ -22899,6 +23103,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s21-secondary"
       ],
@@ -22998,6 +23203,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s21-secondary"
       ],
@@ -23097,6 +23303,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s21-primary-current"
       ],
@@ -23198,6 +23405,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -23296,6 +23504,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -23394,6 +23603,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s21-primary-history"
       ],
@@ -23496,6 +23706,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s22-primary-current"
       ],
@@ -23596,6 +23807,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s22-primary-current"
       ],
@@ -23696,6 +23908,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s22-primary-history"
       ],
@@ -23796,6 +24009,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s22-primary-history"
       ],
@@ -23902,6 +24116,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s22-secondary"
       ],
@@ -24001,6 +24216,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s22-secondary"
       ],
@@ -24100,6 +24316,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s22-primary-current"
       ],
@@ -24201,6 +24418,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -24299,6 +24517,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -24397,6 +24616,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s22-primary-history"
       ],
@@ -24499,6 +24719,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s23-primary-current"
       ],
@@ -24599,6 +24820,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s23-primary-current"
       ],
@@ -24699,6 +24921,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s23-primary-history"
       ],
@@ -24799,6 +25022,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s23-primary-history"
       ],
@@ -24905,6 +25129,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s23-secondary"
       ],
@@ -25004,6 +25229,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s23-secondary"
       ],
@@ -25103,6 +25329,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s23-primary-current"
       ],
@@ -25204,6 +25431,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -25302,6 +25530,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -25400,6 +25629,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s23-primary-history"
       ],
@@ -25502,6 +25732,7 @@
       ],
       "category": "current_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s24-primary-current"
       ],
@@ -25602,6 +25833,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s24-primary-current"
       ],
@@ -25702,6 +25934,7 @@
       ],
       "category": "history_relation",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s24-primary-history"
       ],
@@ -25802,6 +26035,7 @@
       ],
       "category": "temporal_boundary",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s24-primary-history"
       ],
@@ -25908,6 +26142,7 @@
       ],
       "category": "same_entity_multi_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s24-secondary"
       ],
@@ -26007,6 +26242,7 @@
       ],
       "category": "semantic_paraphrase",
       "partition": "heldout",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s24-secondary"
       ],
@@ -26106,6 +26342,7 @@
       ],
       "category": "negated_relation_contrast",
       "partition": "adversarial",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s24-primary-current"
       ],
@@ -26207,6 +26444,7 @@
       ],
       "category": "related_but_insufficient",
       "partition": "adversarial",
+      "retrieval_expectation": "related_context",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -26305,6 +26543,7 @@
       ],
       "category": "unknown_entity",
       "partition": "heldout",
+      "retrieval_expectation": "no_evidence",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -26403,6 +26642,7 @@
       ],
       "category": "historical_interval_relation",
       "partition": "dev",
+      "retrieval_expectation": "direct_evidence",
       "required_memory_ids": [
         "v2-s24-primary-history"
       ],
@@ -26497,6 +26737,7 @@
     "complete_relevance_judgments": true,
     "complete_relation_type_labels": true,
     "validate_direct_relation_evidence": true,
+    "complete_retrieval_expectations": true,
     "relevance_rubric": "0=irrelevant_or_unauthorized;1=related_context_not_proof;2=direct_answer_evidence",
     "related_context_categories": [
       "related_but_insufficient"
