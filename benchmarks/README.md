@@ -149,6 +149,27 @@ aggregate gate across every executed profile.
 The fixture remains `frozen=false` and `publication_ready=false`; it is an engineering
 baseline, not public numerical evidence yet.
 
+The expanded candidate dataset
+`datasets/personal-relation-ablation-zh-v2.json` is intentionally separate from the
+65-query v1 fixture that influenced runtime development. Draft.1 contains 72 memories,
+240 queries, 12 exact owner scopes, and a fixed 72/96/72 dev/held-out/adversarial
+split. Every query explicitly grades the entire 72-memory corpus as 0 (irrelevant or
+unauthorized), 1 (useful related context but not proof), or 2 (direct answer evidence),
+so nDCG can distinguish “retrieved a useful clue” from “retrieved evidence that answers
+the question.” Twenty-four queries specifically have related context but no direct
+answer; twenty-four use unknown entities. See the
+[v2 annotation notes](datasets/personal-relation-ablation-zh-v2.md) and verify the
+checked-in generator output with:
+
+```bash
+python -m benchmarks.build_personal_relation_v2 --check
+```
+
+The v2 split is preassigned, not secret: the public generator and gold remain
+`frozen=false` and `publication_ready=false` until an independent semantic review.
+Do not tune runtime code against its held-out/adversarial cases or describe them as a
+blind result. The v1 file remains available for exact regression comparisons.
+
 With opt-in `--candidate-fusion union`, an evidence lookup whose model draft has
 entity/relation anchors but empty `search_text` uses the raw question only for bounded
 lexical/semantic candidate discovery. Reports expose the fallback in warnings and

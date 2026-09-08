@@ -21,6 +21,7 @@ from typing import Any
 from unittest.mock import patch
 from uuid import NAMESPACE_URL, uuid5
 
+from benchmarks.build_personal_relation_v2 import build_dataset
 from benchmarks.personal_retrieval_ablation import (
     ALL_PROFILES,
     PLANNER_MODE_ORACLE,
@@ -91,6 +92,12 @@ RELATION_DATASET_PATH = (
     / "benchmarks"
     / "datasets"
     / "personal-relation-ablation-zh-v1.json"
+)
+RELATION_V2_DATASET_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "benchmarks"
+    / "datasets"
+    / "personal-relation-ablation-zh-v2.json"
 )
 
 NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "")
@@ -440,6 +447,143 @@ class RelationRerankerHarnessTest(unittest.IsolatedAsyncioTestCase):
 
 
 class DatasetTest(unittest.TestCase):
+    def test_expanded_relation_v2_has_prefixed_partitions_and_complete_judgments(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_V2_DATASET_PATH)
+        fixture_ids = {item.memory_id for item in dataset.fixtures}
+        partition_counts = {
+            name: sum(query.partition == name for query in dataset.queries)
+            for name in ("dev", "heldout", "adversarial")
+        }
+
+        self.assertEqual(dataset.suite_version, "2.0.0-draft.1")
+        self.assertEqual(len(dataset.fixtures), 72)
+        self.assertEqual(len(dataset.queries), 240)
+        self.assertEqual(len(dataset.scopes), 12)
+        self.assertEqual(
+            partition_counts,
+            {"dev": 72, "heldout": 96, "adversarial": 72},
+        )
+        self.assertFalse(dataset.frozen)
+        self.assertFalse(dataset.publication_ready)
+        self.assertEqual(set(dataset.relation_type_labels), {
+            query.query_id for query in dataset.queries
+        })
+        for query in dataset.queries:
+            self.assertEqual(set(query.relevance_grades), fixture_ids)
+            self.assertTrue(
+                all(
+                    query.relevance_grades[memory_id] == 2
+                    for memory_id in query.required_memory_ids
+                )
+            )
+        self.assertEqual(
+            dataset.fingerprint,
+            "b899720a02646cf316672dafd1cae3286ff4518a9406127e67cc07f646078d45",
+        )
+
+    def test_expanded_relation_v2_distinguishes_context_from_answer_evidence(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_V2_DATASET_PATH)
+        context_queries = [
+            query
+            for query in dataset.queries
+            if query.category == "related_but_insufficient"
+        ]
+        unknown_queries = [
+            query for query in dataset.queries if query.category == "unknown_entity"
+        ]
+
+        self.assertEqual(len(context_queries), 24)
+        self.assertEqual(len(unknown_queries), 24)
+        for query in context_queries:
+            self.assertEqual(query.required_memory_ids, [])
+            self.assertNotIn(2, query.relevance_grades.values())
+            self.assertIn(1, query.relevance_grades.values())
+            self.assertTrue(query.expected_abstain)
+            self.assertEqual(query.forbidden_memory_ids, sorted(
+                query.forbidden_memory_ids
+            ))
+        for query in unknown_queries:
+            self.assertEqual(set(query.relevance_grades.values()), {0})
+            self.assertTrue(query.expected_abstain)
+
+    def test_expanded_relation_v2_has_balanced_scenario_matrix(self) -> None:
+        dataset = load_ablation_dataset(RELATION_V2_DATASET_PATH)
+        category_counts = {
+            category: sum(query.category == category for query in dataset.queries)
+            for category in (
+                "current_relation",
+                "semantic_paraphrase",
+                "history_relation",
+                "temporal_boundary",
+                "same_entity_multi_relation",
+                "negated_relation_contrast",
+                "related_but_insufficient",
+                "unknown_entity",
+                "historical_interval_relation",
+            )
+        }
+        scope_fixture_counts = {
+            scope: sum(item.scope == scope for item in dataset.fixtures)
+            for scope in dataset.scopes
+        }
+        entity_scopes: dict[str, set[str]] = {}
+        for item in dataset.fixtures:
+            assert item.relation is not None
+            entity_scopes.setdefault(item.relation.source_entity, set()).add(item.scope)
+
+        self.assertEqual(category_counts["semantic_paraphrase"], 48)
+        for category, count in category_counts.items():
+            if category != "semantic_paraphrase":
+                self.assertEqual(count, 24, category)
+        self.assertEqual(set(scope_fixture_counts.values()), {6})
+        self.assertEqual(len(entity_scopes), 12)
+        self.assertTrue(all(len(scopes) == 2 for scopes in entity_scopes.values()))
+        self.assertTrue(all(item.relation is not None for item in dataset.fixtures))
+
+    def test_expanded_relation_v2_checked_in_file_matches_generator(self) -> None:
+        checked_in = json.loads(RELATION_V2_DATASET_PATH.read_text(encoding="utf-8"))
+
+        self.assertEqual(checked_in, build_dataset())
+
+    def test_complete_relevance_validator_rejects_missing_and_cross_scope_grades(
+        self,
+    ) -> None:
+        dataset = load_ablation_dataset(RELATION_V2_DATASET_PATH)
+        query = dataset.queries[0]
+        missing = dict(query.relevance_grades)
+        missing.pop(next(iter(missing)))
+        missing_query = query.model_copy(update={"relevance_grades": missing})
+        cross_scope = next(
+            item
+            for item in dataset.fixtures
+            if item.scope not in query.scopes
+        )
+        leaked = dict(query.relevance_grades)
+        leaked[cross_scope.memory_id] = 1
+        leaked_query = query.model_copy(update={"relevance_grades": leaked})
+
+        missing_failures = validate_dataset_semantics(dataset.model_copy(update={
+            "queries": [
+                missing_query if item.query_id == query.query_id else item
+                for item in dataset.queries
+            ]
+        }))
+        leaked_failures = validate_dataset_semantics(dataset.model_copy(update={
+            "queries": [
+                leaked_query if item.query_id == query.query_id else item
+                for item in dataset.queries
+            ]
+        }))
+
+        self.assertTrue(any("entire fixture corpus" in item
+                            for item in missing_failures))
+        self.assertTrue(any("cross-scope memories" in item
+                            for item in leaked_failures))
+
     def test_reproducibility_command_hashes_model_query_prefixes(self) -> None:
         command = _sanitized_command(
             [

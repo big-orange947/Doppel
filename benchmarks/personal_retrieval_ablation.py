@@ -371,7 +371,40 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     failures: list[str] = []
     scope_ids = {name: item.user_id for name, item in dataset.scopes.items()}
     fixtures_by_id = {item.memory_id: item for item in dataset.fixtures}
+    fixture_id_set = set(fixtures_by_id)
     relation_benchmark = bool(dataset.requirements.get("relation_benchmark", False))
+    complete_relevance = bool(
+        dataset.requirements.get("complete_relevance_judgments", False)
+    )
+    complete_relation_labels = bool(
+        dataset.requirements.get("complete_relation_type_labels", False)
+    )
+    related_context_categories = {
+        str(item)
+        for item in dataset.requirements.get("related_context_categories", [])
+    }
+    if complete_relation_labels:
+        missing_labels = sorted(
+            {query.query_id for query in dataset.queries}.difference(
+                dataset.relation_type_labels
+            )
+        )
+        if missing_labels:
+            failures.append(
+                "relation type labels are incomplete for queries: "
+                f"{missing_labels[:5]}"
+            )
+    raw_partition_minimums = dataset.requirements.get("partition_minimums", {})
+    if isinstance(raw_partition_minimums, dict):
+        for partition, raw_minimum in raw_partition_minimums.items():
+            minimum = int(raw_minimum or 0)
+            actual = sum(
+                query.partition == partition for query in dataset.queries
+            )
+            if actual < minimum:
+                failures.append(
+                    f"partition {partition!r} has {actual} queries; requires {minimum}"
+                )
     for item in dataset.fixtures:
         scope_user = scope_ids.get(item.scope, "")
         if (
@@ -399,6 +432,47 @@ def validate_dataset_semantics(dataset: AblationDataset) -> list[str]:
     for query in dataset.queries:
         if query.partition == "deferred_cross_subject":
             continue
+        if complete_relevance:
+            judged_ids = set(query.relevance_grades)
+            if judged_ids != fixture_id_set:
+                failures.append(
+                    f"{query.query_id}: complete relevance judgments must cover "
+                    "the entire fixture corpus"
+                )
+            for memory_id in query.required_memory_ids:
+                if query.relevance_grades.get(memory_id) != 2:
+                    failures.append(
+                        f"{query.query_id}: required memory {memory_id} must have "
+                        "relevance grade 2"
+                    )
+            query_scope_names = set(query.scopes)
+            leaked_positive = sorted(
+                memory_id
+                for memory_id, grade in query.relevance_grades.items()
+                if grade > 0
+                and fixtures_by_id[memory_id].scope not in query_scope_names
+            )
+            if leaked_positive:
+                failures.append(
+                    f"{query.query_id}: cross-scope memories must have relevance "
+                    f"grade 0: {leaked_positive[:5]}"
+                )
+            if query.category in related_context_categories:
+                if query.required_memory_ids:
+                    failures.append(
+                        f"{query.query_id}: related-context query cannot require "
+                        "direct answer evidence"
+                    )
+                if 2 in query.relevance_grades.values():
+                    failures.append(
+                        f"{query.query_id}: related-context query cannot contain "
+                        "grade-2 evidence"
+                    )
+                if 1 not in query.relevance_grades.values():
+                    failures.append(
+                        f"{query.query_id}: related-context query requires at least "
+                        "one grade-1 memory"
+                    )
         overlap = sorted(
             set(query.required_memory_ids).intersection(query.forbidden_memory_ids)
         )
