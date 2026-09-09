@@ -789,6 +789,11 @@ provider 时间坐标不会被覆盖，但与坐标矛盾的 lookup/current/hist
 时间门。count/list/planned 不被改写成别的意图。多个日期、非法日期、相对时间和自然语言范围
 保持 Planner-owned，binder 不依赖实体、关系或业务领域词典。
 
+Reference Planner 的 untrusted-output 投影只对一种中间态开放：`intent=as_of` 已存在但 `as_of`
+字段缺失。该中间态必须立即经过上述显式日历 grounding，并在返回前重新按完整
+`PersonalMemoryQueryDraft` 不变量校验；若问句没有唯一可绑定的数字日期，它仍以
+`query_as_of_required` 失败。时区、反向区间、类型和其他 schema 约束从不延迟。
+
 默认 deterministic planner 只识别 current/history/planned/as_of/list/count 等封闭结构，不维护
 饮食、工作、居住、宠物、颜色等领域关键词到 topic_key 的映射。领域概念留在 search_text，由
 lexical/semantic retrieval 处理；固定 benchmark 文本不得反向进入查询代码。

@@ -2822,6 +2822,29 @@ async def test_reference_projection_keeps_temporal_cross_field_validation() -> N
         )
 
 
+async def test_reference_planner_grounds_explicit_date_before_strict_validation() -> None:
+    model = _StubStructuredModel(
+        {
+            "intent": "as_of",
+            "search_text": "编号物件",
+            "entity_mentions": ["编号物件"],
+        }
+    )
+
+    draft = await ReferencePersonalMemoryQueryPlanner(model).plan(
+        PersonalMemoryQueryRequest(
+            query="2026年2月20日编号物件在哪里？",
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.intent == PersonalMemoryQueryIntent.AS_OF
+    assert draft.as_of == datetime(2026, 2, 20, 12, tzinfo=UTC)
+    assert draft.explanation == "explicit_time_grounded:point"
+    assert PersonalMemoryQueryDraft.model_validate(draft) is draft
+
+
 async def test_fallback_planner_uses_primary_once_and_marks_degradation(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

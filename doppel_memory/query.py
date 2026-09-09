@@ -15,7 +15,14 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_core import PydanticCustomError
 
 from doppel_memory.evidence import (
@@ -171,12 +178,20 @@ class PersonalMemoryQueryDraft(BaseModel):
         return value.astimezone(UTC)
 
     @model_validator(mode="after")
-    def _validate_interval(self) -> PersonalMemoryQueryDraft:
+    def _validate_interval(self, info: ValidationInfo) -> PersonalMemoryQueryDraft:
         if self.time_from and self.time_to and self.time_to < self.time_from:
             raise PydanticCustomError(
                 "query_time_range_reversed", "time_to must not precede time_from"
             )
-        if self.intent == PersonalMemoryQueryIntent.AS_OF and self.as_of is None:
+        allow_incomplete_as_of = bool(
+            isinstance(info.context, Mapping)
+            and info.context.get("allow_incomplete_as_of") is True
+        )
+        if (
+            self.intent == PersonalMemoryQueryIntent.AS_OF
+            and self.as_of is None
+            and not allow_incomplete_as_of
+        ):
             raise PydanticCustomError(
                 "query_as_of_required", "as_of intent requires an as_of timestamp"
             )
@@ -373,7 +388,15 @@ class ReferencePersonalMemoryQueryPlanner:
         )
         if isinstance(raw, BaseModel):
             raw = raw.model_dump(warnings=False)
-        draft = _project_reference_query_draft(raw)
+        draft = _project_reference_query_draft(
+            raw, allow_incomplete_as_of=True
+        )
+        draft = _ground_explicit_query_time(draft, bound)
+        # The relaxed projection exists only long enough for host calendar binding.
+        # The public draft invariant is restored before this planner returns.
+        draft = PersonalMemoryQueryDraft.model_validate(
+            draft.model_dump(mode="python")
+        )
         return draft.model_copy(
             update={
                 "subject": bound.default_subject,
@@ -382,7 +405,9 @@ class ReferencePersonalMemoryQueryPlanner:
         )
 
 
-def _project_reference_query_draft(raw: Any) -> PersonalMemoryQueryDraft:
+def _project_reference_query_draft(
+    raw: Any, *, allow_incomplete_as_of: bool = False
+) -> PersonalMemoryQueryDraft:
     """Remove model-invented fields without granting them execution authority.
 
     ``json_object`` providers guarantee JSON syntax, not JSON Schema conformance.
@@ -392,19 +417,28 @@ def _project_reference_query_draft(raw: Any) -> PersonalMemoryQueryDraft:
     becoming the all-default query draft.
     """
 
+    validation_context = (
+        {"allow_incomplete_as_of": True} if allow_incomplete_as_of else None
+    )
     if not isinstance(raw, Mapping):
-        return PersonalMemoryQueryDraft.model_validate(raw)
+        return PersonalMemoryQueryDraft.model_validate(
+            raw, context=validation_context
+        )
     known = PersonalMemoryQueryDraft.model_fields.keys()
     projected = {name: raw[name] for name in known if name in raw}
     unknown_count = len(raw) - len(projected)
     if not projected:
-        return PersonalMemoryQueryDraft.model_validate(raw)
+        return PersonalMemoryQueryDraft.model_validate(
+            raw, context=validation_context
+        )
     if unknown_count:
         logger.warning(
             "reference query planner discarded %d unknown output field(s)",
             unknown_count,
         )
-    return PersonalMemoryQueryDraft.model_validate(projected)
+    return PersonalMemoryQueryDraft.model_validate(
+        projected, context=validation_context
+    )
 
 
 class FallbackPersonalMemoryQueryPlanner:

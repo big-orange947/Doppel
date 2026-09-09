@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Let the Reference personal-memory Planner project one narrowly incomplete
+  `as_of` draft long enough for host-owned explicit-calendar grounding, then
+  strictly revalidate the complete draft before returning it. This changes no
+  prompt, schema, or provider/cache identity: only a missing `as_of` coordinate
+  may be temporarily admitted, while invalid, ambiguous, relative, reversed, or
+  otherwise malformed time structures still fail closed.
 - Preserve Planner-selected ontology types as soft Graphiti relevance in opt-in
   candidate-union mode. A suggested type match may rank an already authorized
   candidate, while a type-conflicting lexical edge is kept observable at the

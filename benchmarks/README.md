@@ -172,6 +172,9 @@ The first no-LLM live structural diagnostic is recorded in
 [personal relation v2 structural retrieval](reports/personal-relation-v2-structural-2026-09-09.md).
 It separates direct evidence, related context, and true no-evidence behavior; its
 typed-oracle result is a retrieval ceiling, not production Planner quality.
+The paired fixed-Reference-Planner replay and the resulting typed candidate-ranking
+change are recorded in
+[personal relation v2 Reference retrieval](reports/personal-relation-v2-reference-retrieval-2026-09-09.md).
 
 The v2 split is preassigned, not secret: the public generator and gold remain
 `frozen=false` and `publication_ready=false` until an independent semantic review.
@@ -551,8 +554,13 @@ Planner v12 additionally distinguishes mutable present state from enduring
 attribution/provenance, represents imprecise calendar periods as intervals, and asks
 for the smallest supported relation-type candidate set. Its Reference boundary treats
 provider output as untrusted: schema-known fields are projected, unknown fields are
-inert, and recognized values still undergo strict type and temporal validation. An
-object with no recognized field remains invalid. Historical v8-v11 reports remain
+inert, and recognized values still undergo strict type and temporal validation. The
+only temporary incomplete state is `intent=as_of` without `as_of`: it may reach the
+host's domain-neutral explicit-numeric-calendar grounding and must pass complete draft
+validation immediately afterward. Ambiguous, relative, invalid, or multiple dates are
+not repaired, and every other temporal/type invariant remains strict. This execution
+ordering changes no prompt, schema, or request/cache fingerprint. An object with no
+recognized field remains invalid. Historical v8-v11 reports remain
 versioned exploratory references, not concurrent controls for v12; do not attribute
 every between-run fluctuation to the new instructions.
 
