@@ -17,6 +17,11 @@ remain hard constraints even if `relation_hints_require_match=False`. An absent
 or unavailable relation index cannot satisfy them: union raises rather than
 returning unconstrained hits. Hard relation-constrained counts are unsupported.
 Soft relation queries retain the configured fallback behavior on index failure.
+When a Planner-selected ontology type matches an edge, union may use the index's
+bounded relation score for ordering. A type-conflicting edge is retained at the
+adjacency score floor even if its fact happens to share an open-text hint. This
+is still non-authoritative: default `relation_gate` caps type-only suggestions
+below its evidence threshold, and only host `required_relation_types` can filter.
 
 ```python
 from doppel_memory import PersonalMemoryQueryConfig

@@ -1642,10 +1642,17 @@ class PersonalMemoryQueryEngine:
             score = min(max(float(candidate.score), 0.0), 1.0)
             if required_relation_types:
                 score = 1.0
-            elif candidate.match_kind == "type":
+            elif (
+                candidate.match_kind == "type"
+                and self.config.candidate_fusion == "relation_gate"
+            ):
                 # A derived index cannot turn a planner suggestion into a hard
-                # relation match. Type-only evidence remains below the gate.
-                score = min(score, 0.2)
+                # relation match. Legacy gate mode forces it below the configured
+                # evidence threshold; union mode may use it only for ranking.
+                score = min(
+                    score,
+                    max(self.config.minimum_relation_score - 0.000001, 0.0),
+                )
             current = details.get(key)
             if current is None or score > current[0]:
                 details[key] = (

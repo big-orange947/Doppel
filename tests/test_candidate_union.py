@@ -108,6 +108,45 @@ async def test_union_recovers_independent_vector_without_unsafe_candidates():
 
 
 @pytest.mark.asyncio
+async def test_provider_type_is_gate_ineligible_but_can_rank_union_candidates():
+    store, _ = await setup()
+    relation = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="relation",
+                source="graphiti_relation",
+                score=.9,
+                relation_type="HELD_BY",
+                match_kind="type",
+                edge_id="typed-edge",
+                episode_ids=["typed-episode"],
+            )
+        ]
+    )
+    results = {}
+    for mode in ["relation_gate", "union"]:
+        results[mode] = await PersonalMemoryQueryEngine(
+            store,
+            PersonalMemoryQueryConfig(candidate_fusion=mode),
+            relation_index=relation,
+        ).query(
+            _DraftPlanner(
+                search_text="sensor",
+                relation_types=["HELD_BY"],
+            ),
+            "sensor",
+            [SCOPE],
+            now=NOW,
+            available_relation_types=["HELD_BY"],
+        )
+
+    assert results["relation_gate"].hits == []
+    assert [hit.record.memory_id for hit in results["union"].hits] == ["relation"]
+    assert results["union"].hits[0].relation_score == .9
+
+
+@pytest.mark.asyncio
 async def test_union_uses_raw_query_for_candidates_when_planner_search_is_empty():
     store, _ = await setup()
     vector = RecordingVector()

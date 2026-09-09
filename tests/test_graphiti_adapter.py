@@ -1033,14 +1033,14 @@ async def test_candidate_type_bank_keeps_neutral_evidence_and_host_constraints(
         assert calls[1][1]["relation_types"] == ["OWNED_BY"]
         assert calls[0][1]["limit"] == 4 and calls[1][1]["limit"] == 2
         assert candidates[-1].relation_type == "OWNED_BY"
-        assert candidates[-1].score == 0.2
-        assert candidates[-1].match_kind == "none"
+        assert candidates[-1].score > 0.35
+        assert candidates[-1].match_kind == "type"
     assert len(scorer.requests[0].items) == 2  # Duplicated bank edges scored once.
     for _, params in calls:
         assert params["group_ids"] == [scope.scope_key]
 
 
-async def test_suggestion_only_without_reranker_does_not_promote_adjacency() -> None:
+async def test_suggestion_only_preserves_type_relevance_for_engine_policy() -> None:
     scope = MemoryScope(user_id="suggestion-only", agent_id="bot")
     store = InMemoryStore()
     fake = FakeGraphiti()
@@ -1085,8 +1085,67 @@ async def test_suggestion_only_without_reranker_does_not_promote_adjacency() -> 
         limit=2,
     )
     assert len(candidates) == 1
-    assert candidates[0].score == 0.2
-    assert candidates[0].match_kind == "none"
+    assert candidates[0].score == 1.0
+    assert candidates[0].match_kind == "type"
+
+
+async def test_suggested_type_outranks_conflicting_lexical_relation() -> None:
+    scope = MemoryScope(user_id="suggested-type-order", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    rows = []
+    for memory_id, relation_type in (
+        ("lexical-conflict", "CALIBRATED_BY"),
+        ("typed-match", "OWNED_BY"),
+    ):
+        record = MemoryRecord(
+            memory_id=memory_id,
+            scope=scope,
+            content="sensor relation",
+            metadata={"evidence": [{"evidence_id": f"evidence-{memory_id}"}]},
+        )
+        await store.put(record)
+        indexed = await GraphitiSemanticIndex(
+            store, graphiti_client=fake
+        ).index_record(record)
+        rows.append(
+            {
+                "group_id": scope.scope_key,
+                "edge_id": f"edge-{memory_id}",
+                "relation_type": relation_type,
+                "fact": "sensor relation",
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": "sensor",
+                "source_entity_name": "sensor",
+                "target_entity_id": memory_id,
+                "target_entity_name": memory_id,
+                "relation_hint_match": 1,
+            }
+        )
+    fake.driver = _RelationDriver(rows)
+
+    candidates = await GraphitiRelationIndex(
+        store, graphiti_client=fake
+    ).search_relations(
+        RelationQuery(
+            query_text="Who owns the sensor?",
+            entity_mentions=["sensor"],
+            relation_hints=["relation"],
+            candidate_relation_types=["OWNED_BY"],
+            subject="owner",
+            subject_id=scope.user_id,
+        ),
+        [scope],
+        limit=4,
+    )
+
+    by_id = {candidate.memory_id: candidate for candidate in candidates}
+    assert by_id["typed-match"].score > 0.35
+    assert by_id["typed-match"].match_kind == "type"
+    assert by_id["lexical-conflict"].score == 0.2
+    assert by_id["lexical-conflict"].match_kind == "lexical"
 
 
 @pytest.mark.parametrize(

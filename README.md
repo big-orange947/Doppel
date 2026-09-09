@@ -1312,7 +1312,9 @@ Graphiti/Neo4j 从不成为事实权威。
 scope/时间/生命周期/Store 回源门的词法、向量和关系候选并集参与排序。若这类普通
 lookup/current/history/planned/as-of 草案已有实体或关系锚点、却把 `search_text` 留空，
 union 会用原始问句仅启动有界的独立语义候选发现，并在结果 warning/trace 中记录
-`raw_query_candidate_fallback`；保存的 plan、词法分数和所有权限/事实门都不改。
+`raw_query_candidate_fallback`；保存的 plan、词法分数和所有权限/事实门都不改。Planner
+从白名单中选择的关系类型在 union 中是软排序信号：匹配类型可以加分，类型冲突的边即使
+文本相似也只保留低权重邻接分；它不会删除独立向量候选，也不会升级为事实证明。
 默认 `relation_gate` 不启用这项召回降级，count 也永远不使用 top-k 估算完整集合。
 
 如果 host 使用稳定的关系 ontology，还可以在调用 `engine.query(...)` 时通过

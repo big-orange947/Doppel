@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Preserve Planner-selected ontology types as soft Graphiti relevance in opt-in
+  candidate-union mode. A suggested type match may rank an already authorized
+  candidate, while a type-conflicting lexical edge is kept observable at the
+  adjacency score floor. Legacy `relation_gate` still forces provider-suggested
+  types below its evidence threshold, host `required_relation_types` remain the
+  only hard type authority, and a configured relation reranker remains able to
+  supply an independent match.
 - Add a separate draft v2 personal-relation retrieval dataset: 72 authoritative
   memories, 240 queries, 12 exact owner scopes, fixed dev/held-out/adversarial
   partitions, same-entity cross-owner collisions, time transitions, negated

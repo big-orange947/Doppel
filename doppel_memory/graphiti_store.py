@@ -748,6 +748,7 @@ class GraphitiRelationIndex:
                 for name in bound.candidate_relation_types
                 if not relation_type_set or name in relation_type_set
             ]
+            suggested_relation_type_set = set(suggested)
             if suggested:
                 extra = await driver.execute_query(
                     cypher,
@@ -830,6 +831,10 @@ class GraphitiRelationIndex:
             relation_type_match = bool(
                 relation_type_set and relation_type.upper() in relation_type_set
             )
+            suggested_relation_type_match = bool(
+                suggested_relation_type_set
+                and relation_type.upper() in suggested_relation_type_set
+            )
             fact = str(_graph_row_value(row, "fact", "") or "")
             relation_hint_match = bool(row["relation_hint_match"] or 0)
             reranker_score = reranker_scores.get(edge_id)
@@ -882,13 +887,21 @@ class GraphitiRelationIndex:
                         hints_present=bool(
                             raw_relation_hints or bound.candidate_relation_types
                         ),
-                        hint_match=(
-                            relation_type_match or relation_hint_match or reranker_match
-                        ),
+                        hint_match=relation_hint_match,
+                        reranker_match=reranker_match,
+                        hard_type_match=relation_type_match,
+                        suggested_types_present=bool(suggested_relation_type_set),
+                        suggested_type_match=suggested_relation_type_match,
                     ),
                     relation_type=relation_type,
                     fact=fact,
-                    match_kind=("type" if relation_type_match else match_kind),
+                    match_kind=(
+                        "reranker"
+                        if reranker_match
+                        else "type"
+                        if relation_type_match or suggested_relation_type_match
+                        else match_kind
+                    ),
                     reranker_score=reranker_score,
                     source_entity_id=str(row["source_entity_id"] or ""),
                     source_entity_name=str(row["source_entity_name"] or ""),
@@ -1621,8 +1634,20 @@ def _relation_candidate_score(
     *,
     hints_present: bool,
     hint_match: bool,
+    reranker_match: bool,
+    hard_type_match: bool,
+    suggested_types_present: bool,
+    suggested_type_match: bool,
 ) -> float:
     base = _graphiti_rank_score(rank, result_count)
+    if hard_type_match or reranker_match:
+        return base
+    if suggested_types_present:
+        # Provider-suggested ontology types are useful ranking evidence, but they are
+        # not host authority. Preserve their full relevance signal for candidate-union
+        # ranking while a type-conflicting edge remains only an observable adjacency
+        # candidate. The query engine, rather than the derived index, owns any gate.
+        return base if suggested_type_match else round(min(base, 0.2), 6)
     if not hints_present or hint_match:
         return base
     # An entity anchor proves graph adjacency, not that the edge answers the asked
