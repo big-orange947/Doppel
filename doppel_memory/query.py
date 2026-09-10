@@ -117,16 +117,7 @@ class PersonalMemoryQueryDraft(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    intent: QueryIntent = Field(
-        default=PersonalMemoryQueryIntent.LOOKUP,
-        description=(
-            "Retrieval operation, not grammatical tense. Use lookup for one "
-            "enduring fact or attribution, including the actor, place, source, or "
-            "instrument of a completed action. Use history only to select a "
-            "superseded or ended prior state, historical occurrences as occurrences, "
-            "or an explicit past interval."
-        ),
-    )
+    intent: QueryIntent = PersonalMemoryQueryIntent.LOOKUP
     search_text: str = ""
     memory_types: list[str] = Field(default_factory=list)
     topic_keys: list[str] = Field(default_factory=list)
@@ -290,18 +281,14 @@ class PersonalMemoryQueryPlanner(Protocol):
 REFERENCE_PERSONAL_MEMORY_QUERY_INSTRUCTIONS = """\
 Plan retrieval over already-extracted personal memories. Return one structured query
 draft and never choose read scopes, Store operations, memory IDs, lifecycle actions, or
-an answer. Treat intent as the retrieval operation, never as a label for grammatical
-tense. Use current for a mutable state or relationship whose unqualified question
+an answer. Use current for a mutable state or relationship whose unqualified question
 normally asks what is true now, even when the question omits a word such as "now".
 Use lookup for an enduring attribution, provenance, identity, or other fact whose answer
 does not become historical merely because it was established by a completed action.
 Grammatical past tense or asking about origin, authorship, recommendation, purchase,
 issuance, birth, or who performed an action does not by itself make a query history.
-Asking for one stored actor, place, source, instrument, or other attribution of a
-completed occurrence remains lookup even when the wording says last, previous, or
-previously. Use history only when the requested answer is itself a superseded or ended
-prior state, when occurrences are requested as historical occurrences, or for an
-explicit past interval. Use
+Use history only when the user asks for a superseded or ended prior state, a completed
+occurrence in an explicitly historical context, or an explicit past interval. Use
 planned only for unfulfilled future plans, list for episode enumeration, and count for
 episode counts. Use as_of only for an explicit point in time. A calendar year or month
 without a day is an interval, not an arbitrary representative point: express it with
@@ -378,7 +365,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "13"
+    version = "12"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
