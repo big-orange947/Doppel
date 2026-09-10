@@ -13,7 +13,7 @@ from calendar import monthrange
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 from pydantic import (
     BaseModel,
@@ -81,13 +81,19 @@ logger = logging.getLogger(__name__)
 QueryIntent = Literal[
     "lookup", "current", "history", "planned", "list", "count", "as_of"
 ]
+QueryOperation = Literal["lookup", "list", "count"]
+QueryTemporalView = Literal[
+    "unbounded", "current", "prior", "planned", "as_of", "interval"
+]
 
 # Closed, content-free diagnostics; messages never interpolate model/user values.
 QUERY_TEMPORAL_ERROR_CODES = frozenset(
     {
         "query_time_timezone_required",
         "query_time_range_reversed",
+        "query_time_shape_mixed",
         "query_as_of_required",
+        "query_interval_required",
     }
 )
 
@@ -102,6 +108,25 @@ class PersonalMemoryQueryIntent:
     LIST = "list"
     COUNT = "count"
     AS_OF = "as_of"
+
+
+class PersonalMemoryQueryOperation:
+    """The retrieval operation, independent from the requested time view."""
+
+    LOOKUP = "lookup"
+    LIST = "list"
+    COUNT = "count"
+
+
+class PersonalMemoryQueryTemporalView:
+    """The time slice over which a retrieval operation should execute."""
+
+    UNBOUNDED = "unbounded"
+    CURRENT = "current"
+    PRIOR = "prior"
+    PLANNED = "planned"
+    AS_OF = "as_of"
+    INTERVAL = "interval"
 
 
 class PersonalMemoryCountStatus:
@@ -198,6 +223,117 @@ class PersonalMemoryQueryDraft(BaseModel):
         return self
 
 
+class PersonalMemoryQueryDraftV2(BaseModel):
+    """Orthogonal operation/time Planner output without scope authority.
+
+    V1 ``intent`` remains supported. V2 is deliberately a separate model so an
+    existing Planner, cache, generated schema, or serialized draft does not change
+    meaning merely because the additive protocol exists.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[2] = 2
+    operation: QueryOperation = PersonalMemoryQueryOperation.LOOKUP
+    temporal_view: QueryTemporalView = PersonalMemoryQueryTemporalView.UNBOUNDED
+    search_text: str = ""
+    memory_types: list[str] = Field(default_factory=list)
+    topic_keys: list[str] = Field(default_factory=list)
+    temporal_statuses: list[str] = Field(default_factory=list)
+    entity_mentions: list[str] = Field(default_factory=list)
+    relation_hints: list[str] = Field(default_factory=list)
+    relation_types: list[str] = Field(default_factory=list)
+    subject: str = Actor.OWNER
+    subject_id: str = ""
+    as_of: datetime | None = None
+    time_from: datetime | None = None
+    time_to: datetime | None = None
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    explanation: str = ""
+
+    @field_validator("search_text", "subject_id", "explanation", mode="before")
+    @classmethod
+    def _normalize_text(cls, value: Any) -> str:
+        return str(value or "").strip()
+
+    @field_validator("subject", mode="before")
+    @classmethod
+    def _normalize_subject(cls, value: Any) -> str:
+        return Actor.normalize(value)
+
+    @field_validator("memory_types", "topic_keys", mode="before")
+    @classmethod
+    def _normalize_namespaces(cls, value: Any) -> list[str]:
+        items = [str(item or "").strip().lower() for item in list(value or [])]
+        return list(dict.fromkeys(item for item in items if item))
+
+    @field_validator("temporal_statuses", mode="before")
+    @classmethod
+    def _normalize_temporal_statuses(cls, value: Any) -> list[str]:
+        items = [MemoryTemporalStatus.normalize(item) for item in list(value or [])]
+        return list(dict.fromkeys(item for item in items if item))
+
+    @field_validator("entity_mentions", "relation_hints", mode="before")
+    @classmethod
+    def _normalize_relation_terms(cls, value: Any) -> list[str]:
+        items = [str(item or "").strip() for item in list(value or [])]
+        return list(dict.fromkeys(item for item in items if item))
+
+    @field_validator("relation_types", mode="before")
+    @classmethod
+    def _normalize_relation_types(cls, value: Any) -> list[str]:
+        return _canonical_relation_types(value)
+
+    @field_validator("as_of", "time_from", "time_to")
+    @classmethod
+    def _normalize_time(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise PydanticCustomError(
+                "query_time_timezone_required", "query times must include a timezone"
+            )
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def _validate_time_view(self, info: ValidationInfo) -> PersonalMemoryQueryDraftV2:
+        if self.time_from and self.time_to and self.time_to < self.time_from:
+            raise PydanticCustomError(
+                "query_time_range_reversed", "time_to must not precede time_from"
+            )
+        if self.as_of is not None and (
+            self.time_from is not None or self.time_to is not None
+        ):
+            raise PydanticCustomError(
+                "query_time_shape_mixed",
+                "as_of and interval coordinates cannot be combined",
+            )
+        allow_incomplete = bool(
+            isinstance(info.context, Mapping)
+            and info.context.get("allow_incomplete_time_view") is True
+        )
+        if (
+            self.temporal_view == PersonalMemoryQueryTemporalView.AS_OF
+            and self.as_of is None
+            and not allow_incomplete
+        ):
+            raise PydanticCustomError(
+                "query_as_of_required",
+                "as_of temporal view requires an as_of timestamp",
+            )
+        if (
+            self.temporal_view == PersonalMemoryQueryTemporalView.INTERVAL
+            and self.time_from is None
+            and self.time_to is None
+            and not allow_incomplete
+        ):
+            raise PydanticCustomError(
+                "query_interval_required",
+                "interval temporal view requires at least one interval bound",
+            )
+        return self
+
+
 class PersonalMemoryQueryRequest(BaseModel):
     """Trusted planner input for one user's question at a known current time."""
 
@@ -276,6 +412,18 @@ class PersonalMemoryQueryPlanner(Protocol):
     async def plan(
         self, request: PersonalMemoryQueryRequest
     ) -> PersonalMemoryQueryDraft: ...
+
+
+@runtime_checkable
+class PersonalMemoryQueryPlannerV2(Protocol):
+    """Produce an operation/time-orthogonal, scope-free query draft."""
+
+    name: str
+    version: str
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryQueryDraftV2: ...
 
 
 REFERENCE_PERSONAL_MEMORY_QUERY_INSTRUCTIONS = """\
@@ -361,6 +509,63 @@ preserve the entity anchors and original-language relation hints either way.
 """
 
 
+REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS = """\
+Plan retrieval over already-extracted personal memories. Return one structured query
+draft and never choose read scopes, Store operations, memory IDs, lifecycle actions,
+or an answer. Classify two independent dimensions instead of compressing them into a
+single intent.
+
+operation describes what the caller needs from the evidence set: lookup for one or
+more relevant facts, list for explicit enumeration, and count for an exact episode
+count. temporal_view describes which time slice qualifies: unbounded when no time
+slice is requested, current for what is true now, prior for a superseded/ended state
+or explicitly historical occurrence, planned for an unfulfilled future plan, as_of
+for one explicit instant, and interval for before/after/during or a calendar span.
+Grammar and time are not the retrieval operation: past tense does not change lookup
+into another operation, and asking "how many last year" remains count plus interval.
+Likewise, a completed attribution, origin, authorship, purchase, recommendation,
+issuance, birth, or performed action can be lookup plus unbounded; use prior only
+when the requested evidence itself must belong to a past time slice. A mutable state
+or relationship whose unqualified wording conventionally asks what is true now is
+lookup plus current. Do not infer that a plan happened.
+
+Use the supplied current time to resolve relative expressions. A full explicit date
+uses as_of. A calendar year or month and before/after/during expressions use interval;
+never invent a representative point. Populate the matching as_of or interval fields.
+Every non-null time must include a timezone, time_to must not precede time_from,
+as_of requires an as_of timestamp, and interval requires at least one bound.
+
+Preserve concise semantic search_text for ordinary lookup/list questions. Keep it
+empty only when a complete structural set is required. Use episode memory type for
+occurrence enumeration/counting. Otherwise memory_types and topic_keys are hard
+filters: omit them unless the question explicitly names the stored class or exact
+stable slot. Do not guess domain-specific keys or synonyms.
+
+Populate entity_mentions only for explicitly referenced people, places, objects, or
+named concepts that can anchor a graph relation. An explicitly referenced object need
+not have a proper name. A possessive reference does not make an object the trusted
+subject. Populate relation_hints whenever the question explicitly asks for a
+relationship or property between an anchor and a known or unknown endpoint. Keep the
+shortest predicate phrase from the question, excluding the named entity and requested
+endpoint; do not translate it or replace it with an ontology label. Entity mentions
+and relation hints are independent, and an unknown answer is not evidence that the
+requested predicate is ambiguous.
+
+relation_types contains optional candidate types, never exact filters or proof. Select
+only labels in available_relation_types and use the smallest set supported by the
+requested meaning, endpoint roles, definitions, and explicit exclusions. Do not add
+neighboring types merely to widen recall. Emit multiple types only for multiple
+requested predicates. If types remain underdetermined, leave them empty while keeping
+the original entity anchors and relation hints.
+
+The input default_subject/default_subject_id are trusted host authority. Echo them
+unchanged. Other people, pets, objects, and places belong in entity_mentions, not
+subject. Do not broaden the subject or time range to resolve uncertainty. explanation
+is optional: prefer empty, otherwise use one short sentence of at most 80 characters.
+Do not provide chain-of-thought, repeat definitions, or restate the question.
+"""
+
+
 class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
@@ -388,13 +593,49 @@ class ReferencePersonalMemoryQueryPlanner:
         )
         if isinstance(raw, BaseModel):
             raw = raw.model_dump(warnings=False)
-        draft = _project_reference_query_draft(
-            raw, allow_incomplete_as_of=True
-        )
+        draft = _project_reference_query_draft(raw, allow_incomplete_as_of=True)
         draft = _ground_explicit_query_time(draft, bound)
         # The relaxed projection exists only long enough for host calendar binding.
         # The public draft invariant is restored before this planner returns.
-        draft = PersonalMemoryQueryDraft.model_validate(
+        draft = PersonalMemoryQueryDraft.model_validate(draft.model_dump(mode="python"))
+        return draft.model_copy(
+            update={
+                "subject": bound.default_subject,
+                "subject_id": bound.default_subject_id,
+            }
+        )
+
+
+class ReferencePersonalMemoryQueryPlannerV2:
+    """Reference Planner with independent retrieval operation and time view."""
+
+    name = "doppel.reference-personal-memory-query-planner-v2"
+    version = "1"
+
+    def __init__(self, model: StructuredOutputModel) -> None:
+        self.model = model
+        _require_identity(model, "structured output model")
+        self.version = _model_bound_version(self.version, model)
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryQueryDraftV2:
+        bound = PersonalMemoryQueryRequest.model_validate(request)
+        instructions = REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS
+        if bound.relation_type_definitions:
+            instructions += REFERENCE_RELATION_DEFINITION_INSTRUCTIONS
+        raw = await self.model.generate(
+            StructuredGenerationRequest(
+                instructions=instructions,
+                input=bound.to_planner_input(),
+                output_schema=PersonalMemoryQueryDraftV2.model_json_schema(),
+            )
+        )
+        if isinstance(raw, BaseModel):
+            raw = raw.model_dump(warnings=False)
+        draft = _project_reference_query_draft_v2(raw, allow_incomplete_time_view=True)
+        draft = _ground_explicit_query_time_v2(draft, bound)
+        draft = PersonalMemoryQueryDraftV2.model_validate(
             draft.model_dump(mode="python")
         )
         return draft.model_copy(
@@ -421,22 +662,47 @@ def _project_reference_query_draft(
         {"allow_incomplete_as_of": True} if allow_incomplete_as_of else None
     )
     if not isinstance(raw, Mapping):
-        return PersonalMemoryQueryDraft.model_validate(
-            raw, context=validation_context
-        )
+        return PersonalMemoryQueryDraft.model_validate(raw, context=validation_context)
     known = PersonalMemoryQueryDraft.model_fields.keys()
     projected = {name: raw[name] for name in known if name in raw}
     unknown_count = len(raw) - len(projected)
     if not projected:
-        return PersonalMemoryQueryDraft.model_validate(
-            raw, context=validation_context
-        )
+        return PersonalMemoryQueryDraft.model_validate(raw, context=validation_context)
     if unknown_count:
         logger.warning(
             "reference query planner discarded %d unknown output field(s)",
             unknown_count,
         )
     return PersonalMemoryQueryDraft.model_validate(
+        projected, context=validation_context
+    )
+
+
+def _project_reference_query_draft_v2(
+    raw: Any, *, allow_incomplete_time_view: bool = False
+) -> PersonalMemoryQueryDraftV2:
+    """Project JSON-object provider output onto the strict V2 draft schema."""
+
+    validation_context = (
+        {"allow_incomplete_time_view": True} if allow_incomplete_time_view else None
+    )
+    if not isinstance(raw, Mapping):
+        return PersonalMemoryQueryDraftV2.model_validate(
+            raw, context=validation_context
+        )
+    known = PersonalMemoryQueryDraftV2.model_fields.keys()
+    projected = {name: raw[name] for name in known if name in raw}
+    unknown_count = len(raw) - len(projected)
+    if not projected:
+        return PersonalMemoryQueryDraftV2.model_validate(
+            raw, context=validation_context
+        )
+    if unknown_count:
+        logger.warning(
+            "reference query planner v2 discarded %d unknown output field(s)",
+            unknown_count,
+        )
+    return PersonalMemoryQueryDraftV2.model_validate(
         projected, context=validation_context
     )
 
@@ -498,11 +764,10 @@ class FallbackPersonalMemoryQueryPlanner:
                 f"({error_type}, {type(fallback_error).__name__})"
             ) from fallback_error
 
-        audit = (
-            "fallback_used:"
-            f"{self.primary.name}->{self.fallback.name}:{error_type}"
+        audit = f"fallback_used:{self.primary.name}->{self.fallback.name}:{error_type}"
+        explanation = (
+            f"{audit}; {fallback.explanation}" if fallback.explanation else audit
         )
-        explanation = f"{audit}; {fallback.explanation}" if fallback.explanation else audit
         return fallback.model_copy(update={"explanation": explanation})
 
 
@@ -573,6 +838,69 @@ class DeterministicPersonalMemoryQueryPlanner:
         )
 
 
+class DeterministicPersonalMemoryQueryPlannerV2:
+    """Domain-neutral V2 baseline with orthogonal operation and time parsing."""
+
+    name = "doppel.deterministic-personal-memory-query-planner-v2"
+    version = "1"
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryQueryDraftV2:
+        bound = PersonalMemoryQueryRequest.model_validate(request)
+        query = unicodedata.normalize("NFKC", bound.query).strip()
+        operation = _detect_operation(query)
+        temporal_view = _detect_temporal_view(query)
+        memory_types = (
+            [PersonalMemoryType.EPISODE]
+            if operation == PersonalMemoryQueryOperation.COUNT
+            else []
+        )
+        temporal_statuses: list[str] = []
+        as_of: datetime | None = None
+        time_from: datetime | None = None
+        time_to: datetime | None = None
+        calendar_expression = _explicit_calendar_expression(query, now=bound.now)
+        if (
+            calendar_expression is not None
+            and temporal_view != PersonalMemoryQueryTemporalView.PLANNED
+        ):
+            expression_kind, expression_start, expression_end = calendar_expression
+            if expression_kind == "point":
+                temporal_view = PersonalMemoryQueryTemporalView.AS_OF
+                as_of = expression_start
+            else:
+                temporal_view = PersonalMemoryQueryTemporalView.INTERVAL
+                time_from = expression_start
+                time_to = expression_end
+
+        if temporal_view == PersonalMemoryQueryTemporalView.CURRENT:
+            temporal_statuses = [
+                MemoryTemporalStatus.CURRENT,
+                MemoryTemporalStatus.TIMELESS,
+            ]
+        elif temporal_view == PersonalMemoryQueryTemporalView.PRIOR and not (
+            time_from is not None or time_to is not None
+        ):
+            temporal_statuses = [MemoryTemporalStatus.HISTORICAL]
+        elif temporal_view == PersonalMemoryQueryTemporalView.PLANNED:
+            temporal_statuses = [MemoryTemporalStatus.PLANNED]
+
+        return PersonalMemoryQueryDraftV2(
+            operation=operation,
+            temporal_view=temporal_view,
+            search_text=_search_text(query),
+            memory_types=memory_types,
+            temporal_statuses=temporal_statuses,
+            subject=bound.default_subject,
+            subject_id=bound.default_subject_id,
+            as_of=as_of,
+            time_from=time_from,
+            time_to=time_to,
+            explanation="domain-neutral orthogonal operation and temporal rules",
+        )
+
+
 class PersonalMemoryQueryConfig(BaseModel):
     """Read bounds and ranking controls for one query."""
 
@@ -632,6 +960,49 @@ class PersonalMemoryQueryPlan(BaseModel):
     planner_confidence: float = Field(ge=0.0, le=1.0)
     explanation: str = ""
     config_fingerprint: str
+
+
+class PersonalMemoryQueryPlanV2(PersonalMemoryQueryPlan):
+    """Integrity-bound execution plan retaining both orthogonal dimensions.
+
+    ``intent`` is a compatibility projection for older observability consumers.
+    Execution semantics use ``operation`` and ``temporal_view`` for schema v2.
+    """
+
+    schema_version: Literal[2] = 2
+    operation: QueryOperation
+    temporal_view: QueryTemporalView
+
+    @model_validator(mode="after")
+    def _validate_v2_projection(self) -> PersonalMemoryQueryPlanV2:
+        if self.intent != _legacy_intent_projection(self.operation, self.temporal_view):
+            raise ValueError("v2 legacy intent projection is inconsistent")
+        if self.as_of is not None and (
+            self.time_from is not None or self.time_to is not None
+        ):
+            raise ValueError("v2 point and interval coordinates cannot be combined")
+        if (
+            self.as_of is not None
+            and self.temporal_view != PersonalMemoryQueryTemporalView.AS_OF
+        ):
+            raise ValueError("v2 as_of coordinate requires the as_of temporal view")
+        if (
+            (self.time_from is not None or self.time_to is not None)
+            and self.temporal_view != PersonalMemoryQueryTemporalView.INTERVAL
+        ):
+            raise ValueError("v2 interval coordinates require the interval temporal view")
+        if (
+            self.temporal_view == PersonalMemoryQueryTemporalView.AS_OF
+            and self.as_of is None
+        ):
+            raise ValueError("v2 as_of temporal view requires an as_of timestamp")
+        if (
+            self.temporal_view == PersonalMemoryQueryTemporalView.INTERVAL
+            and self.time_from is None
+            and self.time_to is None
+        ):
+            raise ValueError("v2 interval temporal view requires a bound")
+        return self
 
 
 class PersonalMemoryQueryHit(BaseModel):
@@ -705,7 +1076,7 @@ class PersonalMemoryQueryResult(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    plan: PersonalMemoryQueryPlan
+    plan: PersonalMemoryQueryPlanV2 | PersonalMemoryQueryPlan
     hits: list[PersonalMemoryQueryHit] = Field(default_factory=list)
     conflicts: list[PersonalMemoryConflictHit] = Field(default_factory=list)
     matched_record_count: int = Field(default=0, ge=0)
@@ -758,7 +1129,7 @@ class PersonalMemoryQueryEngine:
 
     async def plan(
         self,
-        planner: PersonalMemoryQueryPlanner,
+        planner: PersonalMemoryQueryPlanner | PersonalMemoryQueryPlannerV2,
         query: str,
         scopes: Sequence[MemoryScope],
         *,
@@ -769,7 +1140,7 @@ class PersonalMemoryQueryEngine:
         available_relation_types: Sequence[str] = (),
         relation_type_definitions: Sequence[RelationTypeDefinition] = (),
         required_relation_types: Sequence[str] = (),
-    ) -> PersonalMemoryQueryPlan:
+    ) -> PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2:
         _require_identity(planner, "personal-memory query planner")
         bound_scopes = _bind_scopes(scopes)
         owner_id = bound_scopes[0].user_id
@@ -784,8 +1155,18 @@ class PersonalMemoryQueryEngine:
         required_types = _bind_relation_types(
             required_relation_types, request.available_relation_types
         )
-        draft = PersonalMemoryQueryDraft.model_validate(await planner.plan(request))
-        draft = _ground_explicit_query_time(draft, request)
+        raw_draft = await planner.plan(request)
+        is_v2 = isinstance(raw_draft, PersonalMemoryQueryDraftV2) or (
+            isinstance(raw_draft, Mapping) and raw_draft.get("schema_version") == 2
+        )
+        if is_v2:
+            draft_v2 = PersonalMemoryQueryDraftV2.model_validate(raw_draft)
+            draft_v2 = _ground_explicit_query_time_v2(draft_v2, request)
+            draft: PersonalMemoryQueryDraft | PersonalMemoryQueryDraftV2 = draft_v2
+        else:
+            draft_v1 = PersonalMemoryQueryDraft.model_validate(raw_draft)
+            draft_v1 = _ground_explicit_query_time(draft_v1, request)
+            draft = draft_v1
         if draft.confidence < self.config.minimum_planner_confidence:
             raise PersonalMemoryQueryPlanningError(
                 f"planner confidence {draft.confidence} is below minimum "
@@ -796,21 +1177,42 @@ class PersonalMemoryQueryEngine:
             bound_scopes,
             allowed_subject_ids=allowed_subject_ids,
         )
-        temporal_statuses = _bind_temporal_statuses(
-            draft.intent,
-            draft.temporal_statuses,
-            has_explicit_time=bool(
-                draft.as_of is not None
-                or draft.time_from is not None
-                or draft.time_to is not None
-            ),
-        )
-        plan = PersonalMemoryQueryPlan(
+        if isinstance(draft, PersonalMemoryQueryDraftV2):
+            temporal_statuses = _bind_temporal_view_statuses(
+                draft.temporal_view,
+                draft.temporal_statuses,
+                has_explicit_time=bool(
+                    draft.as_of is not None
+                    or draft.time_from is not None
+                    or draft.time_to is not None
+                ),
+            )
+            plan_type: type[PersonalMemoryQueryPlanV2 | PersonalMemoryQueryPlan]
+            plan_type = PersonalMemoryQueryPlanV2
+            intent = _legacy_intent_projection(draft.operation, draft.temporal_view)
+            v2_fields: dict[str, Any] = {
+                "operation": draft.operation,
+                "temporal_view": draft.temporal_view,
+            }
+        else:
+            temporal_statuses = _bind_temporal_statuses(
+                draft.intent,
+                draft.temporal_statuses,
+                has_explicit_time=bool(
+                    draft.as_of is not None
+                    or draft.time_from is not None
+                    or draft.time_to is not None
+                ),
+            )
+            plan_type = PersonalMemoryQueryPlan
+            intent = draft.intent
+            v2_fields = {}
+        plan = plan_type(
             plan_id="",
             query=request.query,
             now=request.now,
             scopes=bound_scopes,
-            intent=draft.intent,
+            intent=intent,
             search_text=draft.search_text,
             memory_types=draft.memory_types,
             topic_keys=draft.topic_keys,
@@ -832,24 +1234,41 @@ class PersonalMemoryQueryEngine:
             planner_confidence=draft.confidence,
             explanation=draft.explanation,
             config_fingerprint=self.config.fingerprint,
+            **v2_fields,
         )
         return plan.model_copy(
             update={"plan_id": "pmq_" + _fingerprint(_plan_payload(plan))}
         )
 
     async def execute(
-        self, plan: PersonalMemoryQueryPlan, *, trace_limit: int = 0
+        self,
+        plan: PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2,
+        *,
+        trace_limit: int = 0,
     ) -> PersonalMemoryQueryResult:
         validate_trace_limit(trace_limit)
-        bound = PersonalMemoryQueryPlan.model_validate(plan)
+        is_v2 = isinstance(plan, PersonalMemoryQueryPlanV2) or (
+            isinstance(plan, Mapping) and plan.get("schema_version") == 2
+        )
+        bound = (
+            PersonalMemoryQueryPlanV2.model_validate(plan)
+            if is_v2
+            else PersonalMemoryQueryPlan.model_validate(plan)
+        )
         self._validate_plan(bound)
-        if (self.config.candidate_fusion == "union" and bound.relation_types
-                and (self._relation_index is None or bound.intent == "count")):
+        operation = _query_operation(bound)
+        if (
+            self.config.candidate_fusion == "union"
+            and bound.relation_types
+            and (self._relation_index is None or operation == "count")
+        ):
             raise NotImplementedError(
                 "explicit relation constraints require a relation lookup index"
             )
-        if self._evidence_verifier is not None and bound.intent == "count":
-            raise NotImplementedError("evidence verification does not support exact counts")
+        if self._evidence_verifier is not None and operation == "count":
+            raise NotImplementedError(
+                "evidence verification does not support exact counts"
+            )
         trace = (
             _QueryTraceCollector(trace_limit, {s.scope_key for s in bound.scopes})
             if trace_limit
@@ -882,14 +1301,20 @@ class PersonalMemoryQueryEngine:
         if (
             not candidate_search_text
             and self.config.candidate_fusion == "union"
-            and bound.intent
-            in {
-                PersonalMemoryQueryIntent.LOOKUP,
-                PersonalMemoryQueryIntent.CURRENT,
-                PersonalMemoryQueryIntent.HISTORY,
-                PersonalMemoryQueryIntent.PLANNED,
-                PersonalMemoryQueryIntent.AS_OF,
-            }
+            and (
+                (
+                    isinstance(bound, PersonalMemoryQueryPlanV2)
+                    and operation != PersonalMemoryQueryOperation.COUNT
+                )
+                or bound.intent
+                in {
+                    PersonalMemoryQueryIntent.LOOKUP,
+                    PersonalMemoryQueryIntent.CURRENT,
+                    PersonalMemoryQueryIntent.HISTORY,
+                    PersonalMemoryQueryIntent.PLANNED,
+                    PersonalMemoryQueryIntent.AS_OF,
+                }
+            )
             and (
                 bound.entity_mentions
                 or bound.relation_hints
@@ -911,7 +1336,7 @@ class PersonalMemoryQueryEngine:
                 or bound.relation_types
                 or bound.candidate_relation_types
             )
-            and bound.intent != PersonalMemoryQueryIntent.COUNT
+            and operation != PersonalMemoryQueryOperation.COUNT
         ):
             relation_task = asyncio.create_task(
                 self._read_relation_candidates(bound, trace)
@@ -920,7 +1345,7 @@ class PersonalMemoryQueryEngine:
             if (
                 self._semantic_index is not None
                 and candidate_search_text
-                and bound.intent != PersonalMemoryQueryIntent.COUNT
+                and operation != PersonalMemoryQueryOperation.COUNT
             ):
                 candidate_result = await self._read_candidates(
                     bound,
@@ -951,7 +1376,7 @@ class PersonalMemoryQueryEngine:
                 # A SemanticIndex is a bounded top-k interface. It may improve lookup
                 # recall, but it cannot define an exhaustive set for an exact count.
                 # Counts therefore use only the complete structural/lexical scan.
-                if bound.intent != PersonalMemoryQueryIntent.COUNT:
+                if operation != PersonalMemoryQueryOperation.COUNT:
                     (
                         semantic_scores,
                         semantic_sources,
@@ -966,15 +1391,20 @@ class PersonalMemoryQueryEngine:
                     relation_available,
                 ) = await relation_task
                 warnings.extend(relation_warnings)
-                if (self.config.candidate_fusion == "union"
-                        and bound.relation_types and not relation_available):
+                if (
+                    self.config.candidate_fusion == "union"
+                    and bound.relation_types
+                    and not relation_available
+                ):
                     raise RelationIndexUnavailableError(
                         "explicit relation constraints cannot fall back to untyped retrieval"
                     )
                 require_relation_match = (
-                    (self.config.relation_hints_require_match
-                     if self.config.candidate_fusion == "relation_gate"
-                     else bool(bound.relation_types))
+                    (
+                        self.config.relation_hints_require_match
+                        if self.config.candidate_fusion == "relation_gate"
+                        else bool(bound.relation_types)
+                    )
                     and bool(
                         bound.relation_hints
                         or bound.relation_types
@@ -1042,8 +1472,12 @@ class PersonalMemoryQueryEngine:
                 else:
                     if trace is not None and self.config.candidate_fusion == "union":
                         for record in records:
-                            trace.add("relation_gate", "engine",
-                                      "independent_candidate_retained", record)
+                            trace.add(
+                                "relation_gate",
+                                "engine",
+                                "independent_candidate_retained",
+                                record,
+                            )
                     records_by_key = {
                         (record.scope.scope_key, record.memory_id): record
                         for record in records
@@ -1170,13 +1604,18 @@ class PersonalMemoryQueryEngine:
         evidence_verification = None
         if self._evidence_verifier is not None:
             allowed_scopes = {s.scope_key for s in bound.scopes}
-            matched = [item for item in matched if item[0].scope.scope_key in allowed_scopes]
+            matched = [
+                item for item in matched if item[0].scope.scope_key in allowed_scopes
+            ]
             decisions, evidence_verification = await verify_evidence(
                 self._evidence_verifier,
-                EvidenceRequest(question=bound.query, items=[
-                    EvidenceItem(item_id=f"item_{i}", content=item[0].content)
-                    for i, item in enumerate(matched)
-                ]),
+                EvidenceRequest(
+                    question=bound.query,
+                    items=[
+                        EvidenceItem(item_id=f"item_{i}", content=item[0].content)
+                        for i, item in enumerate(matched)
+                    ],
+                ),
                 self._verification_config,
             )
             if evidence_verification.status in {"unavailable", "limit_exceeded"}:
@@ -1184,11 +1623,17 @@ class PersonalMemoryQueryEngine:
                 warnings.append("evidence_verification_" + evidence_verification.status)
             if trace is not None:
                 for i, item in enumerate(matched):
-                    trace.add("evidence_gate", "engine",
-                              decisions.get(f"item_{i}", evidence_verification.status),
-                              item[0])
-            matched = [item for i, item in enumerate(matched)
-                       if decisions.get(f"item_{i}") == "supported"]
+                    trace.add(
+                        "evidence_gate",
+                        "engine",
+                        decisions.get(f"item_{i}", evidence_verification.status),
+                        item[0],
+                    )
+            matched = [
+                item
+                for i, item in enumerate(matched)
+                if decisions.get(f"item_{i}") == "supported"
+            ]
 
         conflicts = _relevant_conflicts(bound, records, matched, conflict_records)
         ambiguous, ambiguity_warnings = _detect_ambiguity(bound, matched)
@@ -1219,7 +1664,7 @@ class PersonalMemoryQueryEngine:
         if self._memory_reranker is not None:
             rerank_window = (
                 []
-                if bound.intent == PersonalMemoryQueryIntent.COUNT
+                if operation == PersonalMemoryQueryOperation.COUNT
                 else matched[: self._rerank_config.max_candidates]
             )
             rerank_scores, memory_reranking = await score_personal_memories(
@@ -1327,7 +1772,7 @@ class PersonalMemoryQueryEngine:
 
     async def query(
         self,
-        planner: PersonalMemoryQueryPlanner,
+        planner: PersonalMemoryQueryPlanner | PersonalMemoryQueryPlannerV2,
         query: str,
         scopes: Sequence[MemoryScope],
         *,
@@ -1563,7 +2008,10 @@ class PersonalMemoryQueryEngine:
     ) -> Sequence[Any]:
         assert self._semantic_index is not None
         valid_at = plan.as_of
-        if valid_at is None and plan.intent == PersonalMemoryQueryIntent.CURRENT:
+        if (
+            valid_at is None
+            and _query_temporal_view(plan) == PersonalMemoryQueryTemporalView.CURRENT
+        ):
             valid_at = plan.now
         if valid_at is not None and isinstance(
             self._semantic_index, TemporalSemanticIndex
@@ -1595,13 +2043,18 @@ class PersonalMemoryQueryEngine:
     ]:
         assert self._relation_index is not None
         valid_at = plan.as_of
-        if (
-            valid_at is None
-            and plan.intent != PersonalMemoryQueryIntent.HISTORY
-            and plan.time_from is None
-            and plan.time_to is None
-        ):
-            valid_at = plan.now
+        temporal_view = _query_temporal_view(plan)
+        if valid_at is None and plan.time_from is None and plan.time_to is None:
+            if isinstance(plan, PersonalMemoryQueryPlanV2):
+                if temporal_view == PersonalMemoryQueryTemporalView.CURRENT:
+                    valid_at = plan.now
+            elif temporal_view not in {
+                PersonalMemoryQueryTemporalView.PRIOR,
+                PersonalMemoryQueryTemporalView.INTERVAL,
+            }:
+                # Preserve the v1 lookup/planned behavior. V2 can express an
+                # explicitly unbounded graph lookup without silently adding now.
+                valid_at = plan.now
         request = RelationQuery(
             query_text=plan.query,
             entity_mentions=plan.entity_mentions,
@@ -1739,8 +2192,11 @@ class PersonalMemoryQueryEngine:
             True,
         )
 
-    def _validate_plan(self, plan: PersonalMemoryQueryPlan) -> None:
-        if plan.schema_version != 1:
+    def _validate_plan(
+        self, plan: PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2
+    ) -> None:
+        expected_schema = 2 if isinstance(plan, PersonalMemoryQueryPlanV2) else 1
+        if plan.schema_version != expected_schema:
             raise PersonalMemoryQueryPlanningError("unsupported query plan schema")
         if plan.config_fingerprint != self.config.fingerprint:
             raise PersonalMemoryQueryPlanningError(
@@ -1845,7 +2301,7 @@ def _bind_scopes(scopes: Sequence[MemoryScope]) -> list[MemoryScope]:
 
 
 def _bind_subject_id(
-    draft: PersonalMemoryQueryDraft,
+    draft: PersonalMemoryQueryDraft | PersonalMemoryQueryDraftV2,
     scopes: Sequence[MemoryScope],
     *,
     allowed_subject_ids: Sequence[str],
@@ -1928,7 +2384,7 @@ def _structural_rejection_reason(
     valid_from = _metadata_time(record, "valid_from")
     valid_to = _metadata_time(record, "valid_to")
     effective_at = valid_from or record.created_at
-    if plan.intent == PersonalMemoryQueryIntent.CURRENT:
+    if _query_temporal_view(plan) == PersonalMemoryQueryTemporalView.CURRENT:
         if valid_from is not None and valid_from > plan.now:
             return "not_yet_valid"
         if valid_to is not None and valid_to < plan.now:
@@ -1986,7 +2442,7 @@ def _structural_match(
         reasons.append("temporal_status")
     if plan.as_of is not None:
         reasons.append("valid_at_as_of")
-    elif plan.intent == PersonalMemoryQueryIntent.CURRENT and (
+    elif _query_temporal_view(plan) == PersonalMemoryQueryTemporalView.CURRENT and (
         valid_from is not None or valid_to is not None
     ):
         reasons.append("valid_at_now")
@@ -2004,10 +2460,11 @@ def _visible_memory_states(plan: PersonalMemoryQueryPlan) -> frozenset[MemorySta
     """
 
     if (
-        plan.intent
+        _query_temporal_view(plan)
         in {
-            PersonalMemoryQueryIntent.HISTORY,
-            PersonalMemoryQueryIntent.AS_OF,
+            PersonalMemoryQueryTemporalView.PRIOR,
+            PersonalMemoryQueryTemporalView.AS_OF,
+            PersonalMemoryQueryTemporalView.INTERVAL,
         }
         or plan.as_of is not None
         or plan.time_from is not None
@@ -2056,6 +2513,81 @@ def _bind_temporal_statuses(
     return []
 
 
+def _bind_temporal_view_statuses(
+    temporal_view: str,
+    temporal_statuses: Sequence[str],
+    *,
+    has_explicit_time: bool = False,
+) -> list[str]:
+    """Bind V2 time semantics without consulting the retrieval operation."""
+
+    if has_explicit_time and temporal_view in {
+        PersonalMemoryQueryTemporalView.AS_OF,
+        PersonalMemoryQueryTemporalView.INTERVAL,
+    }:
+        return []
+    if temporal_statuses:
+        return list(temporal_statuses)
+    if temporal_view == PersonalMemoryQueryTemporalView.CURRENT:
+        return [MemoryTemporalStatus.CURRENT, MemoryTemporalStatus.TIMELESS]
+    if temporal_view == PersonalMemoryQueryTemporalView.PRIOR:
+        return [MemoryTemporalStatus.HISTORICAL]
+    if temporal_view == PersonalMemoryQueryTemporalView.PLANNED:
+        return [MemoryTemporalStatus.PLANNED]
+    return []
+
+
+def _legacy_intent_projection(operation: str, temporal_view: str) -> QueryIntent:
+    """Expose a stable v1 label for observability while V2 retains both axes."""
+
+    if operation == PersonalMemoryQueryOperation.COUNT:
+        return PersonalMemoryQueryIntent.COUNT
+    if operation == PersonalMemoryQueryOperation.LIST:
+        return PersonalMemoryQueryIntent.LIST
+    return cast(
+        QueryIntent,
+        {
+            PersonalMemoryQueryTemporalView.CURRENT: PersonalMemoryQueryIntent.CURRENT,
+            PersonalMemoryQueryTemporalView.PRIOR: PersonalMemoryQueryIntent.HISTORY,
+            PersonalMemoryQueryTemporalView.PLANNED: PersonalMemoryQueryIntent.PLANNED,
+            PersonalMemoryQueryTemporalView.AS_OF: PersonalMemoryQueryIntent.AS_OF,
+            PersonalMemoryQueryTemporalView.INTERVAL: PersonalMemoryQueryIntent.HISTORY,
+        }.get(temporal_view, PersonalMemoryQueryIntent.LOOKUP),
+    )
+
+
+def _query_operation(
+    plan: PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2,
+) -> QueryOperation:
+    if isinstance(plan, PersonalMemoryQueryPlanV2):
+        return plan.operation
+    if plan.intent == PersonalMemoryQueryIntent.COUNT:
+        return PersonalMemoryQueryOperation.COUNT
+    if plan.intent == PersonalMemoryQueryIntent.LIST:
+        return PersonalMemoryQueryOperation.LIST
+    return PersonalMemoryQueryOperation.LOOKUP
+
+
+def _query_temporal_view(
+    plan: PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2,
+) -> QueryTemporalView:
+    if isinstance(plan, PersonalMemoryQueryPlanV2):
+        return plan.temporal_view
+    if plan.as_of is not None:
+        return PersonalMemoryQueryTemporalView.AS_OF
+    if plan.time_from is not None or plan.time_to is not None:
+        return PersonalMemoryQueryTemporalView.INTERVAL
+    return cast(
+        QueryTemporalView,
+        {
+            PersonalMemoryQueryIntent.CURRENT: PersonalMemoryQueryTemporalView.CURRENT,
+            PersonalMemoryQueryIntent.HISTORY: PersonalMemoryQueryTemporalView.PRIOR,
+            PersonalMemoryQueryIntent.PLANNED: PersonalMemoryQueryTemporalView.PLANNED,
+            PersonalMemoryQueryIntent.AS_OF: PersonalMemoryQueryTemporalView.AS_OF,
+        }.get(plan.intent, PersonalMemoryQueryTemporalView.UNBOUNDED),
+    )
+
+
 def _query_memory_filter(plan: PersonalMemoryQueryPlan) -> MemoryFilter:
     """Build the same coarse eligibility filter for every candidate path."""
 
@@ -2090,9 +2622,10 @@ def _is_query_record_eligible(
     valid_to = _metadata_time(record, "valid_to")
     if valid_from is None and valid_to is None:
         return False
-    if plan.intent == PersonalMemoryQueryIntent.HISTORY or (
-        plan.time_from is not None or plan.time_to is not None
-    ):
+    if _query_temporal_view(plan) in {
+        PersonalMemoryQueryTemporalView.PRIOR,
+        PersonalMemoryQueryTemporalView.INTERVAL,
+    } or (plan.time_from is not None or plan.time_to is not None):
         return _metadata_text(record, "temporal_status") == (
             MemoryTemporalStatus.HISTORICAL
         )
@@ -2202,9 +2735,9 @@ def _detect_ambiguity(
     plan: PersonalMemoryQueryPlan,
     matched: Sequence[tuple[MemoryRecord, float, float, float, datetime, list[str]]],
 ) -> tuple[bool, list[str]]:
-    if plan.intent not in {
-        PersonalMemoryQueryIntent.CURRENT,
-        PersonalMemoryQueryIntent.AS_OF,
+    if _query_temporal_view(plan) not in {
+        PersonalMemoryQueryTemporalView.CURRENT,
+        PersonalMemoryQueryTemporalView.AS_OF,
     }:
         return False, []
     groups: dict[tuple[str, str, str, str], set[str]] = defaultdict(set)
@@ -2227,7 +2760,7 @@ def _detect_ambiguity(
 def _count_result(
     plan: PersonalMemoryQueryPlan, records: Sequence[MemoryRecord]
 ) -> PersonalMemoryCountResult:
-    if plan.intent != PersonalMemoryQueryIntent.COUNT:
+    if _query_operation(plan) != PersonalMemoryQueryOperation.COUNT:
         return PersonalMemoryCountResult(status=PersonalMemoryCountStatus.NOT_REQUESTED)
     if not records:
         return PersonalMemoryCountResult(
@@ -2337,6 +2870,24 @@ def _detect_intent(query: str) -> QueryIntent:
     if _contains_any(query, ("现在", "目前", "如今", "当前")):
         return PersonalMemoryQueryIntent.CURRENT
     return PersonalMemoryQueryIntent.LOOKUP
+
+
+def _detect_operation(query: str) -> QueryOperation:
+    if re.search(r"几次|多少次|次数", query):
+        return PersonalMemoryQueryOperation.COUNT
+    if _contains_any(query, ("哪些", "列出")):
+        return PersonalMemoryQueryOperation.LIST
+    return PersonalMemoryQueryOperation.LOOKUP
+
+
+def _detect_temporal_view(query: str) -> QueryTemporalView:
+    if _contains_any(query, ("计划", "打算", "准备", "将要", "将来")):
+        return PersonalMemoryQueryTemporalView.PLANNED
+    if _contains_any(query, ("以前", "过去", "曾经", "历史", "去年", "之前")):
+        return PersonalMemoryQueryTemporalView.PRIOR
+    if _contains_any(query, ("现在", "目前", "如今", "当前")):
+        return PersonalMemoryQueryTemporalView.CURRENT
+    return PersonalMemoryQueryTemporalView.UNBOUNDED
 
 
 _GROUNDABLE_TEMPORAL_INTENTS = frozenset(
@@ -2466,6 +3017,64 @@ def _ground_explicit_query_time(
                 if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS:
                     updates["intent"] = PersonalMemoryQueryIntent.HISTORY
                     updates["temporal_statuses"] = []
+                marker = "explicit_time_grounded:interval"
+
+    if not updates:
+        return draft
+    explanation = draft.explanation
+    if marker:
+        explanation = f"{explanation}; {marker}" if explanation else marker
+        updates["explanation"] = explanation
+    return draft.model_copy(update=updates)
+
+
+def _ground_explicit_query_time_v2(
+    draft: PersonalMemoryQueryDraftV2,
+    request: PersonalMemoryQueryRequest,
+) -> PersonalMemoryQueryDraftV2:
+    """Bind explicit coordinates without changing the requested operation."""
+
+    updates: dict[str, Any] = {}
+    marker = ""
+    has_as_of = draft.as_of is not None
+    has_interval = draft.time_from is not None or draft.time_to is not None
+
+    if has_as_of and not has_interval:
+        if draft.temporal_view != PersonalMemoryQueryTemporalView.AS_OF:
+            updates["temporal_view"] = PersonalMemoryQueryTemporalView.AS_OF
+            updates["temporal_statuses"] = []
+            marker = "explicit_time_grounded:point"
+    elif has_interval and not has_as_of:
+        if draft.temporal_view != PersonalMemoryQueryTemporalView.INTERVAL:
+            updates["temporal_view"] = PersonalMemoryQueryTemporalView.INTERVAL
+            updates["temporal_statuses"] = []
+            marker = "explicit_time_grounded:interval"
+    elif (
+        not has_as_of
+        and not has_interval
+        and draft.temporal_view != PersonalMemoryQueryTemporalView.PLANNED
+    ):
+        expression = _explicit_calendar_expression(request.query, now=request.now)
+        if expression is not None:
+            expression_kind, expression_start, expression_end = expression
+            if expression_kind == "point":
+                updates.update(
+                    {
+                        "temporal_view": PersonalMemoryQueryTemporalView.AS_OF,
+                        "as_of": expression_start,
+                        "temporal_statuses": [],
+                    }
+                )
+                marker = "explicit_time_grounded:point"
+            else:
+                updates.update(
+                    {
+                        "temporal_view": PersonalMemoryQueryTemporalView.INTERVAL,
+                        "time_from": expression_start,
+                        "time_to": expression_end,
+                        "temporal_statuses": [],
+                    }
+                )
                 marker = "explicit_time_grounded:interval"
 
     if not updates:

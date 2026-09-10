@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add an opt-in personal-query Plan v2 beside the unchanged v1 Planner and wire
+  models. V2 separates retrieval `operation` (`lookup`/`list`/`count`) from
+  `temporal_view` (`unbounded`/`current`/`prior`/`planned`/`as_of`/`interval`),
+  allowing combinations such as an exact count over a historical interval without
+  overloading one intent label. The query engine executes both schemas, retains a
+  deterministic legacy-intent projection for observability, and applies lifecycle,
+  temporal, semantic, relation, evidence, reranking, and exact-count gates from the
+  orthogonal fields. Existing v1 plans, fingerprints, Planner v12, defaults, and
+  serialized field shapes remain unchanged; V2 remains opt-in pending a paired
+  240-query evaluation.
 - Move the relation-Planner benchmark cache from processed query drafts to the
   raw `StructuredOutputModel` boundary. The new versioned namespace stores every
   successful provider JSON object, including output that later fails Planner

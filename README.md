@@ -632,6 +632,32 @@ Store 回源、scope/主体/权限/生命周期/时间门以及可选证据校�
 不能选择读哪些用户、memory ID、Store 操作或最终答案。engine 会把它重新绑定到 host 明确传入的
 exact scopes 和可信 subject，同一次查询禁止跨 user_id。
 
+为解决 v1 `intent` 同时表示“查询动作”和“时间切面”的歧义，Doppel 另外提供了
+显式选用的 Query Plan v2。`operation` 只回答要查询、列举还是计数；`temporal_view`
+独立表示无时间限制、当前、过去、计划、某一时点或时间区间。因此“2025 年一共旅行
+多少次”能表示为 `count + interval`，而“这台相机上次在哪里维修”可以是
+`lookup + unbounded`，不再因为句子用了过去时态就强行进入“历史状态”过滤。
+
+~~~python
+from doppel_memory import ReferencePersonalMemoryQueryPlannerV2
+
+planner = ReferencePersonalMemoryQueryPlannerV2(my_structured_model)
+result = await engine.query(
+    planner,
+    "2025年一共旅行多少次？",
+    [scope.user_scope()],
+    now=now,
+)
+assert result.plan.schema_version == 2
+assert result.plan.operation == "count"
+assert result.plan.temporal_view == "interval"
+~~~
+
+v2 不会覆盖 v1：已验证的 `ReferencePersonalMemoryQueryPlanner` v12 仍是现有默认路径，
+旧 Draft/Plan 的字段、schema version 和 plan fingerprint 保持不变。v2 Plan 额外保留一个
+确定性的 legacy `intent` 投影，只用于旧日志/观测代码阅读；引擎的计数与时间门会读取
+正交字段。在同一批 240 条查询的成对评测完成前，v2 保持 opt-in，不替换线上基线。
+
 Planner 输出与可信 plan 绑定之间还有一层领域无关的显式日历校验。它只处理单个数字日期表达式：
 完整日期以及缺年份的“月日”绑定为 `as_of`（后者从可信 `now` 取得年份），单个月或年份绑定为
 闭区间；如果模型已经给出时间坐标，则不覆盖坐标，只修正 `current + 过去区间` 这类自相矛盾的

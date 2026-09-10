@@ -29,16 +29,22 @@ from doppel_memory.models import (
 )
 from doppel_memory.query import (
     DeterministicPersonalMemoryQueryPlanner,
+    DeterministicPersonalMemoryQueryPlannerV2,
     FallbackPersonalMemoryQueryPlanner,
     PersonalMemoryCountStatus,
     PersonalMemoryQueryConfig,
     PersonalMemoryQueryDraft,
+    PersonalMemoryQueryDraftV2,
     PersonalMemoryQueryEngine,
     PersonalMemoryQueryIntent,
+    PersonalMemoryQueryOperation,
     PersonalMemoryQueryPlanningError,
+    PersonalMemoryQueryPlanV2,
     PersonalMemoryQueryReadLimitError,
     PersonalMemoryQueryRequest,
+    PersonalMemoryQueryTemporalView,
     ReferencePersonalMemoryQueryPlanner,
+    ReferencePersonalMemoryQueryPlannerV2,
 )
 from doppel_memory.relation import (
     RelationCandidate,
@@ -70,23 +76,37 @@ async def test_optional_evidence_gate(verdict):
             calls.append(request)
             if verdict == "error":
                 raise RuntimeError("private-secret")
-            return EvidenceResponse(decisions=[
-                EvidenceDecision(item_id=i.item_id, verdict=verdict)
-                for i in request.items
-            ])
+            return EvidenceResponse(
+                decisions=[
+                    EvidenceDecision(item_id=i.item_id, verdict=verdict)
+                    for i in request.items
+                ]
+            )
 
     store = InMemoryStore()
-    await _put(store, *[
-        _record(name, "camera", memory_type="profile", temporal_status="current",
-                day=1, state=MemoryState.CONFIRMED, scope=scope)
-        for name, scope in [("allowed", SCOPE), ("foreign", OTHER_SCOPE)]
-    ])
+    await _put(
+        store,
+        *[
+            _record(
+                name,
+                "camera",
+                memory_type="profile",
+                temporal_status="current",
+                day=1,
+                state=MemoryState.CONFIRMED,
+                scope=scope,
+            )
+            for name, scope in [("allowed", SCOPE), ("foreign", OTHER_SCOPE)]
+        ],
+    )
     engine = PersonalMemoryQueryEngine(store, evidence_verifier=Verifier())
-    result = await engine.query(_DraftPlanner(search_text="camera"),
-                                "camera", [SCOPE], now=NOW, trace_limit=50)
+    result = await engine.query(
+        _DraftPlanner(search_text="camera"), "camera", [SCOPE], now=NOW, trace_limit=50
+    )
     assert len(calls) == 1
     assert calls[0].model_dump() == {
-        "question": "camera", "items": [{"item_id": "item_0", "content": "camera"}]
+        "question": "camera",
+        "items": [{"item_id": "item_0", "content": "camera"}],
     }
     assert [h.record.memory_id for h in result.hits] == (
         ["allowed"] if verdict == "supported" else []
@@ -1102,7 +1122,9 @@ async def test_explicit_interval_count_can_read_superseded_episode() -> None:
     assert [hit.record.memory_id for hit in result.hits] == ["past-episode"]
 
 
-async def test_engine_repairs_provider_interval_intent_without_overwriting_time() -> None:
+async def test_engine_repairs_provider_interval_intent_without_overwriting_time() -> (
+    None
+):
     engine = PersonalMemoryQueryEngine(InMemoryStore())
     expected_from = datetime(2024, 3, 1, tzinfo=UTC)
     expected_to = datetime(2024, 3, 31, 23, 59, 59, tzinfo=UTC)
@@ -1124,12 +1146,12 @@ async def test_engine_repairs_provider_interval_intent_without_overwriting_time(
     assert plan.time_from == expected_from
     assert plan.time_to == expected_to
     assert plan.temporal_statuses == []
-    assert plan.explanation == (
-        "provider output; explicit_time_grounded:interval"
-    )
+    assert plan.explanation == ("provider output; explicit_time_grounded:interval")
 
 
-async def test_engine_grounds_omitted_month_day_and_recovers_historical_record() -> None:
+async def test_engine_grounds_omitted_month_day_and_recovers_historical_record() -> (
+    None
+):
     store = InMemoryStore()
     await _put(
         store,
@@ -1233,9 +1255,7 @@ async def test_relation_lookup_receives_interval_instead_of_present_instant() ->
     relation_request = relation_index.calls[0][0]
     assert relation_request.valid_at is None
     assert relation_request.time_from == datetime(2025, 1, 1, tzinfo=UTC)
-    assert relation_request.time_to == datetime(
-        2025, 12, 31, 23, 59, 59, tzinfo=UTC
-    )
+    assert relation_request.time_to == datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC)
 
 
 @pytest.mark.parametrize(
@@ -2822,7 +2842,9 @@ async def test_reference_projection_keeps_temporal_cross_field_validation() -> N
         )
 
 
-async def test_reference_planner_grounds_explicit_date_before_strict_validation() -> None:
+async def test_reference_planner_grounds_explicit_date_before_strict_validation() -> (
+    None
+):
     model = _StubStructuredModel(
         {
             "intent": "as_of",
@@ -2896,7 +2918,9 @@ async def test_fallback_planner_does_not_call_fallback_after_primary_success() -
     assert "fallback_used:" not in draft.explanation
 
 
-async def test_fallback_planner_reports_both_failures_without_private_messages() -> None:
+async def test_fallback_planner_reports_both_failures_without_private_messages() -> (
+    None
+):
     class BrokenPlanner:
         name = "tests.broken-planner"
         version = "1"
@@ -2943,3 +2967,196 @@ async def test_explicit_historical_window_uses_validity_not_status_label() -> No
     )
 
     assert plan.temporal_statuses == []
+
+
+def test_v2_draft_requires_coordinates_for_explicit_time_views() -> None:
+    with pytest.raises(ValidationError, match="as_of temporal view"):
+        PersonalMemoryQueryDraftV2(temporal_view="as_of")
+    with pytest.raises(ValidationError, match="interval temporal view"):
+        PersonalMemoryQueryDraftV2(temporal_view="interval")
+    with pytest.raises(ValidationError, match="cannot be combined"):
+        PersonalMemoryQueryDraftV2(
+            temporal_view="as_of",
+            as_of=NOW,
+            time_from=NOW,
+        )
+
+
+async def test_v2_deterministic_planner_separates_operation_and_time_view() -> None:
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+
+    count_plan = await engine.plan(
+        DeterministicPersonalMemoryQueryPlannerV2(),
+        "2025年一共旅行了多少次？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert isinstance(count_plan, PersonalMemoryQueryPlanV2)
+    assert count_plan.schema_version == 2
+    assert count_plan.operation == PersonalMemoryQueryOperation.COUNT
+    assert count_plan.temporal_view == PersonalMemoryQueryTemporalView.INTERVAL
+    assert count_plan.intent == PersonalMemoryQueryIntent.COUNT
+    assert count_plan.memory_types == ["episode"]
+    assert count_plan.time_from == datetime(2025, 1, 1, tzinfo=UTC)
+    assert count_plan.time_to == datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC)
+
+    attribution_plan = await engine.plan(
+        DeterministicPersonalMemoryQueryPlannerV2(),
+        "这台相机上次在哪里维修？",
+        [SCOPE],
+        now=NOW,
+    )
+    assert attribution_plan.operation == PersonalMemoryQueryOperation.LOOKUP
+    assert attribution_plan.temporal_view == PersonalMemoryQueryTemporalView.UNBOUNDED
+    assert attribution_plan.intent == PersonalMemoryQueryIntent.LOOKUP
+
+
+async def test_v2_count_can_apply_current_time_gate_independently() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "current-repair",
+            "相机维修记录",
+            memory_type="episode",
+            temporal_status="current",
+            event_key="repair:current",
+            day=1,
+        ),
+        _record(
+            "historical-repair",
+            "相机维修记录",
+            memory_type="episode",
+            temporal_status="historical",
+            event_key="repair:historical",
+            day=2,
+        ),
+    )
+
+    class CurrentCountPlanner:
+        name = "tests.current-count-v2"
+        version = "1"
+
+        async def plan(self, request: PersonalMemoryQueryRequest):
+            return PersonalMemoryQueryDraftV2(
+                operation="count",
+                temporal_view="current",
+                search_text="相机维修",
+                memory_types=["episode"],
+            )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        CurrentCountPlanner(), "相机当前有多少次维修？", [SCOPE], now=NOW
+    )
+
+    assert result.plan.operation == PersonalMemoryQueryOperation.COUNT
+    assert result.plan.temporal_view == PersonalMemoryQueryTemporalView.CURRENT
+    assert result.plan.intent == PersonalMemoryQueryIntent.COUNT
+    assert result.count.status == PersonalMemoryCountStatus.EXACT
+    assert result.count.value == 1
+    assert [hit.record.memory_id for hit in result.hits] == ["current-repair"]
+
+
+async def test_v2_reference_planner_uses_separate_schema_and_keeps_authority() -> None:
+    model = _StubStructuredModel(
+        {
+            "schema_version": 2,
+            "operation": "count",
+            "temporal_view": "interval",
+            "search_text": "旅行",
+            "memory_types": ["episode"],
+            "time_from": "2025-01-01T00:00:00Z",
+            "time_to": "2025-12-31T23:59:59Z",
+            "subject": "contact",
+            "subject_id": "untrusted",
+            "scopes": ["other-owner"],
+        }
+    )
+    planner = ReferencePersonalMemoryQueryPlannerV2(model)
+
+    draft = await planner.plan(
+        PersonalMemoryQueryRequest(
+            query="2025年一共旅行多少次？",
+            now=NOW,
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.operation == PersonalMemoryQueryOperation.COUNT
+    assert draft.temporal_view == PersonalMemoryQueryTemporalView.INTERVAL
+    assert draft.subject == Actor.OWNER
+    assert draft.subject_id == "owner"
+    request = model.requests[0]
+    assert request.output_schema["title"] == "PersonalMemoryQueryDraftV2"
+    assert "intent" not in request.output_schema["properties"]
+    assert "scopes" not in request.output_schema["properties"]
+    assert "two independent dimensions" in request.instructions
+    assert planner.version.startswith("1.")
+
+
+async def test_v2_plan_round_trip_is_integrity_bound() -> None:
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+    plan = await engine.plan(
+        DeterministicPersonalMemoryQueryPlannerV2(),
+        "2025年一共旅行多少次？",
+        [SCOPE],
+        now=NOW,
+    )
+    payload = plan.model_dump(mode="json")
+    restored = PersonalMemoryQueryPlanV2.model_validate(payload)
+
+    result = await engine.execute(restored)
+
+    assert result.plan == restored
+    assert result.count.status == PersonalMemoryCountStatus.EXACT
+    assert result.count.value == 0
+
+    payload["search_text"] = "tampered"
+    with pytest.raises(PersonalMemoryQueryPlanningError, match="plan_id"):
+        await engine.execute(payload)
+
+
+async def test_v1_plan_wire_shape_and_schema_remain_unchanged() -> None:
+    plan = await PersonalMemoryQueryEngine(InMemoryStore()).plan(
+        DeterministicPersonalMemoryQueryPlanner(),
+        "相机在哪里？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert type(plan).__name__ == "PersonalMemoryQueryPlan"
+    assert plan.schema_version == 1
+    assert "operation" not in plan.model_dump()
+    assert "temporal_view" not in plan.model_dump()
+
+
+async def test_v2_unbounded_relation_lookup_does_not_invent_current_time() -> None:
+    relation_index = _RelationIndex([])
+
+    class UnboundedRelationPlanner:
+        name = "tests.unbounded-relation-v2"
+        version = "1"
+
+        async def plan(self, request: PersonalMemoryQueryRequest):
+            return PersonalMemoryQueryDraftV2(
+                operation="lookup",
+                temporal_view="unbounded",
+                search_text="相机维修地点",
+                entity_mentions=["相机"],
+                relation_hints=["维修地点"],
+            )
+
+    await PersonalMemoryQueryEngine(
+        InMemoryStore(), relation_index=relation_index
+    ).query(
+        UnboundedRelationPlanner(),
+        "这台相机上次在哪里维修？",
+        [SCOPE],
+        now=NOW,
+    )
+
+    request = relation_index.calls[0][0]
+    assert request.valid_at is None
+    assert request.time_from is None
+    assert request.time_to is None

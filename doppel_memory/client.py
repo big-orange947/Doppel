@@ -83,6 +83,7 @@ from doppel_memory.query import (
     PersonalMemoryQueryConfig,
     PersonalMemoryQueryEngine,
     PersonalMemoryQueryPlanner,
+    PersonalMemoryQueryPlannerV2,
     PersonalMemoryQueryResult,
 )
 from doppel_memory.relation import RelationIndex, RelationTypeDefinition
@@ -363,7 +364,7 @@ class DoppelClient:
         query: str,
         scopes: Sequence[MemoryScope],
         *,
-        planner: PersonalMemoryQueryPlanner | None = None,
+        planner: PersonalMemoryQueryPlanner | PersonalMemoryQueryPlannerV2 | None = None,
         now: datetime | None = None,
         config: PersonalMemoryQueryConfig | None = None,
         semantic_index: SemanticIndex | None = None,

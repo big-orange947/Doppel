@@ -783,6 +783,15 @@ ID、生命周期或答案；plan 绑定提问时刻、全部 exact scopes、sub
 多个 scope 可以属于同一个人，但一个 query 不允许跨 user ID。
 contact/custom subject ID 必须由 host 显式授权。
 
+Query Plan v2 作为独立的 opt-in wire model 将上述 v1 intent 拆成正交维度：
+`operation=lookup/list/count` 和
+`temporal_view=unbounded/current/prior/planned/as_of/interval`。引擎为 v2 生成
+`schema_version=2` 的 integrity-bound plan，并保留确定性 legacy intent 仅供观测兼容。
+候选路径、完整计数、inactive 历史可见性、Graphiti/pgvector 时点传递、冲突检测和
+reranker 禁用条件都从这两个字段读取，因此 `count + interval` 不会丢失时间过滤。
+v1 模型、Planner v12、plan ID payload 和默认路径不变；v2 只有在 Planner 返回显式
+schema-v2 draft 时才启用，切换默认值之前必须先通过同数据集的成对评测。
+
 在 draft 与 plan 之间，binder 对单个明确的数字日历表达式执行领域无关 grounding：日级表达式
 绑定为 point-in-time，月/年级表达式绑定为闭区间；缺年份的月日使用可信 `now` 的年份。已有
 provider 时间坐标不会被覆盖，但与坐标矛盾的 lookup/current/history/as_of 形态会先规范化，再进入

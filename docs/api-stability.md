@@ -53,6 +53,13 @@ provisional root APIs. They are additive beside the unchanged stable generic
 optional `SemanticIndex` may score only already-authorized records; exact-scope,
 subject, temporal, and metadata gates remain engine responsibilities.
 
+The operation/time-orthogonal personal-query Draft/Plan v2 and its deterministic and
+Reference Planners are additive provisional APIs. V1 remains accepted and keeps its
+wire shape and fingerprint. V2 is selected only by an explicit schema-v2 draft; its
+legacy `intent` is a deterministic compatibility projection, while execution uses the
+independent `operation` and `temporal_view` fields. V2 is not the default until paired
+evaluation demonstrates a non-regressing replacement.
+
 `TemporalSemanticIndex` is an additive provisional extension of `SemanticIndex` for
 current/as-of candidate search. Implementations receive one trusted valid-at instant,
 but their results remain non-authoritative and must be reloaded from the exact-scope
