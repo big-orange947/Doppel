@@ -13,8 +13,9 @@ from pydantic import TypeAdapter, ValidationError
 from benchmarks.personal_retrieval_ablation import load_ablation_dataset
 from benchmarks.relation_planner_quality import (
     DEFAULT_DATASET,
-    CachedPlanner,
+    CachedStructuredOutputModel,
     ReplayPlanner,
+    StructuredOutputCallBudget,
     _async_main,
     _fingerprint,
     _parser,
@@ -253,15 +254,18 @@ async def test_every_definition_semantic_field_separates_cache_entries(
     tmp_path: Path,
     updates: dict[str, Any],
 ) -> None:
-    planner = _Planner()
-    cache = CachedPlanner(planner, tmp_path)
+    model = _Model()
+    budget = StructuredOutputCallBudget(model, max_calls=4)
+    cache = CachedStructuredOutputModel(budget, tmp_path)
+    planner = ReferencePersonalMemoryQueryPlanner(cache)
     original = _request(relation_type_definitions=[_definition()])
-    await cache.plan(original)
-    await cache.plan(original)
-    await cache.plan(_request(relation_type_definitions=[_definition(**updates)]))
-    await cache.plan(_request(available_relation_types=["CALIBRATED_BY"]))
+    await planner.plan(original)
+    await planner.plan(original)
+    await planner.plan(_request(relation_type_definitions=[_definition(**updates)]))
+    await planner.plan(_request(available_relation_types=["CALIBRATED_BY"]))
     assert cache.hits == 1
-    assert len(planner.requests) == 3
+    assert budget.calls == 3
+    assert len(model.requests) == 3
 
 
 def _load_catalog() -> list[RelationTypeDefinition]:

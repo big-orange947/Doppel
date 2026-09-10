@@ -121,10 +121,16 @@ Doppel must continue reporting retrieval and answer/evidence qualification separ
 The follow-up implementation now permits only `intent=as_of` with a missing `as_of`
 coordinate to reach host-owned explicit-calendar grounding, then strictly revalidates
 the complete draft. It adds no entity, relation, language-domain, or benchmark-case
-vocabulary and does not change the Planner prompt, schema, version, or cache identity.
+vocabulary and does not change the Planner prompt, schema, version, or provider request.
 
 The cache retains 230 valid drafts; the ten invalid first-pass outputs were not cached.
 Therefore the next live verification needs at most ten provider calls, not 240. It must
 demonstrate 230 cache hits, re-run exactly those ten cases, and report whether all ten
 explicit dates become valid. A subsequent retrieval replay remains zero-paid and must
 preserve scope, temporal, provenance, and inactive-candidate gates.
+
+That follow-up exposed a benchmark-boundary limitation: the historical cache stored
+processed final drafts, so its 230 hits bypassed newer Planner execution code. The
+current runner supersedes that cache with a separate raw-provider-output namespace;
+legacy final drafts remain historical artifacts and are never mixed into a fresh
+current-implementation result.

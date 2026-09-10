@@ -11,10 +11,12 @@ from pydantic import ValidationError
 from benchmarks.personal_retrieval_ablation import load_ablation_dataset
 from benchmarks.relation_planner_quality import (
     DEFAULT_DATASET,
-    CachedPlanner,
-    PlannerCallBudget,
+    PROVIDER_OUTPUT_CACHE_NAMESPACE,
+    PROVIDER_OUTPUT_CACHE_SCHEMA,
+    CachedStructuredOutputModel,
     PlannerCallBudgetExceeded,
     ReplayPlanner,
+    StructuredOutputCallBudget,
     UsageLedger,
     _async_main,
     _evaluate_case,
@@ -28,6 +30,8 @@ from benchmarks.relation_planner_quality import (
 from doppel_memory import (
     PersonalMemoryQueryDraft,
     PersonalMemoryQueryRequest,
+    ReferencePersonalMemoryQueryPlanner,
+    StructuredGenerationRequest,
     StructuredOutputProviderError,
 )
 
@@ -80,6 +84,20 @@ class _StaticPlanner:
         del request
         self.calls += 1
         return self.draft
+
+
+class _StaticStructuredModel:
+    name = "tests.static-structured-model"
+    version = "1"
+
+    def __init__(self, output: dict[str, Any]) -> None:
+        self.output = output
+        self.calls = 0
+
+    async def generate(self, request: StructuredGenerationRequest) -> dict[str, Any]:
+        del request
+        self.calls += 1
+        return self.output
 
 
 @pytest.mark.asyncio
@@ -242,48 +260,148 @@ async def test_reviewed_open_interval_accepts_either_day_boundary() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cache_hit_does_not_consume_call_budget(tmp_path: Path) -> None:
-    base = _StaticPlanner(
-        PersonalMemoryQueryDraft(
-            search_text="相机",
-            entity_mentions=["相机"],
-            relation_hints=["位于"],
-        )
+async def test_raw_provider_cache_hit_reprocesses_without_consuming_budget(
+    tmp_path: Path,
+) -> None:
+    model = _StaticStructuredModel(
+        {
+            "intent": "as_of",
+            "search_text": "相机",
+            "entity_mentions": ["相机"],
+            "relation_hints": ["位于"],
+        }
     )
-    budget = PlannerCallBudget(base, max_calls=1)
-    cached = CachedPlanner(budget, tmp_path)
+    budget = StructuredOutputCallBudget(model, max_calls=1)
+    cached = CachedStructuredOutputModel(budget, tmp_path)
+    planner = ReferencePersonalMemoryQueryPlanner(cached)
     request = PersonalMemoryQueryRequest(
-        query="相机在哪里？",
+        query="2026年8月31日相机在哪里？",
         now=datetime(2026, 8, 31, tzinfo=UTC),
         default_subject_id="owner",
     )
 
-    first = await cached.plan(request)
-    second = await cached.plan(request)
+    first = await planner.plan(request)
+    second = await planner.plan(request)
 
     assert first == second
-    assert base.calls == 1
+    assert first.as_of == datetime(2026, 8, 31, 12, tzinfo=UTC)
+    assert first.explanation == "explicit_time_grounded:point"
+    assert model.calls == 1
     assert budget.calls == 1
     assert cached.hits == 1
     assert cached.misses == 1
     cache_files = list(tmp_path.rglob("*.json"))
     assert len(cache_files) == 1
-    assert "api_key" not in cache_files[0].read_text(encoding="utf-8").casefold()
+    assert PROVIDER_OUTPUT_CACHE_NAMESPACE in cache_files[0].parts
+    envelope = json.loads(cache_files[0].read_text(encoding="utf-8"))
+    assert envelope["cache_schema"] == PROVIDER_OUTPUT_CACHE_SCHEMA
+    assert envelope["output"]["intent"] == "as_of"
+    assert "as_of" not in envelope["output"]
+    assert "subject_id" not in envelope["output"]
+    assert "api_key" not in json.dumps(envelope).casefold()
 
 
 @pytest.mark.asyncio
-async def test_budget_blocks_before_second_planner_call() -> None:
-    base = _StaticPlanner(PersonalMemoryQueryDraft(search_text="test"))
-    budget = PlannerCallBudget(base, max_calls=1)
+async def test_invalid_draft_still_reuses_successful_raw_provider_output(
+    tmp_path: Path,
+) -> None:
+    model = _StaticStructuredModel({"intent": "as_of"})
+    budget = StructuredOutputCallBudget(model, max_calls=1)
+    cached = CachedStructuredOutputModel(budget, tmp_path)
+    planner = ReferencePersonalMemoryQueryPlanner(cached)
+    request = PersonalMemoryQueryRequest(
+        query="昨天相机在哪里？",
+        now=datetime(2026, 8, 31, tzinfo=UTC),
+    )
+
+    with pytest.raises(ValidationError, match="as_of timestamp"):
+        await planner.plan(request)
+    with pytest.raises(ValidationError, match="as_of timestamp"):
+        await planner.plan(request)
+
+    assert model.calls == 1
+    assert budget.calls == 1
+    assert cached.hits == 1
+    assert cached.misses == 1
+
+
+@pytest.mark.asyncio
+async def test_raw_cache_namespace_never_reads_legacy_final_drafts(
+    tmp_path: Path,
+) -> None:
+    legacy = tmp_path / "aa" / ("a" * 64 + ".json")
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(
+        PersonalMemoryQueryDraft(search_text="legacy-final-draft").model_dump_json(),
+        encoding="utf-8",
+    )
+    model = _StaticStructuredModel({"search_text": "fresh-raw-output"})
+    budget = StructuredOutputCallBudget(model, max_calls=1)
+    cached = CachedStructuredOutputModel(budget, tmp_path)
+    planner = ReferencePersonalMemoryQueryPlanner(cached)
+
+    draft = await planner.plan(
+        PersonalMemoryQueryRequest(
+            query="test",
+            now=datetime(2026, 8, 31, tzinfo=UTC),
+        )
+    )
+
+    assert draft.search_text == "fresh-raw-output"
+    assert model.calls == 1
+    assert cached.hits == 0
+    assert cached.misses == 1
+    assert cached.legacy_final_drafts_read == 0
+    assert len(list((tmp_path / PROVIDER_OUTPUT_CACHE_NAMESPACE).rglob("*.json"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_invalid_provider_cache_envelope_fails_closed_to_live_miss(
+    tmp_path: Path,
+) -> None:
+    model = _StaticStructuredModel({"search_text": "fresh-raw-output"})
+    budget = StructuredOutputCallBudget(model, max_calls=1)
+    cached = CachedStructuredOutputModel(budget, tmp_path)
+    request = StructuredGenerationRequest(
+        instructions="return one object",
+        input={"query": "test"},
+        output_schema={"type": "object"},
+    )
+    cache_path = cached._cache_path(request)
+    assert cache_path is not None
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text(
+        PersonalMemoryQueryDraft(search_text="legacy-final-draft").model_dump_json(),
+        encoding="utf-8",
+    )
+
+    output = await cached.generate(request)
+
+    assert output == {"search_text": "fresh-raw-output"}
+    assert model.calls == 1
+    assert budget.calls == 1
+    assert cached.hits == 0
+    assert cached.misses == 1
+    assert cached.invalid_entries_ignored == 1
+    envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert envelope["cache_schema"] == PROVIDER_OUTPUT_CACHE_SCHEMA
+    assert envelope["output"] == output
+
+
+@pytest.mark.asyncio
+async def test_budget_blocks_before_second_provider_call() -> None:
+    model = _StaticStructuredModel({"search_text": "test"})
+    budget = StructuredOutputCallBudget(model, max_calls=1)
+    planner = ReferencePersonalMemoryQueryPlanner(budget)
     request = PersonalMemoryQueryRequest(
         query="test",
         now=datetime(2026, 8, 31, tzinfo=UTC),
     )
 
-    await budget.plan(request)
+    await planner.plan(request)
     with pytest.raises(PlannerCallBudgetExceeded):
-        await budget.plan(request)
-    assert base.calls == 1
+        await planner.plan(request)
+    assert model.calls == 1
 
 
 def test_term_matching_is_unicode_and_punctuation_tolerant() -> None:
@@ -368,6 +486,16 @@ async def test_deterministic_planner_is_not_limited_by_provider_call_budget(
     assert report["metrics"]["provider_error_count"] == 0
     assert report["metrics"]["relation_type_failure_count"] == 65
     assert report["budget"] == {"max_calls": None, "calls": 0}
+    assert report["cache"] == {
+        "enabled": False,
+        "hits": 0,
+        "misses": 0,
+        "kind": "none",
+        "schema": "",
+        "namespace": "",
+        "invalid_entries_ignored": 0,
+        "legacy_final_drafts_read": 0,
+    }
 
 
 @pytest.mark.asyncio
@@ -455,6 +583,9 @@ def test_result_schema_tracks_runner_contract() -> None:
     assert "cases" in schema["required"]
     assert "metrics" in schema["required"]
     assert "usage" in schema["required"]
+    assert schema["properties"]["cache"]["properties"][
+        "legacy_final_drafts_read"
+    ] == {"const": 0}
     assert "time_range_boundary_accuracy" in schema["properties"]["metrics"][
         "required"
     ]

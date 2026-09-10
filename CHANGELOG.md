@@ -2,10 +2,18 @@
 
 ## Unreleased
 
+- Move the relation-Planner benchmark cache from processed query drafts to the
+  raw `StructuredOutputModel` boundary. The new versioned namespace stores every
+  successful provider JSON object, including output that later fails Planner
+  validation, and re-runs current projection, calendar grounding, subject binding,
+  and strict validation on every hit. Provider calls—not Planner executions—consume
+  the hard budget. Legacy final-draft files are never read, malformed envelopes fail
+  closed to a live miss, atomic writes and content-addressed request/model binding
+  remain, and reports identify cache kind/schema/namespace explicitly.
 - Let the Reference personal-memory Planner project one narrowly incomplete
   `as_of` draft long enough for host-owned explicit-calendar grounding, then
   strictly revalidate the complete draft before returning it. This changes no
-  prompt, schema, or provider/cache identity: only a missing `as_of` coordinate
+  prompt, schema, or provider generation identity: only a missing `as_of` coordinate
   may be temporarily admitted, while invalid, ambiguous, relative, reversed, or
   otherwise malformed time structures still fail closed.
 - Preserve Planner-selected ontology types as soft Graphiti relevance in opt-in

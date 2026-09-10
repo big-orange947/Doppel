@@ -191,7 +191,17 @@
     },
     "cache": {
       "type": "object",
-      "required": ["enabled", "hits", "misses"]
+      "required": ["enabled", "hits", "misses"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "hits": {"type": "integer", "minimum": 0},
+        "misses": {"type": "integer", "minimum": 0},
+        "kind": {"enum": ["none", "provider_raw"]},
+        "schema": {"type": "string"},
+        "namespace": {"type": "string"},
+        "invalid_entries_ignored": {"type": "integer", "minimum": 0},
+        "legacy_final_drafts_read": {"const": 0}
+      }
     },
     "replay": {
       "type": "object",

@@ -642,7 +642,8 @@ Planner 输出与可信 plan 绑定之间还有一层领域无关的显式日历
 Reference Planner 的投影边界允许一种受限的中间态：provider 已明确选择 `as_of`、但漏掉
 `as_of` 坐标时，可先让上述单一数字日期规则完成绑定；返回 draft 前会重新执行完整 Pydantic
 校验。这个例外不会放宽时区、区间顺序或其他结构约束，也不会猜测相对时间或含多个日期的问句。
-Planner prompt、schema 与 cache identity 均不因此改变。
+Planner prompt、schema 与 provider 请求指纹均不因此改变。评测缓存位于原始 provider 输出边界，
+因此缓存命中仍会重新执行当前版本的投影、日期绑定和严格校验。
 
 线上接入可以显式用 `FallbackPersonalMemoryQueryPlanner(reference, deterministic)`
 包住模型 Planner。它只调用主 Planner 一次；主调用或 schema 校验失败后才执行宿主选择的

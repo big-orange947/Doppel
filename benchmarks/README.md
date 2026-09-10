@@ -424,12 +424,19 @@ surface-plan contract and exact canonical relation typing; the original
 `--max-relation-type-failures` is an opt-in exit gate, so old structure-only commands
 keep their previous behavior. Relation hints are scored against the concise normalized surface predicate;
 an overlong phrase containing the gold term does not receive credit because it would
-not satisfy the production relation gate. Successful drafts use a content-addressed disk cache,
-so a rerun does not spend another provider call; failed/invalid responses are never
-cached. `--max-calls` is checked before each reference-provider cache miss; it does
-not limit deterministic local planning. Provider token usage is an
-aggregate content-free ledger. The cache fingerprint includes planner/provider
-version and the complete request but never includes an API key. The result contract is
+not satisfy the production relation gate. The reference runner caches the raw JSON
+object returned by `StructuredOutputModel`, before Planner projection or validation.
+Every hit therefore re-runs the current projection, calendar grounding, subject
+binding, and strict validation. A successful provider response is cached even when
+that current Planner rejects it, so a later implementation can be evaluated without
+paying again. Provider HTTP failures are not cached. The versioned
+`provider-output-v1` namespace never reads legacy final-draft entries.
+`--max-calls` is checked before each actual reference-provider call, after raw-cache
+lookup; it does not limit deterministic local planning. Provider token usage is an
+aggregate content-free ledger. The cache fingerprint binds the structured model
+identity and complete generation request—input, instructions, and output schema—but
+never includes an API key. Reports identify cache kind, schema, namespace, ignored
+invalid entries, and the invariant zero legacy-final-draft reads. The result contract is
 [`relation-planner-quality-result.schema.json`](relation-planner-quality-result.schema.json).
 
 A prior paid result can be re-scored without another provider request. Replay now
@@ -559,7 +566,7 @@ only temporary incomplete state is `intent=as_of` without `as_of`: it may reach 
 host's domain-neutral explicit-numeric-calendar grounding and must pass complete draft
 validation immediately afterward. Ambiguous, relative, invalid, or multiple dates are
 not repaired, and every other temporal/type invariant remains strict. This execution
-ordering changes no prompt, schema, or request/cache fingerprint. An object with no
+ordering changes no prompt, schema, or provider request fingerprint. An object with no
 recognized field remains invalid. Historical v8-v11 reports remain
 versioned exploratory references, not concurrent controls for v12; do not attribute
 every between-run fluctuation to the new instructions.

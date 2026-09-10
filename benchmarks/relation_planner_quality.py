@@ -12,13 +12,13 @@ import re
 import sys
 import tempfile
 from collections import Counter, defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 from typing import Any, get_args
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic_core.core_schema import ErrorType
 
 from benchmarks.personal_retrieval_ablation import (
@@ -42,6 +42,7 @@ from doppel_memory import (
     PersonalMemoryQueryRequest,
     ReferencePersonalMemoryQueryPlanner,
     RelationTypeDefinition,
+    StructuredGenerationRequest,
     StructuredOutputProviderError,
     __version__,
 )
@@ -50,7 +51,9 @@ from doppel_memory.query import QUERY_TEMPORAL_ERROR_CODES
 DEFAULT_DATASET = (
     Path(__file__).parent / "datasets" / "personal-relation-ablation-zh-v1.json"
 )
-CACHE_FORMAT_VERSION = 1
+PROVIDER_OUTPUT_CACHE_SCHEMA = "doppel.structured-provider-output.v1"
+PROVIDER_OUTPUT_CACHE_NAMESPACE = "provider-output-v1"
+PROVIDER_OUTPUT_CACHE_FORMAT_VERSION = 1
 
 
 def _safe_validation_errors(exc: ValidationError) -> list[dict[str, Any]]:
@@ -130,83 +133,132 @@ class PlannerCallBudgetExceeded(RuntimeError):
     """A live planner call was blocked before reaching its provider."""
 
 
-class PlannerCallBudget:
-    """Sequential preflight call budget; cache hits do not consume it."""
+class StructuredOutputCallBudget:
+    """Sequential provider-call budget; raw-output cache hits do not consume it."""
 
-    def __init__(self, planner: Any, *, max_calls: int) -> None:
-        self._planner = planner
+    def __init__(self, model: Any, *, max_calls: int) -> None:
+        self._model = model
         self.max_calls = max_calls
         self.calls = 0
-        self.name = str(planner.name)
-        self.version = str(planner.version)
+        self.name = str(model.name)
+        self.version = str(model.version)
 
-    async def plan(
-        self, request: PersonalMemoryQueryRequest
-    ) -> PersonalMemoryQueryDraft:
+    async def generate(
+        self, request: StructuredGenerationRequest
+    ) -> Mapping[str, Any] | BaseModel:
         if self.max_calls >= 0 and self.calls >= self.max_calls:
             raise PlannerCallBudgetExceeded(
-                f"planner call budget exhausted before call {self.calls + 1}"
+                f"provider call budget exhausted before call {self.calls + 1}"
             )
         self.calls += 1
-        return PersonalMemoryQueryDraft.model_validate(
-            await self._planner.plan(request)
-        )
+        return await self._model.generate(request)
 
 
-class CachedPlanner:
-    """Content-addressed successful planner drafts with atomic disk writes."""
+class CachedStructuredOutputModel:
+    """Content-addressed raw structured outputs with atomic disk writes.
 
-    def __init__(self, planner: Any, cache_dir: Path | None) -> None:
-        self._planner = planner
+    The cache deliberately wraps the model rather than the Planner. Every hit is
+    projected, calendar-grounded, and validated again by the current Planner code.
+    Successful provider JSON is cached even when downstream draft validation fails.
+    Legacy final-draft entries live outside this namespace and are never read.
+    """
+
+    def __init__(self, model: Any, cache_dir: Path | None) -> None:
+        self._model = model
         self._cache_dir = cache_dir
-        self.name = str(planner.name)
-        self.version = str(planner.version)
+        self.name = str(model.name)
+        self.version = str(model.version)
         self.hits = 0
         self.misses = 0
+        self.invalid_entries_ignored = 0
+        self.legacy_final_drafts_read = 0
 
-    async def plan(
-        self, request: PersonalMemoryQueryRequest
-    ) -> PersonalMemoryQueryDraft:
-        bound = PersonalMemoryQueryRequest.model_validate(request)
+    async def generate(
+        self, request: StructuredGenerationRequest
+    ) -> Mapping[str, Any]:
+        bound = StructuredGenerationRequest.model_validate(request)
         cache_path = self._cache_path(bound)
         if cache_path is not None and cache_path.is_file():
             try:
-                draft = PersonalMemoryQueryDraft.model_validate_json(
-                    cache_path.read_text(encoding="utf-8")
-                )
-            except (OSError, ValueError):
-                pass
+                envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+                output = self._validate_envelope(envelope, bound)
+            except (OSError, TypeError, ValueError):
+                self.invalid_entries_ignored += 1
             else:
                 self.hits += 1
-                return draft
+                return output
         self.misses += 1
-        draft = PersonalMemoryQueryDraft.model_validate(await self._planner.plan(bound))
+        raw = await self._model.generate(bound)
+        output = (
+            raw.model_dump(mode="json", warnings=False)
+            if isinstance(raw, BaseModel)
+            else dict(raw)
+        )
         if cache_path is not None:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
+            envelope = {
+                "cache_schema": PROVIDER_OUTPUT_CACHE_SCHEMA,
+                "format_version": PROVIDER_OUTPUT_CACHE_FORMAT_VERSION,
+                "model": {"name": self.name, "version": self.version},
+                "request_fingerprint": self._request_fingerprint(bound),
+                "output": output,
+            }
             fd, temporary = tempfile.mkstemp(
                 prefix=f".{cache_path.name}.", suffix=".tmp", dir=cache_path.parent
             )
             try:
                 with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as target:
-                    target.write(draft.model_dump_json())
+                    json.dump(
+                        envelope,
+                        target,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
                     target.write("\n")
                 os.replace(temporary, cache_path)
             finally:
                 if os.path.exists(temporary):
                     os.unlink(temporary)
-        return draft
+        return output
 
-    def _cache_path(self, request: PersonalMemoryQueryRequest) -> Path | None:
+    def _cache_path(self, request: StructuredGenerationRequest) -> Path | None:
         if self._cache_dir is None:
             return None
         payload = {
-            "format_version": CACHE_FORMAT_VERSION,
-            "planner": self.name,
-            "planner_version": self.version,
-            "request": request.to_planner_input(),
+            "cache_schema": PROVIDER_OUTPUT_CACHE_SCHEMA,
+            "format_version": PROVIDER_OUTPUT_CACHE_FORMAT_VERSION,
+            "model": {"name": self.name, "version": self.version},
+            "request": request.model_dump(mode="json"),
         }
         digest = _fingerprint(payload)
-        return self._cache_dir / digest[:2] / f"{digest}.json"
+        return (
+            self._cache_dir
+            / PROVIDER_OUTPUT_CACHE_NAMESPACE
+            / digest[:2]
+            / f"{digest}.json"
+        )
+
+    def _request_fingerprint(self, request: StructuredGenerationRequest) -> str:
+        return _fingerprint(request.model_dump(mode="json"))
+
+    def _validate_envelope(
+        self, envelope: Any, request: StructuredGenerationRequest
+    ) -> dict[str, Any]:
+        if not isinstance(envelope, dict):
+            raise TypeError("provider-output cache envelope must be an object")
+        if envelope.get("cache_schema") != PROVIDER_OUTPUT_CACHE_SCHEMA:
+            raise ValueError("provider-output cache schema mismatch")
+        if envelope.get("format_version") != PROVIDER_OUTPUT_CACHE_FORMAT_VERSION:
+            raise ValueError("provider-output cache format mismatch")
+        if envelope.get("model") != {"name": self.name, "version": self.version}:
+            raise ValueError("provider-output cache model mismatch")
+        if envelope.get("request_fingerprint") != self._request_fingerprint(request):
+            raise ValueError("provider-output cache request mismatch")
+        output = envelope.get("output")
+        if not isinstance(output, dict):
+            raise TypeError("provider-output cache output must be an object")
+        return output
 
 
 class UsageLedger:
@@ -278,8 +330,8 @@ async def run_relation_planner_quality(
     dataset: AblationDataset,
     planner: Any,
     *,
-    cache: CachedPlanner | None = None,
-    call_budget: PlannerCallBudget | None = None,
+    cache: CachedStructuredOutputModel | None = None,
+    call_budget: StructuredOutputCallBudget | None = None,
     usage: UsageLedger | None = None,
     relation_type_definitions: Sequence[RelationTypeDefinition] = (),
 ) -> dict[str, Any]:
@@ -289,7 +341,6 @@ async def run_relation_planner_quality(
         raise ValueError("relation planner quality requires a relation benchmark")
     # Validate host definitions before any provider calls, not as per-case errors.
     _query_request(dataset, dataset.queries[0], relation_type_definitions)
-    runner = cache or planner
     cases: list[dict[str, Any]] = []
     stop_reason = ""
     stopped_at = ""
@@ -308,7 +359,7 @@ async def run_relation_planner_quality(
             )
         else:
             case = await _evaluate_case(
-                runner,
+                planner,
                 dataset,
                 query,
                 relation_type_definitions=relation_type_definitions,
@@ -458,6 +509,17 @@ async def run_relation_planner_quality(
             "enabled": cache is not None and cache._cache_dir is not None,
             "hits": cache.hits if cache is not None else 0,
             "misses": cache.misses if cache is not None else 0,
+            "kind": "provider_raw" if cache is not None else "none",
+            "schema": PROVIDER_OUTPUT_CACHE_SCHEMA if cache is not None else "",
+            "namespace": (
+                PROVIDER_OUTPUT_CACHE_NAMESPACE if cache is not None else ""
+            ),
+            "invalid_entries_ignored": (
+                cache.invalid_entries_ignored if cache is not None else 0
+            ),
+            "legacy_final_drafts_read": (
+                cache.legacy_final_drafts_read if cache is not None else 0
+            ),
         },
         "cases": cases,
     }
@@ -941,6 +1003,8 @@ async def _async_main(args: argparse.Namespace) -> int:
         ).validate_dataset(dataset)
     usage = UsageLedger()
     provider: OpenAICompatibleStructuredOutputModel | None = None
+    cache: CachedStructuredOutputModel | None = None
+    budget: StructuredOutputCallBudget | None = None
     if args.replay_report is not None:
         if (
             args.output is not None
@@ -976,19 +1040,15 @@ async def _async_main(args: argparse.Namespace) -> int:
             api_key=os.environ.get("DOPPEL_API_KEY", ""),
             usage_observer=usage.observe,
         )
-        base_planner = ReferencePersonalMemoryQueryPlanner(provider)
+        budget = StructuredOutputCallBudget(provider, max_calls=args.max_calls)
+        cache = CachedStructuredOutputModel(
+            budget,
+            None if args.no_cache else args.cache_dir,
+        )
+        base_planner = ReferencePersonalMemoryQueryPlanner(cache)
     else:
         base_planner = DeterministicPersonalMemoryQueryPlanner()
 
-    budget = (
-        PlannerCallBudget(base_planner, max_calls=args.max_calls)
-        if args.replay_report is None and args.planner == "reference"
-        else None
-    )
-    cache = CachedPlanner(
-        budget or base_planner,
-        None if args.no_cache or args.replay_report is not None else args.cache_dir,
-    )
     try:
         report = await run_relation_planner_quality(
             dataset,
@@ -1034,7 +1094,11 @@ async def _async_main(args: argparse.Namespace) -> int:
         ),
         "latency_kind": "local_replay"
         if args.replay_report is not None
-        else "planner_with_cache",
+        else (
+            "planner_with_provider_output_cache"
+            if cache is not None and cache._cache_dir is not None
+            else "planner_live"
+        ),
     }
 
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
