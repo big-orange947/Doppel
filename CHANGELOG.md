@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Clarify Reference personal-memory Planner v13 that `intent` is a retrieval
+  operation rather than grammatical tense. A request for one enduring actor, place,
+  source, instrument, or other attribution of a completed action remains `lookup`;
+  `history` selects a prior/ended state, historical occurrences as occurrences, or
+  an explicit past interval. The same domain-neutral distinction is now present in
+  the generated output schema, with no query vocabulary, relation-name special case,
+  scope authority, or runtime time-gate relaxation.
 - Move the relation-Planner benchmark cache from processed query drafts to the
   raw `StructuredOutputModel` boundary. The new versioned namespace stores every
   successful provider JSON object, including output that later fails Planner

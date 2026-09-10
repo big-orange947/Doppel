@@ -2769,9 +2769,14 @@ async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> 
     assert "Echo them unchanged" in request.instructions
     assert "Grammatical past tense" in request.instructions
     assert "enduring attribution" in request.instructions
-    assert planner.version.startswith("12.")
+    assert "retrieval operation" in request.instructions
+    assert "requested answer is itself" in request.instructions
+    assert planner.version.startswith("13.")
     assert request.output_schema["title"] == "PersonalMemoryQueryDraft"
     assert "scopes" not in request.output_schema["properties"]
+    assert "Retrieval operation" in request.output_schema["properties"]["intent"][
+        "description"
+    ]
 
 
 async def test_reference_planner_projects_unknown_model_fields_without_authority(
