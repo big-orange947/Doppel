@@ -439,6 +439,42 @@ never includes an API key. Reports identify cache kind, schema, namespace, ignor
 invalid entries, and the invariant zero legacy-final-draft reads. The result contract is
 [`relation-planner-quality-result.schema.json`](relation-planner-quality-result.schema.json).
 
+### Paired Query Plan v1/v2 ablation
+
+`query_plan_v2_ablation.py` compares the unchanged v1 Reference Planner with the
+opt-in operation/time-orthogonal v2 Planner on the same 240 non-deferred questions,
+the same v2 relation ontology, and identical provider settings. It measures planning
+only—no Store, index, retrieval, reranking, or answer generation is involved. Start
+with the zero-network plan inspection:
+
+```bash
+uv run python -m benchmarks.query_plan_v2_ablation
+```
+
+For a live paired run, keep the credential in the process environment:
+
+```powershell
+$env:DOPPEL_API_KEY = "..."
+uv run python -m benchmarks.query_plan_v2_ablation --live
+```
+
+Each run gets an immutable directory under `data/doppel/query-plan-v2/` containing
+the preflight plan, one report per completed arm, a comparison report, and SHA-256
+sidecars. Raw provider output is cached by complete prompt, output schema, and model
+identity, so the v1 and v2 schemas cannot collide. `--max-calls-per-arm` is a hard
+network-call ceiling after cache lookup; use `0` to perform a cache-only replay. The
+runner stops if source/dataset/catalog identity changes between arms and sanitizes
+unexpected provider failures to an exception class without persisting response text.
+
+The promotion gate is deliberately one-sided: v2 must complete without reducing
+valid drafts or regressing operation, temporal view/coordinates, subject binding,
+entity/relation recall, or relation-type metrics. Top-level and
+`orthogonal_by_partition`/`orthogonal_by_category` fields are authoritative for v2;
+the old `by_partition`/`by_category` fields retain a legacy intent projection only
+for historical comparison. Exit code 1 means the no-regression gate did not pass,
+not that the data should be hidden. The current 240-query dataset is still unfrozen,
+so no result from this runner is publication-ready yet.
+
 A prior paid result can be re-scored without another provider request. Replay now
 requires the same dataset fingerprint and verifies per-case request fingerprints
 when available. Original failure types remain failures with `error_origin=source_report`;

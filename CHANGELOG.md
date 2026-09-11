@@ -12,6 +12,13 @@
   orthogonal fields. Existing v1 plans, fingerprints, Planner v12, defaults, and
   serialized field shapes remain unchanged; V2 remains opt-in pending a paired
   240-query evaluation.
+- Add a repository-only paired v1/v2 Planner ablation over those same 240 queries.
+  It fixes identical provider settings and per-arm call ceilings, separates raw
+  caches by complete schema/prompt identity, records immutable plans/reports with
+  hashes, stops on input drift, and applies a no-regression promotion gate across
+  operation, temporal, subject, entity, relation, and relation-type planning. V2
+  reports expose authoritative orthogonal metrics by partition/category while
+  retaining the legacy intent projection only as an explicitly labeled diagnostic.
 - Move the relation-Planner benchmark cache from processed query drafts to the
   raw `StructuredOutputModel` boundary. The new versioned namespace stores every
   successful provider JSON object, including output that later fails Planner

@@ -1,0 +1,100 @@
+[
+  {
+    "name": "ADOPTED_FROM",
+    "description": "An adoption origin: the source was adopted from the target.",
+    "source_description": "The adopted individual or animal.",
+    "target_description": "The person, organization, or place from which adoption occurred.",
+    "constraints": ["Acquisition or movement alone does not establish adoption."]
+  },
+  {
+    "name": "BORROWED_FROM",
+    "description": "The source was borrowed from the target lender or source.",
+    "source_description": "The borrowed item.",
+    "target_description": "The person or organization that lent or supplied the item.",
+    "constraints": ["Possession, custody, or location alone does not establish borrowing.", "A borrower is not thereby an owner."]
+  },
+  {
+    "name": "CARED_FOR_BY",
+    "description": "The source receives care from the target.",
+    "source_description": "The recipient of care.",
+    "target_description": "The person or organization providing care.",
+    "constraints": ["Care does not establish ownership or physical custody."]
+  },
+  {
+    "name": "COPIED_BY",
+    "description": "The source was copied, duplicated, fitted, or prepared by the target service provider.",
+    "source_description": "The copied, duplicated, fitted, or prepared item.",
+    "target_description": "The person, shop, or organization that performed the service.",
+    "constraints": ["Copying or fitting does not establish purchase, ownership, custody, or repair.", "The service provider is not necessarily the item's current location."]
+  },
+  {
+    "name": "GIFTED_BY",
+    "description": "The source was given as a gift by the target.",
+    "source_description": "The gifted item.",
+    "target_description": "The person or organization that gave the gift.",
+    "constraints": ["A recommendation, purchase, or transfer of custody alone does not establish a gift."]
+  },
+  {
+    "name": "HELD_BY",
+    "description": "The target holds or has custody of the source.",
+    "source_description": "The item being held or kept in custody.",
+    "target_description": "The custodian, such as a person or organizational custody point.",
+    "constraints": ["Custody does not establish ownership, a loan, or purchase.", "A general location question need not uniquely specify custody."]
+  },
+  {
+    "name": "ISSUED_BY",
+    "description": "The source was issued by the target authority or issuer.",
+    "source_description": "The issued document, credential, or other issued item.",
+    "target_description": "The issuing authority or organization.",
+    "constraints": ["The issuer is not necessarily the issue location, holder, or renewal date."]
+  },
+  {
+    "name": "LOCATED_AT",
+    "description": "The source is physically located at the target place.",
+    "source_description": "The located entity.",
+    "target_description": "The physical location.",
+    "constraints": ["Location alone does not establish custody, ownership, storage purpose, or an activity at that place.", "Location and storage meanings may overlap; do not assume a unique storage label from a general location question."]
+  },
+  {
+    "name": "PURCHASED_AT",
+    "description": "The source was purchased at the target venue or outlet.",
+    "source_description": "The purchased item.",
+    "target_description": "The purchase venue or outlet.",
+    "constraints": ["This is the purchase location, not the purchaser or the item's later location."]
+  },
+  {
+    "name": "RECOMMENDED_BY",
+    "description": "The source was recommended by the target.",
+    "source_description": "The recommended entity or option.",
+    "target_description": "The person or organization making the recommendation.",
+    "constraints": ["Mentioning an entity does not necessarily recommend it.", "A recommendation does not establish purchase, ownership, or custody."]
+  },
+  {
+    "name": "REPAIRED_AT",
+    "description": "The source has a repair activity at the target venue.",
+    "source_description": "The item undergoing or associated with repair.",
+    "target_description": "The repair venue.",
+    "constraints": ["This is the repair location, not necessarily the repairer.", "The label alone does not establish that repair is completed or the item is still there."]
+  },
+  {
+    "name": "REPAIRED_BY",
+    "description": "The target carries out repair work on the source.",
+    "source_description": "The item being repaired.",
+    "target_description": "The person or organization performing repair.",
+    "constraints": ["This is the repairer, not necessarily the repair location or owner.", "The label alone does not establish completed repair."]
+  },
+  {
+    "name": "SIGNED_WITH",
+    "description": "The source agreement, contract, or document was signed with the target counterparty.",
+    "source_description": "The signed agreement, contract, or document.",
+    "target_description": "The person or organization that is the signing counterparty.",
+    "constraints": ["A counterparty is not a signing location, witness, custodian, or issuer.", "Mentioning a person or organization in a document does not establish that it signed the agreement."]
+  },
+  {
+    "name": "STORED_IN",
+    "description": "The source is kept in the target storage place or container.",
+    "source_description": "The stored item.",
+    "target_description": "The storage place or container.",
+    "constraints": ["A storage location does not identify an owner or custodian.", "Storage and physical location overlap; neither label is universally interchangeable with the other."]
+  }
+]
