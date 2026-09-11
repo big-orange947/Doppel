@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Let the zero-paid retrieval benchmark replay v1 and v2 Planner reports together
+  as `report_v1`/`report_v2` over one authoritative Store and one set of pgvector/
+  Graphiti indexes. V2 drafts retain their orthogonal operation/time semantics,
+  source schemas are verified to prevent swapped arms, the dataset calendar timezone
+  reaches the query engine, and reports include per-profile deltas plus a conservative
+  paired promotion gate. The legacy single `report` mode remains supported.
 - Add host-authoritative calendar timezone grounding to personal-memory planning.
   `PersonalMemoryQueryRequest`, the query engine, and `DoppelClient` accept
   `calendar_timezone` as UTC, a bounded fixed offset, or an available IANA zone.

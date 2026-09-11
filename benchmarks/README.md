@@ -483,6 +483,38 @@ for historical comparison. Exit code 1 means the no-regression gate did not pass
 not that the data should be hidden. The current 240-query dataset is still unfrozen,
 so no result from this runner is publication-ready yet.
 
+The resulting v1/v2 reports can be replayed together through one local Store and
+one shared set of indexes. This stage makes zero provider calls and preserves the
+v2 `operation`/`temporal_view` draft instead of projecting it back to v1. The paired
+modes require both files to come from the same experiment directory, verify their
+shared runner/dataset/catalog identity and optional `plan.json`, and reject swapped
+schema arms. They add per-profile retrieval deltas plus a conservative promotion
+gate. The gate uses final ranked quality, abstention, forbidden evidence, execution,
+and scope/time/provenance safety; source/effective Planner structure remains a
+separate diagnostic because the upstream Planner report already scores it. For the
+current relation dataset, a
+full local vector/Graphiti comparison is:
+
+```powershell
+$env:DOPPEL_ABLATION_PG_PASSWORD = "<local PostgreSQL password>"
+$env:NEO4J_PASSWORD = "<local Neo4j password>"
+uv run python -m benchmarks.personal_retrieval_ablation `
+  --dataset benchmarks/datasets/personal-relation-ablation-zh-v2.json `
+  --profiles lexical,lexical_vector,lexical_graph,lexical_vector_graph,lexical_relation,lexical_vector_relation `
+  --planner-modes report_v1,report_v2 `
+  --planner-report-v1 data/doppel/query-plan-v2/<run>/v1.json `
+  --planner-report-v2 data/doppel/query-plan-v2/<run>/v2.json `
+  --candidate-fusion union --no-metamorphic `
+  --require-live-postgres --require-live-neo4j --require-all-profiles `
+  --output data/doppel/query-plan-v2-retrieval.json
+```
+
+This is the first result that can determine whether shorter relation hints or
+overlapping `LOCATED_AT`/`STORED_IN` candidate types improve or harm accepted Top-K
+memories. The earlier Planner-only gate cannot answer that question. Source Planner
+failures, effective-plan failures, retrieval failures, and scope/time/provenance
+safety failures remain separate in the report.
+
 A prior paid result can be re-scored without another provider request. Replay now
 requires the same dataset fingerprint and verifies per-case request fingerprints
 when available. Original failure types remain failures with `error_origin=source_report`;

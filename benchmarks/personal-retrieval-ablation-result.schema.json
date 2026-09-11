@@ -38,10 +38,10 @@
         "memory_reranker": {"$ref": "#/$defs/source"}
       }
     },
-    "planner_modes": {"type": "array", "items": {"enum": ["oracle", "oracle_typed", "deterministic", "report"]}},
+    "planner_modes": {"type": "array", "items": {"enum": ["oracle", "oracle_typed", "deterministic", "report", "report_v1", "report_v2"]}},
     "profiles": {
       "type": "object",
-      "propertyNames": {"enum": ["oracle", "oracle_typed", "deterministic", "report"]},
+      "propertyNames": {"enum": ["oracle", "oracle_typed", "deterministic", "report", "report_v1", "report_v2"]},
       "additionalProperties": {
         "type": "object",
         "propertyNames": {"enum": ["lexical", "lexical_vector", "lexical_graph", "lexical_vector_graph", "lexical_relation", "lexical_vector_relation", "lexical_relation_reranked", "lexical_vector_relation_reranked"]},
@@ -53,6 +53,33 @@
       "propertyNames": {"enum": ["vector_direct", "graph_direct", "composite_direct", "composite_graph_only_degradation", "composite_vector_only_degradation"]}
     },
     "comparisons": {"type": "object"},
+    "paired_planner_promotion_gate": {
+      "type": "object",
+      "required": ["available", "passed", "profiles", "checks", "diagnostics", "failures"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "passed": {"type": "boolean"},
+        "profiles": {"type": "array", "items": {"type": "string"}},
+        "checks": {"type": "object", "additionalProperties": {"type": "boolean"}},
+        "diagnostics": {"type": "object"},
+        "failures": {"type": "array", "items": {"type": "string"}},
+        "policy": {"type": "string"}
+      }
+    },
+    "paired_planner_source": {
+      "type": "object",
+      "required": ["available"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "directory": {"type": "string"},
+        "manifest_present": {"type": "boolean"},
+        "manifest_sha256": {"type": "string"},
+        "v1_sha256": {"type": "string"},
+        "v2_sha256": {"type": "string"},
+        "shared_identity": {"type": "object"},
+        "provider_calls_during_replay": {"type": "integer", "minimum": 0}
+      }
+    },
     "hard_gates": {
       "type": "object",
       "required": ["planner_failures", "retrieval_failures", "security_failures", "fixture_validation_failures"],

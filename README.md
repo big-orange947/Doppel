@@ -659,7 +659,9 @@ v2 不会覆盖 v1：`ReferencePersonalMemoryQueryPlanner` v13 仍是现有默�
 旧 Draft/Plan 的字段、schema version 和 plan fingerprint 保持不变。v2 Plan 额外保留一个
 确定性的 legacy `intent` 投影，只用于旧日志/观测代码阅读；引擎的计数与时间门会读取
 正交字段。v2 继续保持 opt-in；切换默认值前必须通过独立标注的关系集与完整操作/时间矩阵，
-并在端到端检索指标上确认没有退化。
+并在端到端检索指标上确认没有退化。仓库 benchmark 支持把同一次真实生成的 v1/v2 报告以
+`report_v1,report_v2` 零付费回放到同一个 Store、pgvector 与 Graphiti 实例，保留 v2 正交语义并
+输出逐 profile 的质量、安全和延迟差异；具体命令见 `benchmarks/README.md`。
 
 Planner 输出与可信 plan 绑定之间还有一层领域无关的显式日历校验。宿主通过
 `calendar_timezone` 显式提供 `UTC`、固定偏移（如 `+08:00`）或运行环境可用的 IANA 时区。

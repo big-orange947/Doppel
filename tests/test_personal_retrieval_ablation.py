@@ -17,7 +17,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 from uuid import NAMESPACE_URL, uuid5
 
@@ -27,6 +27,8 @@ from benchmarks.personal_retrieval_ablation import (
     PLANNER_MODE_ORACLE,
     PLANNER_MODE_ORACLE_TYPED,
     PLANNER_MODE_REPORT,
+    PLANNER_MODE_REPORT_V1,
+    PLANNER_MODE_REPORT_V2,
     PROFILE_DIRECT,
     PROFILE_EXECUTION,
     PROFILE_MAIN,
@@ -65,6 +67,7 @@ from doppel_memory import (
     DeterministicPersonalMemoryQueryPlanner,
     InMemoryStore,
     MemoryScope,
+    PersonalMemoryQueryDraftV2,
     PersonalMemoryQueryEngine,
     PersonalMemoryQueryRequest,
     PersonalMemoryRerankItem,
@@ -1794,6 +1797,206 @@ class PlannerModeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(draft.entity_mentions, query.entity_mentions)
         self.assertEqual(draft.relation_hints, query.relation_hints)
         self.assertEqual(planner.source["provider_calls_during_replay"], 0)
+
+    async def test_report_planner_preserves_v2_operation_and_time_view(self) -> None:
+        dataset = load_ablation_dataset(RELATION_V2_DATASET_PATH)
+        payload = {
+            "query_schema": "v2",
+            "dataset": {"fingerprint": dataset.fingerprint},
+            "planner": {"name": "provider-planner-v2", "version": "2"},
+            "cases": [
+                {
+                    "query": query.query,
+                    "error": "",
+                    "actual": {
+                        "schema_version": 2,
+                        "operation": query.operation or "lookup",
+                        "temporal_view": query.temporal_view
+                        or {
+                            "current": "current",
+                            "history": "prior",
+                            "planned": "planned",
+                        }.get(query.intent, "unbounded"),
+                        "as_of": query.as_of.isoformat() if query.as_of else None,
+                        "time_from": (
+                            query.time_from.isoformat() if query.time_from else None
+                        ),
+                        "time_to": query.time_to.isoformat() if query.time_to else None,
+                        "entity_mentions": query.entity_mentions,
+                        "relation_hints": query.relation_hints,
+                        "relation_types": dataset.relation_type_labels.get(
+                            query.query_id, []
+                        ),
+                    },
+                }
+                for query in dataset.queries
+                if query.partition != "deferred_cross_subject"
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "planner-v2.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            planner = BenchmarkReportPlanner(path, dataset)
+            query = next(item for item in dataset.queries if item.temporal_view == "prior")
+            draft = await planner.plan(
+                PersonalMemoryQueryRequest(query=query.query, now=query.now)
+            )
+            result = await PersonalMemoryQueryEngine(InMemoryStore()).query(
+                cast(Any, planner),
+                query.query,
+                [dataset.scopes[name].to_scope() for name in query.scopes],
+                now=query.now,
+                calendar_timezone=dataset.calendar_timezone,
+                available_relation_types=dataset.relation_types,
+            )
+
+        assert isinstance(draft, PersonalMemoryQueryDraftV2)
+        self.assertEqual(draft.operation, query.operation)
+        self.assertEqual(draft.temporal_view, "prior")
+        effective_plan = cast(Any, result.plan)
+        self.assertEqual(effective_plan.schema_version, 2)
+        self.assertEqual(effective_plan.operation, query.operation)
+        self.assertEqual(effective_plan.temporal_view, "prior")
+        self.assertEqual(planner.source["query_schema_counts"], {"v2": 240})
+        self.assertEqual(planner.source["provider_calls_during_replay"], 0)
+
+    async def test_paired_report_modes_share_one_retrieval_run(self) -> None:
+        dataset = _dataset()
+        v1_payload = self._replay_payload(dataset)
+        v1_payload["planner"] = {"name": "provider-v1", "version": "1"}
+        v2_payload = {
+            "query_schema": "v2",
+            "dataset": {"fingerprint": dataset.fingerprint},
+            "planner": {"name": "provider-v2", "version": "2"},
+            "cases": [
+                {
+                    "query": query.query,
+                    "error": "",
+                    "actual": {
+                        "schema_version": 2,
+                        "operation": query.operation or "lookup",
+                        "temporal_view": query.temporal_view
+                        or {
+                            "current": "current",
+                            "history": "prior",
+                            "planned": "planned",
+                        }.get(query.intent, "unbounded"),
+                    },
+                }
+                for query in dataset.queries
+                if query.partition != "deferred_cross_subject"
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            v1_path = root / "v1.json"
+            v2_path = root / "v2.json"
+            v1_path.write_text(json.dumps(v1_payload), encoding="utf-8")
+            v2_path.write_text(json.dumps(v2_payload), encoding="utf-8")
+            report = await _run_profiles(
+                store=InMemoryStore(),
+                scopes={name: item.to_scope() for name, item in dataset.scopes.items()},
+                dataset=dataset,
+                profiles=("lexical",),
+                semantic_by_source={},
+                relation_index=None,
+                graph=None,
+                planner_modes=(PLANNER_MODE_REPORT_V1, PLANNER_MODE_REPORT_V2),
+                planner_reports={
+                    PLANNER_MODE_REPORT_V1: v1_path,
+                    PLANNER_MODE_REPORT_V2: v2_path,
+                },
+            )
+
+        self.assertEqual(
+            set(report["profiles"]),
+            {PLANNER_MODE_REPORT_V1, PLANNER_MODE_REPORT_V2},
+        )
+        self.assertIn(
+            "report_v2_vs_report_v1_lexical", report["comparisons"]
+        )
+        self.assertTrue(report["paired_planner_promotion_gate"]["available"])
+        self.assertEqual(
+            report["paired_planner_promotion_gate"]["profiles"], ["lexical"]
+        )
+        self.assertEqual(
+            report["paired_planner_promotion_gate"]["diagnostics"][
+                "lexical:planner_structure_failure_case_count"
+            ],
+            {"v1": 36, "v2": 7},
+        )
+        self.assertTrue(report["paired_planner_source"]["available"])
+        self.assertEqual(
+            report["paired_planner_source"]["provider_calls_during_replay"], 0
+        )
+        for case in report["cases"]:
+            if case["mode"] != PLANNER_MODE_REPORT_V2:
+                continue
+            semantic_failures = {
+                "planner_intent_miss",
+                "planner_operation_miss",
+                "planner_temporal_view_miss",
+            }.intersection(case["effective_plan_failures"])
+            self.assertEqual(case["intent_ok"], not semantic_failures)
+        self.assertEqual(
+            report["planner_sources"][PLANNER_MODE_REPORT_V1][
+                "query_schema_counts"
+            ],
+            {"v1": 36},
+        )
+        self.assertEqual(
+            report["planner_sources"][PLANNER_MODE_REPORT_V2][
+                "query_schema_counts"
+            ],
+            {"v2": 36},
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            mismatched_path = Path(directory) / "v1.json"
+            mismatched_path.write_text(json.dumps(v1_payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "requires only v2 drafts"):
+                await _run_profiles(
+                    store=InMemoryStore(),
+                    scopes={
+                        name: item.to_scope() for name, item in dataset.scopes.items()
+                    },
+                    dataset=dataset,
+                    profiles=("lexical",),
+                    semantic_by_source={},
+                    relation_index=None,
+                    graph=None,
+                    planner_modes=(PLANNER_MODE_REPORT_V2,),
+                    planner_reports={PLANNER_MODE_REPORT_V2: mismatched_path},
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            v1_path = root / "first" / "v1.json"
+            v2_path = root / "second" / "v2.json"
+            v1_path.parent.mkdir()
+            v2_path.parent.mkdir()
+            v1_path.write_text(json.dumps(v1_payload), encoding="utf-8")
+            v2_path.write_text(json.dumps(v2_payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "same experiment directory"):
+                await _run_profiles(
+                    store=InMemoryStore(),
+                    scopes={
+                        name: item.to_scope() for name, item in dataset.scopes.items()
+                    },
+                    dataset=dataset,
+                    profiles=("lexical",),
+                    semantic_by_source={},
+                    relation_index=None,
+                    graph=None,
+                    planner_modes=(
+                        PLANNER_MODE_REPORT_V1,
+                        PLANNER_MODE_REPORT_V2,
+                    ),
+                    planner_reports={
+                        PLANNER_MODE_REPORT_V1: v1_path,
+                        PLANNER_MODE_REPORT_V2: v2_path,
+                    },
+                )
 
     async def test_report_planner_rejects_dataset_fingerprint_mismatch(
         self,

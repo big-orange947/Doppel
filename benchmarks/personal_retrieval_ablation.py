@@ -46,7 +46,7 @@ import re
 import sys
 import tempfile
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
@@ -76,9 +76,9 @@ from doppel_memory.intelligence import MemoryTemporalStatus, PersonalMemoryType
 from doppel_memory.models import WriteStatus, utc_now
 from doppel_memory.query import (
     PersonalMemoryQueryDraft,
+    PersonalMemoryQueryDraftV2,
     PersonalMemoryQueryHit,
     PersonalMemoryQueryIntent,
-    PersonalMemoryQueryPlan,
     PersonalMemoryQueryRequest,
     PersonalMemoryQueryResult,
     QueryIntent,
@@ -791,8 +791,19 @@ PLANNER_MODE_ORACLE = "oracle"
 PLANNER_MODE_ORACLE_TYPED = "oracle_typed"
 PLANNER_MODE_DETERMINISTIC = "deterministic"
 PLANNER_MODE_REPORT = "report"
+PLANNER_MODE_REPORT_V1 = "report_v1"
+PLANNER_MODE_REPORT_V2 = "report_v2"
 PLANNER_MODES = (PLANNER_MODE_ORACLE, PLANNER_MODE_DETERMINISTIC)
-ALL_PLANNER_MODES = (*PLANNER_MODES, PLANNER_MODE_ORACLE_TYPED, PLANNER_MODE_REPORT)
+REPORT_PLANNER_MODES = (
+    PLANNER_MODE_REPORT,
+    PLANNER_MODE_REPORT_V1,
+    PLANNER_MODE_REPORT_V2,
+)
+ALL_PLANNER_MODES = (*PLANNER_MODES, PLANNER_MODE_ORACLE_TYPED, *REPORT_PLANNER_MODES)
+
+
+def _is_report_planner_mode(mode: str) -> bool:
+    return mode in REPORT_PLANNER_MODES
 
 
 class BenchmarkOraclePlanner:
@@ -893,9 +904,27 @@ class BenchmarkReportPlanner:
             "sha256": hashlib.sha256(payload).hexdigest(),
             "dataset_fingerprint": source_fingerprint,
             "planner": source_planner,
+            "report_identity": {
+                "runner": str(raw.get("runner") or ""),
+                "query_schema": str(raw.get("query_schema") or "v1"),
+                "scoring_version": str(raw.get("scoring_version") or ""),
+                "dataset_name": str((raw.get("dataset") or {}).get("name") or ""),
+                "dataset_version": str(
+                    (raw.get("dataset") or {}).get("version") or ""
+                ),
+                "dataset_query_count": (raw.get("dataset") or {}).get(
+                    "query_count"
+                ),
+                "relation_catalog_fingerprint": str(
+                    (raw.get("relation_catalog") or {}).get("fingerprint") or ""
+                ),
+            },
             "provider_calls_during_replay": 0,
         }
-        drafts: dict[str, PersonalMemoryQueryDraft] = {}
+        drafts: dict[
+            str, PersonalMemoryQueryDraft | PersonalMemoryQueryDraftV2
+        ] = {}
+        schema_versions: Counter[str] = Counter()
         failures: set[str] = set()
         seen: set[str] = set()
         for item in list(raw.get("cases") or []):
@@ -910,7 +939,15 @@ class BenchmarkReportPlanner:
                 continue
             if item.get("actual") is None:
                 raise ValueError("planner report case has neither a draft nor an error")
-            drafts[query_text] = PersonalMemoryQueryDraft.model_validate(item["actual"])
+            actual = item["actual"]
+            if not isinstance(actual, dict):
+                raise TypeError("planner report draft must be an object")
+            if actual.get("schema_version") == 2:
+                drafts[query_text] = PersonalMemoryQueryDraftV2.model_validate(actual)
+                schema_versions["v2"] += 1
+            else:
+                drafts[query_text] = PersonalMemoryQueryDraft.model_validate(actual)
+                schema_versions["v1"] += 1
         required = {
             query.query.strip()
             for query in dataset.queries
@@ -927,20 +964,23 @@ class BenchmarkReportPlanner:
                 "failed_attempt_count": len(required.intersection(failures)),
                 "failure_policy": "preserve_in_denominator_no_retry",
                 "execution_semantics": "planner_candidates_host_constraints",
+                "query_schema_counts": dict(sorted(schema_versions.items())),
             }
         )
 
     def has_successful_draft(self, query: str) -> bool:
         return query.strip() in self._drafts
 
-    def source_draft(self, query: str) -> PersonalMemoryQueryDraft | None:
+    def source_draft(
+        self, query: str
+    ) -> PersonalMemoryQueryDraft | PersonalMemoryQueryDraftV2 | None:
         """Return the immutable replay input for source/effective attribution."""
 
         return self._drafts.get(query.strip())
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
-    ) -> PersonalMemoryQueryDraft:
+    ) -> PersonalMemoryQueryDraft | PersonalMemoryQueryDraftV2:
         query_text = str(request.query or "").strip()
         if query_text in self._failures:
             raise BenchmarkReportPlannerFailure()
@@ -955,6 +995,76 @@ class BenchmarkReportPlanner:
                 "subject_id": request.default_subject_id,
             }
         )
+
+
+def _validate_paired_report_sources(
+    planners: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind a paired retrieval replay to one v1/v2 planner experiment directory."""
+
+    v1 = planners.get(PLANNER_MODE_REPORT_V1)
+    v2 = planners.get(PLANNER_MODE_REPORT_V2)
+    if not isinstance(v1, BenchmarkReportPlanner) or not isinstance(
+        v2, BenchmarkReportPlanner
+    ):
+        return {"available": False}
+    parent = v1.path.parent
+    if parent != v2.path.parent:
+        raise ValueError(
+            "paired planner reports must come from the same experiment directory"
+        )
+    identities = [v1.source["report_identity"], v2.source["report_identity"]]
+    expected_schemas = ("v1", "v2")
+    actual_schemas = tuple(identity["query_schema"] for identity in identities)
+    if actual_schemas != expected_schemas:
+        raise ValueError(
+            "paired planner report schema identities must be v1 and v2; "
+            f"found {actual_schemas}"
+        )
+    shared_fields = (
+        "runner",
+        "scoring_version",
+        "dataset_name",
+        "dataset_version",
+        "dataset_query_count",
+        "relation_catalog_fingerprint",
+    )
+    mismatches = [
+        field
+        for field in shared_fields
+        if identities[0].get(field) != identities[1].get(field)
+    ]
+    if mismatches:
+        raise ValueError(
+            "paired planner reports do not share the same experiment identity: "
+            f"{mismatches}"
+        )
+    manifest_path = parent / "plan.json"
+    manifest_sha256 = ""
+    manifest_present = manifest_path.is_file()
+    if manifest_present:
+        manifest_payload = manifest_path.read_bytes()
+        manifest = json.loads(manifest_payload)
+        if set(manifest.get("arms") or []) != {"v1", "v2"}:
+            raise ValueError("paired planner plan.json must declare v1 and v2 arms")
+        manifest_runner = str(manifest.get("runner") or "")
+        if manifest_runner and manifest_runner != identities[0]["runner"]:
+            raise ValueError(
+                "paired planner plan.json runner does not match source reports"
+            )
+        manifest_sha256 = hashlib.sha256(manifest_payload).hexdigest()
+    return {
+        "available": True,
+        "directory": str(parent),
+        "manifest_present": manifest_present,
+        "manifest_sha256": manifest_sha256,
+        "v1_sha256": v1.source["sha256"],
+        "v2_sha256": v2.source["sha256"],
+        "shared_identity": {
+            field: identities[0].get(field) for field in shared_fields
+        },
+        "provider_calls_during_replay": 0,
+    }
 
 
 _INTENT_VALUES = {
@@ -2080,6 +2190,7 @@ async def _run_case(
     profile: str,
     mode: str = PLANNER_MODE_DETERMINISTIC,
     available_relation_types: Sequence[str] = (),
+    calendar_timezone: str = "UTC",
     trace_limit: int = 0,
 ) -> dict[str, Any]:
     started = perf_counter()
@@ -2087,16 +2198,17 @@ async def _run_case(
     allowed_scope_keys = {scope.scope_key for scope in bound_scopes}
     source_planner_draft = (
         planner.source_draft(query.query)
-        if mode == PLANNER_MODE_REPORT
+        if _is_report_planner_mode(mode)
         and isinstance(planner, BenchmarkReportPlanner)
         else None
     )
     try:
         result = await engine.query(
-            planner,
+            cast(Any, planner),
             query.query,
             bound_scopes,
             now=query.now,
+            calendar_timezone=calendar_timezone,
             available_relation_types=available_relation_types,
             trace_limit=trace_limit,
             required_relation_types=(
@@ -2181,14 +2293,53 @@ def _expected_intent_ok(
     return _intent_ok(str(result.plan.intent), query)
 
 
+def _report_semantics_ok(failures: Sequence[str]) -> bool:
+    """Whether the report plan selected the labeled operation/time semantics."""
+
+    return not {
+        "planner_intent_miss",
+        "planner_operation_miss",
+        "planner_temporal_view_miss",
+    }.intersection(failures)
+
+
 def _planner_structure_failures(
-    plan: PersonalMemoryQueryDraft | PersonalMemoryQueryPlan,
+    plan: Any,
     query: AblationQuery,
 ) -> list[str]:
     """Compare one source/effective structure with labeled query semantics."""
 
     failures: list[str] = []
-    if not _intent_ok(str(plan.intent), query):
+    if getattr(plan, "schema_version", 1) == 2:
+        expected_operation = query.operation
+        if expected_operation is None:
+            expected_operation = (
+                "count"
+                if query.intent == "count"
+                else "list"
+                if query.intent == "list"
+                else "lookup"
+            )
+        if str(plan.operation) != expected_operation:
+            failures.append("planner_operation_miss")
+        accepted_views: set[str] = set(query.accepted_temporal_views)
+        if query.temporal_view is not None:
+            accepted_views.add(query.temporal_view)
+        if not accepted_views:
+            accepted_views.add(
+                "as_of"
+                if query.as_of is not None
+                else "interval"
+                if query.time_from is not None or query.time_to is not None
+                else {
+                    "current": "current",
+                    "history": "prior",
+                    "planned": "planned",
+                }.get(query.intent, "unbounded")
+            )
+        if str(plan.temporal_view) not in accepted_views:
+            failures.append("planner_temporal_view_miss")
+    elif not _intent_ok(str(plan.intent), query):
         failures.append("planner_intent_miss")
     temporal_ok = True
     if query.as_of is not None:
@@ -2280,7 +2431,9 @@ def _evaluate_result(
     *,
     allowed_scope_keys: set[str],
     mode: str = PLANNER_MODE_DETERMINISTIC,
-    source_planner_draft: PersonalMemoryQueryDraft | None = None,
+    source_planner_draft: (
+        PersonalMemoryQueryDraft | PersonalMemoryQueryDraftV2 | None
+    ) = None,
 ) -> dict[str, Any]:
     hits: list[PersonalMemoryQueryHit] = list(result.hits)
     hit_set = {hit.record.memory_id for hit in hits}
@@ -2295,20 +2448,23 @@ def _evaluate_result(
     as_of_recognized = plan_as_of is not None
     effective_report_plan_failures = (
         _planner_structure_failures(result.plan, query)
-        if mode == PLANNER_MODE_REPORT
+        if _is_report_planner_mode(mode)
         else []
     )
     source_report_planner_failures = (
         _planner_structure_failures(source_planner_draft, query)
-        if mode == PLANNER_MODE_REPORT and source_planner_draft is not None
+        if _is_report_planner_mode(mode) and source_planner_draft is not None
         else effective_report_plan_failures
     )
     temporal_plan_is_trusted = mode in {
         PLANNER_MODE_ORACLE,
         PLANNER_MODE_ORACLE_TYPED,
     } or (
-        mode == PLANNER_MODE_REPORT
-        and "planner_temporal_miss" not in effective_report_plan_failures
+        _is_report_planner_mode(mode)
+        and not {
+            "planner_temporal_miss",
+            "planner_temporal_view_miss",
+        }.intersection(effective_report_plan_failures)
     )
     for hit in hits:
         record = hit.record
@@ -2366,7 +2522,11 @@ def _evaluate_result(
         )
     else:
         count_ok = result.count.status in {"not_requested", "exact"}
-    intent_ok = _expected_intent_ok(result, query)
+    intent_ok = (
+        _report_semantics_ok(effective_report_plan_failures)
+        if _is_report_planner_mode(mode)
+        else _expected_intent_ok(result, query)
+    )
 
     # ---- planner-mode attribution --------------------------------------- #
     planner_temporal_miss = bool(
@@ -2389,18 +2549,32 @@ def _evaluate_result(
         planner_failures.append("planner_interval_miss")
     if planner_intent_miss:
         planner_failures.append("planner_intent_miss")
-    if mode == PLANNER_MODE_REPORT:
+    if _is_report_planner_mode(mode):
         planner_failures = source_report_planner_failures
-        planner_temporal_miss = "planner_temporal_miss" in planner_failures
+        planner_temporal_miss = bool(
+            {
+                "planner_temporal_miss",
+                "planner_temporal_view_miss",
+            }.intersection(planner_failures)
+        )
         planner_interval_miss = False
-        planner_intent_miss = "planner_intent_miss" in planner_failures
+        planner_intent_miss = bool(
+            {"planner_intent_miss", "planner_operation_miss"}.intersection(
+                planner_failures
+            )
+        )
     effective_plan_failures = (
         effective_report_plan_failures
-        if mode == PLANNER_MODE_REPORT
+        if _is_report_planner_mode(mode)
         else list(planner_failures)
     )
     time_grounding_recovered = bool(
-        {"planner_intent_miss", "planner_temporal_miss"}.intersection(
+        {
+            "planner_intent_miss",
+            "planner_operation_miss",
+            "planner_temporal_miss",
+            "planner_temporal_view_miss",
+        }.intersection(
             planner_failures
         ).difference(effective_plan_failures)
     )
@@ -2774,8 +2948,17 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _delta(full: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
-    suffix = {key: base.get(key, 0) for key in ()}
-    del suffix
+    def optional_delta(after: Any, before: Any) -> float | None:
+        if after is None or before is None:
+            return None
+        return round(float(after) - float(before), 6)
+
+    full_relevance = full.get("graded_relevance") or {}
+    base_relevance = base.get("graded_relevance") or {}
+    full_expectations = full.get("retrieval_expectations") or {}
+    base_expectations = base.get("retrieval_expectations") or {}
+    full_latency = full.get("latency_ms") or {}
+    base_latency = base.get("latency_ms") or {}
     return {
         "recall_at_1_delta": round(full["recall_at_1"] - base["recall_at_1"], 4),
         "recall_at_5_delta": round(full["recall_at_5"] - base["recall_at_5"], 4),
@@ -2797,6 +2980,133 @@ def _delta(full: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
         ),
         "abstention_accuracy_delta": round(
             full["abstention_accuracy"] - base["abstention_accuracy"], 4
+        ),
+        "mean_ndcg_at_5_delta": optional_delta(
+            full_relevance.get("mean_ndcg_at_5"),
+            base_relevance.get("mean_ndcg_at_5"),
+        ),
+        "related_context_recall_at_1_delta": optional_delta(
+            full_expectations.get("related_context_recall_at_1"),
+            base_expectations.get("related_context_recall_at_1"),
+        ),
+        "related_context_recall_at_5_delta": optional_delta(
+            full_expectations.get("related_context_recall_at_5"),
+            base_expectations.get("related_context_recall_at_5"),
+        ),
+        "no_evidence_abstention_accuracy_delta": optional_delta(
+            full_expectations.get("no_evidence_abstention_accuracy"),
+            base_expectations.get("no_evidence_abstention_accuracy"),
+        ),
+        "planner_structure_failure_case_count_delta": (
+            full.get("planner_structure_failure_case_count", 0)
+            - base.get("planner_structure_failure_case_count", 0)
+        ),
+        "effective_plan_failure_case_count_delta": (
+            full.get("effective_plan_failure_case_count", 0)
+            - base.get("effective_plan_failure_case_count", 0)
+        ),
+        "latency_p50_ms_delta": optional_delta(
+            full_latency.get("p50"), base_latency.get("p50")
+        ),
+        "latency_p95_ms_delta": optional_delta(
+            full_latency.get("p95"), base_latency.get("p95")
+        ),
+    }
+
+
+def _paired_planner_promotion_gate(
+    per_mode: Mapping[str, Mapping[str, dict[str, Any]]],
+) -> dict[str, Any]:
+    """Compare v2/v1 by retrieval outcomes, execution, and safety.
+
+    Source/effective plan structure remains visible as diagnostics, but it is not a
+    second hard gate here: planner-quality reports already score that surface. This
+    gate answers the downstream question -- whether the new plan improves what the
+    authorized Store/index pipeline actually returns.
+    """
+
+    before = per_mode.get(PLANNER_MODE_REPORT_V1)
+    after = per_mode.get(PLANNER_MODE_REPORT_V2)
+    if before is None or after is None:
+        return {
+            "available": False,
+            "passed": False,
+            "profiles": [],
+            "checks": {},
+            "diagnostics": {},
+            "failures": ["paired report_v1/report_v2 modes were not both executed"],
+        }
+    profiles = sorted(set(before).intersection(after))
+    executed_profiles: list[str] = []
+    checks: dict[str, bool] = {}
+    diagnostics: dict[str, Any] = {}
+    for profile in profiles:
+        left = before[profile]
+        right = after[profile]
+        prefix = f"{profile}:"
+        available = not left.get("unavailable", False) and not right.get(
+            "unavailable", False
+        )
+        checks[prefix + "available"] = available
+        if not available:
+            continue
+        executed_profiles.append(profile)
+        for metric in (
+            "recall_at_1",
+            "recall_at_5",
+            "mrr",
+            "required_evidence_recall",
+            "abstention_accuracy",
+        ):
+            checks[prefix + metric] = float(right[metric]) >= float(left[metric])
+        checks[prefix + "forbidden_hit_count"] = int(
+            right["forbidden_hit_count"]
+        ) <= int(left["forbidden_hit_count"])
+        diagnostics[prefix + "planner_structure_failure_case_count"] = {
+            "v1": int(left.get("planner_structure_failure_case_count", 0)),
+            "v2": int(right.get("planner_structure_failure_case_count", 0)),
+        }
+        diagnostics[prefix + "effective_plan_failure_case_count"] = {
+            "v1": int(left.get("effective_plan_failure_case_count", 0)),
+            "v2": int(right.get("effective_plan_failure_case_count", 0)),
+        }
+        checks[prefix + "execution_errors"] = int(right.get("error_count", 0)) <= int(
+            left.get("error_count", 0)
+        )
+        for metric in (
+            "scope_leakage_count",
+            "temporal_violation_count",
+            "provenance_failure_count",
+        ):
+            checks[prefix + metric] = int(right[metric]) == 0
+        left_ndcg = (left.get("graded_relevance") or {}).get("mean_ndcg_at_5")
+        right_ndcg = (right.get("graded_relevance") or {}).get("mean_ndcg_at_5")
+        if left_ndcg is not None and right_ndcg is not None:
+            checks[prefix + "mean_ndcg_at_5"] = float(right_ndcg) >= float(
+                left_ndcg
+            )
+        left_no_evidence = (left.get("retrieval_expectations") or {}).get(
+            "no_evidence_abstention_accuracy"
+        )
+        right_no_evidence = (right.get("retrieval_expectations") or {}).get(
+            "no_evidence_abstention_accuracy"
+        )
+        if left_no_evidence is not None and right_no_evidence is not None:
+            checks[prefix + "no_evidence_abstention_accuracy"] = float(
+                right_no_evidence
+            ) >= float(left_no_evidence)
+    failures = sorted(name for name, passed in checks.items() if not passed)
+    return {
+        "available": bool(executed_profiles),
+        "passed": bool(executed_profiles) and not failures,
+        "profiles": executed_profiles,
+        "checks": checks,
+        "diagnostics": diagnostics,
+        "failures": failures,
+        "policy": (
+            "v2 must not regress ranked quality, abstention, forbidden evidence, "
+            "execution stability, or safety on every paired retrieval profile; "
+            "planner structure is diagnostic because it is scored upstream"
         ),
     }
 
@@ -3059,6 +3369,7 @@ async def run_ablation(
     profiles: Sequence[str] = PROFILE_MAIN,
     planner_modes: Sequence[str] = PLANNER_MODES,
     planner_report: Path | None = None,
+    planner_reports: Mapping[str, Path] | None = None,
     require_live_postgres: bool = False,
     require_live_neo4j: bool = False,
     run_metamorphic: bool = True,
@@ -3084,8 +3395,19 @@ async def run_ablation(
     unknown_modes = set(planner_modes).difference(ALL_PLANNER_MODES)
     if unknown_modes:
         raise ValueError(f"unknown planner modes: {sorted(unknown_modes)}")
-    if PLANNER_MODE_REPORT in planner_modes and planner_report is None:
-        raise ValueError("planner mode 'report' requires planner_report")
+    bound_planner_reports = dict(planner_reports or {})
+    if planner_report is not None:
+        bound_planner_reports[PLANNER_MODE_REPORT] = planner_report
+    missing_reports = sorted(
+        mode
+        for mode in planner_modes
+        if _is_report_planner_mode(mode) and mode not in bound_planner_reports
+    )
+    if missing_reports:
+        raise ValueError(
+            "planner report paths are required for modes: "
+            f"{missing_reports}"
+        )
     if minimum_reranker_score is not None and not (
         0.0 <= minimum_reranker_score <= 1.0
     ):
@@ -3237,6 +3559,7 @@ async def run_ablation(
             graph=graph,
             planner_modes=planner_modes,
             planner_report=planner_report,
+            planner_reports=bound_planner_reports,
             trace_limit=trace_limit,
             candidate_fusion=candidate_fusion,
         )
@@ -3359,14 +3682,26 @@ async def _run_profiles(
     memory_rerank_config: PersonalMemoryRerankConfig | None = None,
     planner_modes: Sequence[str] = PLANNER_MODES,
     planner_report: Path | None = None,
+    planner_reports: Mapping[str, Path] | None = None,
     trace_limit: int = 0,
     candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
 ) -> dict[str, Any]:
     unknown_modes = set(planner_modes).difference(ALL_PLANNER_MODES)
     if unknown_modes:
         raise ValueError(f"unknown planner modes: {sorted(unknown_modes)}")
-    if PLANNER_MODE_REPORT in planner_modes and planner_report is None:
-        raise ValueError("planner mode 'report' requires planner_report")
+    bound_planner_reports = dict(planner_reports or {})
+    if planner_report is not None:
+        bound_planner_reports[PLANNER_MODE_REPORT] = planner_report
+    missing_reports = sorted(
+        mode
+        for mode in planner_modes
+        if _is_report_planner_mode(mode) and mode not in bound_planner_reports
+    )
+    if missing_reports:
+        raise ValueError(
+            "planner report paths are required for modes: "
+            f"{missing_reports}"
+        )
     vector_available = SOURCE_VECTOR in semantic_by_source
     graph_available = SOURCE_GRAPH in semantic_by_source
     vector_source = semantic_by_source.get(SOURCE_VECTOR)
@@ -3407,8 +3742,21 @@ async def _run_profiles(
             relation_type_labels=dataset.relation_type_labels,
         ),
     }
-    if planner_report is not None:
-        planners[PLANNER_MODE_REPORT] = BenchmarkReportPlanner(planner_report, dataset)
+    for mode, path in bound_planner_reports.items():
+        if mode in REPORT_PLANNER_MODES:
+            report_planner = BenchmarkReportPlanner(path, dataset)
+            expected_schema = {
+                PLANNER_MODE_REPORT_V1: "v1",
+                PLANNER_MODE_REPORT_V2: "v2",
+            }.get(mode)
+            actual_schemas = set(report_planner.source["query_schema_counts"])
+            if expected_schema is not None and actual_schemas != {expected_schema}:
+                raise ValueError(
+                    f"planner mode {mode!r} requires only {expected_schema} drafts; "
+                    f"found {sorted(actual_schemas)}"
+                )
+            planners[mode] = report_planner
+    paired_planner_source = _validate_paired_report_sources(planners)
     per_mode: dict[str, dict[str, dict[str, Any]]] = {}
     all_cases: list[dict[str, Any]] = []
     deferred_queries: list[str] = []
@@ -3476,10 +3824,11 @@ async def _run_profiles(
             )
             if warmup is not None:
                 await engine.query(
-                    planner,
+                    cast(Any, planner),
                     warmup.query,
                     [scopes[name] for name in warmup.scopes],
                     now=warmup.now,
+                    calendar_timezone=dataset.calendar_timezone,
                     available_relation_types=dataset.relation_types,
                     required_relation_types=(
                         planner._relation_type_labels.get(warmup.query_id, [])
@@ -3502,6 +3851,7 @@ async def _run_profiles(
                         profile=profile,
                         mode=mode,
                         available_relation_types=dataset.relation_types,
+                        calendar_timezone=dataset.calendar_timezone,
                         trace_limit=trace_limit,
                     )
                 )
@@ -3576,6 +3926,7 @@ async def _run_profiles(
             for mode, planner in planners.items()
             if mode in planner_modes and hasattr(planner, "source")
         },
+        "paired_planner_source": paired_planner_source,
         "profiles": per_mode,
         "diagnostics": diagnostics,
         "comparisons": {},
@@ -3642,7 +3993,27 @@ async def _run_profiles(
                     typed,
                     untyped,
                 )
+    if (
+        PLANNER_MODE_REPORT_V1 in per_mode
+        and PLANNER_MODE_REPORT_V2 in per_mode
+    ):
+        for profile in PROFILE_EXECUTION:
+            before = per_mode[PLANNER_MODE_REPORT_V1].get(profile)
+            after = per_mode[PLANNER_MODE_REPORT_V2].get(profile)
+            if (
+                before is not None
+                and after is not None
+                and not before.get("unavailable", False)
+                and not after.get("unavailable", False)
+            ):
+                comparisons[f"report_v2_vs_report_v1_{profile}"] = _delta(
+                    after,
+                    before,
+                )
     report["comparisons"] = comparisons
+    report["paired_planner_promotion_gate"] = _paired_planner_promotion_gate(
+        per_mode
+    )
 
     report["hard_gates"] = _collect_hard_gates(all_cases)
     report["hard_gates_by_profile"] = {
@@ -4263,6 +4634,16 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--planner-report-v1",
+        type=Path,
+        help="v1 source report for paired report_v1/report_v2 retrieval replay",
+    )
+    parser.add_argument(
+        "--planner-report-v2",
+        type=Path,
+        help="v2 source report for paired report_v1/report_v2 retrieval replay",
+    )
+    parser.add_argument(
         "--require-live-postgres",
         action="store_true",
         help="exit non-zero when pgvector is unavailable",
@@ -4638,6 +5019,14 @@ async def _async_main(args: argparse.Namespace) -> int:
         profiles=profiles,
         planner_modes=modes,
         planner_report=args.planner_report,
+        planner_reports={
+            mode: path
+            for mode, path in (
+                (PLANNER_MODE_REPORT_V1, args.planner_report_v1),
+                (PLANNER_MODE_REPORT_V2, args.planner_report_v2),
+            )
+            if path is not None
+        },
         require_live_postgres=args.require_live_postgres,
         require_live_neo4j=args.require_live_neo4j,
         run_metamorphic=not args.no_metamorphic,
@@ -4756,6 +5145,10 @@ async def _async_main(args: argparse.Namespace) -> int:
                 "planner_modes": modes,
                 "profiles": report.get("profiles", {}),
                 "comparisons": report.get("comparisons", {}),
+                "paired_planner_source": report.get("paired_planner_source", {}),
+                "paired_planner_promotion_gate": report.get(
+                    "paired_planner_promotion_gate", {}
+                ),
                 "hard_gates": report.get("hard_gates", {}),
                 "hard_gates_by_profile": report.get("hard_gates_by_profile", {}),
                 "graph_final_hit_attribution": report.get(
