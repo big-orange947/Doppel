@@ -27,9 +27,13 @@ def test_graded_judgments_never_inferred_from_legacy_gold():
 def test_unannotated_dataset_fingerprint_unchanged():
     dataset = _dataset()
     original = dataset.model_dump(mode="json")
+    original.pop("calendar_timezone")
     for query in original["queries"]:
         query.pop("relevance_grades")
         query.pop("retrieval_expectation")
+        query.pop("operation")
+        query.pop("temporal_view")
+        query.pop("accepted_temporal_views")
     assert dataset.fingerprint == hashlib.sha256(json.dumps(
         original, ensure_ascii=False, sort_keys=True
     ).encode()).hexdigest()

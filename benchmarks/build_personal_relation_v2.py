@@ -427,6 +427,7 @@ def _query_base(
         "scopes": [scenario["scope"]],
         "now": NOW,
         "intent": intent,
+        "operation": "lookup",
         "entity_mentions": [scenario["entity"]],
         "relation_hints": [relation_hint],
         "category": category,
@@ -598,6 +599,21 @@ def _scenario_queries(scenario: dict[str, Any], unknown_entity: str) -> list[dic
     ]
 
     for number, row in enumerate(rows, start=1):
+        if number in {1, 2, 7, 9}:
+            row["temporal_view"] = "current"
+        elif number == 3:
+            row["temporal_view"] = "prior"
+        elif number == 4:
+            row["temporal_view"] = "as_of"
+        elif number == 10:
+            row["temporal_view"] = "interval"
+        elif number in {5, 6} and scenario["secondary_type"] in {
+            "REPAIRED_AT",
+            "REPAIRED_BY",
+        }:
+            row["temporal_view"] = "prior"
+        else:
+            row["temporal_view"] = "unbounded"
         if number in {1, 2, 7}:
             row["required_memory_ids"] = [ids["current"]]
             row["_grade_kind"] = "current"
@@ -685,8 +701,9 @@ def build_dataset() -> dict[str, Any]:
     assert all(memory_id in fixture_by_id for memory_id in fixture_ids)
     return {
         "suite": "doppel-personal-relation-ablation-zh-v2",
-        "suite_version": "2.0.0-draft.2",
+        "suite_version": "2.0.0-draft.3",
         "language": "zh-CN",
+        "calendar_timezone": "UTC",
         "status": "draft",
         "frozen": False,
         "publication_ready": False,

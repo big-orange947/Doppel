@@ -1,7 +1,8 @@
 {
   "suite": "doppel-personal-relation-ablation-zh-v2",
-  "suite_version": "2.0.0-draft.2",
+  "suite_version": "2.0.0-draft.3",
   "language": "zh-CN",
+  "calendar_timezone": "UTC",
   "status": "draft",
   "frozen": false,
   "publication_ready": false,
@@ -2425,6 +2426,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -2434,6 +2436,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s01-primary-current"
       ],
@@ -2526,6 +2529,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -2535,6 +2539,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s01-primary-current"
       ],
@@ -2627,6 +2632,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -2636,6 +2642,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s01-primary-history"
       ],
@@ -2728,6 +2735,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -2737,6 +2745,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s01-primary-history"
       ],
@@ -2835,6 +2844,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -2844,6 +2854,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s01-secondary"
       ],
@@ -2935,6 +2946,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -2944,6 +2956,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s01-secondary"
       ],
@@ -3035,6 +3048,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -3044,6 +3058,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s01-primary-current"
       ],
@@ -3137,6 +3152,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -3146,6 +3162,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -3236,6 +3253,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "航拍无人机"
       ],
@@ -3245,6 +3263,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -3335,6 +3354,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -3344,6 +3364,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s01-primary-history"
       ],
@@ -3438,6 +3459,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -3447,6 +3469,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s02-primary-current"
       ],
@@ -3539,6 +3562,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -3548,6 +3572,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s02-primary-current"
       ],
@@ -3640,6 +3665,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -3649,6 +3675,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s02-primary-history"
       ],
@@ -3741,6 +3768,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -3750,6 +3778,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s02-primary-history"
       ],
@@ -3848,6 +3877,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -3857,6 +3887,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s02-secondary"
       ],
@@ -3948,6 +3979,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -3957,6 +3989,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s02-secondary"
       ],
@@ -4048,6 +4081,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -4057,6 +4091,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s02-primary-current"
       ],
@@ -4150,6 +4185,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -4159,6 +4195,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -4249,6 +4286,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "蓝色档案盒"
       ],
@@ -4258,6 +4296,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -4348,6 +4387,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -4357,6 +4397,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s02-primary-history"
       ],
@@ -4451,6 +4492,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -4460,6 +4502,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s03-primary-current"
       ],
@@ -4552,6 +4595,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -4561,6 +4605,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s03-primary-current"
       ],
@@ -4653,6 +4698,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -4662,6 +4708,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s03-primary-history"
       ],
@@ -4754,6 +4801,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -4763,6 +4811,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s03-primary-history"
       ],
@@ -4861,6 +4910,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -4870,6 +4920,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s03-secondary"
       ],
@@ -4961,6 +5012,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -4970,6 +5022,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s03-secondary"
       ],
@@ -5061,6 +5114,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -5070,6 +5124,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s03-primary-current"
       ],
@@ -5163,6 +5218,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -5172,6 +5228,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -5262,6 +5319,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "备用手机"
       ],
@@ -5271,6 +5329,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -5361,6 +5420,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -5370,6 +5430,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s03-primary-history"
       ],
@@ -5464,6 +5525,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -5473,6 +5535,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s04-primary-current"
       ],
@@ -5565,6 +5628,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -5574,6 +5638,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s04-primary-current"
       ],
@@ -5666,6 +5731,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -5675,6 +5741,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s04-primary-history"
       ],
@@ -5767,6 +5834,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -5776,6 +5844,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s04-primary-history"
       ],
@@ -5874,6 +5943,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -5883,6 +5953,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s04-secondary"
       ],
@@ -5974,6 +6045,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -5983,6 +6055,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s04-secondary"
       ],
@@ -6074,6 +6147,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -6083,6 +6157,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s04-primary-current"
       ],
@@ -6176,6 +6251,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -6185,6 +6261,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -6275,6 +6352,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "祖传怀表"
       ],
@@ -6284,6 +6362,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -6374,6 +6453,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -6383,6 +6463,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s04-primary-history"
       ],
@@ -6477,6 +6558,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -6486,6 +6568,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s05-primary-current"
       ],
@@ -6578,6 +6661,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -6587,6 +6671,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s05-primary-current"
       ],
@@ -6679,6 +6764,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -6688,6 +6774,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s05-primary-history"
       ],
@@ -6780,6 +6867,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -6789,6 +6877,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s05-primary-history"
       ],
@@ -6887,6 +6976,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -6896,6 +6986,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s05-secondary"
       ],
@@ -6987,6 +7078,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -6996,6 +7088,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s05-secondary"
       ],
@@ -7087,6 +7180,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -7096,6 +7190,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s05-primary-current"
       ],
@@ -7189,6 +7284,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -7198,6 +7294,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -7288,6 +7385,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "健身房门卡"
       ],
@@ -7297,6 +7395,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -7387,6 +7486,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -7396,6 +7496,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s05-primary-history"
       ],
@@ -7490,6 +7591,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -7499,6 +7601,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s06-primary-current"
       ],
@@ -7591,6 +7694,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -7600,6 +7704,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s06-primary-current"
       ],
@@ -7692,6 +7797,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -7701,6 +7807,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s06-primary-history"
       ],
@@ -7793,6 +7900,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -7802,6 +7910,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s06-primary-history"
       ],
@@ -7900,6 +8009,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -7909,6 +8019,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s06-secondary"
       ],
@@ -8000,6 +8111,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -8009,6 +8121,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s06-secondary"
       ],
@@ -8100,6 +8213,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -8109,6 +8223,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s06-primary-current"
       ],
@@ -8202,6 +8317,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -8211,6 +8327,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -8301,6 +8418,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "露营帐篷"
       ],
@@ -8310,6 +8428,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -8400,6 +8519,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -8409,6 +8529,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s06-primary-history"
       ],
@@ -8503,6 +8624,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -8512,6 +8634,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s07-primary-current"
       ],
@@ -8604,6 +8727,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -8613,6 +8737,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s07-primary-current"
       ],
@@ -8705,6 +8830,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -8714,6 +8840,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s07-primary-history"
       ],
@@ -8806,6 +8933,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -8815,6 +8943,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s07-primary-history"
       ],
@@ -8913,6 +9042,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -8922,6 +9052,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s07-secondary"
       ],
@@ -9013,6 +9144,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -9022,6 +9154,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s07-secondary"
       ],
@@ -9113,6 +9246,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -9122,6 +9256,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s07-primary-current"
       ],
@@ -9215,6 +9350,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -9224,6 +9360,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -9314,6 +9451,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "宠物疫苗本"
       ],
@@ -9323,6 +9461,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -9413,6 +9552,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -9422,6 +9562,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s07-primary-history"
       ],
@@ -9516,6 +9657,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -9525,6 +9667,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s08-primary-current"
       ],
@@ -9617,6 +9760,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -9626,6 +9770,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s08-primary-current"
       ],
@@ -9718,6 +9863,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -9727,6 +9873,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s08-primary-history"
       ],
@@ -9819,6 +9966,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -9828,6 +9976,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s08-primary-history"
       ],
@@ -9926,6 +10075,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -9935,6 +10085,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s08-secondary"
       ],
@@ -10026,6 +10177,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -10035,6 +10187,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s08-secondary"
       ],
@@ -10126,6 +10279,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -10135,6 +10289,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s08-primary-current"
       ],
@@ -10228,6 +10383,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -10237,6 +10393,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -10327,6 +10484,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "机械键盘"
       ],
@@ -10336,6 +10494,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -10426,6 +10585,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -10435,6 +10595,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s08-primary-history"
       ],
@@ -10529,6 +10690,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -10538,6 +10700,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s09-primary-current"
       ],
@@ -10630,6 +10793,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -10639,6 +10803,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s09-primary-current"
       ],
@@ -10731,6 +10896,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -10740,6 +10906,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s09-primary-history"
       ],
@@ -10832,6 +10999,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -10841,6 +11009,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s09-primary-history"
       ],
@@ -10939,6 +11108,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -10948,6 +11118,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s09-secondary"
       ],
@@ -11039,6 +11210,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -11048,6 +11220,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s09-secondary"
       ],
@@ -11139,6 +11312,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -11148,6 +11322,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s09-primary-current"
       ],
@@ -11241,6 +11416,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -11250,6 +11426,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -11340,6 +11517,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "体检报告原件"
       ],
@@ -11349,6 +11527,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -11439,6 +11618,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -11448,6 +11628,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s09-primary-history"
       ],
@@ -11542,6 +11723,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -11551,6 +11733,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s10-primary-current"
       ],
@@ -11643,6 +11826,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -11652,6 +11836,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s10-primary-current"
       ],
@@ -11744,6 +11929,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -11753,6 +11939,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s10-primary-history"
       ],
@@ -11845,6 +12032,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -11854,6 +12042,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s10-primary-history"
       ],
@@ -11952,6 +12141,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -11961,6 +12151,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s10-secondary"
       ],
@@ -12052,6 +12243,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -12061,6 +12253,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s10-secondary"
       ],
@@ -12152,6 +12345,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -12161,6 +12355,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s10-primary-current"
       ],
@@ -12254,6 +12449,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -12263,6 +12459,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -12353,6 +12550,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "电子琴"
       ],
@@ -12362,6 +12560,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -12452,6 +12651,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -12461,6 +12661,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s10-primary-history"
       ],
@@ -12555,6 +12756,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -12564,6 +12766,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s11-primary-current"
       ],
@@ -12656,6 +12859,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -12665,6 +12869,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s11-primary-current"
       ],
@@ -12757,6 +12962,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -12766,6 +12972,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s11-primary-history"
       ],
@@ -12858,6 +13065,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -12867,6 +13075,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s11-primary-history"
       ],
@@ -12965,6 +13174,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -12974,6 +13184,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s11-secondary"
       ],
@@ -13065,6 +13276,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -13074,6 +13286,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s11-secondary"
       ],
@@ -13165,6 +13378,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -13174,6 +13388,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s11-primary-current"
       ],
@@ -13267,6 +13482,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -13276,6 +13492,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -13366,6 +13583,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "红色登机箱"
       ],
@@ -13375,6 +13593,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -13465,6 +13684,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -13474,6 +13694,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s11-primary-history"
       ],
@@ -13568,6 +13789,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -13577,6 +13799,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s12-primary-current"
       ],
@@ -13669,6 +13892,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -13678,6 +13902,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s12-primary-current"
       ],
@@ -13770,6 +13995,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -13779,6 +14005,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s12-primary-history"
       ],
@@ -13871,6 +14098,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -13880,6 +14108,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s12-primary-history"
       ],
@@ -13978,6 +14207,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -13987,6 +14217,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s12-secondary"
       ],
@@ -14078,6 +14309,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -14087,6 +14319,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s12-secondary"
       ],
@@ -14178,6 +14411,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -14187,6 +14421,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s12-primary-current"
       ],
@@ -14280,6 +14515,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -14289,6 +14525,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -14379,6 +14616,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "本科成绩单"
       ],
@@ -14388,6 +14626,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -14478,6 +14717,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -14487,6 +14727,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s12-primary-history"
       ],
@@ -14581,6 +14822,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -14590,6 +14832,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s13-primary-current"
       ],
@@ -14682,6 +14925,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -14691,6 +14935,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s13-primary-current"
       ],
@@ -14783,6 +15028,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -14792,6 +15038,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s13-primary-history"
       ],
@@ -14884,6 +15131,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -14893,6 +15141,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s13-primary-history"
       ],
@@ -14991,6 +15240,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -15000,6 +15250,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s13-secondary"
       ],
@@ -15091,6 +15342,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -15100,6 +15352,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s13-secondary"
       ],
@@ -15191,6 +15444,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -15200,6 +15454,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s13-primary-current"
       ],
@@ -15293,6 +15548,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -15302,6 +15558,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -15392,6 +15649,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "运动相机"
       ],
@@ -15401,6 +15659,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -15491,6 +15750,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "护照"
       ],
@@ -15500,6 +15760,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s13-primary-history"
       ],
@@ -15594,6 +15855,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -15603,6 +15865,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s14-primary-current"
       ],
@@ -15695,6 +15958,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -15704,6 +15968,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s14-primary-current"
       ],
@@ -15796,6 +16061,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -15805,6 +16071,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s14-primary-history"
       ],
@@ -15897,6 +16164,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -15906,6 +16174,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s14-primary-history"
       ],
@@ -16004,6 +16273,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -16013,6 +16283,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s14-secondary"
       ],
@@ -16104,6 +16375,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -16113,6 +16385,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s14-secondary"
       ],
@@ -16204,6 +16477,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -16213,6 +16487,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s14-primary-current"
       ],
@@ -16306,6 +16581,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -16315,6 +16591,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -16405,6 +16682,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "绿色资料袋"
       ],
@@ -16414,6 +16692,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -16504,6 +16783,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "单反相机"
       ],
@@ -16513,6 +16793,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s14-primary-history"
       ],
@@ -16607,6 +16888,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -16616,6 +16898,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s15-primary-current"
       ],
@@ -16708,6 +16991,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -16717,6 +17001,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s15-primary-current"
       ],
@@ -16809,6 +17094,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -16818,6 +17104,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s15-primary-history"
       ],
@@ -16910,6 +17197,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -16919,6 +17207,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s15-primary-history"
       ],
@@ -17017,6 +17306,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -17026,6 +17316,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s15-secondary"
       ],
@@ -17117,6 +17408,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -17126,6 +17418,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s15-secondary"
       ],
@@ -17217,6 +17510,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -17226,6 +17520,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s15-primary-current"
       ],
@@ -17319,6 +17614,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -17328,6 +17624,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -17418,6 +17715,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "旧平板电脑"
       ],
@@ -17427,6 +17725,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -17517,6 +17816,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "《海边的卡夫卡》"
       ],
@@ -17526,6 +17826,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s15-primary-history"
       ],
@@ -17620,6 +17921,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -17629,6 +17931,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s16-primary-current"
       ],
@@ -17721,6 +18024,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -17730,6 +18034,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s16-primary-current"
       ],
@@ -17822,6 +18127,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -17831,6 +18137,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s16-primary-history"
       ],
@@ -17923,6 +18230,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -17932,6 +18240,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s16-primary-history"
       ],
@@ -18030,6 +18339,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -18039,6 +18349,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s16-secondary"
       ],
@@ -18130,6 +18441,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -18139,6 +18451,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s16-secondary"
       ],
@@ -18230,6 +18543,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -18239,6 +18553,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s16-primary-current"
       ],
@@ -18332,6 +18647,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -18341,6 +18657,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -18431,6 +18748,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "纪念钢笔"
       ],
@@ -18440,6 +18758,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -18530,6 +18849,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "备用钥匙"
       ],
@@ -18539,6 +18859,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s16-primary-history"
       ],
@@ -18633,6 +18954,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -18642,6 +18964,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s17-primary-current"
       ],
@@ -18734,6 +19057,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -18743,6 +19067,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s17-primary-current"
       ],
@@ -18835,6 +19160,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -18844,6 +19170,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s17-primary-history"
       ],
@@ -18936,6 +19263,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -18945,6 +19273,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s17-primary-history"
       ],
@@ -19043,6 +19372,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -19052,6 +19382,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s17-secondary"
       ],
@@ -19143,6 +19474,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -19152,6 +19484,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s17-secondary"
       ],
@@ -19243,6 +19576,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -19252,6 +19586,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s17-primary-current"
       ],
@@ -19345,6 +19680,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -19354,6 +19690,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -19444,6 +19781,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "车库遥控器"
       ],
@@ -19453,6 +19791,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -19543,6 +19882,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "租房合同原件"
       ],
@@ -19552,6 +19892,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s17-primary-history"
       ],
@@ -19646,6 +19987,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -19655,6 +19997,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s18-primary-current"
       ],
@@ -19747,6 +20090,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -19756,6 +20100,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s18-primary-current"
       ],
@@ -19848,6 +20193,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -19857,6 +20203,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s18-primary-history"
       ],
@@ -19949,6 +20296,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -19958,6 +20306,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s18-primary-history"
       ],
@@ -20056,6 +20405,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -20065,6 +20415,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s18-secondary"
       ],
@@ -20156,6 +20507,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -20165,6 +20517,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s18-secondary"
       ],
@@ -20256,6 +20609,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -20265,6 +20619,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s18-primary-current"
       ],
@@ -20358,6 +20713,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -20367,6 +20723,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -20457,6 +20814,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "滑雪板"
       ],
@@ -20466,6 +20824,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -20556,6 +20915,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "折叠自行车"
       ],
@@ -20565,6 +20925,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s18-primary-history"
       ],
@@ -20659,6 +21020,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -20668,6 +21030,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s19-primary-current"
       ],
@@ -20760,6 +21123,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -20769,6 +21133,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s19-primary-current"
       ],
@@ -20861,6 +21226,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -20870,6 +21236,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s19-primary-history"
       ],
@@ -20962,6 +21329,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -20971,6 +21339,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s19-primary-history"
       ],
@@ -21069,6 +21438,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -21078,6 +21448,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s19-secondary"
       ],
@@ -21169,6 +21540,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -21178,6 +21550,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s19-secondary"
       ],
@@ -21269,6 +21642,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -21278,6 +21652,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s19-primary-current"
       ],
@@ -21371,6 +21746,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -21380,6 +21756,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -21470,6 +21847,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "宠物定位器"
       ],
@@ -21479,6 +21857,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -21569,6 +21948,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "豆包"
       ],
@@ -21578,6 +21958,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s19-primary-history"
       ],
@@ -21672,6 +22053,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -21681,6 +22063,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s20-primary-current"
       ],
@@ -21773,6 +22156,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -21782,6 +22166,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s20-primary-current"
       ],
@@ -21874,6 +22259,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -21883,6 +22269,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s20-primary-history"
       ],
@@ -21975,6 +22362,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -21984,6 +22372,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s20-primary-history"
       ],
@@ -22082,6 +22471,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -22091,6 +22481,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s20-secondary"
       ],
@@ -22182,6 +22573,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -22191,6 +22583,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s20-secondary"
       ],
@@ -22282,6 +22675,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -22291,6 +22685,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s20-primary-current"
       ],
@@ -22384,6 +22779,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -22393,6 +22789,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -22483,6 +22880,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "移动硬盘"
       ],
@@ -22492,6 +22890,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -22582,6 +22981,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "旧笔记本电脑"
       ],
@@ -22591,6 +22991,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s20-primary-history"
       ],
@@ -22685,6 +23086,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -22694,6 +23096,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s21-primary-current"
       ],
@@ -22786,6 +23189,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -22795,6 +23199,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s21-primary-current"
       ],
@@ -22887,6 +23292,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -22896,6 +23302,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s21-primary-history"
       ],
@@ -22988,6 +23395,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -22997,6 +23405,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s21-primary-history"
       ],
@@ -23095,6 +23504,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -23104,6 +23514,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s21-secondary"
       ],
@@ -23195,6 +23606,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -23204,6 +23616,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s21-secondary"
       ],
@@ -23295,6 +23708,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -23304,6 +23718,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s21-primary-current"
       ],
@@ -23397,6 +23812,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -23406,6 +23822,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -23496,6 +23913,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "商业保险合同"
       ],
@@ -23505,6 +23923,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -23595,6 +24014,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "医保卡"
       ],
@@ -23604,6 +24024,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s21-primary-history"
       ],
@@ -23698,6 +24119,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -23707,6 +24129,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s22-primary-current"
       ],
@@ -23799,6 +24222,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -23808,6 +24232,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s22-primary-current"
       ],
@@ -23900,6 +24325,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -23909,6 +24335,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s22-primary-history"
       ],
@@ -24001,6 +24428,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -24010,6 +24438,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s22-primary-history"
       ],
@@ -24108,6 +24537,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -24117,6 +24547,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s22-secondary"
       ],
@@ -24208,6 +24639,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -24217,6 +24649,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s22-secondary"
       ],
@@ -24308,6 +24741,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -24317,6 +24751,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s22-primary-current"
       ],
@@ -24410,6 +24845,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -24419,6 +24855,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -24509,6 +24946,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "尤克里里"
       ],
@@ -24518,6 +24956,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -24608,6 +25047,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "木吉他"
       ],
@@ -24617,6 +25057,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s22-primary-history"
       ],
@@ -24711,6 +25152,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -24720,6 +25162,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s23-primary-current"
       ],
@@ -24812,6 +25255,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -24821,6 +25265,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s23-primary-current"
       ],
@@ -24913,6 +25358,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -24922,6 +25368,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s23-primary-history"
       ],
@@ -25014,6 +25461,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -25023,6 +25471,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s23-primary-history"
       ],
@@ -25121,6 +25570,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -25130,6 +25580,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s23-secondary"
       ],
@@ -25221,6 +25672,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -25230,6 +25682,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s23-secondary"
       ],
@@ -25321,6 +25774,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -25330,6 +25784,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s23-primary-current"
       ],
@@ -25423,6 +25878,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -25432,6 +25888,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -25522,6 +25979,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "黑色旅行包"
       ],
@@ -25531,6 +25989,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -25621,6 +26080,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "银色行李箱"
       ],
@@ -25630,6 +26090,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s23-primary-history"
       ],
@@ -25724,6 +26185,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -25733,6 +26195,7 @@
       "category": "current_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s24-primary-current"
       ],
@@ -25825,6 +26288,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -25834,6 +26298,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s24-primary-current"
       ],
@@ -25926,6 +26391,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -25935,6 +26401,7 @@
       "category": "history_relation",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "prior",
       "required_memory_ids": [
         "v2-s24-primary-history"
       ],
@@ -26027,6 +26494,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "as_of",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -26036,6 +26504,7 @@
       "category": "temporal_boundary",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "as_of",
       "required_memory_ids": [
         "v2-s24-primary-history"
       ],
@@ -26134,6 +26603,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -26143,6 +26613,7 @@
       "category": "same_entity_multi_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s24-secondary"
       ],
@@ -26234,6 +26705,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -26243,6 +26715,7 @@
       "category": "semantic_paraphrase",
       "partition": "heldout",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "unbounded",
       "required_memory_ids": [
         "v2-s24-secondary"
       ],
@@ -26334,6 +26807,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -26343,6 +26817,7 @@
       "category": "negated_relation_contrast",
       "partition": "adversarial",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "current",
       "required_memory_ids": [
         "v2-s24-primary-current"
       ],
@@ -26436,6 +26911,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "lookup",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -26445,6 +26921,7 @@
       "category": "related_but_insufficient",
       "partition": "adversarial",
       "retrieval_expectation": "related_context",
+      "temporal_view": "unbounded",
       "expected_abstain": true,
       "abstain_reason": "No direct borrowing evidence; same-entity memories remain useful grade-1 context and are not security failures.",
       "forbidden_memory_ids": [
@@ -26535,6 +27012,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "current",
+      "operation": "lookup",
       "entity_mentions": [
         "学位认证书"
       ],
@@ -26544,6 +27022,7 @@
       "category": "unknown_entity",
       "partition": "heldout",
       "retrieval_expectation": "no_evidence",
+      "temporal_view": "current",
       "expected_abstain": true,
       "abstain_reason": "No memory exists for the explicitly named entity.",
       "forbidden_memory_ids": [
@@ -26634,6 +27113,7 @@
       ],
       "now": "2026-09-15T12:00:00Z",
       "intent": "history",
+      "operation": "lookup",
       "entity_mentions": [
         "研究生毕业证"
       ],
@@ -26643,6 +27123,7 @@
       "category": "historical_interval_relation",
       "partition": "dev",
       "retrieval_expectation": "direct_evidence",
+      "temporal_view": "interval",
       "required_memory_ids": [
         "v2-s24-primary-history"
       ],

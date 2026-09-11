@@ -1,0 +1,814 @@
+{
+  "suite": "doppel-query-plan-operations-zh-v1",
+  "suite_version": "1.0.0-draft.1",
+  "language": "zh-CN",
+  "frozen": false,
+  "publication_ready": false,
+  "description": "Independent operation/time-view matrix with four domain-varied topics; it measures planning only and contains no retrieval answers.",
+  "cases": [
+    {
+      "case_id": "op-1-1-1",
+      "query": "帮我找出与旅行有关的事实。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-1-1-2",
+      "query": "帮我找出与设备维修有关的事实。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-1-1-3",
+      "query": "帮我找出与会议有关的事实。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-1-1-4",
+      "query": "帮我找出与票据报销有关的事实。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-1-2-1",
+      "query": "旅行目前是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "current",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-1-2-2",
+      "query": "设备维修目前是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "current",
+      "expected_memory_types": [],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-1-2-3",
+      "query": "会议目前是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "current",
+      "expected_memory_types": [],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-1-2-4",
+      "query": "票据报销目前是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "current",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-1-3-1",
+      "query": "旅行之前是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "prior",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-1-3-2",
+      "query": "设备维修之前是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "prior",
+      "expected_memory_types": [],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-1-3-3",
+      "query": "会议之前是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "prior",
+      "expected_memory_types": [],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-1-3-4",
+      "query": "票据报销之前是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "prior",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-1-4-1",
+      "query": "下一项尚未发生的旅行计划是什么？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "planned",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-1-4-2",
+      "query": "下一项尚未发生的设备维修计划是什么？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "planned",
+      "expected_memory_types": [],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-1-4-3",
+      "query": "下一项尚未发生的会议计划是什么？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "planned",
+      "expected_memory_types": [],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-1-4-4",
+      "query": "下一项尚未发生的票据报销计划是什么？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "planned",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-1-5-1",
+      "query": "2026年3月15日，旅行是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "as_of",
+      "expected_memory_types": [],
+      "partition": "dev",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-1-5-2",
+      "query": "2026年3月15日，设备维修是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "as_of",
+      "expected_memory_types": [],
+      "partition": "heldout",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-1-5-3",
+      "query": "2026年3月15日，会议是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "as_of",
+      "expected_memory_types": [],
+      "partition": "adversarial",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-1-5-4",
+      "query": "2026年3月15日，票据报销是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "as_of",
+      "expected_memory_types": [],
+      "partition": "dev",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-1-6-1",
+      "query": "2025年期间，旅行是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "interval",
+      "expected_memory_types": [],
+      "partition": "dev",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-1-6-2",
+      "query": "2025年期间，设备维修是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "interval",
+      "expected_memory_types": [],
+      "partition": "heldout",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-1-6-3",
+      "query": "2025年期间，会议是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "interval",
+      "expected_memory_types": [],
+      "partition": "adversarial",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-1-6-4",
+      "query": "2025年期间，票据报销是什么情况？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "lookup",
+      "temporal_view": "interval",
+      "expected_memory_types": [],
+      "partition": "dev",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-2-1-1",
+      "query": "列出所有旅行记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-2-1-2",
+      "query": "列出所有设备维修记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-2-1-3",
+      "query": "列出所有会议记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-2-1-4",
+      "query": "列出所有票据报销记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-2-2-1",
+      "query": "列出当前有效的旅行记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "current",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-2-2-2",
+      "query": "列出当前有效的设备维修记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "current",
+      "expected_memory_types": [],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-2-2-3",
+      "query": "列出当前有效的会议记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "current",
+      "expected_memory_types": [],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-2-2-4",
+      "query": "列出当前有效的票据报销记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "current",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-2-3-1",
+      "query": "列出已经结束的旅行记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "prior",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-2-3-2",
+      "query": "列出已经结束的设备维修记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "prior",
+      "expected_memory_types": [],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-2-3-3",
+      "query": "列出已经结束的会议记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "prior",
+      "expected_memory_types": [],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-2-3-4",
+      "query": "列出已经结束的票据报销记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "prior",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-2-4-1",
+      "query": "列出尚未发生的旅行计划。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "planned",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-2-4-2",
+      "query": "列出尚未发生的设备维修计划。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "planned",
+      "expected_memory_types": [],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-2-4-3",
+      "query": "列出尚未发生的会议计划。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "planned",
+      "expected_memory_types": [],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-2-4-4",
+      "query": "列出尚未发生的票据报销计划。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "planned",
+      "expected_memory_types": [],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-2-5-1",
+      "query": "列出2026年3月15日有效的旅行记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "as_of",
+      "expected_memory_types": [],
+      "partition": "dev",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-2-5-2",
+      "query": "列出2026年3月15日有效的设备维修记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "as_of",
+      "expected_memory_types": [],
+      "partition": "heldout",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-2-5-3",
+      "query": "列出2026年3月15日有效的会议记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "as_of",
+      "expected_memory_types": [],
+      "partition": "adversarial",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-2-5-4",
+      "query": "列出2026年3月15日有效的票据报销记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "as_of",
+      "expected_memory_types": [],
+      "partition": "dev",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-2-6-1",
+      "query": "列出2025年期间的旅行记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "interval",
+      "expected_memory_types": [],
+      "partition": "dev",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-2-6-2",
+      "query": "列出2025年期间的设备维修记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "interval",
+      "expected_memory_types": [],
+      "partition": "heldout",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-2-6-3",
+      "query": "列出2025年期间的会议记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "interval",
+      "expected_memory_types": [],
+      "partition": "adversarial",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-2-6-4",
+      "query": "列出2025年期间的票据报销记录。",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "list",
+      "temporal_view": "interval",
+      "expected_memory_types": [],
+      "partition": "dev",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-3-1-1",
+      "query": "旅行一共发生了多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-3-1-2",
+      "query": "设备维修一共发生了多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-3-1-3",
+      "query": "会议一共发生了多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-3-1-4",
+      "query": "票据报销一共发生了多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "unbounded",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-3-2-1",
+      "query": "当前有效的旅行事件有多少个？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "current",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-3-2-2",
+      "query": "当前有效的设备维修事件有多少个？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "current",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-3-2-3",
+      "query": "当前有效的会议事件有多少个？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "current",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-3-2-4",
+      "query": "当前有效的票据报销事件有多少个？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "current",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-3-3-1",
+      "query": "已经完成的旅行一共有多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "prior",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-3-3-2",
+      "query": "已经完成的设备维修一共有多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "prior",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-3-3-3",
+      "query": "已经完成的会议一共有多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "prior",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-3-3-4",
+      "query": "已经完成的票据报销一共有多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "prior",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-3-4-1",
+      "query": "还没发生的旅行计划一共有多少个？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "planned",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-3-4-2",
+      "query": "还没发生的设备维修计划一共有多少个？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "planned",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "heldout"
+    },
+    {
+      "case_id": "op-3-4-3",
+      "query": "还没发生的会议计划一共有多少个？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "planned",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "adversarial"
+    },
+    {
+      "case_id": "op-3-4-4",
+      "query": "还没发生的票据报销计划一共有多少个？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "planned",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev"
+    },
+    {
+      "case_id": "op-3-5-1",
+      "query": "在2026年3月15日这个时间点，有多少条旅行事件有效？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "as_of",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-3-5-2",
+      "query": "在2026年3月15日这个时间点，有多少条设备维修事件有效？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "as_of",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "heldout",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-3-5-3",
+      "query": "在2026年3月15日这个时间点，有多少条会议事件有效？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "as_of",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "adversarial",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-3-5-4",
+      "query": "在2026年3月15日这个时间点，有多少条票据报销事件有效？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "as_of",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev",
+      "as_of": "2026-03-15T12:00:00Z"
+    },
+    {
+      "case_id": "op-3-6-1",
+      "query": "2025年期间，旅行一共发生了多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "interval",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-3-6-2",
+      "query": "2025年期间，设备维修一共发生了多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "interval",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "heldout",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-3-6-3",
+      "query": "2025年期间，会议一共发生了多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "interval",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "adversarial",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    },
+    {
+      "case_id": "op-3-6-4",
+      "query": "2025年期间，票据报销一共发生了多少次？",
+      "now": "2026-09-15T12:00:00Z",
+      "calendar_timezone": "UTC",
+      "operation": "count",
+      "temporal_view": "interval",
+      "expected_memory_types": [
+        "episode"
+      ],
+      "partition": "dev",
+      "time_from": "2025-01-01T00:00:00Z",
+      "time_to": "2025-12-31T23:59:59Z"
+    }
+  ]
+}

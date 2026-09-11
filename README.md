@@ -635,8 +635,9 @@ exact scopes 和可信 subject，同一次查询禁止跨 user_id。
 为解决 v1 `intent` 同时表示“查询动作”和“时间切面”的歧义，Doppel 另外提供了
 显式选用的 Query Plan v2。`operation` 只回答要查询、列举还是计数；`temporal_view`
 独立表示无时间限制、当前、过去、计划、某一时点或时间区间。因此“2025 年一共旅行
-多少次”能表示为 `count + interval`，而“这台相机上次在哪里维修”可以是
-`lookup + unbounded`，不再因为句子用了过去时态就强行进入“历史状态”过滤。
+多少次”能表示为 `count + interval`，而“护照由谁签发”可以是
+`lookup + unbounded`。像“上次在哪里维修”这类明确限定某次历史事件的问题则可表示为
+`lookup + prior`，不会再把查询动作和时间限制压进一个枚举值。
 
 ~~~python
 from doppel_memory import ReferencePersonalMemoryQueryPlannerV2
@@ -647,28 +648,31 @@ result = await engine.query(
     "2025年一共旅行多少次？",
     [scope.user_scope()],
     now=now,
+    calendar_timezone="+08:00",
 )
 assert result.plan.schema_version == 2
 assert result.plan.operation == "count"
 assert result.plan.temporal_view == "interval"
 ~~~
 
-v2 不会覆盖 v1：已验证的 `ReferencePersonalMemoryQueryPlanner` v12 仍是现有默认路径，
+v2 不会覆盖 v1：`ReferencePersonalMemoryQueryPlanner` v13 仍是现有默认路径，
 旧 Draft/Plan 的字段、schema version 和 plan fingerprint 保持不变。v2 Plan 额外保留一个
 确定性的 legacy `intent` 投影，只用于旧日志/观测代码阅读；引擎的计数与时间门会读取
-正交字段。在同一批 240 条查询的成对评测完成前，v2 保持 opt-in，不替换线上基线。
+正交字段。v2 继续保持 opt-in；切换默认值前必须通过独立标注的关系集与完整操作/时间矩阵，
+并在端到端检索指标上确认没有退化。
 
-Planner 输出与可信 plan 绑定之间还有一层领域无关的显式日历校验。它只处理单个数字日期表达式：
-完整日期以及缺年份的“月日”绑定为 `as_of`（后者从可信 `now` 取得年份），单个月或年份绑定为
-闭区间；如果模型已经给出时间坐标，则不覆盖坐标，只修正 `current + 过去区间` 这类自相矛盾的
-查询形态。`count/list/planned` 保留原意图但仍应用时间坐标。非法日期或包含多个日期的复杂问句
-不会被这一层猜成某个范围，仍交给完整 Planner 处理。这里不读取物品、人名或业务词，因此不是
-针对 benchmark 问句的关键词补丁。
+Planner 输出与可信 plan 绑定之间还有一层领域无关的显式日历校验。宿主通过
+`calendar_timezone` 显式提供 `UTC`、固定偏移（如 `+08:00`）或运行环境可用的 IANA 时区。
+完整日期以及缺年份的“月日”绑定为当地正午的 `as_of`，单个月或年份绑定为当地闭区间，随后统一
+转换为 UTC。对于一个明确数字日期，binder 会覆盖模型自行换算出的 point 或闭区间坐标；单边
+before/after 区间仍归 Planner，避免擅自扩大范围。`count/list/planned` 保留原查询动作。非法日期或
+包含多个日期的复杂问句不会被这一层猜成某个范围。这里不读取物品、人名或业务词，因此不是针对
+benchmark 问句的关键词补丁。
 
 Reference Planner 的投影边界允许一种受限的中间态：provider 已明确选择 `as_of`、但漏掉
 `as_of` 坐标时，可先让上述单一数字日期规则完成绑定；返回 draft 前会重新执行完整 Pydantic
 校验。这个例外不会放宽时区、区间顺序或其他结构约束，也不会猜测相对时间或含多个日期的问句。
-Planner prompt、schema 与 provider 请求指纹均不因此改变。评测缓存位于原始 provider 输出边界，
+评测缓存位于原始 provider 输出边界，
 因此缓存命中仍会重新执行当前版本的投影、日期绑定和严格校验。
 
 线上接入可以显式用 `FallbackPersonalMemoryQueryPlanner(reference, deterministic)`

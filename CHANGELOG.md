@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add host-authoritative calendar timezone grounding to personal-memory planning.
+  `PersonalMemoryQueryRequest`, the query engine, and `DoppelClient` accept
+  `calendar_timezone` as UTC, a bounded fixed offset, or an available IANA zone.
+  Explicit numeric dates resolve at local noon and month/year spans at local calendar
+  boundaries before conversion to UTC. The binder canonicalizes provider-supplied
+  points and closed spans while leaving one-sided ranges Planner-owned. Reference
+  Planners move to v13/v2 and deterministic Planners to v6/v2; v1 Draft/Plan wire
+  shapes and the default v1 path remain unchanged.
+- Give the 240-query relation dataset independent v2 operation/time-view gold rather
+  than deriving it from legacy intent, and add a separate generated 72-case matrix
+  covering every lookup/list/count and temporal-view combination. The paired runner
+  now evaluates 312 cases per arm and includes operation-suite completion, coordinate,
+  count-memory-type, and exact-semantics metrics in its promotion gate.
 - Add an opt-in personal-query Plan v2 beside the unchanged v1 Planner and wire
   models. V2 separates retrieval `operation` (`lookup`/`list`/`count`) from
   `temporal_view` (`unbounded`/`current`/`prior`/`planned`/`as_of`/`interval`),
@@ -9,7 +22,7 @@
   overloading one intent label. The query engine executes both schemas, retains a
   deterministic legacy-intent projection for observability, and applies lifecycle,
   temporal, semantic, relation, evidence, reranking, and exact-count gates from the
-  orthogonal fields. Existing v1 plans, fingerprints, Planner v12, defaults, and
+  orthogonal fields. Existing v1 plans, fingerprints, defaults, and
   serialized field shapes remain unchanged; V2 remains opt-in pending a paired
   240-query evaluation.
 - Add a repository-only paired v1/v2 Planner ablation over those same 240 queries.
@@ -54,8 +67,8 @@
 - Add a domain-neutral explicit-calendar grounding layer between Planner output and
   trusted plan binding. One numeric full date or month/day becomes an `as_of` point;
   one numeric calendar month or year becomes a closed interval. Existing provider
-  coordinates are never overwritten, while contradictory lookup/current/history
-  shapes are canonicalized before temporal gates. Count/list/planned intent stays
+  coordinates are normalized under the host calendar policy, while contradictory
+  lookup/current/history shapes are canonicalized before temporal gates. Count/list/planned intent stays
   intact, historical interval aggregation can inspect eligible inactive evidence,
   and relation retrieval receives the interval instead of silently querying `now`.
   Invalid or multiple date expressions remain Planner-owned rather than guessed.

@@ -12,8 +12,9 @@ import unicodedata
 from calendar import monthrange
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from typing import Any, Literal, Protocol, cast, runtime_checkable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
     BaseModel,
@@ -341,6 +342,7 @@ class PersonalMemoryQueryRequest(BaseModel):
 
     query: str
     now: datetime
+    calendar_timezone: str = "UTC"
     default_subject: str = Actor.OWNER
     default_subject_id: str = ""
     available_relation_types: list[str] = Field(default_factory=list)
@@ -359,6 +361,13 @@ class PersonalMemoryQueryRequest(BaseModel):
         if not value:
             raise ValueError("query is required")
         return value
+
+    @field_validator("calendar_timezone", mode="before")
+    @classmethod
+    def _normalize_calendar_timezone(cls, value: Any) -> str:
+        name = str(value or "UTC").strip()
+        _resolve_calendar_timezone(name)
+        return name
 
     @field_validator("default_subject", mode="before")
     @classmethod
@@ -484,7 +493,8 @@ underdetermined among types. Keep entity anchors and relation hints even then.
 The input default_subject/default_subject_id are trusted host authority, not semantic
 fields for the model to reinterpret. Echo them unchanged; a person, pet, object, or
 place mentioned in the question belongs in entity_mentions, not subject.
-Use the supplied current time to resolve relative expressions. Every non-null time
+Use the supplied current time and calendar_timezone to resolve relative expressions.
+Interpret date-only calendar text in that host-supplied timezone. Every non-null time
 must include a timezone; time_to must not precede time_from, and as_of intent requires
 a non-null as_of timestamp. Do not broaden the subject or time range to resolve
 uncertainty. explanation is optional: prefer an empty string, otherwise one short
@@ -529,7 +539,8 @@ when the requested evidence itself must belong to a past time slice. A mutable s
 or relationship whose unqualified wording conventionally asks what is true now is
 lookup plus current. Do not infer that a plan happened.
 
-Use the supplied current time to resolve relative expressions. A full explicit date
+Use the supplied current time and calendar_timezone to resolve relative expressions.
+Interpret date-only calendar text in that host-supplied timezone. A full explicit date
 uses as_of. A calendar year or month and before/after/during expressions use interval;
 never invent a representative point. Populate the matching as_of or interval fields.
 Every non-null time must include a timezone, time_to must not precede time_from,
@@ -570,7 +581,7 @@ class ReferencePersonalMemoryQueryPlanner:
     """Schema-constrained query planner using a host-owned model provider."""
 
     name = "doppel.reference-personal-memory-query-planner"
-    version = "12"
+    version = "13"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -610,7 +621,7 @@ class ReferencePersonalMemoryQueryPlannerV2:
     """Reference Planner with independent retrieval operation and time view."""
 
     name = "doppel.reference-personal-memory-query-planner-v2"
-    version = "1"
+    version = "2"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -775,7 +786,7 @@ class DeterministicPersonalMemoryQueryPlanner:
     """Domain-neutral baseline for temporal and aggregation structure only."""
 
     name = "doppel.deterministic-personal-memory-query-planner"
-    version = "5"
+    version = "6"
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
@@ -798,7 +809,9 @@ class DeterministicPersonalMemoryQueryPlanner:
         as_of: datetime | None = None
         time_from: datetime | None = None
         time_to: datetime | None = None
-        calendar_expression = _explicit_calendar_expression(query, now=bound.now)
+        calendar_expression = _explicit_calendar_expression(
+            query, now=bound.now, calendar_timezone=bound.calendar_timezone
+        )
         if calendar_expression is not None:
             expression_kind, expression_start, expression_end = calendar_expression
             if expression_kind == "point":
@@ -842,7 +855,7 @@ class DeterministicPersonalMemoryQueryPlannerV2:
     """Domain-neutral V2 baseline with orthogonal operation and time parsing."""
 
     name = "doppel.deterministic-personal-memory-query-planner-v2"
-    version = "1"
+    version = "2"
 
     async def plan(
         self, request: PersonalMemoryQueryRequest
@@ -860,7 +873,9 @@ class DeterministicPersonalMemoryQueryPlannerV2:
         as_of: datetime | None = None
         time_from: datetime | None = None
         time_to: datetime | None = None
-        calendar_expression = _explicit_calendar_expression(query, now=bound.now)
+        calendar_expression = _explicit_calendar_expression(
+            query, now=bound.now, calendar_timezone=bound.calendar_timezone
+        )
         if (
             calendar_expression is not None
             and temporal_view != PersonalMemoryQueryTemporalView.PLANNED
@@ -1134,6 +1149,7 @@ class PersonalMemoryQueryEngine:
         scopes: Sequence[MemoryScope],
         *,
         now: datetime,
+        calendar_timezone: str = "UTC",
         default_subject: str = Actor.OWNER,
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
@@ -1147,6 +1163,7 @@ class PersonalMemoryQueryEngine:
         request = PersonalMemoryQueryRequest(
             query=query,
             now=now,
+            calendar_timezone=calendar_timezone,
             default_subject=default_subject,
             default_subject_id=default_subject_id or owner_id,
             available_relation_types=list(available_relation_types),
@@ -1777,6 +1794,7 @@ class PersonalMemoryQueryEngine:
         scopes: Sequence[MemoryScope],
         *,
         now: datetime,
+        calendar_timezone: str = "UTC",
         default_subject: str = Actor.OWNER,
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
@@ -1791,6 +1809,7 @@ class PersonalMemoryQueryEngine:
             query,
             scopes,
             now=now,
+            calendar_timezone=calendar_timezone,
             default_subject=default_subject,
             default_subject_id=default_subject_id,
             allowed_subject_ids=allowed_subject_ids,
@@ -2858,8 +2877,13 @@ def _fixed_ngrams(text: str, size: int) -> dict[str, int]:
     return dict(counts)
 
 
+_COUNT_QUERY_PATTERN = re.compile(
+    r"次数|数量|总数|(?:几|多少)(?:次|个|条|项|场|笔|件|份|人|本|趟)"
+)
+
+
 def _detect_intent(query: str) -> QueryIntent:
-    if re.search(r"几次|多少次|次数", query):
+    if _COUNT_QUERY_PATTERN.search(query):
         return PersonalMemoryQueryIntent.COUNT
     if _contains_any(query, ("哪些", "列出")):
         return PersonalMemoryQueryIntent.LIST
@@ -2873,7 +2897,7 @@ def _detect_intent(query: str) -> QueryIntent:
 
 
 def _detect_operation(query: str) -> QueryOperation:
-    if re.search(r"几次|多少次|次数", query):
+    if _COUNT_QUERY_PATTERN.search(query):
         return PersonalMemoryQueryOperation.COUNT
     if _contains_any(query, ("哪些", "列出")):
         return PersonalMemoryQueryOperation.LIST
@@ -2883,7 +2907,10 @@ def _detect_operation(query: str) -> QueryOperation:
 def _detect_temporal_view(query: str) -> QueryTemporalView:
     if _contains_any(query, ("计划", "打算", "准备", "将要", "将来")):
         return PersonalMemoryQueryTemporalView.PLANNED
-    if _contains_any(query, ("以前", "过去", "曾经", "历史", "去年", "之前")):
+    if _contains_any(
+        query,
+        ("以前", "过去", "曾经", "历史", "去年", "之前", "已经完成", "已经结束"),
+    ):
         return PersonalMemoryQueryTemporalView.PRIOR
     if _contains_any(query, ("现在", "目前", "如今", "当前")):
         return PersonalMemoryQueryTemporalView.CURRENT
@@ -2916,9 +2943,36 @@ _CALENDAR_EXPRESSION_PATTERN = re.compile(
     r"|(?P<year_only>(?<!\d)(?P<year>20\d{2})\s*年)"
 )
 
+_CALENDAR_OFFSET_PATTERN = re.compile(
+    r"^(?P<sign>[+-])(?P<hours>\d{2}):(?P<minutes>\d{2})$"
+)
+
+
+def _resolve_calendar_timezone(name: str) -> tzinfo:
+    normalized = name.strip()
+    if normalized.upper() in {"UTC", "Z"}:
+        return UTC
+    offset = _CALENDAR_OFFSET_PATTERN.fullmatch(normalized)
+    if offset is not None:
+        hours = int(offset.group("hours"))
+        minutes = int(offset.group("minutes"))
+        if hours > 14 or minutes > 59 or (hours == 14 and minutes):
+            raise ValueError("calendar timezone offset must be between -14:00 and +14:00")
+        delta = timedelta(hours=hours, minutes=minutes)
+        if offset.group("sign") == "-":
+            delta = -delta
+        return timezone(delta, normalized)
+    try:
+        return ZoneInfo(normalized)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(
+            "calendar_timezone must be UTC, an offset such as +08:00, or an "
+            "available IANA timezone (install tzdata where the OS has no zone database)"
+        ) from exc
+
 
 def _explicit_calendar_expression(
-    query: str, *, now: datetime
+    query: str, *, now: datetime, calendar_timezone: str = "UTC"
 ) -> tuple[Literal["point", "interval"], datetime, datetime] | None:
     """Parse one unambiguous numeric calendar expression without domain semantics.
 
@@ -2932,6 +2986,7 @@ def _explicit_calendar_expression(
     if len(matches) != 1:
         return None
     match = matches[0]
+    local_timezone = _resolve_calendar_timezone(calendar_timezone)
     try:
         if match.group("full_date") is not None:
             point = datetime(
@@ -2939,17 +2994,18 @@ def _explicit_calendar_expression(
                 int(match.group("full_month")),
                 int(match.group("full_day")),
                 12,
-                tzinfo=UTC,
-            )
+                tzinfo=local_timezone,
+            ).astimezone(UTC)
             return "point", point, point
         if match.group("month_day") is not None:
+            local_now = now.astimezone(local_timezone)
             point = datetime(
-                now.year,
+                local_now.year,
                 int(match.group("md_month")),
                 int(match.group("md_day")),
                 12,
-                tzinfo=UTC,
-            )
+                tzinfo=local_timezone,
+            ).astimezone(UTC)
             return "point", point, point
         if match.group("year_month") is not None:
             year = int(match.group("ym_year"))
@@ -2957,14 +3013,18 @@ def _explicit_calendar_expression(
             last_day = monthrange(year, month)[1]
             return (
                 "interval",
-                datetime(year, month, 1, tzinfo=UTC),
-                datetime(year, month, last_day, 23, 59, 59, tzinfo=UTC),
+                datetime(year, month, 1, tzinfo=local_timezone).astimezone(UTC),
+                datetime(
+                    year, month, last_day, 23, 59, 59, tzinfo=local_timezone
+                ).astimezone(UTC),
             )
         year = int(match.group("year"))
         return (
             "interval",
-            datetime(year, 1, 1, tzinfo=UTC),
-            datetime(year, 12, 31, 23, 59, 59, tzinfo=UTC),
+            datetime(year, 1, 1, tzinfo=local_timezone).astimezone(UTC),
+            datetime(year, 12, 31, 23, 59, 59, tzinfo=local_timezone).astimezone(
+                UTC
+            ),
         )
     except (TypeError, ValueError):
         return None
@@ -2976,18 +3036,52 @@ def _ground_explicit_query_time(
 ) -> PersonalMemoryQueryDraft:
     """Bind explicit calendar coordinates and repair contradictory time shapes.
 
-    Provider-supplied coordinates are never overwritten. The binder only canonicalizes
-    lookup/current/history/as_of intent around those coordinates, or fills coordinates
-    when the provider omitted all of them and the raw query contains exactly one
-    unambiguous numeric calendar expression. Count/list/planned intent is preserved.
+    One unambiguous numeric calendar expression is normalized with the host's
+    calendar timezone instead of trusting provider arithmetic. One-sided provider
+    intervals remain Planner-owned so before/after semantics are not broadened.
+    Count/list/planned intent is preserved.
     """
 
     updates: dict[str, Any] = {}
     marker = ""
     has_as_of = draft.as_of is not None
     has_interval = draft.time_from is not None or draft.time_to is not None
+    has_closed_interval = draft.time_from is not None and draft.time_to is not None
+    expression = _explicit_calendar_expression(
+        request.query,
+        now=request.now,
+        calendar_timezone=request.calendar_timezone,
+    )
 
-    if has_as_of and not has_interval:
+    if expression is not None and (
+        (expression[0] == "point" and (has_as_of or not has_interval))
+        or (
+            expression[0] == "interval"
+            and (has_as_of or has_closed_interval or not has_interval)
+        )
+    ):
+        expression_kind, expression_start, expression_end = expression
+        if expression_kind == "point":
+            updates.update(
+                {"as_of": expression_start, "time_from": None, "time_to": None}
+            )
+            if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS:
+                updates["intent"] = PersonalMemoryQueryIntent.AS_OF
+                updates["temporal_statuses"] = []
+            marker = "explicit_time_grounded:point"
+        else:
+            updates.update(
+                {
+                    "as_of": None,
+                    "time_from": expression_start,
+                    "time_to": expression_end,
+                }
+            )
+            if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS:
+                updates["intent"] = PersonalMemoryQueryIntent.HISTORY
+                updates["temporal_statuses"] = []
+            marker = "explicit_time_grounded:interval"
+    elif has_as_of and not has_interval:
         if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS and draft.intent != (
             PersonalMemoryQueryIntent.AS_OF
         ):
@@ -3001,23 +3095,6 @@ def _ground_explicit_query_time(
             updates["intent"] = PersonalMemoryQueryIntent.HISTORY
             updates["temporal_statuses"] = []
             marker = "explicit_time_grounded:interval"
-    elif not has_as_of and not has_interval:
-        expression = _explicit_calendar_expression(request.query, now=request.now)
-        if expression is not None:
-            expression_kind, expression_start, expression_end = expression
-            if expression_kind == "point":
-                updates["as_of"] = expression_start
-                if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS:
-                    updates["intent"] = PersonalMemoryQueryIntent.AS_OF
-                    updates["temporal_statuses"] = []
-                marker = "explicit_time_grounded:point"
-            else:
-                updates["time_from"] = expression_start
-                updates["time_to"] = expression_end
-                if draft.intent in _GROUNDABLE_TEMPORAL_INTENTS:
-                    updates["intent"] = PersonalMemoryQueryIntent.HISTORY
-                    updates["temporal_statuses"] = []
-                marker = "explicit_time_grounded:interval"
 
     if not updates:
         return draft
@@ -3038,8 +3115,48 @@ def _ground_explicit_query_time_v2(
     marker = ""
     has_as_of = draft.as_of is not None
     has_interval = draft.time_from is not None or draft.time_to is not None
+    has_closed_interval = draft.time_from is not None and draft.time_to is not None
+    expression = _explicit_calendar_expression(
+        request.query,
+        now=request.now,
+        calendar_timezone=request.calendar_timezone,
+    )
 
-    if has_as_of and not has_interval:
+    if (
+        expression is not None
+        and draft.temporal_view != PersonalMemoryQueryTemporalView.PLANNED
+        and (
+            (expression[0] == "point" and (has_as_of or not has_interval))
+            or (
+                expression[0] == "interval"
+                and (has_as_of or has_closed_interval or not has_interval)
+            )
+        )
+    ):
+        expression_kind, expression_start, expression_end = expression
+        if expression_kind == "point":
+            updates.update(
+                {
+                    "temporal_view": PersonalMemoryQueryTemporalView.AS_OF,
+                    "as_of": expression_start,
+                    "time_from": None,
+                    "time_to": None,
+                    "temporal_statuses": [],
+                }
+            )
+            marker = "explicit_time_grounded:point"
+        else:
+            updates.update(
+                {
+                    "temporal_view": PersonalMemoryQueryTemporalView.INTERVAL,
+                    "as_of": None,
+                    "time_from": expression_start,
+                    "time_to": expression_end,
+                    "temporal_statuses": [],
+                }
+            )
+            marker = "explicit_time_grounded:interval"
+    elif has_as_of and not has_interval:
         if draft.temporal_view != PersonalMemoryQueryTemporalView.AS_OF:
             updates["temporal_view"] = PersonalMemoryQueryTemporalView.AS_OF
             updates["temporal_statuses"] = []
@@ -3049,33 +3166,6 @@ def _ground_explicit_query_time_v2(
             updates["temporal_view"] = PersonalMemoryQueryTemporalView.INTERVAL
             updates["temporal_statuses"] = []
             marker = "explicit_time_grounded:interval"
-    elif (
-        not has_as_of
-        and not has_interval
-        and draft.temporal_view != PersonalMemoryQueryTemporalView.PLANNED
-    ):
-        expression = _explicit_calendar_expression(request.query, now=request.now)
-        if expression is not None:
-            expression_kind, expression_start, expression_end = expression
-            if expression_kind == "point":
-                updates.update(
-                    {
-                        "temporal_view": PersonalMemoryQueryTemporalView.AS_OF,
-                        "as_of": expression_start,
-                        "temporal_statuses": [],
-                    }
-                )
-                marker = "explicit_time_grounded:point"
-            else:
-                updates.update(
-                    {
-                        "temporal_view": PersonalMemoryQueryTemporalView.INTERVAL,
-                        "time_from": expression_start,
-                        "time_to": expression_end,
-                        "temporal_statuses": [],
-                    }
-                )
-                marker = "explicit_time_grounded:interval"
 
     if not updates:
         return draft

@@ -204,6 +204,13 @@ class AblationQuery(BaseModel):
     now: datetime
     intent: str
     accepted_intents: list[str] = Field(default_factory=list)
+    operation: Literal["lookup", "list", "count"] | None = None
+    temporal_view: Literal[
+        "unbounded", "current", "prior", "planned", "as_of", "interval"
+    ] | None = None
+    accepted_temporal_views: list[
+        Literal["unbounded", "current", "prior", "planned", "as_of", "interval"]
+    ] = Field(default_factory=list)
     as_of: datetime | None = None
     accept_interval_covering_as_of: bool = False
     time_from: datetime | None = None
@@ -248,6 +255,7 @@ class AblationDataset(BaseModel):
     suite: str
     suite_version: str
     language: str
+    calendar_timezone: str = "UTC"
     status: str = "draft"
     frozen: bool = False
     publication_ready: bool = False
@@ -340,11 +348,16 @@ class AblationDataset(BaseModel):
         payload = self.model_dump(mode="json")
         # Absent new judgments must not invalidate existing paid-planner caches.
         # Any actual annotation change still changes the dataset fingerprint.
-        for query in payload["queries"]:
+        if "calendar_timezone" not in self.model_fields_set:
+            payload.pop("calendar_timezone")
+        for query, model in zip(payload["queries"], self.queries, strict=True):
             if not query["relevance_grades"]:
                 query.pop("relevance_grades")
             if query.get("retrieval_expectation") == "legacy":
                 query.pop("retrieval_expectation")
+            for field in ("operation", "temporal_view", "accepted_temporal_views"):
+                if field not in model.model_fields_set:
+                    query.pop(field)
         return hashlib.sha256(
             json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()

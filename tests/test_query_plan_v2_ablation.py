@@ -10,6 +10,8 @@ from benchmarks import query_plan_v2_ablation as ablation
 from benchmarks.personal_retrieval_ablation import load_ablation_dataset
 from benchmarks.relation_planner_quality import run_relation_planner_quality
 from doppel_memory import (
+    DeterministicPersonalMemoryQueryPlanner,
+    DeterministicPersonalMemoryQueryPlannerV2,
     PersonalMemoryQueryDraftV2,
     PersonalMemoryQueryRequest,
 )
@@ -28,11 +30,14 @@ class _GoldV2Planner:
     ) -> PersonalMemoryQueryDraftV2:
         item = self.by_query[request.query]
         operation, temporal_views = ablation._expected_axes(item)
-        preferred_view = ablation._temporal_view_from_shape(
-            item.intent,
-            as_of=item.as_of,
-            time_from=item.time_from,
-            time_to=item.time_to,
+        preferred_view = (
+            item.temporal_view
+            or ablation._temporal_view_from_shape(
+                item.intent,
+                as_of=item.as_of,
+                time_from=item.time_from,
+                time_to=item.time_to,
+            )
         )
         assert preferred_view in temporal_views
         return PersonalMemoryQueryDraftV2(
@@ -59,9 +64,11 @@ def test_dry_plan_fixes_equal_240_case_arms_without_reading_key(
     plan = ablation.build_plan(args)
 
     assert plan["mode"] == "dry_run"
-    assert plan["query_count_per_arm"] == 240
-    assert plan["max_calls_per_arm"] == 240
-    assert plan["max_total_provider_calls"] == 480
+    assert plan["relation_query_count_per_arm"] == 240
+    assert plan["operation_query_count_per_arm"] == 72
+    assert plan["query_count_per_arm"] == 312
+    assert plan["max_calls_per_arm"] == 312
+    assert plan["max_total_provider_calls"] == 624
     assert plan["settings"] == {
         "model": "deepseek-v4-flash",
         "base_url": "https://api.deepseek.com",
@@ -109,22 +116,19 @@ async def test_v2_gold_axes_score_independently_on_all_240_queries() -> None:
     )
 
 
-def test_expected_axes_do_not_turn_past_action_grammar_into_prior_state() -> None:
+def test_expected_axes_use_independently_reviewed_temporal_views() -> None:
     dataset = load_ablation_dataset(ablation.DEFAULT_DATASET)
-    repairs = [
+    repaired_events = [
         query
         for query in dataset.queries
-        if query.intent == "lookup"
-        and query.as_of is None
-        and query.time_from is None
-        and query.time_to is None
+        if query.temporal_view == "prior" and query.intent == "lookup"
     ]
 
-    assert repairs
-    for query in repairs:
+    assert len(repaired_events) == 12
+    for query in repaired_events:
         operation, temporal_views = ablation._expected_axes(query)
         assert operation == "lookup"
-        assert temporal_views == {"unbounded"}
+        assert temporal_views == {"prior"}
 
 
 def test_relation_catalog_is_restricted_to_dataset_host_allowlist() -> None:
@@ -139,6 +143,93 @@ def test_relation_catalog_is_restricted_to_dataset_host_allowlist() -> None:
     )
 
 
+def test_operation_dataset_covers_full_orthogonal_matrix() -> None:
+    dataset = ablation._load_operation_dataset(ablation.DEFAULT_OPERATION_DATASET)
+
+    assert len(dataset.cases) == 72
+    assert {case.operation for case in dataset.cases} == {"lookup", "list", "count"}
+    assert {case.temporal_view for case in dataset.cases} == {
+        "unbounded",
+        "current",
+        "prior",
+        "planned",
+        "as_of",
+        "interval",
+    }
+
+
+@pytest.mark.asyncio
+async def test_operation_suite_scores_all_72_independent_cases() -> None:
+    dataset = ablation._load_operation_dataset(ablation.DEFAULT_OPERATION_DATASET)
+    by_query = {case.query: case for case in dataset.cases}
+
+    class GoldPlanner:
+        name = "tests.gold-operation-v2"
+        version = "1"
+
+        async def plan(
+            self, request: PersonalMemoryQueryRequest
+        ) -> PersonalMemoryQueryDraftV2:
+            case = by_query[request.query]
+            return PersonalMemoryQueryDraftV2(
+                operation=case.operation,
+                temporal_view=case.temporal_view,
+                memory_types=case.expected_memory_types,
+                as_of=case.as_of,
+                time_from=case.time_from,
+                time_to=case.time_to,
+            )
+
+    report = await ablation._run_operation_suite(dataset, GoldPlanner())
+
+    assert report["execution"] == {
+        "complete": True,
+        "error_count": 0,
+        "stop_reason": "",
+    }
+    assert report["metrics"] == {
+        "case_count": 72,
+        "valid_case_count": 72,
+        "operation_accuracy": 1,
+        "temporal_view_accuracy": 1,
+        "coordinate_accuracy": 1,
+        "count_memory_type_accuracy": 1,
+        "exact_semantics_accuracy": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_operation_matrix_exposes_v1_axis_collapse_without_domain_rules() -> None:
+    dataset = ablation._load_operation_dataset(ablation.DEFAULT_OPERATION_DATASET)
+
+    v1 = await ablation._run_operation_suite(
+        dataset, DeterministicPersonalMemoryQueryPlanner()
+    )
+    v2 = await ablation._run_operation_suite(
+        dataset, DeterministicPersonalMemoryQueryPlannerV2()
+    )
+
+    assert v1["metrics"]["operation_accuracy"] == 1
+    assert v1["metrics"]["coordinate_accuracy"] == 1
+    assert v1["metrics"]["temporal_view_accuracy"] == 0.6667
+    assert v1["metrics"]["exact_semantics_accuracy"] == 0.6667
+    assert v2["metrics"]["exact_semantics_accuracy"] == 1
+    assert {
+        (case.operation, case.temporal_view) for case in dataset.cases
+    } == {
+        (operation, temporal_view)
+        for operation in ("lookup", "list", "count")
+        for temporal_view in (
+            "unbounded",
+            "current",
+            "prior",
+            "planned",
+            "as_of",
+            "interval",
+        )
+    }
+
+
 def test_promotion_gate_fails_each_declared_regression() -> None:
     metric_names = (
         "operation_accuracy",
@@ -151,9 +242,20 @@ def test_promotion_gate_fails_each_declared_regression() -> None:
         "relation_type_recall",
         "relation_type_precision",
     )
+    operation_suite = {
+        "execution": {"complete": True},
+        "metrics": {
+            "operation_accuracy": 0.9,
+            "temporal_view_accuracy": 0.9,
+            "coordinate_accuracy": 0.9,
+            "count_memory_type_accuracy": 0.9,
+            "exact_semantics_accuracy": 0.9,
+        },
+    }
     baseline = {
         "execution": {"complete": True},
         "metrics": {"valid_case_count": 240, **dict.fromkeys(metric_names, 0.9)},
+        "operation_suite": operation_suite,
     }
     candidate = json.loads(json.dumps(baseline))
     reports = {"v1": baseline, "v2": candidate}
@@ -180,12 +282,27 @@ def test_promotion_gate_handles_unmeasured_metrics_without_crashing() -> None:
         "relation_type_recall": None,
         "relation_type_precision": None,
     }
-    report = {"execution": {"complete": False}, "metrics": metrics}
+    report = {
+        "execution": {"complete": False},
+        "metrics": metrics,
+        "operation_suite": {
+            "execution": {"complete": False},
+            "metrics": {},
+        },
+    }
 
     gate = ablation._promotion_gate({"v1": report, "v2": report})
 
     assert gate["passed"] is False
-    assert gate["failures"] == ["provider_complete"]
+    assert gate["failures"] == [
+        "provider_complete",
+        "operation_suite_complete",
+        "operation_suite_operation_accuracy",
+        "operation_suite_temporal_view_accuracy",
+        "operation_suite_coordinate_accuracy",
+        "operation_suite_count_memory_type_accuracy",
+        "operation_suite_exact_semantics_accuracy",
+    ]
 
 
 @pytest.mark.asyncio
@@ -202,9 +319,13 @@ async def test_pair_writes_both_reports_and_preserves_failed_promotion_gate(
     )
 
     async def fake_arm(
-        arm: str, args: Any, dataset: Any, definitions: Any
+        arm: str,
+        args: Any,
+        dataset: Any,
+        operation_dataset: Any,
+        definitions: Any,
     ) -> dict[str, Any]:
-        del args, dataset, definitions
+        del args, dataset, operation_dataset, definitions
         value = 0.9 if arm == "v1" else 0.8
         metrics = {
             "valid_case_count": 240,
@@ -225,6 +346,16 @@ async def test_pair_writes_both_reports_and_preserves_failed_promotion_gate(
             "usage": {},
             "budget": {"calls": 0},
             "cache": {"hits": 0, "misses": 0},
+            "operation_suite": {
+                "execution": {"complete": True},
+                "metrics": {
+                    "operation_accuracy": value,
+                    "temporal_view_accuracy": value,
+                    "coordinate_accuracy": value,
+                    "count_memory_type_accuracy": value,
+                    "exact_semantics_accuracy": value,
+                },
+            },
             "cases": [],
         }
 

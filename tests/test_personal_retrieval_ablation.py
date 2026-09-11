@@ -457,7 +457,8 @@ class DatasetTest(unittest.TestCase):
             for name in ("dev", "heldout", "adversarial")
         }
 
-        self.assertEqual(dataset.suite_version, "2.0.0-draft.2")
+        self.assertEqual(dataset.suite_version, "2.0.0-draft.3")
+        self.assertEqual(dataset.calendar_timezone, "UTC")
         self.assertEqual(len(dataset.fixtures), 72)
         self.assertEqual(len(dataset.queries), 240)
         self.assertEqual(len(dataset.scopes), 12)
@@ -480,7 +481,12 @@ class DatasetTest(unittest.TestCase):
             )
         self.assertEqual(
             dataset.fingerprint,
-            "f62c9d21fb3d7a472eb9e6cc14d007654943afcede500dd1874f04f0c21b7d41",
+            "ec4b81dffe5c18fc38be814a765cf2ec6780f019277ca29a04e08143ea6b87db",
+        )
+        self.assertTrue(all(query.operation == "lookup" for query in dataset.queries))
+        self.assertEqual(
+            sum(query.temporal_view == "prior" for query in dataset.queries),
+            36,
         )
 
     def test_expanded_relation_v2_distinguishes_context_from_answer_evidence(

@@ -564,6 +564,7 @@ def _query_request(
     return PersonalMemoryQueryRequest(
         query=query.query,
         now=query.now,
+        calendar_timezone=dataset.calendar_timezone,
         default_subject=Actor.OWNER,
         default_subject_id=scope.user_id,
         available_relation_types=dataset.relation_types,

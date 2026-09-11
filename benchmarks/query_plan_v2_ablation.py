@@ -12,10 +12,10 @@ import sys
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from benchmarks.personal_retrieval_ablation import (
     AblationDataset,
@@ -26,6 +26,7 @@ from benchmarks.personal_retrieval_ablation import (
 )
 from benchmarks.relation_planner_quality import (
     CachedStructuredOutputModel,
+    PlannerCallBudgetExceeded,
     StructuredOutputCallBudget,
     UsageLedger,
     run_relation_planner_quality,
@@ -42,6 +43,7 @@ from doppel_memory import (
     ReferencePersonalMemoryQueryPlanner,
     ReferencePersonalMemoryQueryPlannerV2,
     RelationTypeDefinition,
+    StructuredOutputProviderError,
 )
 from doppel_memory.query import QueryIntent, QueryOperation, QueryTemporalView
 
@@ -50,7 +52,44 @@ DEFAULT_DATASET = (
     ROOT / "benchmarks/datasets/personal-relation-ablation-zh-v2.json"
 )
 DEFAULT_CATALOG = ROOT / "benchmarks/catalogs/personal-relations-v2.json"
+DEFAULT_OPERATION_DATASET = (
+    ROOT / "benchmarks/datasets/query-plan-operations-zh-v1.json"
+)
 ARMS = ("v1", "v2")
+
+
+class QueryPlanOperationCase(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    case_id: str
+    query: str
+    now: datetime
+    calendar_timezone: str = "UTC"
+    operation: Literal["lookup", "list", "count"]
+    temporal_view: Literal[
+        "unbounded", "current", "prior", "planned", "as_of", "interval"
+    ]
+    as_of: datetime | None = None
+    time_from: datetime | None = None
+    time_to: datetime | None = None
+    expected_memory_types: list[str] = Field(default_factory=list)
+    partition: Literal["dev", "heldout", "adversarial"]
+
+
+class QueryPlanOperationDataset(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    suite: str
+    suite_version: str
+    language: str
+    frozen: bool = False
+    publication_ready: bool = False
+    description: str = ""
+    cases: list[QueryPlanOperationCase] = Field(min_length=18)
+
+
+def _load_operation_dataset(path: Path) -> QueryPlanOperationDataset:
+    return QueryPlanOperationDataset.model_validate_json(path.read_bytes())
 
 
 def _fingerprint(value: Any) -> str:
@@ -97,17 +136,30 @@ def _temporal_view_from_shape(
 def _expected_axes(
     query: AblationQuery,
 ) -> tuple[QueryOperation, set[QueryTemporalView]]:
-    operation = _operation_from_intent(query.intent)
-    primary = _temporal_view_from_shape(
-        query.intent,
-        as_of=query.as_of,
-        time_from=query.time_from,
-        time_to=query.time_to,
+    operation = cast(
+        QueryOperation,
+        query.operation or _operation_from_intent(query.intent),
+    )
+    primary = cast(
+        QueryTemporalView,
+        query.temporal_view
+        or _temporal_view_from_shape(
+            query.intent,
+            as_of=query.as_of,
+            time_from=query.time_from,
+            time_to=query.time_to,
+        ),
     )
     accepted: set[QueryTemporalView] = {primary}
-    if query.accept_interval_covering_as_of:
+    accepted.update(cast(QueryTemporalView, item) for item in query.accepted_temporal_views)
+    if query.temporal_view is None and query.accept_interval_covering_as_of:
         accepted.add(cast(QueryTemporalView, PersonalMemoryQueryTemporalView.INTERVAL))
-    if query.as_of is None and query.time_from is None and query.time_to is None:
+    if (
+        query.temporal_view is None
+        and query.as_of is None
+        and query.time_from is None
+        and query.time_to is None
+    ):
         accepted.update(
             _temporal_view_from_shape(intent)
             for intent in query.accepted_intents
@@ -323,27 +375,35 @@ def _augment_report(
     return report
 
 
-def _input_identity(dataset: Path, catalog: Path) -> dict[str, str]:
+def _input_identity(
+    dataset: Path, catalog: Path, operation_dataset: Path
+) -> dict[str, str]:
     return {
         "commit": _git_commit_hash(),
         "source_sha256": _source_tree_sha256(),
         "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
         "catalog_sha256": hashlib.sha256(catalog.read_bytes()).hexdigest(),
+        "operation_dataset_sha256": hashlib.sha256(
+            operation_dataset.read_bytes()
+        ).hexdigest(),
         "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
     }
 
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     dataset = load_ablation_dataset(args.dataset)
-    query_count = sum(
+    relation_query_count = sum(
         query.partition != "deferred_cross_subject" for query in dataset.queries
     )
+    operation_query_count = len(_load_operation_dataset(args.operation_dataset).cases)
     return {
         "runner": "doppel.query-plan-v2-ablation.v1",
         "mode": "live" if args.live else "dry_run",
         "publication_ready": False,
         "arms": list(ARMS),
-        "query_count_per_arm": query_count,
+        "relation_query_count_per_arm": relation_query_count,
+        "operation_query_count_per_arm": operation_query_count,
+        "query_count_per_arm": relation_query_count + operation_query_count,
         "max_calls_per_arm": args.max_calls_per_arm,
         "max_total_provider_calls": args.max_calls_per_arm * len(ARMS),
         "cache_enabled": True,
@@ -357,7 +417,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "thinking": args.thinking,
             "temperature": 0,
         },
-        "input_identity": _input_identity(args.dataset, args.relation_catalog),
+        "input_identity": _input_identity(
+            args.dataset, args.relation_catalog, args.operation_dataset
+        ),
         "promotion_gate": [
             "provider execution complete in both arms",
             "v2 valid drafts are not fewer than v1",
@@ -368,6 +430,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "Both arms receive identical questions, host ontology, model settings, and call ceilings.",
             "Raw provider caches are schema/prompt-addressed; v1 and v2 entries cannot collide.",
             "No retrieval or answer generation is measured in this stage.",
+            "The independent operation suite covers lookup/list/count across all six temporal views.",
         ],
     }
 
@@ -401,10 +464,199 @@ def _load_relation_definitions(
     return [by_name[name] for name in sorted(expected)]
 
 
+def _operation_group_metrics(
+    cases: list[dict[str, Any]], key: str
+) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for group in sorted({str(case[key]) for case in cases}):
+        selected = [case for case in cases if str(case[key]) == group]
+        valid = [case for case in selected if case["status"] == "valid"]
+        result[group] = {
+            "case_count": len(selected),
+            "valid_case_count": len(valid),
+            "operation_accuracy": _ratio(
+                sum(case["operation_ok"] for case in valid), len(selected)
+            ),
+            "temporal_view_accuracy": _ratio(
+                sum(case["temporal_view_ok"] for case in valid), len(selected)
+            ),
+            "coordinate_accuracy": _ratio(
+                sum(case["coordinates_ok"] for case in valid), len(selected)
+            ),
+            "exact_semantics_accuracy": _ratio(
+                sum(case["exact_semantics_ok"] for case in valid), len(selected)
+            ),
+        }
+    return result
+
+
+async def _run_operation_suite(
+    dataset: QueryPlanOperationDataset,
+    planner: Any,
+) -> dict[str, Any]:
+    cases: list[dict[str, Any]] = []
+    stop_reason = ""
+    for gold in dataset.cases:
+        if stop_reason:
+            cases.append(
+                {
+                    "case_id": gold.case_id,
+                    "query": gold.query,
+                    "partition": gold.partition,
+                    "expected_operation": gold.operation,
+                    "expected_temporal_view": gold.temporal_view,
+                    "actual_operation": None,
+                    "actual_temporal_view": None,
+                    "operation_ok": False,
+                    "temporal_view_ok": False,
+                    "coordinates_ok": False,
+                    "count_memory_type_ok": False,
+                    "exact_semantics_ok": False,
+                    "status": "not_run",
+                    "error": "PlannerNotRun",
+                }
+            )
+            continue
+        try:
+            draft = await planner.plan(
+                PersonalMemoryQueryRequest(
+                    query=gold.query,
+                    now=gold.now,
+                    calendar_timezone=gold.calendar_timezone,
+                    default_subject_id="operation-suite-owner",
+                )
+            )
+            if isinstance(draft, PersonalMemoryQueryDraftV2):
+                actual_operation = draft.operation
+                actual_view = draft.temporal_view
+            else:
+                legacy = PersonalMemoryQueryDraft.model_validate(draft)
+                actual_operation = _operation_from_intent(legacy.intent)
+                actual_view = _temporal_view_from_shape(
+                    legacy.intent,
+                    as_of=legacy.as_of,
+                    time_from=legacy.time_from,
+                    time_to=legacy.time_to,
+                )
+                draft = legacy
+            operation_ok = actual_operation == gold.operation
+            temporal_view_ok = actual_view == gold.temporal_view
+            coordinates_ok = (
+                draft.as_of == gold.as_of
+                and draft.time_from == gold.time_from
+                and draft.time_to == gold.time_to
+            )
+            count_memory_type_ok = (
+                gold.operation != "count"
+                or set(gold.expected_memory_types).issubset(draft.memory_types)
+            )
+            cases.append(
+                {
+                    "case_id": gold.case_id,
+                    "query": gold.query,
+                    "partition": gold.partition,
+                    "expected_operation": gold.operation,
+                    "expected_temporal_view": gold.temporal_view,
+                    "actual_operation": actual_operation,
+                    "actual_temporal_view": actual_view,
+                    "operation_ok": operation_ok,
+                    "temporal_view_ok": temporal_view_ok,
+                    "coordinates_ok": coordinates_ok,
+                    "count_memory_type_ok": count_memory_type_ok,
+                    "exact_semantics_ok": operation_ok
+                    and temporal_view_ok
+                    and coordinates_ok
+                    and count_memory_type_ok,
+                    "status": "valid",
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - content-free diagnostics only
+            if isinstance(exc, PlannerCallBudgetExceeded):
+                stop_reason = "budget_exhausted"
+            elif (
+                isinstance(exc, StructuredOutputProviderError)
+                and exc.code == "authentication_error"
+            ):
+                stop_reason = "authentication_error"
+            cases.append(
+                {
+                    "case_id": gold.case_id,
+                    "query": gold.query,
+                    "partition": gold.partition,
+                    "expected_operation": gold.operation,
+                    "expected_temporal_view": gold.temporal_view,
+                    "actual_operation": None,
+                    "actual_temporal_view": None,
+                    "operation_ok": False,
+                    "temporal_view_ok": False,
+                    "coordinates_ok": False,
+                    "count_memory_type_ok": False,
+                    "exact_semantics_ok": False,
+                    "status": "error",
+                    "error": type(exc).__name__,
+                }
+            )
+    valid = [case for case in cases if case["status"] == "valid"]
+    count_cases = [
+        case for case in valid if case["expected_operation"] == "count"
+    ]
+    metrics = {
+        "case_count": len(cases),
+        "valid_case_count": len(valid),
+        "operation_accuracy": _ratio(
+            sum(case["operation_ok"] for case in valid), len(cases)
+        ),
+        "temporal_view_accuracy": _ratio(
+            sum(case["temporal_view_ok"] for case in valid), len(cases)
+        ),
+        "coordinate_accuracy": _ratio(
+            sum(case["coordinates_ok"] for case in valid), len(cases)
+        ),
+        "count_memory_type_accuracy": _ratio(
+            sum(case["count_memory_type_ok"] for case in count_cases),
+            sum(case.operation == "count" for case in dataset.cases),
+        ),
+        "exact_semantics_accuracy": _ratio(
+            sum(case["exact_semantics_ok"] for case in valid), len(cases)
+        ),
+    }
+    return {
+        "dataset": {
+            "name": dataset.suite,
+            "version": dataset.suite_version,
+            "case_count": len(cases),
+            "frozen": dataset.frozen,
+            "publication_ready": dataset.publication_ready,
+        },
+        "execution": {
+            "complete": len(valid) == len(cases),
+            "error_count": len(cases) - len(valid),
+            "stop_reason": stop_reason,
+        },
+        "metrics": metrics,
+        "by_operation": _operation_group_metrics(cases, "expected_operation"),
+        "by_temporal_view": _operation_group_metrics(
+            cases, "expected_temporal_view"
+        ),
+        "by_partition": _operation_group_metrics(cases, "partition"),
+        "cases": cases,
+    }
+
+
+def _unavailable_operation_suite(dataset: QueryPlanOperationDataset) -> dict[str, Any]:
+    return {
+        "dataset": {"name": dataset.suite, "case_count": len(dataset.cases)},
+        "execution": {"complete": False, "error_count": 0},
+        "metrics": {},
+        "cases": [],
+    }
+
+
 async def _run_arm(
     arm: str,
     args: argparse.Namespace,
     dataset: AblationDataset,
+    operation_dataset: QueryPlanOperationDataset,
     definitions: list[RelationTypeDefinition],
 ) -> dict[str, Any]:
     usage = UsageLedger()
@@ -426,20 +678,42 @@ async def _run_arm(
                 usage=usage,
                 relation_type_definitions=definitions,
             )
-            return _augment_report(report, dataset, arm=arm)
-        inner = ReferencePersonalMemoryQueryPlannerV2(cache)
-        wrapper = _CapturingV2CompatibilityPlanner(inner)
-        report = await run_relation_planner_quality(
-            dataset,
-            wrapper,
-            cache=cache,
-            call_budget=budget,
-            usage=usage,
-            relation_type_definitions=definitions,
+            report = _augment_report(report, dataset, arm=arm)
+            report["operation_suite"] = (
+                await _run_operation_suite(operation_dataset, planner)
+                if report["execution"]["complete"]
+                else _unavailable_operation_suite(operation_dataset)
+            )
+        else:
+            inner = ReferencePersonalMemoryQueryPlannerV2(cache)
+            wrapper = _CapturingV2CompatibilityPlanner(inner)
+            report = await run_relation_planner_quality(
+                dataset,
+                wrapper,
+                cache=cache,
+                call_budget=budget,
+                usage=usage,
+                relation_type_definitions=definitions,
+            )
+            report = _augment_report(
+                report, dataset, arm=arm, drafts=wrapper.drafts
+            )
+            report["operation_suite"] = (
+                await _run_operation_suite(operation_dataset, inner)
+                if report["execution"]["complete"]
+                else _unavailable_operation_suite(operation_dataset)
+            )
+        report["usage"] = usage.report()
+        report["budget"] = {"max_calls": budget.max_calls, "calls": budget.calls}
+        report["cache"].update(
+            {
+                "hits": cache.hits,
+                "misses": cache.misses,
+                "invalid_entries_ignored": cache.invalid_entries_ignored,
+                "legacy_final_drafts_read": cache.legacy_final_drafts_read,
+            }
         )
-        return _augment_report(
-            report, dataset, arm=arm, drafts=wrapper.drafts
-        )
+        return report
     finally:
         await provider.aclose()
 
@@ -455,6 +729,12 @@ def _promotion_gate(reports: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "valid_case_count": (
             v2["metrics"]["valid_case_count"]
             >= v1["metrics"]["valid_case_count"]
+        ),
+        "operation_suite_complete": all(
+            report.get("operation_suite", {})
+            .get("execution", {})
+            .get("complete", False)
+            for report in reports.values()
         ),
     }
     for metric in (
@@ -475,6 +755,21 @@ def _promotion_gate(reports: dict[str, dict[str, Any]]) -> dict[str, Any]:
             if isinstance(after, (int, float))
             and isinstance(before, (int, float))
             else after == before
+        )
+    for metric in (
+        "operation_accuracy",
+        "temporal_view_accuracy",
+        "coordinate_accuracy",
+        "count_memory_type_accuracy",
+        "exact_semantics_accuracy",
+    ):
+        before = v1.get("operation_suite", {}).get("metrics", {}).get(metric)
+        after = v2.get("operation_suite", {}).get("metrics", {}).get(metric)
+        checks[f"operation_suite_{metric}"] = (
+            after >= before
+            if isinstance(after, (int, float))
+            and isinstance(before, (int, float))
+            else after == before and after is not None
         )
     failures = [name for name, passed in checks.items() if not passed]
     return {"passed": not failures, "checks": checks, "failures": failures}
@@ -512,6 +807,20 @@ def _comparison(reports: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return {
         "available": True,
         "metric_deltas_v2_minus_v1": deltas,
+        "operation_suite_metric_deltas_v2_minus_v1": {
+            name: round(
+                v2["operation_suite"]["metrics"][name]
+                - v1["operation_suite"]["metrics"][name],
+                4,
+            )
+            for name in sorted(
+                set(v1["operation_suite"]["metrics"]).intersection(
+                    v2["operation_suite"]["metrics"]
+                )
+            )
+            if isinstance(v1["operation_suite"]["metrics"][name], (int, float))
+            and isinstance(v2["operation_suite"]["metrics"][name], (int, float))
+        },
         "orthogonal_semantic_transitions": transitions,
     }
 
@@ -527,6 +836,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 async def run_pair(args: argparse.Namespace) -> tuple[int, Path]:
     dataset = load_ablation_dataset(args.dataset)
+    operation_dataset = _load_operation_dataset(args.operation_dataset)
     definitions = _load_relation_definitions(args.relation_catalog, dataset)
     plan = build_plan(args)
     run_dir = args.output_root / (
@@ -538,12 +848,16 @@ async def run_pair(args: argparse.Namespace) -> tuple[int, Path]:
     stop_reason = ""
     failure_type = ""
     for arm in ARMS:
-        if _input_identity(args.dataset, args.relation_catalog) != plan["input_identity"]:
+        if _input_identity(
+            args.dataset, args.relation_catalog, args.operation_dataset
+        ) != plan["input_identity"]:
             stop_reason = "inputs_changed"
             break
         print(f"Running {arm} Planner arm", flush=True)
         try:
-            report = await _run_arm(arm, args, dataset, definitions)
+            report = await _run_arm(
+                arm, args, dataset, operation_dataset, definitions
+            )
         except Exception as exc:  # noqa: BLE001 - sanitize provider failures
             stop_reason = f"{arm}_execution_error"
             failure_type = type(exc).__name__
@@ -587,12 +901,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--relation-catalog", type=Path, default=DEFAULT_CATALOG)
     parser.add_argument(
+        "--operation-dataset", type=Path, default=DEFAULT_OPERATION_DATASET
+    )
+    parser.add_argument(
         "--output-root", type=Path, default=ROOT / "data/doppel/query-plan-v2"
     )
     parser.add_argument(
         "--cache-dir", type=Path, default=ROOT / "data/doppel/planner-cache"
     )
-    parser.add_argument("--max-calls-per-arm", type=int, default=240)
+    parser.add_argument("--max-calls-per-arm", type=int, default=312)
     parser.add_argument("--model", default="deepseek-v4-flash")
     parser.add_argument("--base-url", default="https://api.deepseek.com")
     parser.add_argument(

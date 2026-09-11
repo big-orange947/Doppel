@@ -192,7 +192,7 @@ async def test_reference_prompt_distinguishes_predicate_ambiguity_from_unknown_f
     planner = ReferencePersonalMemoryQueryPlanner(model)
     draft = await planner.plan(_request(relation_type_definitions=[_definition()]))
     request = model.requests[0]
-    assert planner.version.startswith("12.")
+    assert planner.version.startswith("13.")
     assert "independently from whether its answer is known" in request.instructions
     assert (
         "requested meaning, endpoint roles, and explicit exclusions"
@@ -296,6 +296,7 @@ async def test_benchmark_passes_one_global_catalog_without_gold_or_score_changes
         assert set(request.to_planner_input()) == {
             "query",
             "now",
+            "calendar_timezone",
             "default_subject",
             "default_subject_id",
             "available_relation_types",

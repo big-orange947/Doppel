@@ -789,14 +789,16 @@ Query Plan v2 作为独立的 opt-in wire model 将上述 v1 intent 拆成正交
 `schema_version=2` 的 integrity-bound plan，并保留确定性 legacy intent 仅供观测兼容。
 候选路径、完整计数、inactive 历史可见性、Graphiti/pgvector 时点传递、冲突检测和
 reranker 禁用条件都从这两个字段读取，因此 `count + interval` 不会丢失时间过滤。
-v1 模型、Planner v12、plan ID payload 和默认路径不变；v2 只有在 Planner 返回显式
+v1 Draft/Plan wire model、plan ID payload 和默认路径不变；Reference Planner v13 与 v2
+Planner v2 接收宿主日历时区，v2 只有在 Planner 返回显式
 schema-v2 draft 时才启用，切换默认值之前必须先通过同数据集的成对评测。
 
-在 draft 与 plan 之间，binder 对单个明确的数字日历表达式执行领域无关 grounding：日级表达式
-绑定为 point-in-time，月/年级表达式绑定为闭区间；缺年份的月日使用可信 `now` 的年份。已有
-provider 时间坐标不会被覆盖，但与坐标矛盾的 lookup/current/history/as_of 形态会先规范化，再进入
-时间门。count/list/planned 不被改写成别的意图。多个日期、非法日期、相对时间和自然语言范围
-保持 Planner-owned，binder 不依赖实体、关系或业务领域词典。
+在 draft 与 plan 之间，binder 对单个明确的数字日历表达式执行领域无关 grounding：宿主显式传入
+`calendar_timezone`，日级表达式绑定为当地正午的 point-in-time，月/年级表达式绑定为当地闭区间，
+最后统一转成 UTC；缺年份的月日使用可信 `now` 在该时区中的年份。模型自行计算的 point 或完整
+闭区间会被宿主坐标覆盖，单边 before/after 区间仍保持 Planner-owned。count/list/planned 不被改写
+成别的查询动作。多个日期、非法日期、相对时间和自然语言范围保持 Planner-owned，binder 不依赖
+实体、关系或业务领域词典。
 
 Reference Planner 的 untrusted-output 投影只对一种中间态开放：`intent=as_of` 已存在但 `as_of`
 字段缺失。该中间态必须立即经过上述显式日历 grounding，并在返回前重新按完整

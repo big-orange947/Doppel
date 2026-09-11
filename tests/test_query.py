@@ -1051,6 +1051,100 @@ async def test_deterministic_planner_resolves_month_day_against_trusted_now() ->
     assert "3月14日" not in draft.search_text
 
 
+async def test_calendar_grounding_uses_host_fixed_offset() -> None:
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+
+    point = await engine.plan(
+        DeterministicPersonalMemoryQueryPlannerV2(),
+        "2024年6月15日某设备在哪里？",
+        [SCOPE],
+        now=NOW,
+        calendar_timezone="+08:00",
+    )
+    interval = await engine.plan(
+        DeterministicPersonalMemoryQueryPlannerV2(),
+        "2025年某设备有哪些记录？",
+        [SCOPE],
+        now=NOW,
+        calendar_timezone="+08:00",
+    )
+
+    assert point.as_of == datetime(2024, 6, 15, 4, tzinfo=UTC)
+    assert interval.time_from == datetime(2024, 12, 31, 16, tzinfo=UTC)
+    assert interval.time_to == datetime(2025, 12, 31, 15, 59, 59, tzinfo=UTC)
+
+
+def test_query_request_validates_and_exposes_host_calendar_timezone() -> None:
+    request = PersonalMemoryQueryRequest(
+        query="某设备在哪里？", now=NOW, calendar_timezone="+08:00"
+    )
+
+    assert request.to_planner_input()["calendar_timezone"] == "+08:00"
+    with pytest.raises(ValidationError, match="calendar timezone offset"):
+        PersonalMemoryQueryRequest(
+            query="某设备在哪里？", now=NOW, calendar_timezone="+15:00"
+        )
+
+
+@pytest.mark.parametrize(
+    ("query", "provider", "expected_view", "expected_from", "expected_to"),
+    [
+        (
+            "2026年3月15日某设备在哪里？",
+            {
+                "schema_version": 2,
+                "operation": "lookup",
+                "temporal_view": "as_of",
+                "as_of": "2026-03-14T16:00:00Z",
+            },
+            "as_of",
+            datetime(2026, 3, 15, 12, tzinfo=UTC),
+            None,
+        ),
+        (
+            "2025年某设备在哪里？",
+            {
+                "schema_version": 2,
+                "operation": "lookup",
+                "temporal_view": "interval",
+                "time_from": "2024-12-31T16:00:00Z",
+                "time_to": "2025-12-31T15:59:59Z",
+            },
+            "interval",
+            datetime(2025, 1, 1, tzinfo=UTC),
+            datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC),
+        ),
+    ],
+)
+async def test_reference_v2_canonicalizes_provider_calendar_arithmetic(
+    query: str,
+    provider: dict[str, object],
+    expected_view: str,
+    expected_from: datetime,
+    expected_to: datetime | None,
+) -> None:
+    draft = await ReferencePersonalMemoryQueryPlannerV2(
+        _StubStructuredModel(provider)
+    ).plan(
+        PersonalMemoryQueryRequest(
+            query=query,
+            now=NOW,
+            calendar_timezone="UTC",
+            default_subject_id="owner",
+        )
+    )
+
+    assert draft.temporal_view == expected_view
+    if expected_view == "as_of":
+        assert draft.as_of == expected_from
+        assert draft.time_from is None
+        assert draft.time_to is None
+    else:
+        assert draft.as_of is None
+        assert draft.time_from == expected_from
+        assert draft.time_to == expected_to
+
+
 @pytest.mark.parametrize(
     "query",
     [
@@ -2789,7 +2883,7 @@ async def test_reference_planner_gets_schema_but_cannot_choose_read_scopes() -> 
     assert "Echo them unchanged" in request.instructions
     assert "Grammatical past tense" in request.instructions
     assert "enduring attribution" in request.instructions
-    assert planner.version.startswith("12.")
+    assert planner.version.startswith("13.")
     assert request.output_schema["title"] == "PersonalMemoryQueryDraft"
     assert "scopes" not in request.output_schema["properties"]
 
@@ -3092,7 +3186,7 @@ async def test_v2_reference_planner_uses_separate_schema_and_keeps_authority() -
     assert "intent" not in request.output_schema["properties"]
     assert "scopes" not in request.output_schema["properties"]
     assert "two independent dimensions" in request.instructions
-    assert planner.version.startswith("1.")
+    assert planner.version.startswith("2.")
 
 
 async def test_v2_plan_round_trip_is_integrity_bound() -> None:
