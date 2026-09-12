@@ -83,6 +83,19 @@ repository-only `benchmarks` package.
 
 ## v0.9 personal hybrid retrieval ablation
 
+On Windows, the local benchmark services can be checked (and existing stopped
+containers started) without printing credentials or changing volumes:
+
+```powershell
+.\scripts\check-ablation-runtime.ps1 -Start
+```
+
+The preflight is intentionally non-repairing: it never resets WSL, removes a
+container/volume, or rewrites Docker Desktop data. If Docker Desktop itself is not
+ready, `-Start` uses the Desktop CLI and waits for the server. Existing benchmark
+containers should use `restart=unless-stopped`; enable Docker Desktop's own
+“start when you sign in” setting separately if automatic boot is desired.
+
 `personal_retrieval_ablation.py` compares the same pre-extracted fixture set across
 four main execution profiles and three index-direct diagnostics. Every main profile
 runs the real `PersonalMemoryQueryEngine` end-to-end (planner -> lexical/semantic

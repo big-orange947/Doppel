@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add a non-destructive Windows Docker preflight for the PostgreSQL/pgvector and
+  Neo4j benchmark services. It can start Docker Desktop and existing containers,
+  waits for health, reports the WSL data disk, and never resets WSL or changes
+  containers, volumes, credentials, or Docker data.
 - Treat a v2 `prior` retrieval view as eligible for both ended `historical`
   records and non-expiring `timeless` facts. This keeps completed attribution,
   origin, authorship, and performed-action evidence available without admitting
