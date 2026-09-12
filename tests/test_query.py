@@ -3152,6 +3152,62 @@ async def test_v2_count_can_apply_current_time_gate_independently() -> None:
     assert [hit.record.memory_id for hit in result.hits] == ["current-repair"]
 
 
+async def test_v2_prior_view_keeps_historical_and_timeless_evidence() -> None:
+    store = InMemoryStore()
+    await _put(
+        store,
+        _record(
+            "current-location",
+            "相机现在放在书房",
+            memory_type="state",
+            temporal_status="current",
+            day=3,
+        ),
+        _record(
+            "historical-location",
+            "相机以前放在办公室",
+            memory_type="state",
+            temporal_status="historical",
+            day=1,
+        ),
+        _record(
+            "timeless-origin",
+            "相机由林师傅维修",
+            memory_type="fact",
+            temporal_status="timeless",
+            day=2,
+        ),
+        _record(
+            "planned-repair",
+            "相机计划送去保养",
+            memory_type="plan",
+            temporal_status="planned",
+            day=4,
+        ),
+    )
+
+    class PriorPlanner:
+        name = "tests.prior-v2"
+        version = "1"
+
+        async def plan(self, request: PersonalMemoryQueryRequest):
+            return PersonalMemoryQueryDraftV2(
+                operation="lookup",
+                temporal_view="prior",
+                search_text="相机",
+            )
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        PriorPlanner(), "相机以前有哪些相关记录？", [SCOPE], now=NOW
+    )
+
+    assert result.plan.temporal_statuses == ["historical", "timeless"]
+    assert {hit.record.memory_id for hit in result.hits} == {
+        "historical-location",
+        "timeless-origin",
+    }
+
+
 async def test_v2_reference_planner_uses_separate_schema_and_keeps_authority() -> None:
     model = _StubStructuredModel(
         {

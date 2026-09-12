@@ -639,6 +639,11 @@ exact scopes 和可信 subject，同一次查询禁止跨 user_id。
 `lookup + unbounded`。像“上次在哪里维修”这类明确限定某次历史事件的问题则可表示为
 `lookup + prior`，不会再把查询动作和时间限制压进一个枚举值。
 
+`prior` 表示排除仅在当前成立的可变状态，而不是“只接受 historical 标签”。因此引擎会同时
+接受 `historical` 与 `timeless`：前者用于已经结束或被取代的状态，后者覆盖来源、作者、签发者、
+维修者等没有失效边界的事实。`planned` 仍不会混入，带 `as_of`/`interval` 坐标时仍以
+`valid_from`/`valid_to` 为准。这条规则只读取标准时间元数据，不包含领域词表。
+
 ~~~python
 from doppel_memory import ReferencePersonalMemoryQueryPlannerV2
 

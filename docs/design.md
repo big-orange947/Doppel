@@ -789,6 +789,10 @@ Query Plan v2 作为独立的 opt-in wire model 将上述 v1 intent 拆成正交
 `schema_version=2` 的 integrity-bound plan，并保留确定性 legacy intent 仅供观测兼容。
 候选路径、完整计数、inactive 历史可见性、Graphiti/pgvector 时点传递、冲突检测和
 reranker 禁用条件都从这两个字段读取，因此 `count + interval` 不会丢失时间过滤。
+无显式坐标的 `prior` 会放行 `historical+timeless`，而不是只放行 `historical`：前者表示
+已经结束的可变状态，后者可以表示发生在过去但没有真值失效边界的归属、来源、作者或已完成动作。
+当前可变状态和未来计划仍被排除。这样“过去的时间切面”不会与“只看已经失效的状态”混为一谈，
+且实现只依赖标准 temporal status，不读取实体、关系标签或业务词汇。
 v1 Draft/Plan wire model、plan ID payload 和默认路径不变；Reference Planner v13 与 v2
 Planner v2 接收宿主日历时区，v2 只有在 Planner 返回显式
 schema-v2 draft 时才启用，切换默认值之前必须先通过同数据集的成对评测。

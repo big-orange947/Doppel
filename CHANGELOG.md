@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Treat a v2 `prior` retrieval view as eligible for both ended `historical`
+  records and non-expiring `timeless` facts. This keeps completed attribution,
+  origin, authorship, and performed-action evidence available without admitting
+  current-only mutable state or future plans. A zero-paid 240-query replay over
+  PostgreSQL, pgvector, and Neo4j raised the v2 typed-relation profile's Recall@1,
+  Recall@5, MRR, and required-evidence recall from 0.9479 to 0.9948 while scope,
+  temporal, and provenance failures remained zero.
 - Let the zero-paid retrieval benchmark replay v1 and v2 Planner reports together
   as `report_v1`/`report_v2` over one authoritative Store and one set of pgvector/
   Graphiti indexes. V2 drafts retain their orthogonal operation/time semantics,

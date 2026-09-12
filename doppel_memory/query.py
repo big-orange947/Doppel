@@ -2550,7 +2550,13 @@ def _bind_temporal_view_statuses(
     if temporal_view == PersonalMemoryQueryTemporalView.CURRENT:
         return [MemoryTemporalStatus.CURRENT, MemoryTemporalStatus.TIMELESS]
     if temporal_view == PersonalMemoryQueryTemporalView.PRIOR:
-        return [MemoryTemporalStatus.HISTORICAL]
+        # ``prior`` excludes a present-only mutable state, but it must not erase
+        # facts whose truth is not bounded by a mutable validity interval.  A
+        # completed attribution, origin, authorship, or performed action may be
+        # stored as a timeless fact even though the evidence/occurrence is in the
+        # past.  Treating prior as historical-only made those facts impossible to
+        # retrieve and conflated "ended state" with "past occurrence".
+        return [MemoryTemporalStatus.HISTORICAL, MemoryTemporalStatus.TIMELESS]
     if temporal_view == PersonalMemoryQueryTemporalView.PLANNED:
         return [MemoryTemporalStatus.PLANNED]
     return []
