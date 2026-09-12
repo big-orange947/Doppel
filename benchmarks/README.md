@@ -209,6 +209,19 @@ false positives without turning relation hints into exact-answer judgments. Run 
 as a separate report; its config fingerprint is not interchangeable with either
 `union` or `relation_gate`.
 
+Retrieval reports now use evaluation semantics v4. Runtime hits expose structured
+`candidate_evidence`, but always declare `answer_support=unassessed`; only benchmark
+gold assigns `judged_evidence_role` (`direct_evidence`, `related_context`, or
+`non_evidence`). `accepted_candidate_pool` reports direct-evidence recall at 10/20,
+while no-evidence queries report candidate-empty/nonempty rates as retrieval
+diagnostics. The old `no_evidence_abstention_accuracy` field remains as a deprecated
+candidate-empty alias for report compatibility and is not answer quality or a paired
+Planner promotion gate. Dataset `forbidden` candidates are likewise counted and
+surfaced as `candidate_diagnostics`, not treated as answer failures: the retrieval
+runner has no answer model with which to judge whether the context was misused.
+Scope, subject, authority/lifecycle, time, and provenance remain independent hard
+gates.
+
 The relation dataset also carries a closed, host-owned relation ontology and one
 canonical relation-type label per query. `oracle_typed` selects those labels through
 the same public `available_relation_types` / `relation_types` binding used by a real

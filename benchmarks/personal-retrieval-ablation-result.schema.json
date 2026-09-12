@@ -141,7 +141,22 @@
         "recall_at_5": {"type": "number", "minimum": 0, "maximum": 1},
         "mrr": {"type": "number", "minimum": 0, "maximum": 1},
         "required_evidence_recall": {"type": "number", "minimum": 0, "maximum": 1},
+        "accepted_candidate_pool": {
+          "type": "object",
+          "required": ["query_count", "mean_candidate_count", "direct_evidence_query_count", "direct_evidence_recall_at_10", "direct_evidence_recall_at_20", "answer_support", "population"],
+          "properties": {
+            "query_count": {"type": "integer", "minimum": 0},
+            "mean_candidate_count": {"type": ["number", "null"], "minimum": 0},
+            "direct_evidence_query_count": {"type": "integer", "minimum": 0},
+            "direct_evidence_recall_at_10": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "direct_evidence_recall_at_20": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "answer_support": {"const": "unassessed"},
+            "population": {"type": "string"}
+          }
+        },
+        "retrieval_expectations": {"type": "object"},
         "forbidden_hit_count": {"type": "integer", "minimum": 0},
+        "abstention_accuracy_status": {"const": "legacy_empty_output_agreement"},
         "scope_leakage_count": {"type": "integer", "minimum": 0},
         "temporal_violation_count": {"type": "integer", "minimum": 0},
         "provenance_failure_count": {"type": "integer", "minimum": 0},
@@ -166,8 +181,29 @@
         "error": {"type": "string"},
         "trace": {"type": ["object", "null"]},
         "memory_reranking": {"type": ["object", "null"]},
+        "evaluation_semantics": {"type": "object"},
+        "hit_scores": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["memory_id", "score", "judged_evidence_role"],
+            "properties": {
+              "memory_id": {"type": "string"},
+              "score": {"type": "number"},
+              "judged_evidence_role": {"enum": ["direct_evidence", "related_context", "non_evidence", "unjudged"]},
+              "candidate_evidence": {
+                "type": ["object", "null"],
+                "properties": {
+                  "answer_support": {"const": "unassessed"},
+                  "store_revalidated": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        },
         "source_planner_failure": {"type": "boolean"},
         "failure_stage": {"enum": ["planner", "execution"]},
+        "candidate_diagnostics": {"type": "array", "items": {"type": "string"}},
         "scope_leakage": {"type": "integer", "minimum": 0},
         "forbidden": {"type": "array", "items": {"type": "string"}},
         "hits": {"type": "array", "items": {"type": "string"}}

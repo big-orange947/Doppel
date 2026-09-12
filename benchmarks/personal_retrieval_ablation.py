@@ -131,6 +131,7 @@ PG_HOST = "127.0.0.1"
 PG_PORT = 5432
 PG_DATABASE = "doppel_ablation"
 PG_USER = "postgres"
+EVALUATION_SEMANTICS_VERSION = 4
 
 
 # --------------------------------------------------------------------------- #
@@ -2423,6 +2424,19 @@ def _graded_relevance(query: AblationQuery, hit_ids: list[str]) -> dict[str, Any
     }
 
 
+def _judged_evidence_role(query: AblationQuery, memory_id: str) -> str:
+    """Return benchmark gold only; runtime retrieval never assigns this role."""
+
+    grade = query.relevance_grades.get(memory_id)
+    if grade is None:
+        return "unjudged"
+    if grade >= 2:
+        return "direct_evidence"
+    if grade == 1:
+        return "related_context"
+    return "non_evidence"
+
+
 def _evaluate_result(
     result: PersonalMemoryQueryResult,
     query: AblationQuery,
@@ -2579,11 +2593,12 @@ def _evaluate_result(
         ).difference(effective_plan_failures)
     )
     retrieval_failures: list[str] = []
+    candidate_diagnostics: list[str] = []
     retrieval_plan_is_trusted = not effective_plan_failures
     if temporal_plan_is_trusted and temporal_violations:
         retrieval_failures.append("retrieval_temporal_failure")
     if forbidden and retrieval_plan_is_trusted:
-        retrieval_failures.append("forbidden_hit")
+        candidate_diagnostics.append("forbidden_candidate_returned")
     if missing and not query.expected_abstain and retrieval_plan_is_trusted:
         retrieval_failures.append("missing_required_hit")
     security_failures: list[str] = []
@@ -2598,6 +2613,8 @@ def _evaluate_result(
 
     required_set = set(query.required_memory_ids)
     top_five_ids = [hit.record.memory_id for hit in hits[:5]]
+    top_ten_ids = [hit.record.memory_id for hit in hits[:10]]
+    top_twenty_ids = [hit.record.memory_id for hit in hits[:20]]
     related_context_recall_at_1 = (
         int(
             bool(top_five_ids)
@@ -2616,8 +2633,39 @@ def _evaluate_result(
         if query.retrieval_expectation == "related_context"
         else None
     )
+    related_context_recall_at_10 = (
+        int(
+            any(
+                query.relevance_grades.get(memory_id, 0) > 0
+                for memory_id in top_ten_ids
+            )
+        )
+        if query.retrieval_expectation == "related_context"
+        else None
+    )
+    related_context_recall_at_20 = (
+        int(
+            any(
+                query.relevance_grades.get(memory_id, 0) > 0
+                for memory_id in top_twenty_ids
+            )
+        )
+        if query.retrieval_expectation == "related_context"
+        else None
+    )
     no_evidence_abstention_ok = (
         not hit_set if query.retrieval_expectation == "no_evidence" else None
+    )
+    no_evidence_candidate_nonempty = (
+        bool(hit_set) if query.retrieval_expectation == "no_evidence" else None
+    )
+    no_evidence_non_evidence_candidate_count = (
+        sum(
+            _judged_evidence_role(query, hit.record.memory_id) == "non_evidence"
+            for hit in hits
+        )
+        if query.retrieval_expectation == "no_evidence"
+        else None
     )
     hit_top1_ok = bool(hits and hits[0].record.memory_id in required_set)
     recall_at_1 = int(any(hit.record.memory_id in required_set for hit in hits[:1]))
@@ -2631,6 +2679,16 @@ def _evaluate_result(
         len(required_set.intersection(hit_set)) / len(required_set)
         if required_set
         else 1.0
+    )
+    evidence_recall_at_10 = (
+        len(required_set.intersection(top_ten_ids)) / len(required_set)
+        if required_set
+        else None
+    )
+    evidence_recall_at_20 = (
+        len(required_set.intersection(top_twenty_ids)) / len(required_set)
+        if required_set
+        else None
     )
     contribution = {
         "vector": 0,
@@ -2701,6 +2759,14 @@ def _evaluate_result(
                     ) is not None
                     else None
                 ),
+                "candidate_evidence": (
+                    hit.candidate_evidence.model_dump(mode="json")
+                    if hasattr(hit, "candidate_evidence")
+                    else None
+                ),
+                "judged_evidence_role": _judged_evidence_role(
+                    query, hit.record.memory_id
+                ),
                 "reasons": list(hit.reasons),
             }
             for hit in hits
@@ -2708,12 +2774,20 @@ def _evaluate_result(
         "missing": missing,
         "forbidden": forbidden,
         "evaluation_semantics": {
-            "version": 3,
+            "version": EVALUATION_SEMANTICS_VERSION,
             "legacy_forbidden": "dataset_exclusions_not_automatic_security_violations",
-            "legacy_abstention": "empty_output_agreement_not_answer_correctness",
+            "legacy_abstention": (
+                "deprecated_empty_candidate_agreement_not_answer_correctness"
+            ),
             "retrieval_expectation": (
                 "direct evidence, related context, and no evidence are scored "
                 "as separate retrieval populations"
+            ),
+            "candidate_pool": (
+                "accepted post-authority/scope/time candidates before any answer layer"
+            ),
+            "judged_evidence_role": (
+                "benchmark gold annotation only; never assigned by the runtime engine"
             ),
             "answer_quality": "not_measured",
         },
@@ -2735,10 +2809,20 @@ def _evaluate_result(
         "recall_at_5": recall_at_5,
         "mrr": mrr,
         "evidence_recall": evidence_recall,
+        "evidence_recall_at_10": evidence_recall_at_10,
+        "evidence_recall_at_20": evidence_recall_at_20,
+        "accepted_candidate_count": len(hits),
         "retrieval_expectation": query.retrieval_expectation,
         "related_context_recall_at_1": related_context_recall_at_1,
         "related_context_recall_at_5": related_context_recall_at_5,
+        "related_context_recall_at_10": related_context_recall_at_10,
+        "related_context_recall_at_20": related_context_recall_at_20,
         "no_evidence_abstention_ok": no_evidence_abstention_ok,
+        "no_evidence_candidate_nonempty": no_evidence_candidate_nonempty,
+        "no_evidence_non_evidence_candidate_count": (
+            no_evidence_non_evidence_candidate_count
+        ),
+        "answer_abstention_ok": None,
         "intent_ok": intent_ok,
         "required_evidence": bool(query.required_memory_ids),
         "expected_abstain": query.expected_abstain,
@@ -2753,6 +2837,7 @@ def _evaluate_result(
         "effective_plan_failures": effective_plan_failures,
         "time_grounding_recovered": time_grounding_recovered,
         "retrieval_failures": retrieval_failures,
+        "candidate_diagnostics": candidate_diagnostics,
         "security_failures": security_failures,
         "ambiguous": bool(result.ambiguous),
         "contribution": contribution,
@@ -2793,6 +2878,12 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
         case
         for case in valid
         if case.get("retrieval_expectation") == "related_context"
+    ]
+    direct_evidence = [
+        case
+        for case in valid
+        if case.get("retrieval_expectation") == "direct_evidence"
+        and case.get("required_evidence")
     ]
     no_evidence = [
         case
@@ -2856,6 +2947,39 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
             / expected_evidence_total,
             4,
         ),
+        "accepted_candidate_pool": {
+            "query_count": len(valid),
+            "mean_candidate_count": (
+                round(
+                    sum(int(case.get("accepted_candidate_count", 0)) for case in valid)
+                    / len(valid),
+                    4,
+                )
+                if valid
+                else None
+            ),
+            "direct_evidence_query_count": len(direct_evidence),
+            "direct_evidence_recall_at_10": (
+                round(
+                    sum(float(case["evidence_recall_at_10"]) for case in direct_evidence)
+                    / len(direct_evidence),
+                    4,
+                )
+                if direct_evidence
+                else None
+            ),
+            "direct_evidence_recall_at_20": (
+                round(
+                    sum(float(case["evidence_recall_at_20"]) for case in direct_evidence)
+                    / len(direct_evidence),
+                    4,
+                )
+                if direct_evidence
+                else None
+            ),
+            "answer_support": "unassessed",
+            "population": "post-hard-gate runtime hits before any answer layer",
+        },
         "forbidden_hit_count": sum(len(case["forbidden"]) for case in valid),
         "graded_relevance": {
             "evaluated_count": sum(
@@ -2910,7 +3034,59 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 if related_context
                 else None
             ),
+            "related_context_recall_at_10": (
+                round(
+                    sum(
+                        case["related_context_recall_at_10"]
+                        for case in related_context
+                    )
+                    / len(related_context),
+                    4,
+                )
+                if related_context
+                else None
+            ),
+            "related_context_recall_at_20": (
+                round(
+                    sum(
+                        case["related_context_recall_at_20"]
+                        for case in related_context
+                    )
+                    / len(related_context),
+                    4,
+                )
+                if related_context
+                else None
+            ),
             "no_evidence_query_count": len(no_evidence),
+            "no_evidence_candidate_empty_rate": (
+                round(
+                    sum(
+                        not bool(case["no_evidence_candidate_nonempty"])
+                        for case in no_evidence
+                    )
+                    / len(no_evidence),
+                    4,
+                )
+                if no_evidence
+                else None
+            ),
+            "no_evidence_candidate_nonempty_rate": (
+                round(
+                    sum(
+                        bool(case["no_evidence_candidate_nonempty"])
+                        for case in no_evidence
+                    )
+                    / len(no_evidence),
+                    4,
+                )
+                if no_evidence
+                else None
+            ),
+            "no_evidence_non_evidence_candidate_count": sum(
+                int(case["no_evidence_non_evidence_candidate_count"])
+                for case in no_evidence
+            ),
             "no_evidence_abstention_accuracy": (
                 round(
                     sum(
@@ -2922,6 +3098,11 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 if no_evidence
                 else None
             ),
+            "no_evidence_abstention_accuracy_status": (
+                "deprecated_candidate_empty_alias"
+            ),
+            "answer_abstention_accuracy": None,
+            "answer_quality": "not_measured",
         },
         "scope_leakage_count": sum(case["scope_leakage"] for case in valid),
         "temporal_violation_count": sum(case["temporal_violations"] for case in valid),
@@ -2932,6 +3113,7 @@ def _aggregate(cases: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "abstention_accuracy": round(
             sum(case["abstention_ok"] for case in valid) / max(total, 1), 4
         ),
+        "abstention_accuracy_status": "legacy_empty_output_agreement",
         "ambiguity_accuracy": round(
             sum(case["ambiguity_ok"] for case in valid) / max(total, 1), 4
         ),
@@ -2957,6 +3139,8 @@ def _delta(full: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
     base_relevance = base.get("graded_relevance") or {}
     full_expectations = full.get("retrieval_expectations") or {}
     base_expectations = base.get("retrieval_expectations") or {}
+    full_candidate_pool = full.get("accepted_candidate_pool") or {}
+    base_candidate_pool = base.get("accepted_candidate_pool") or {}
     full_latency = full.get("latency_ms") or {}
     base_latency = base.get("latency_ms") or {}
     return {
@@ -2993,9 +3177,36 @@ def _delta(full: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
             full_expectations.get("related_context_recall_at_5"),
             base_expectations.get("related_context_recall_at_5"),
         ),
+        "related_context_recall_at_10_delta": optional_delta(
+            full_expectations.get("related_context_recall_at_10"),
+            base_expectations.get("related_context_recall_at_10"),
+        ),
+        "related_context_recall_at_20_delta": optional_delta(
+            full_expectations.get("related_context_recall_at_20"),
+            base_expectations.get("related_context_recall_at_20"),
+        ),
+        "direct_evidence_recall_at_10_delta": optional_delta(
+            full_candidate_pool.get("direct_evidence_recall_at_10"),
+            base_candidate_pool.get("direct_evidence_recall_at_10"),
+        ),
+        "direct_evidence_recall_at_20_delta": optional_delta(
+            full_candidate_pool.get("direct_evidence_recall_at_20"),
+            base_candidate_pool.get("direct_evidence_recall_at_20"),
+        ),
+        "no_evidence_candidate_empty_rate_delta": optional_delta(
+            full_expectations.get("no_evidence_candidate_empty_rate"),
+            base_expectations.get("no_evidence_candidate_empty_rate"),
+        ),
+        "no_evidence_candidate_nonempty_rate_delta": optional_delta(
+            full_expectations.get("no_evidence_candidate_nonempty_rate"),
+            base_expectations.get("no_evidence_candidate_nonempty_rate"),
+        ),
         "no_evidence_abstention_accuracy_delta": optional_delta(
             full_expectations.get("no_evidence_abstention_accuracy"),
             base_expectations.get("no_evidence_abstention_accuracy"),
+        ),
+        "no_evidence_abstention_accuracy_status": (
+            "deprecated_candidate_empty_alias"
         ),
         "planner_structure_failure_case_count_delta": (
             full.get("planner_structure_failure_case_count", 0)
@@ -3056,12 +3267,18 @@ def _paired_planner_promotion_gate(
             "recall_at_5",
             "mrr",
             "required_evidence_recall",
-            "abstention_accuracy",
         ):
             checks[prefix + metric] = float(right[metric]) >= float(left[metric])
-        checks[prefix + "forbidden_hit_count"] = int(
-            right["forbidden_hit_count"]
-        ) <= int(left["forbidden_hit_count"])
+        diagnostics[prefix + "candidate_empty_agreement"] = {
+            "v1": float(left.get("abstention_accuracy", 0.0)),
+            "v2": float(right.get("abstention_accuracy", 0.0)),
+            "status": "diagnostic_not_answer_abstention",
+        }
+        diagnostics[prefix + "forbidden_candidate_count"] = {
+            "v1": int(left.get("forbidden_hit_count", 0)),
+            "v2": int(right.get("forbidden_hit_count", 0)),
+            "status": "diagnostic_candidate_pool_exclusion_not_security",
+        }
         diagnostics[prefix + "planner_structure_failure_case_count"] = {
             "v1": int(left.get("planner_structure_failure_case_count", 0)),
             "v2": int(right.get("planner_structure_failure_case_count", 0)),
@@ -3085,16 +3302,16 @@ def _paired_planner_promotion_gate(
             checks[prefix + "mean_ndcg_at_5"] = float(right_ndcg) >= float(
                 left_ndcg
             )
-        left_no_evidence = (left.get("retrieval_expectations") or {}).get(
-            "no_evidence_abstention_accuracy"
-        )
-        right_no_evidence = (right.get("retrieval_expectations") or {}).get(
-            "no_evidence_abstention_accuracy"
-        )
-        if left_no_evidence is not None and right_no_evidence is not None:
-            checks[prefix + "no_evidence_abstention_accuracy"] = float(
-                right_no_evidence
-            ) >= float(left_no_evidence)
+        left_pool = left.get("accepted_candidate_pool") or {}
+        right_pool = right.get("accepted_candidate_pool") or {}
+        for metric in (
+            "direct_evidence_recall_at_10",
+            "direct_evidence_recall_at_20",
+        ):
+            left_value = left_pool.get(metric)
+            right_value = right_pool.get(metric)
+            if left_value is not None and right_value is not None:
+                checks[prefix + metric] = float(right_value) >= float(left_value)
     failures = sorted(name for name, passed in checks.items() if not passed)
     return {
         "available": bool(executed_profiles),
@@ -3104,9 +3321,10 @@ def _paired_planner_promotion_gate(
         "diagnostics": diagnostics,
         "failures": failures,
         "policy": (
-            "v2 must not regress ranked quality, abstention, forbidden evidence, "
-            "execution stability, or safety on every paired retrieval profile; "
-            "planner structure is diagnostic because it is scored upstream"
+            "v2 must not regress ranked quality, accepted-candidate evidence recall, "
+            "execution stability, or hard safety on every paired retrieval profile; "
+            "candidate emptiness and dataset exclusions are diagnostics rather than "
+            "answer-abstention or security gates"
         ),
     }
 

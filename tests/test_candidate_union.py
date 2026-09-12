@@ -103,6 +103,17 @@ async def test_union_recovers_independent_vector_without_unsafe_candidates():
         )
     assert {h.record.memory_id for h in results["relation_gate"].hits} == {"relation"}
     assert {h.record.memory_id for h in results["union"].hits} == {"vector", "relation"}
+    evidence_by_id = {
+        hit.record.memory_id: hit.candidate_evidence for hit in results["union"].hits
+    }
+    assert "semantic" in evidence_by_id["vector"].sources
+    assert evidence_by_id["vector"].entity_binding == "not_requested"
+    assert evidence_by_id["vector"].answer_support == "unassessed"
+    assert evidence_by_id["vector"].store_revalidated
+    assert "relation:graphiti_relation" in evidence_by_id["relation"].sources
+    assert evidence_by_id["relation"].relation_match_kind == "lexical"
+    assert evidence_by_id["relation"].relation_type == "HELD_BY"
+    assert evidence_by_id["relation"].relation_edge_id == "e"
     assert results["union"].trace.counts[
         "relation_gate:engine:independent_candidate_retained"
     ] == 1
@@ -129,6 +140,7 @@ async def test_anchored_union_requires_entity_or_relation_evidence():
     )
 
     assert [hit.record.memory_id for hit in result.hits] == ["relation"]
+    assert result.hits[0].candidate_evidence.entity_binding == "relation"
     assert result.trace is not None
     assert result.trace.counts["score_gate:engine:missing_entity_anchor"] == 1
 
@@ -170,6 +182,8 @@ async def test_anchored_union_accepts_authoritative_relation_metadata_anchor():
     )
 
     assert [hit.record.memory_id for hit in result.hits] == ["vector"]
+    assert result.hits[0].candidate_evidence.entity_binding == "literal"
+    assert result.hits[0].candidate_evidence.answer_support == "unassessed"
 
 
 @pytest.mark.asyncio

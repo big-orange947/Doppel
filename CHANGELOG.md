@@ -2,14 +2,25 @@
 
 ## Unreleased
 
+- Add structured `PersonalMemoryCandidateEvidence` to every personal-query hit.
+  It exposes accepted lexical/semantic/relation sources, literal or relation-backed
+  entity binding, and relation edge metadata while explicitly leaving
+  `answer_support="unassessed"`; retrieval does not claim that related context proves
+  an answer. Retrieval benchmark semantics v4 separately reports accepted-candidate
+  evidence recall and candidate presence for no-evidence queries. The legacy empty-
+  candidate "abstention" metric remains labeled as a deprecated compatibility alias
+  and is no longer a planner-promotion gate. Dataset-excluded candidates remain
+  visible diagnostics but no longer masquerade as answer or security failures.
 - Add opt-in `candidate_fusion="anchored_union"`. It preserves independent
   lexical/vector/relation discovery, but when a Planner supplies explicit entity
   mentions, a final candidate must bind one literal entity in authoritative Store
   content/relation metadata or carry a qualified relation edge. It performs no
   alias, ontology, predicate, or domain expansion. On the live 240-query v2 replay,
   typed-relation Recall@1/5, MRR, and evidence recall remained 0.9948 while
-  no-evidence abstention improved from 0.9167/0.0 to 1.0 for both relation-only and
-  pgvector+relation profiles; all scope, time, and provenance failures stayed zero.
+  no-evidence candidate-empty rate improved from 0.9167/0.0 to 1.0 for both
+  relation-only and pgvector+relation profiles; this is a strict precision-mode
+  diagnostic, not answer correctness. All scope, time, and provenance failures
+  stayed zero.
 - Add a non-destructive Windows Docker preflight for the PostgreSQL/pgvector and
   Neo4j benchmark services. It can start Docker Desktop and existing containers,
   waits for health, reports the WSL data disk, and never resets WSL or changes

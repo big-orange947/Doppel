@@ -842,6 +842,13 @@ relation score 独立进入解释与排序，不因它同时出现在向量源�
 仍可交给回答层判断。它不展开别名、不翻译、不读取 ontology 或领域词表，也不能绕过 scope、
 subject、authority、lifecycle、time 和 provenance 门。
 
+普通高召回路径不会把实体或关系支持当成答案资格。每个 `PersonalMemoryQueryHit` 通过
+`candidate_evidence` 结构化暴露候选来源、实体绑定和关系边，并固定声明
+`answer_support="unassessed"`；“同一本书由谁保管”不能自动证明“由谁购买”。benchmark 的
+direct/related/non-evidence 是只存在于评测端的金标，不会进入 Planner 或运行时排序。无证据查询
+是否产生近邻候选是检索诊断，不等同于最终模型是否应拒答；scope、权限、事实状态、时间和 Store
+回源仍是不可放宽的硬门。
+
 实体相邻不等于关系相关。若 plan 提供 relation hints，Graphiti adapter 会在 edge name 与 edge fact
 中做领域无关的大小写归一化包含匹配。中文长短语另外展开为有界的连续 2–4 字片段，以容忍模型把
 实体或疑问端点留在提示中；单字不参与，且不维护任何同义词/ontology/domain map。未命中的边仍可被观察和自定义阈值消费，但默认降为 0.2，

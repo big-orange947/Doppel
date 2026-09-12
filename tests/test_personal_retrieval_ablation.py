@@ -1107,7 +1107,97 @@ class EvaluationTest(unittest.IsolatedAsyncioTestCase):
         metrics = _aggregate([context_case, empty_case])["retrieval_expectations"]
         self.assertEqual(metrics["related_context_recall_at_1"], 1.0)
         self.assertEqual(metrics["related_context_recall_at_5"], 1.0)
+        self.assertEqual(metrics["related_context_recall_at_10"], 1.0)
+        self.assertEqual(metrics["related_context_recall_at_20"], 1.0)
         self.assertEqual(metrics["no_evidence_abstention_accuracy"], 1.0)
+        self.assertEqual(metrics["no_evidence_candidate_empty_rate"], 1.0)
+        self.assertEqual(metrics["no_evidence_candidate_nonempty_rate"], 0.0)
+        self.assertIsNone(metrics["answer_abstention_accuracy"])
+        self.assertEqual(
+            _aggregate([context_case, empty_case])["abstention_accuracy_status"],
+            "legacy_empty_output_agreement",
+        )
+        self.assertEqual(
+            metrics["no_evidence_abstention_accuracy_status"],
+            "deprecated_candidate_empty_alias",
+        )
+
+        noisy_case = _evaluate_result(
+            result([_hit("m-context", scope=scope)]),
+            empty_query,
+            "lexical_vector",
+            1.0,
+            allowed_scope_keys={scope.scope_key},
+        )
+        noisy_metrics = _aggregate([noisy_case])["retrieval_expectations"]
+        self.assertEqual(noisy_metrics["no_evidence_candidate_empty_rate"], 0.0)
+        self.assertEqual(noisy_metrics["no_evidence_candidate_nonempty_rate"], 1.0)
+        self.assertEqual(
+            noisy_metrics["no_evidence_non_evidence_candidate_count"], 1
+        )
+        self.assertIsNone(noisy_case["answer_abstention_ok"])
+        self.assertEqual(
+            noisy_case["hit_scores"][0]["judged_evidence_role"], "non_evidence"
+        )
+
+        self.assertEqual(noisy_case["evaluation_semantics"]["version"], 4)
+
+        direct_query = _query(required=["m-context"]).model_copy(update={
+            "retrieval_expectation": "direct_evidence",
+            "relevance_grades": {"m-context": 2},
+        })
+        direct_case = _evaluate_result(
+            result([_hit("m-context", scope=scope)]),
+            direct_query,
+            "lexical_vector",
+            1.0,
+            allowed_scope_keys={scope.scope_key},
+        )
+        candidate_pool = _aggregate([direct_case])["accepted_candidate_pool"]
+        self.assertEqual(candidate_pool["direct_evidence_recall_at_10"], 1.0)
+        self.assertEqual(candidate_pool["direct_evidence_recall_at_20"], 1.0)
+        self.assertEqual(candidate_pool["answer_support"], "unassessed")
+        self.assertEqual(
+            direct_case["hit_scores"][0]["judged_evidence_role"],
+            "direct_evidence",
+        )
+
+    def test_forbidden_candidate_is_diagnostic_not_retrieval_failure(self) -> None:
+        scope = MemoryScope(user_id="user-linz", agent_id="echo")
+        result = SimpleNamespace(
+            plan=SimpleNamespace(intent="current", as_of=None),
+            hits=[_hit("m-location-only", scope=scope)],
+            conflicts=[],
+            matched_record_count=1,
+            scanned_record_count=1,
+            scanned_conflict_count=0,
+            count=SimpleNamespace(status="not_requested", value=None),
+            ambiguous=False,
+            warnings=[],
+        )
+        query = _query(
+            query_id="q-forbidden-diagnostic",
+            forbidden=["m-location-only"],
+            expected_abstain=True,
+        ).model_copy(
+            update={
+                "retrieval_expectation": "no_evidence",
+                "relevance_grades": {"m-location-only": 0},
+            }
+        )
+
+        case = _evaluate_result(
+            result,
+            query,
+            "lexical",
+            1.0,
+            allowed_scope_keys={scope.scope_key},
+        )
+
+        self.assertNotIn("forbidden_hit", case["retrieval_failures"])
+        self.assertEqual(
+            case["candidate_diagnostics"], ["forbidden_candidate_returned"]
+        )
 
     async def test_exact_scope_identity_reports_leakage(self) -> None:
         scope = MemoryScope(user_id="user-linz", agent_id="echo")

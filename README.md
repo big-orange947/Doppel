@@ -1360,13 +1360,21 @@ union 会用原始问句仅启动有界的独立语义候选发现，并在结�
 文本相似也只保留低权重邻接分；它不会删除独立向量候选，也不会升级为事实证明。
 默认 `relation_gate` 不启用这项召回降级，count 也永远不使用 top-k 估算完整集合。
 
-需要兼顾高召回与未知实体拒答时，可以显式选择
+需要严格抑制未知实体的近邻替代时，可以显式选择
 `candidate_fusion="anchored_union"`。它保留 union 的词法/向量/关系候选并集，但当 Planner
 明确给出 `entity_mentions` 时，最终候选还必须满足其一：权威 Store 记录的正文或标准关系元数据
 包含至少一个归一化后的实体原文，或者该记录拥有达到 `minimum_relation_score` 的 Graphiti
 关系边。它不会要求问句谓词与证据关系完全相同，因此“同一物品的相关记忆但不足以证明答案”仍可
 作为上下文返回；不存在的物品则不会仅凭最近邻被替换成另一个物品。没有显式实体的查询保持普通
 union 行为。这里没有别名表、翻译、ontology 推断或领域关键词特判。
+这是高精度 opt-in 模式，不是一般高召回查询的推荐默认值：在 canonical entity/alias 图尚未
+建立时，字面实体门可能漏掉别名、指代、跨语言名称和文档改写。普通个人记忆检索应优先使用
+`union` 保留候选，并依据每条 hit 的 `candidate_evidence` 把实体/关系支持作为软判断信号。
+
+`PersonalMemoryQueryHit.candidate_evidence` 将候选发现来源、实体绑定方式及关系边信息结构化返回。
+其中 `answer_support` 当前固定为 `unassessed`：Doppel 查询引擎只证明候选已经通过 scope、事实状态、
+时间与 Store 回源门，不声称它足以回答问题。接入方可以把相关候选交给后续 verifier、上下文装配器
+或 LLM 判定；旧 `reasons` 字段继续保留以兼容已有观察代码。
 
 如果 host 使用稳定的关系 ontology，还可以在调用 `engine.query(...)` 时通过
 `available_relation_types` 提供允许的机器标签。Planner 只能从该白名单选择

@@ -1022,6 +1022,43 @@ class PersonalMemoryQueryPlanV2(PersonalMemoryQueryPlan):
         return self
 
 
+class PersonalMemoryCandidateEvidence(BaseModel):
+    """Explain how a candidate was discovered without judging the answer.
+
+    This is retrieval evidence, not factual proof.  In particular,
+    ``answer_support`` remains ``unassessed`` until a host-supplied verifier or
+    answer layer evaluates whether the memory actually answers the question.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sources: list[str] = Field(default_factory=list)
+    entity_binding: Literal[
+        "not_requested", "literal", "relation", "unverified"
+    ] = "not_requested"
+    relation_match_kind: Literal[
+        "not_requested", "adjacency", "type", "lexical", "reranker", "none"
+    ] = "not_requested"
+    relation_source: str = ""
+    relation_type: str = ""
+    relation_edge_id: str = ""
+    answer_support: Literal["unassessed"] = "unassessed"
+    store_revalidated: bool = False
+
+    @field_validator("sources")
+    @classmethod
+    def _normalize_sources(cls, value: list[str]) -> list[str]:
+        normalized = [str(item or "").strip() for item in value]
+        return list(dict.fromkeys(item for item in normalized if item))
+
+    @field_validator(
+        "relation_source", "relation_type", "relation_edge_id", mode="before"
+    )
+    @classmethod
+    def _strip_relation_text(cls, value: object) -> str:
+        return str(value or "").strip()
+
+
 class PersonalMemoryQueryHit(BaseModel):
     """One evidence-bearing record with transparent ranking features."""
 
@@ -1034,6 +1071,9 @@ class PersonalMemoryQueryHit(BaseModel):
     relation_score: float = Field(default=0.0, ge=0.0, le=1.0)
     memory_reranker_score: float | None = Field(
         default=None, ge=0.0, le=1.0, allow_inf_nan=False
+    )
+    candidate_evidence: PersonalMemoryCandidateEvidence = Field(
+        default_factory=PersonalMemoryCandidateEvidence
     )
     effective_at: datetime
     reasons: list[str] = Field(default_factory=list)
@@ -1776,6 +1816,14 @@ class PersonalMemoryQueryEngine:
                 relation_score=relation_score,
                 memory_reranker_score=memory_rerank_scores.get(
                     (record.scope.scope_key, record.memory_id)
+                ),
+                candidate_evidence=_candidate_evidence(
+                    bound,
+                    record,
+                    lexical_score=lexical_score,
+                    semantic_score=semantic_score,
+                    relation_score=relation_score,
+                    reasons=reasons,
                 ),
                 effective_at=effective_at,
                 reasons=reasons,
@@ -2905,6 +2953,114 @@ def _record_supports_entity_anchor(
         for mention in entity_mentions
         if (normalized := _normalize_text(mention))
     )
+
+
+def _candidate_evidence(
+    plan: PersonalMemoryQueryPlan,
+    record: MemoryRecord,
+    *,
+    lexical_score: float,
+    semantic_score: float,
+    relation_score: float,
+    reasons: Sequence[str],
+) -> PersonalMemoryCandidateEvidence:
+    """Project accepted retrieval signals into a stable structured explanation."""
+
+    semantic_sources = [
+        value
+        for reason in reasons
+        if (value := _reason_value(reason, "semantic_source:")) is not None
+    ]
+    relation_source = next(
+        (
+            value
+            for reason in reasons
+            if (value := _reason_value(reason, "relation_source:")) is not None
+        ),
+        None,
+    ) or ""
+    relation_type = next(
+        (
+            value
+            for reason in reasons
+            if (value := _reason_value(reason, "relation_type:")) is not None
+        ),
+        None,
+    ) or ""
+    relation_edge = next(
+        (
+            value
+            for reason in reasons
+            if (value := _reason_value(reason, "relation_edge:")) is not None
+        ),
+        None,
+    ) or ""
+    raw_relation_match_kind = next(
+        (
+            value
+            for reason in reasons
+            if (
+                value := _reason_value(reason, "relation_match_kind:")
+            ) is not None
+        ),
+        None,
+    )
+    allowed_relation_match_kinds = {
+        "not_requested",
+        "adjacency",
+        "type",
+        "lexical",
+        "reranker",
+        "none",
+    }
+    relation_match_kind = cast(
+        Literal["not_requested", "adjacency", "type", "lexical", "reranker", "none"],
+        raw_relation_match_kind
+        if raw_relation_match_kind in allowed_relation_match_kinds
+        else "not_requested"
+        if relation_score <= 0
+        else "none",
+    )
+    sources: list[str] = []
+    if lexical_score > 0:
+        sources.append("lexical")
+    if semantic_score > 0:
+        sources.extend(
+            f"semantic:{source}" for source in semantic_sources
+        )
+        if not semantic_sources:
+            sources.append("semantic")
+    if relation_score > 0:
+        sources.append(
+            f"relation:{relation_source}" if relation_source else "relation"
+        )
+
+    if not plan.entity_mentions:
+        entity_binding = "not_requested"
+    elif _record_supports_entity_anchor(record, plan.entity_mentions):
+        entity_binding = "literal"
+    elif relation_score > 0:
+        entity_binding = "relation"
+    else:
+        entity_binding = "unverified"
+
+    return PersonalMemoryCandidateEvidence(
+        sources=sources,
+        entity_binding=entity_binding,
+        relation_match_kind=relation_match_kind,
+        relation_source=relation_source,
+        relation_type=relation_type,
+        relation_edge_id=relation_edge,
+        answer_support="unassessed",
+        store_revalidated=True,
+    )
+
+
+def _reason_value(reason: str, prefix: str) -> str | None:
+    if not reason.startswith(prefix):
+        return None
+    value = reason[len(prefix) :].strip()
+    return value or None
 
 
 def _character_ngrams(text: str) -> dict[str, int]:

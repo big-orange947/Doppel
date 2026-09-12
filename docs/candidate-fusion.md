@@ -57,8 +57,9 @@ domain-neutral admission rule when the Planner emitted explicit
 literal entity anchor in its authoritative content/relation metadata, or have a
 Graphiti relation score above `minimum_relation_score`.
 
-This prevents an index from answering an unknown named entity with the nearest
-same-scope object merely because a nearest neighbour always exists. It does not
+This strict precision mode prevents a candidate set from substituting an unknown
+named entity with the nearest same-scope object merely because a nearest neighbour
+always exists. It does not
 require the requested predicate to match: evidence about the same explicit entity
 may remain useful related context, while the answer layer decides whether it proves
 the requested claim. Queries without an explicit entity anchor preserve ordinary
@@ -70,4 +71,8 @@ config = PersonalMemoryQueryConfig(candidate_fusion="anchored_union")
 ```
 
 `anchored_union` has its own configuration fingerprint. Rebind saved plans when
-switching among fusion modes. It remains opt-in while the dataset is draft.
+switching among fusion modes. It remains opt-in while the dataset is draft and is
+not the general high-recall recommendation: literal admission can reject aliases,
+references, cross-language names, and document paraphrases before a canonical entity
+resolver exists. Use ordinary `union` when downstream selection can inspect the
+structured `candidate_evidence` and decide whether related context proves an answer.

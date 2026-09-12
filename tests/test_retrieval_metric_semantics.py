@@ -1,6 +1,7 @@
 """Regression tests for additive metrics, not relaxed benchmark gold."""
 import hashlib
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 
 from benchmarks.personal_retrieval_ablation import (
@@ -8,6 +9,7 @@ from benchmarks.personal_retrieval_ablation import (
     _build_relation_final_hit_attribution,
     _evaluate_result,
     _graded_relevance,
+    _paired_planner_promotion_gate,
 )
 from doppel_memory import MemoryScope
 from tests.test_personal_retrieval_ablation import _dataset, _hit, _query
@@ -84,3 +86,48 @@ def test_relation_report_mode_not_hidden_and_not_mixed_with_oracle():
     assert attribution["available"]
     assert not attribution["legacy_oracle_available"]
     assert attribution["per_mode"][PLANNER_MODE_REPORT]["correct_relation_final_hit_links"] == 1
+
+
+def test_planner_promotion_does_not_treat_candidate_presence_as_answer_failure():
+    profile = {
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "required_evidence_recall": 1.0,
+        "abstention_accuracy": 1.0,
+        "forbidden_hit_count": 0,
+        "error_count": 0,
+        "scope_leakage_count": 0,
+        "temporal_violation_count": 0,
+        "provenance_failure_count": 0,
+        "graded_relevance": {"mean_ndcg_at_5": 1.0},
+        "accepted_candidate_pool": {
+            "direct_evidence_recall_at_10": 1.0,
+            "direct_evidence_recall_at_20": 1.0,
+        },
+        "retrieval_expectations": {
+            "no_evidence_candidate_empty_rate": 1.0,
+            "no_evidence_abstention_accuracy": 1.0,
+        },
+    }
+    noisier_candidate_pool = deepcopy(profile)
+    noisier_candidate_pool["abstention_accuracy"] = 0.0
+    noisier_candidate_pool["forbidden_hit_count"] = 10
+    noisier_candidate_pool["retrieval_expectations"] = {
+        "no_evidence_candidate_empty_rate": 0.0,
+        "no_evidence_abstention_accuracy": 0.0,
+    }
+
+    gate = _paired_planner_promotion_gate(
+        {
+            "report_v1": {"lexical": profile},
+            "report_v2": {"lexical": noisier_candidate_pool},
+        }
+    )
+
+    assert gate["passed"]
+    assert "lexical:abstention_accuracy" not in gate["checks"]
+    assert "lexical:forbidden_hit_count" not in gate["checks"]
+    assert "lexical:no_evidence_abstention_accuracy" not in gate["checks"]
+    assert gate["diagnostics"]["lexical:candidate_empty_agreement"]["v2"] == 0
+    assert gate["diagnostics"]["lexical:forbidden_candidate_count"]["v2"] == 10
