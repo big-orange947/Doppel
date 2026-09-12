@@ -3383,7 +3383,9 @@ async def run_ablation(
     memory_reranker_reason: str = "",
     memory_rerank_config: PersonalMemoryRerankConfig | None = None,
     trace_limit: int = 0,
-    candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
+    candidate_fusion: Literal[
+        "relation_gate", "union", "anchored_union"
+    ] = "relation_gate",
 ) -> dict[str, Any]:
     from doppel_memory.query_trace import validate_trace_limit
 
@@ -3684,7 +3686,9 @@ async def _run_profiles(
     planner_report: Path | None = None,
     planner_reports: Mapping[str, Path] | None = None,
     trace_limit: int = 0,
-    candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
+    candidate_fusion: Literal[
+        "relation_gate", "union", "anchored_union"
+    ] = "relation_gate",
 ) -> dict[str, Any]:
     unknown_modes = set(planner_modes).difference(ALL_PLANNER_MODES)
     if unknown_modes:
@@ -4284,7 +4288,9 @@ def _engines(
     semantic: Any | None,
     relation: Any | None = None,
     *,
-    candidate_fusion: Literal["relation_gate", "union"] = "relation_gate",
+    candidate_fusion: Literal[
+        "relation_gate", "union", "anchored_union"
+    ] = "relation_gate",
     memory_reranker: Any | None = None,
     memory_rerank_config: PersonalMemoryRerankConfig | None = None,
 ) -> PersonalMemoryQueryEngine:
@@ -4757,8 +4763,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--memory-reranker-max-input-chars", type=int, default=100_000)
     parser.add_argument("--memory-reranker-timeout-seconds", type=float, default=30)
     parser.add_argument("--no-metamorphic", action="store_true")
-    parser.add_argument("--candidate-fusion", choices=["relation_gate", "union"],
-                        default="relation_gate")
+    parser.add_argument(
+        "--candidate-fusion",
+        choices=["relation_gate", "union", "anchored_union"],
+        default="relation_gate",
+    )
     parser.add_argument(
         "--query-trace-limit",
         type=int,

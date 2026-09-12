@@ -936,7 +936,9 @@ class PersonalMemoryQueryConfig(BaseModel):
     relation_hints_require_match: bool = True
     semantic_fallback_to_lexical: bool = True
     relation_fallback_to_nonrelation: bool = True
-    candidate_fusion: Literal["relation_gate", "union"] = "relation_gate"
+    candidate_fusion: Literal["relation_gate", "union", "anchored_union"] = (
+        "relation_gate"
+    )
 
     @property
     def fingerprint(self) -> str:
@@ -1275,7 +1277,7 @@ class PersonalMemoryQueryEngine:
         self._validate_plan(bound)
         operation = _query_operation(bound)
         if (
-            self.config.candidate_fusion == "union"
+            self.config.candidate_fusion in {"union", "anchored_union"}
             and bound.relation_types
             and (self._relation_index is None or operation == "count")
         ):
@@ -1317,7 +1319,7 @@ class PersonalMemoryQueryEngine:
         candidate_search_text = bound.search_text
         if (
             not candidate_search_text
-            and self.config.candidate_fusion == "union"
+            and self.config.candidate_fusion in {"union", "anchored_union"}
             and (
                 (
                     isinstance(bound, PersonalMemoryQueryPlanV2)
@@ -1409,7 +1411,7 @@ class PersonalMemoryQueryEngine:
                 ) = await relation_task
                 warnings.extend(relation_warnings)
                 if (
-                    self.config.candidate_fusion == "union"
+                    self.config.candidate_fusion in {"union", "anchored_union"}
                     and bound.relation_types
                     and not relation_available
                 ):
@@ -1487,7 +1489,10 @@ class PersonalMemoryQueryEngine:
                             "relation evidence"
                         )
                 else:
-                    if trace is not None and self.config.candidate_fusion == "union":
+                    if trace is not None and self.config.candidate_fusion in {
+                        "union",
+                        "anchored_union",
+                    }:
                         for record in records:
                             trace.add(
                                 "relation_gate",
@@ -1556,6 +1561,30 @@ class PersonalMemoryQueryEngine:
                 relation_edge = ""
                 relation_match_kind = ""
                 relation_reranker_score = None
+            if (
+                self.config.candidate_fusion == "anchored_union"
+                and bound.entity_mentions
+                and relation_score < self.config.minimum_relation_score
+                and not _record_supports_entity_anchor(record, bound.entity_mentions)
+            ):
+                # A nearest neighbour can always be found, even when the named
+                # entity does not exist in this scope.  In anchored-union mode,
+                # independent lexical/semantic similarity therefore needs either
+                # an exact entity anchor in the authoritative record or a qualified
+                # relation edge.  This is deliberately predicate/domain agnostic.
+                if trace is not None:
+                    trace.add(
+                        "score_gate",
+                        "engine",
+                        "missing_entity_anchor",
+                        record,
+                        scores={
+                            "lexical": lexical_score,
+                            "semantic": semantic_score,
+                            "relation": relation_score,
+                        },
+                    )
+                continue
             if (
                 (bound.search_text or bound.entity_mentions)
                 and lexical_score < self.config.minimum_lexical_score
@@ -2850,6 +2879,32 @@ def _lexical_score(query: str, record: MemoryRecord) -> float:
     if normalized_query in document:
         score = min(1.0, score + 0.25)
     return round(min(max(score, 0.0), 1.0), 6)
+
+
+def _record_supports_entity_anchor(
+    record: MemoryRecord, entity_mentions: Sequence[str]
+) -> bool:
+    """Check explicit entity anchors against authoritative memory text/metadata.
+
+    The comparison uses normalized literal containment only.  It does not expand
+    aliases, translate names, inspect an ontology, or infer a relationship.  A
+    Graphiti relation candidate that already passed the relation score gate is
+    handled separately by the caller.
+    """
+
+    relation = record.metadata.get("relation")
+    relation_text = ""
+    if isinstance(relation, Mapping):
+        relation_text = " ".join(
+            str(relation.get(key) or "")
+            for key in ("source_entity", "target_entity", "fact")
+        )
+    document = _normalize_text(f"{record.content} {relation_text}")
+    return any(
+        normalized in document
+        for mention in entity_mentions
+        if (normalized := _normalize_text(mention))
+    )
 
 
 def _character_ngrams(text: str) -> dict[str, int]:

@@ -1,4 +1,4 @@
-# Optional candidate union experiment
+# Optional candidate fusion modes
 
 `PersonalMemoryQueryConfig(candidate_fusion="union")` enables an experimental
 alternative to the default `relation_gate` behavior. It is not enabled by default.
@@ -47,3 +47,27 @@ do not establish real Graphiti/pgvector quality improvement. Next validation is
 paired live replay: vector baseline, relation gate, and union, tracking recall,
 ranking, independent source benefit, legacy exclusions, safety and latency.
 Preserve inspected development-set limitations and unavailable graded metrics.
+
+## Anchored union
+
+`PersonalMemoryQueryConfig(candidate_fusion="anchored_union")` keeps union's
+independent candidate discovery and soft Planner ontology semantics, then adds one
+domain-neutral admission rule when the Planner emitted explicit
+`entity_mentions`: each accepted record must either contain at least one normalized
+literal entity anchor in its authoritative content/relation metadata, or have a
+Graphiti relation score above `minimum_relation_score`.
+
+This prevents an index from answering an unknown named entity with the nearest
+same-scope object merely because a nearest neighbour always exists. It does not
+require the requested predicate to match: evidence about the same explicit entity
+may remain useful related context, while the answer layer decides whether it proves
+the requested claim. Queries without an explicit entity anchor preserve ordinary
+union behavior. The comparison performs no alias expansion, translation, ontology
+lookup, relation inference, or domain-specific keyword matching.
+
+```python
+config = PersonalMemoryQueryConfig(candidate_fusion="anchored_union")
+```
+
+`anchored_union` has its own configuration fingerprint. Rebind saved plans when
+switching among fusion modes. It remains opt-in while the dataset is draft.

@@ -78,9 +78,10 @@ async def test_union_still_applies_explicit_time_and_deduplicates():
 
 
 @pytest.mark.asyncio
-async def test_union_hard_constraint_without_index_fails_before_search():
+@pytest.mark.parametrize("fusion", ["union", "anchored_union"])
+async def test_union_hard_constraint_without_index_fails_before_search(fusion):
     engine = PersonalMemoryQueryEngine(InMemoryStore(),
-                                       PersonalMemoryQueryConfig(candidate_fusion="union"))
+                                       PersonalMemoryQueryConfig(candidate_fusion=fusion))
     with pytest.raises(NotImplementedError):
         await engine.query(_DraftPlanner(), "sensor", [SCOPE], now=NOW,
                            available_relation_types=["HELD_BY"],
@@ -105,6 +106,88 @@ async def test_union_recovers_independent_vector_without_unsafe_candidates():
     assert results["union"].trace.counts[
         "relation_gate:engine:independent_candidate_retained"
     ] == 1
+
+
+@pytest.mark.asyncio
+async def test_anchored_union_requires_entity_or_relation_evidence():
+    store, relation = await setup()
+    result = await PersonalMemoryQueryEngine(
+        store,
+        PersonalMemoryQueryConfig(candidate_fusion="anchored_union"),
+        semantic_index=Vector(),
+        relation_index=relation,
+    ).query(
+        _DraftPlanner(
+            search_text="sensor",
+            entity_mentions=["camera"],
+            relation_hints=["held"],
+        ),
+        "Who holds the camera?",
+        [SCOPE],
+        now=NOW,
+        trace_limit=100,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["relation"]
+    assert result.trace is not None
+    assert result.trace.counts["score_gate:engine:missing_entity_anchor"] == 1
+
+
+@pytest.mark.asyncio
+async def test_anchored_union_accepts_authoritative_relation_metadata_anchor():
+    store = InMemoryStore()
+    record = _record(
+        "vector",
+        "维修记录已归档",
+        memory_type="fact",
+        temporal_status="current",
+        day=1,
+    )
+    record = record.model_copy(
+        update={
+            "metadata": {
+                **record.metadata,
+                "relation": {
+                    "source_entity": "单反相机",
+                    "relation_type": "REPAIRED_BY",
+                    "target_entity": "林师傅",
+                    "fact": "单反相机由林师傅维修",
+                },
+            }
+        }
+    )
+    await _put(store, record)
+
+    result = await PersonalMemoryQueryEngine(
+        store,
+        PersonalMemoryQueryConfig(candidate_fusion="anchored_union"),
+        semantic_index=Vector(),
+    ).query(
+        _DraftPlanner(search_text="维修", entity_mentions=["单反相机"]),
+        "单反相机的维修记录",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert [hit.record.memory_id for hit in result.hits] == ["vector"]
+
+
+@pytest.mark.asyncio
+async def test_anchored_union_without_entity_anchor_preserves_union_recall():
+    store, relation = await setup()
+    result = await PersonalMemoryQueryEngine(
+        store,
+        PersonalMemoryQueryConfig(candidate_fusion="anchored_union"),
+        semantic_index=Vector(),
+        relation_index=relation,
+    ).query(
+        _DraftPlanner(search_text="sensor", relation_hints=["held"]),
+        "Who holds it?",
+        [SCOPE],
+        now=NOW,
+    )
+
+    assert {hit.record.memory_id for hit in result.hits} == {"vector", "relation"}
 
 
 @pytest.mark.asyncio
@@ -231,3 +314,9 @@ def test_default_fingerprint_stays_compatible_and_union_is_distinct():
     legacy.pop("candidate_fusion")
     assert default.fingerprint == _fingerprint(legacy)
     assert default.fingerprint != PersonalMemoryQueryConfig(candidate_fusion="union").fingerprint
+    assert default.fingerprint != PersonalMemoryQueryConfig(
+        candidate_fusion="anchored_union"
+    ).fingerprint
+    assert PersonalMemoryQueryConfig(candidate_fusion="union").fingerprint != (
+        PersonalMemoryQueryConfig(candidate_fusion="anchored_union").fingerprint
+    )

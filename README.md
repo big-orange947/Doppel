@@ -1360,6 +1360,14 @@ union 会用原始问句仅启动有界的独立语义候选发现，并在结�
 文本相似也只保留低权重邻接分；它不会删除独立向量候选，也不会升级为事实证明。
 默认 `relation_gate` 不启用这项召回降级，count 也永远不使用 top-k 估算完整集合。
 
+需要兼顾高召回与未知实体拒答时，可以显式选择
+`candidate_fusion="anchored_union"`。它保留 union 的词法/向量/关系候选并集，但当 Planner
+明确给出 `entity_mentions` 时，最终候选还必须满足其一：权威 Store 记录的正文或标准关系元数据
+包含至少一个归一化后的实体原文，或者该记录拥有达到 `minimum_relation_score` 的 Graphiti
+关系边。它不会要求问句谓词与证据关系完全相同，因此“同一物品的相关记忆但不足以证明答案”仍可
+作为上下文返回；不存在的物品则不会仅凭最近邻被替换成另一个物品。没有显式实体的查询保持普通
+union 行为。这里没有别名表、翻译、ontology 推断或领域关键词特判。
+
 如果 host 使用稳定的关系 ontology，还可以在调用 `engine.query(...)` 时通过
 `available_relation_types` 提供允许的机器标签。Planner 只能从该白名单选择
 草案中的 `relation_types`。从 Reference Planner v10 对应的执行层修订开始，所有 Planner

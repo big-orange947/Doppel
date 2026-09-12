@@ -201,6 +201,14 @@ query traces. This does not repair the Planner draft, change its intent/time, or
 relation/scope authority; Planner-quality metrics must still count the empty-field
 failure separately. Count queries and the default relation-gate mode are unchanged.
 
+`--candidate-fusion anchored_union` exercises the same independent candidate pool
+with an additional explicit-entity admission check. When the Planner supplies
+`entity_mentions`, a hit needs a normalized literal anchor in the authoritative
+memory/relation metadata or a qualified graph relation. This measures unknown-entity
+false positives without turning relation hints into exact-answer judgments. Run it
+as a separate report; its config fingerprint is not interchangeable with either
+`union` or `relation_gate`.
+
 The relation dataset also carries a closed, host-owned relation ontology and one
 canonical relation-type label per query. `oracle_typed` selects those labels through
 the same public `available_relation_types` / `relation_types` binding used by a real
@@ -517,7 +525,7 @@ uv run python -m benchmarks.personal_retrieval_ablation `
   --planner-modes report_v1,report_v2 `
   --planner-report-v1 data/doppel/query-plan-v2/<run>/v1.json `
   --planner-report-v2 data/doppel/query-plan-v2/<run>/v2.json `
-  --candidate-fusion union --no-metamorphic `
+  --candidate-fusion anchored_union --no-metamorphic `
   --require-live-postgres --require-live-neo4j --require-all-profiles `
   --output data/doppel/query-plan-v2-retrieval.json
 ```

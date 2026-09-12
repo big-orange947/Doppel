@@ -835,6 +835,13 @@ relation score 独立进入解释与排序，不因它同时出现在向量源�
 明确带时间坐标的 history/as_of，`valid_from/valid_to` 优先于记录今天的 temporal-status 分类，避免
 把“过去已生效且现在仍 current”的状态排除。
 
+`candidate_fusion="anchored_union"` 是宽松 union 与旧式强 relation gate 之间的 opt-in
+候选准入策略。Planner 明确给出实体时，每条候选必须在权威 Store 正文/关系元数据中包含至少一个
+归一化后的实体原文，或有达到 relation threshold 的图边；没有显式实体时行为与 union 相同。
+该门只验证“这条记忆确实关于所点名实体”，不判断关系是否足以回答问题，因此同实体的相关上下文
+仍可交给回答层判断。它不展开别名、不翻译、不读取 ontology 或领域词表，也不能绕过 scope、
+subject、authority、lifecycle、time 和 provenance 门。
+
 实体相邻不等于关系相关。若 plan 提供 relation hints，Graphiti adapter 会在 edge name 与 edge fact
 中做领域无关的大小写归一化包含匹配。中文长短语另外展开为有界的连续 2–4 字片段，以容忍模型把
 实体或疑问端点留在提示中；单字不参与，且不维护任何同义词/ontology/domain map。未命中的边仍可被观察和自定义阈值消费，但默认降为 0.2，
