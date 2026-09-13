@@ -69,6 +69,13 @@ The provisional `RelationQuery` accepts either one `valid_at` instant or an addi
 `time_from`/`time_to` interval. Implementations must reject a mixed point/range request
 and keep every returned relation subject to authoritative Store revalidation.
 
+Bounded typed-path models and `RelationPathIndex` currently remain module-only
+experimental. They are not root exports and do not change `RelationIndex` or personal
+query Plan v1/v2. A path implementation must cap traversal at two hops and fail closed
+unless every hop independently survives exact-scope, time, provenance, and Store
+revalidation. Natural-language path planning is intentionally outside this first
+protocol revision.
+
 `relation_types` is an additive exact-match constraint. A host exposes its ontology
 through `available_relation_types`; planners cannot bind labels outside that
 allowlist. Empty relation types preserve pre-field plan fingerprints and behavior.

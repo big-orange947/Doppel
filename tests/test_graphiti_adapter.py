@@ -1,5 +1,6 @@
 """Optional Graphiti adapter construction contract."""
 
+import copy
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -35,6 +36,11 @@ from doppel_memory.graphiti_store import (
     GraphitiSemanticIndex,
     _ensure_graphiti_fallback_edge,
     _relation_match_terms,
+)
+from doppel_memory.relation import (
+    RelationPathIndex,
+    RelationPathQuery,
+    RelationPathStep,
 )
 
 
@@ -1105,9 +1111,9 @@ async def test_suggested_type_outranks_conflicting_lexical_relation() -> None:
             metadata={"evidence": [{"evidence_id": f"evidence-{memory_id}"}]},
         )
         await store.put(record)
-        indexed = await GraphitiSemanticIndex(
-            store, graphiti_client=fake
-        ).index_record(record)
+        indexed = await GraphitiSemanticIndex(store, graphiti_client=fake).index_record(
+            record
+        )
         rows.append(
             {
                 "group_id": scope.scope_key,
@@ -1352,3 +1358,208 @@ async def test_graphiti_relation_index_revalidates_store_time_and_filters() -> N
     assert range_params["valid_at"] is None
     assert range_params["time_from"] == datetime(2026, 1, 15, tzinfo=UTC)
     assert range_params["time_to"] == datetime(2026, 1, 31, tzinfo=UTC)
+
+
+def test_relation_path_query_is_typed_and_bounded_to_two_hops() -> None:
+    query = RelationPathQuery(
+        query_text="相机现在在哪？",
+        entity_mentions=[" 相机 ", "相机"],
+        steps=[
+            RelationPathStep(relation_types=[" held_by "]),
+            RelationPathStep(
+                relation_types=["located_at", "LOCATED_AT"], direction="either"
+            ),
+        ],
+        subject="owner",
+        subject_id="owner-a",
+    )
+
+    assert query.entity_mentions == ["相机"]
+    assert query.steps[0].relation_types == ["HELD_BY"]
+    assert query.steps[1].relation_types == ["LOCATED_AT"]
+    with pytest.raises(ValueError, match="at most 2 items"):
+        RelationPathQuery(
+            query_text="open graph walk",
+            steps=[
+                RelationPathStep(relation_types=["A"]),
+                RelationPathStep(relation_types=["B"]),
+                RelationPathStep(relation_types=["C"]),
+            ],
+            subject="owner",
+            subject_id="owner-a",
+        )
+    with pytest.raises(ValueError, match="cannot mix valid_at"):
+        RelationPathQuery(
+            query_text="mixed time",
+            steps=[RelationPathStep(relation_types=["HELD_BY"])],
+            subject="owner",
+            subject_id="owner-a",
+            valid_at=datetime(2026, 8, 1, tzinfo=UTC),
+            time_from=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+
+
+async def test_graphiti_relation_path_requires_provenance_on_every_hop() -> None:
+    scope = MemoryScope(user_id="path-owner", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
+
+    async def index_record(memory_id: str, content: str, *, valid_to: str = "") -> str:
+        metadata: dict[str, object] = {
+            "subject": "owner",
+            "subject_id": scope.user_id,
+            "valid_from": "2026-01-01T00:00:00+00:00",
+            "evidence": [{"evidence_id": f"evidence-{memory_id}"}],
+        }
+        if valid_to:
+            metadata["valid_to"] = valid_to
+        record = MemoryRecord(
+            memory_id=memory_id,
+            scope=scope,
+            content=content,
+            tags=["personal-memory"],
+            metadata=metadata,
+        )
+        assert (await store.put(record)).accepted
+        return (await semantic.index_record(record)).episode_id
+
+    held_episode = await index_record("held", "相机由小王保管。")
+    location_episode = await index_record("location", "小王目前住在上海。")
+    stale_episode = await index_record(
+        "stale-location",
+        "小王以前住在杭州。",
+        valid_to="2026-02-01T00:00:00+00:00",
+    )
+    valid_at = datetime(2026, 8, 1, tzinfo=UTC)
+    row = {
+        "group_id": scope.scope_key,
+        "node_group_ids": [scope.scope_key, scope.scope_key, scope.scope_key],
+        "edge_group_ids": [scope.scope_key, scope.scope_key],
+        "node_ids": ["camera", "wang", "shanghai"],
+        "node_names": ["相机", "小王", "上海"],
+        "edge_ids": ["edge-held", "edge-location"],
+        "relation_types": ["HELD_BY", "LOCATED_AT"],
+        "facts": ["相机由小王保管。", "小王目前住在上海。"],
+        "episode_ids_by_hop": [[held_episode], [location_episode]],
+        "valid_ats": [
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 1, tzinfo=UTC),
+        ],
+        "invalid_ats": [None, None],
+        "directions": ["outbound", "outbound"],
+    }
+    driver = _RelationDriver([row])
+    fake.driver = driver
+    relation = GraphitiRelationIndex(store, graphiti_client=fake)
+    assert isinstance(relation, RelationPathIndex)
+    query = RelationPathQuery(
+        query_text="相机现在在哪？",
+        entity_mentions=["相机"],
+        steps=[
+            RelationPathStep(relation_types=["HELD_BY"]),
+            RelationPathStep(relation_types=["LOCATED_AT"]),
+        ],
+        subject="owner",
+        subject_id=scope.user_id,
+        valid_at=valid_at,
+    )
+
+    candidates = await relation.search_relation_paths(
+        query,
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+        limit=5,
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.start_entity_name == "相机"
+    assert candidate.end_entity_name == "上海"
+    assert candidate.supporting_memory_ids == ["held", "location"]
+    assert [hop.relation_type for hop in candidate.hops] == [
+        "HELD_BY",
+        "LOCATED_AT",
+    ]
+    assert [hop.memory_ids for hop in candidate.hops] == [["held"], ["location"]]
+    cypher, params = driver.calls[0]
+    assert "[:RELATES_TO*1..2]" in cypher
+    assert "size(path_edges) = $hop_count" in cypher
+    assert params["hop_count"] == 2
+    assert params["relation_types_by_hop"] == [["HELD_BY"], ["LOCATED_AT"]]
+    assert params["group_ids"] == [scope.scope_key]
+
+    invalid_rows = []
+    cross_scope = copy.deepcopy(row)
+    cross_scope["edge_group_ids"][1] = "foreign-scope"
+    invalid_rows.append(cross_scope)
+    orphan = copy.deepcopy(row)
+    orphan["episode_ids_by_hop"][1] = ["missing-episode"]
+    invalid_rows.append(orphan)
+    expired_edge = copy.deepcopy(row)
+    expired_edge["invalid_ats"][1] = datetime(2026, 2, 1, tzinfo=UTC)
+    invalid_rows.append(expired_edge)
+    stale_store_record = copy.deepcopy(row)
+    stale_store_record["episode_ids_by_hop"][1] = [stale_episode]
+    invalid_rows.append(stale_store_record)
+
+    for invalid_row in invalid_rows:
+        driver.rows = [invalid_row]
+        assert (
+            await relation.search_relation_paths(
+                query,
+                [scope],
+                filters=MemoryFilter(tags={"personal-memory"}),
+                limit=5,
+            )
+            == []
+        )
+
+
+async def test_graphiti_relation_path_rechecks_type_and_direction_after_query() -> None:
+    scope = MemoryScope(user_id="path-shape", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    record = MemoryRecord(
+        memory_id="shape-memory",
+        scope=scope,
+        content="相机由小王保管。",
+        tags=["personal-memory"],
+        metadata={"evidence": [{"evidence_id": "shape-evidence"}]},
+    )
+    assert (await store.put(record)).accepted
+    episode_id = (
+        await GraphitiSemanticIndex(store, graphiti_client=fake).index_record(record)
+    ).episode_id
+    base_row = {
+        "group_id": scope.scope_key,
+        "node_group_ids": [scope.scope_key, scope.scope_key],
+        "edge_group_ids": [scope.scope_key],
+        "node_ids": ["camera", "wang"],
+        "node_names": ["相机", "小王"],
+        "edge_ids": ["edge-held"],
+        "relation_types": ["HELD_BY"],
+        "facts": ["相机由小王保管。"],
+        "episode_ids_by_hop": [[episode_id]],
+        "valid_ats": [None],
+        "invalid_ats": [None],
+        "directions": ["outbound"],
+    }
+    driver = _RelationDriver([])
+    fake.driver = driver
+    relation = GraphitiRelationIndex(store, graphiti_client=fake)
+    query = RelationPathQuery(
+        query_text="相机由谁保管？",
+        entity_mentions=["相机"],
+        steps=[RelationPathStep(relation_types=["HELD_BY"], direction="outbound")],
+        subject="owner",
+        subject_id=scope.user_id,
+    )
+
+    wrong_type = copy.deepcopy(base_row)
+    wrong_type["relation_types"] = ["PURCHASED_BY"]
+    wrong_direction = copy.deepcopy(base_row)
+    wrong_direction["directions"] = ["inbound"]
+    for invalid_row in (wrong_type, wrong_direction):
+        driver.rows = [invalid_row]
+        assert await relation.search_relation_paths(query, [scope]) == []

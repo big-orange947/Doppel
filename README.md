@@ -1351,6 +1351,19 @@ pgvector/词法候选仍可在合格关系事实之间辅助排序，却不能�
 问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回 Store 复核，
 Graphiti/Neo4j 从不成为事实权威。
 
+对于“物品 → 当前保管人 → 保管人所在地”这类确实需要组合两段关系的问题，
+`GraphitiRelationIndex` 还提供 module-only experimental 的
+`search_relation_paths()`。它不是让模型任意生成 Cypher，也不是默认把所有相邻边向外扩散：host 必须
+用 `RelationPathQuery` 明确提供 1–2 个 `RelationPathStep`，每一步指定 ontology 中允许的关系类型和
+方向。固定 Cypher 最多走两跳；每条边、每个节点必须属于同一个授权 scope，每一跳分别检查查询时点/
+区间，并经 Edge → Episode → memory ID 回到权威 Store。任意一步没有合格来源，整条路径都不返回。
+结果保留逐跳 edge、方向、时间、Episode 和 supporting memory IDs，方便后续上下文装配层把两段原始
+记忆一起交给回答模型，而不是把图路径本身冒充最终答案。
+
+这条接口当前没有接入自然语言 Planner 或 `PersonalMemoryQueryEngine`，也没有纳入现有单跳质量数字；
+这是有意的分阶段边界。先验证路径结构、安全性和时间语义，再用独立的多跳数据集测量增益与误召回，
+通过后才设计 Planner v3，避免修改已经冻结的 v2 wire shape，更不会针对固定问句写路径特判。
+
 高召回部署可以显式设置 `PersonalMemoryQueryConfig(candidate_fusion="union")`，让通过
 scope/时间/生命周期/Store 回源门的词法、向量和关系候选并集参与排序。若这类普通
 lookup/current/history/planned/as-of 草案已有实体或关系锚点、却把 `search_text` 留空，

@@ -231,6 +231,11 @@
     "doppel_memory.graphiti_store.GraphitiIndexUnavailableError",
     "doppel_memory.graphiti_store.GraphitiMemoryStore",
     "doppel_memory.graphiti_store.GraphitiRelationIndex",
-    "doppel_memory.graphiti_store.GraphitiSemanticIndex"
+    "doppel_memory.graphiti_store.GraphitiSemanticIndex",
+    "doppel_memory.relation.RelationPathCandidate",
+    "doppel_memory.relation.RelationPathHop",
+    "doppel_memory.relation.RelationPathIndex",
+    "doppel_memory.relation.RelationPathQuery",
+    "doppel_memory.relation.RelationPathStep"
   ]
 }

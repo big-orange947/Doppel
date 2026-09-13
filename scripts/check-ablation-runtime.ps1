@@ -12,21 +12,57 @@ param(
 $ErrorActionPreference = "Stop"
 
 function Get-DockerServerName {
-    $name = & docker version --format "{{.Server.Platform.Name}}" 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        return ""
+    # A broken Desktop pipe can make `docker version` hang instead of returning an
+    # error. Use a private, no-window process so every read-only probe has its own
+    # hard deadline and Windows PowerShell 5 cannot promote native stderr to a
+    # terminating ErrorRecord.
+    $dockerCommand = Get-Command docker -ErrorAction Stop
+    $probe = New-Object System.Diagnostics.Process
+    $probe.StartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $probe.StartInfo.FileName = $dockerCommand.Source
+    $probe.StartInfo.Arguments = 'version --format "{{.Server.Platform.Name}}"'
+    $probe.StartInfo.UseShellExecute = $false
+    $probe.StartInfo.CreateNoWindow = $true
+    $probe.StartInfo.RedirectStandardOutput = $true
+    $probe.StartInfo.RedirectStandardError = $true
+    try {
+        if (-not $probe.Start()) {
+            return ""
+        }
+        if (-not $probe.WaitForExit(2000)) {
+            $probe.Kill()
+            $probe.WaitForExit()
+            return ""
+        }
+        $name = $probe.StandardOutput.ReadToEnd().Trim()
+        if ($probe.ExitCode -ne 0) {
+            return ""
+        }
+        return [string]$name
     }
-    return [string]$name
+    finally {
+        $probe.Dispose()
+    }
 }
 
 function Wait-DockerServer {
-    param([int]$TimeoutSeconds)
+    param(
+        [int]$TimeoutSeconds,
+        [System.Diagnostics.Process]$StartProcess = $null
+    )
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     do {
         $name = Get-DockerServerName
         if ($name) {
             return $name
+        }
+        if (
+            $null -ne $StartProcess -and
+            $StartProcess.HasExited -and
+            $StartProcess.ExitCode -ne 0
+        ) {
+            throw "Docker Desktop start command failed with exit code $($StartProcess.ExitCode)."
         }
         Start-Sleep -Seconds 2
     } while ([DateTime]::UtcNow -lt $deadline)
@@ -42,11 +78,22 @@ if (-not $serverName) {
     if (-not $Start) {
         throw "Docker Desktop is not ready. Re-run with -Start to start it safely."
     }
-    & docker desktop start | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Docker Desktop could not be started by its CLI."
+    $dockerCommand = Get-Command docker -ErrorAction Stop
+    $startProcess = Start-Process `
+        -FilePath $dockerCommand.Source `
+        -ArgumentList @("desktop", "start") `
+        -PassThru `
+        -WindowStyle Hidden
+    try {
+        $serverName = Wait-DockerServer `
+            -TimeoutSeconds $WaitSeconds `
+            -StartProcess $startProcess
     }
-    $serverName = Wait-DockerServer -TimeoutSeconds $WaitSeconds
+    finally {
+        if ($null -ne $startProcess -and -not $startProcess.HasExited) {
+            Stop-Process -Id $startProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 $rows = foreach ($container in $Containers) {

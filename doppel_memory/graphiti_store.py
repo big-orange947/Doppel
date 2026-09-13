@@ -2,9 +2,10 @@
 
 ``GraphitiSemanticIndex`` remains the compatibility integration for Graphiti's full
 hybrid search. ``GraphitiRelationIndex`` is the focused relation/time integration: a
-durable Store remains authoritative while Graphiti contributes only anchored rich
-edges. The legacy ``GraphitiMemoryStore`` remains temporarily available for migration,
-but it cannot satisfy Doppel's core Store contract.
+durable Store remains authoritative while Graphiti contributes anchored rich edges and
+experimental bounded typed paths. The legacy ``GraphitiMemoryStore`` remains
+temporarily available for migration, but it cannot satisfy Doppel's core Store
+contract.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from graphiti_core import Graphiti
@@ -61,6 +62,9 @@ from doppel_memory.models import (
 from doppel_memory.relation import (
     RelationCandidate,
     RelationIndexUnavailableError,
+    RelationPathCandidate,
+    RelationPathHop,
+    RelationPathQuery,
     RelationQuery,
     RelationReranker,
     RelationRerankItem,
@@ -740,7 +744,7 @@ class GraphitiRelationIndex:
                 "limit": limit * 2,
             }
             raw = await driver.execute_query(cypher, **parameters)
-            rows = _graph_query_records(raw)[:limit * 2]
+            rows = _graph_query_records(raw)[: limit * 2]
             # Reserve a neutral bank before admitting suggested types. A wrong
             # suggestion cannot remove candidates from the neutral query.
             suggested = [
@@ -916,6 +920,175 @@ class GraphitiRelationIndex:
                     return list(results.values())
         return list(results.values())
 
+    async def search_relation_paths(
+        self,
+        request: RelationPathQuery,
+        scopes: Sequence[MemoryScope],
+        *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> Sequence[RelationPathCandidate]:
+        """Return complete one/two-hop paths with evidence on every hop.
+
+        This experimental method deliberately has no natural-language path planner.
+        A trusted host must supply the typed step sequence.  Cypher only discovers
+        bounded paths; Python then repeats structural checks and maps every edge via
+        Episode provenance to an eligible record in the authoritative Store.
+        """
+
+        if not scopes:
+            raise MemoryIsolationError(
+                "Graphiti relation path search requires at least one exact scope"
+            )
+        if not self._enabled:
+            raise RelationIndexUnavailableError("Graphiti relation index is disabled")
+        if limit <= 0:
+            return []
+        bound = RelationPathQuery.model_validate(request)
+        scope_by_key = {scope.scope_key: scope for scope in scopes}
+        anchors = [item.casefold() for item in bound.entity_mentions]
+        if not anchors:
+            anchors = [
+                _graphiti_subject_identity(scope, bound.subject_id)[0].casefold()
+                for scope in scope_by_key.values()
+            ]
+        relation_types_by_hop = [step.relation_types for step in bound.steps]
+        directions = [step.direction for step in bound.steps]
+        cypher = (
+            "MATCH path=(start:Entity)-[:RELATES_TO*1..2]-(finish:Entity) "
+            "WITH path, start, finish, nodes(path) AS path_nodes, "
+            "relationships(path) AS path_edges "
+            "WHERE size(path_edges) = $hop_count "
+            "AND start.group_id IN $group_ids "
+            "AND all(node IN path_nodes WHERE node.group_id = start.group_id) "
+            "AND all(edge IN path_edges WHERE edge.group_id = start.group_id) "
+            "AND all(edge IN path_edges WHERE "
+            "coalesce(edge.name, '') <> $fallback_name) "
+            "AND any(anchor IN $anchors WHERE "
+            "toLower(coalesce(start.name, '')) CONTAINS anchor) "
+            "AND all(i IN range(0, size(path_edges) - 1) WHERE "
+            "toUpper(coalesce(path_edges[i].name, '')) "
+            "IN $relation_types_by_hop[i]) "
+            "AND all(i IN range(0, size(path_edges) - 1) WHERE "
+            "$directions[i] = 'either' OR "
+            "($directions[i] = 'outbound' AND "
+            "startNode(path_edges[i]) = path_nodes[i]) OR "
+            "($directions[i] = 'inbound' AND "
+            "endNode(path_edges[i]) = path_nodes[i])) "
+            "AND all(edge IN path_edges WHERE $valid_at IS NULL OR "
+            "((edge.valid_at IS NULL OR edge.valid_at <= $valid_at) AND "
+            "(edge.invalid_at IS NULL OR edge.invalid_at >= $valid_at))) "
+            "AND all(edge IN path_edges WHERE $time_to IS NULL OR "
+            "edge.valid_at IS NULL OR edge.valid_at <= $time_to) "
+            "AND all(edge IN path_edges WHERE $time_from IS NULL OR "
+            "edge.invalid_at IS NULL OR edge.invalid_at >= $time_from) "
+            "RETURN start.group_id AS group_id, "
+            "[node IN path_nodes | node.group_id] AS node_group_ids, "
+            "[edge IN path_edges | edge.group_id] AS edge_group_ids, "
+            "[node IN path_nodes | node.uuid] AS node_ids, "
+            "[node IN path_nodes | node.name] AS node_names, "
+            "[edge IN path_edges | edge.uuid] AS edge_ids, "
+            "[edge IN path_edges | edge.name] AS relation_types, "
+            "[edge IN path_edges | edge.fact] AS facts, "
+            "[edge IN path_edges | edge.episodes] AS episode_ids_by_hop, "
+            "[edge IN path_edges | edge.valid_at] AS valid_ats, "
+            "[edge IN path_edges | edge.invalid_at] AS invalid_ats, "
+            "[i IN range(0, size(path_edges) - 1) | "
+            "CASE WHEN startNode(path_edges[i]) = path_nodes[i] "
+            "THEN 'outbound' ELSE 'inbound' END] AS directions "
+            "ORDER BY coalesce(path_edges[0].valid_at, "
+            "path_edges[0].created_at) DESC, path_edges[0].uuid "
+            "LIMIT $limit"
+        )
+        parameters = {
+            "group_ids": list(scope_by_key),
+            "anchors": anchors,
+            "relation_types_by_hop": relation_types_by_hop,
+            "directions": directions,
+            "fallback_name": GRAPHITI_FALLBACK_EDGE_NAME,
+            "hop_count": len(bound.steps),
+            "valid_at": bound.valid_at,
+            "time_from": bound.time_from,
+            "time_to": bound.time_to,
+            "limit": limit * 4,
+        }
+        try:
+            graphiti = await self._ensure_graphiti()
+            driver = getattr(graphiti, "driver", None)
+            if driver is None or not hasattr(driver, "execute_query"):
+                raise RuntimeError("Graphiti client does not expose a graph driver")
+            raw = await driver.execute_query(cypher, **parameters)
+            rows = _graph_query_records(raw)[: limit * 4]
+        except Exception as exc:
+            if isinstance(exc, RelationIndexUnavailableError):
+                raise
+            raise RelationIndexUnavailableError(
+                f"Graphiti relation path search failed: {exc}"
+            ) from exc
+
+        episode_ids = {
+            str(episode_id)
+            for row in rows
+            for group in list(_graph_row_value(row, "episode_ids_by_hop", []) or [])
+            for episode_id in list(group or [])
+            if episode_id
+        }
+        try:
+            episodes = await _load_graphiti_episodes(graphiti, episode_ids)
+        except Exception as exc:
+            raise RelationIndexUnavailableError(
+                f"Graphiti relation path provenance lookup failed: {exc}"
+            ) from exc
+        source_by_episode = {
+            str(getattr(episode, "uuid", "") or ""): (
+                str(getattr(episode, "group_id", "") or ""),
+                _memory_id_from_episode_name(str(getattr(episode, "name", "") or "")),
+            )
+            for episode in episodes
+        }
+        source_keys = sorted(
+            {
+                source
+                for source in source_by_episode.values()
+                if source[0] in scope_by_key and source[1]
+            }
+        )
+        source_records = await asyncio.gather(
+            *(
+                self._store.get(scope_by_key[scope_key], memory_id)
+                for scope_key, memory_id in source_keys
+            )
+        )
+        record_by_source = dict(zip(source_keys, source_records, strict=True))
+        filter_obj = filters or MemoryFilter()
+        results: list[RelationPathCandidate] = []
+        seen_paths: set[tuple[str, tuple[str, ...], tuple[str, ...]]] = set()
+        for rank, row in enumerate(rows):
+            candidate = _revalidate_relation_path_row(
+                row,
+                bound,
+                scope_by_key=scope_by_key,
+                source_by_episode=source_by_episode,
+                record_by_source=record_by_source,
+                filters=filter_obj,
+                rank=rank,
+                result_count=len(rows),
+            )
+            if candidate is None:
+                continue
+            key = (
+                candidate.scope.scope_key,
+                tuple(hop.edge_id for hop in candidate.hops),
+                tuple(hop.direction for hop in candidate.hops),
+            )
+            if key in seen_paths:
+                continue
+            seen_paths.add(key)
+            results.append(candidate)
+            if len(results) >= limit:
+                break
+        return results
+
     async def _rerank_rows(
         self, request: RelationQuery, rows: Sequence[Any]
     ) -> dict[str, float]:
@@ -979,6 +1152,7 @@ class GraphitiRelationIndex:
                 "backend": "graphiti",
                 "role": "relation_index",
                 "semantic_search": False,
+                "relation_paths": {"enabled": True, "max_hops": 2},
                 "experimental": True,
                 "relation_reranker": self._reranker_health(),
             }
@@ -989,6 +1163,7 @@ class GraphitiRelationIndex:
                 "backend": "graphiti",
                 "role": "relation_index",
                 "semantic_search": False,
+                "relation_paths": {"enabled": True, "max_hops": 2},
                 "experimental": True,
                 "reason": str(exc),
                 "relation_reranker": self._reranker_health(),
@@ -1560,6 +1735,173 @@ def _graph_row_value(row: Any, key: str, default: Any = None) -> Any:
         return default
 
 
+def _revalidate_relation_path_row(
+    row: Any,
+    query: RelationPathQuery,
+    *,
+    scope_by_key: dict[str, MemoryScope],
+    source_by_episode: dict[str, tuple[str, str]],
+    record_by_source: dict[tuple[str, str], MemoryRecord | None],
+    filters: MemoryFilter,
+    rank: int,
+    result_count: int,
+) -> RelationPathCandidate | None:
+    """Fail closed unless every projected hop has eligible Store provenance."""
+
+    group_id = str(_graph_row_value(row, "group_id", "") or "")
+    scope = scope_by_key.get(group_id)
+    hop_count = len(query.steps)
+    node_group_ids = list(_graph_row_value(row, "node_group_ids", []) or [])
+    edge_group_ids = list(_graph_row_value(row, "edge_group_ids", []) or [])
+    node_ids = [
+        str(value or "") for value in list(_graph_row_value(row, "node_ids", []) or [])
+    ]
+    node_names = [
+        str(value or "")
+        for value in list(_graph_row_value(row, "node_names", []) or [])
+    ]
+    edge_ids = [
+        str(value or "") for value in list(_graph_row_value(row, "edge_ids", []) or [])
+    ]
+    relation_types = [
+        str(value or "").strip().upper()
+        for value in list(_graph_row_value(row, "relation_types", []) or [])
+    ]
+    facts = [
+        str(value or "") for value in list(_graph_row_value(row, "facts", []) or [])
+    ]
+    episode_ids_by_hop = list(_graph_row_value(row, "episode_ids_by_hop", []) or [])
+    valid_ats = list(_graph_row_value(row, "valid_ats", []) or [])
+    invalid_ats = list(_graph_row_value(row, "invalid_ats", []) or [])
+    directions = [
+        str(value or "").strip().lower()
+        for value in list(_graph_row_value(row, "directions", []) or [])
+    ]
+    if (
+        scope is None
+        or len(node_group_ids) != hop_count + 1
+        or len(edge_group_ids) != hop_count
+        or len(node_ids) != hop_count + 1
+        or len(node_names) != hop_count + 1
+        or len(edge_ids) != hop_count
+        or len(relation_types) != hop_count
+        or len(facts) != hop_count
+        or len(episode_ids_by_hop) != hop_count
+        or len(valid_ats) != hop_count
+        or len(invalid_ats) != hop_count
+        or len(directions) != hop_count
+        or any(str(value or "") != group_id for value in node_group_ids)
+        or any(str(value or "") != group_id for value in edge_group_ids)
+        or any(not value for value in node_ids)
+        or any(not value for value in edge_ids)
+    ):
+        return None
+
+    hops: list[RelationPathHop] = []
+    supporting_memory_ids: list[str] = []
+    for position, step in enumerate(query.steps):
+        relation_type = relation_types[position]
+        direction = directions[position]
+        if (
+            relation_type == GRAPHITI_FALLBACK_EDGE_NAME
+            or relation_type not in step.relation_types
+            or direction not in {"outbound", "inbound"}
+            or (step.direction != "either" and direction != step.direction)
+        ):
+            return None
+        valid_at = _optional_datetime(valid_ats[position])
+        invalid_at = _optional_datetime(invalid_ats[position])
+        if not _relation_edge_valid_for_path(
+            valid_at=valid_at, invalid_at=invalid_at, query=query
+        ):
+            return None
+        episode_ids = list(
+            dict.fromkeys(
+                str(value or "").strip()
+                for value in list(episode_ids_by_hop[position] or [])
+                if str(value or "").strip()
+            )
+        )
+        if not episode_ids:
+            return None
+        hop_memory_ids: list[str] = []
+        for episode_id in episode_ids:
+            source_key = source_by_episode.get(episode_id, ("", ""))
+            record = record_by_source.get(source_key)
+            if (
+                record is None
+                or source_key[0] != group_id
+                or record.scope.scope_key != group_id
+                or not _core_record_matches_filter(record, filters)
+                or not _core_record_valid_for_relation(record, query)
+            ):
+                continue
+            if record.memory_id not in hop_memory_ids:
+                hop_memory_ids.append(record.memory_id)
+            if record.memory_id not in supporting_memory_ids:
+                supporting_memory_ids.append(record.memory_id)
+        if not hop_memory_ids:
+            # A graph edge with no eligible authoritative source cannot support a
+            # path, even if another hop in the same path has valid provenance.
+            return None
+        if direction == "outbound":
+            source_position, target_position = position, position + 1
+        else:
+            source_position, target_position = position + 1, position
+        hops.append(
+            RelationPathHop(
+                position=position,
+                relation_type=relation_type,
+                direction=cast(Literal["outbound", "inbound"], direction),
+                source_entity_id=node_ids[source_position],
+                source_entity_name=node_names[source_position],
+                target_entity_id=node_ids[target_position],
+                target_entity_name=node_names[target_position],
+                edge_id=edge_ids[position],
+                fact=facts[position],
+                episode_ids=episode_ids,
+                memory_ids=hop_memory_ids,
+                valid_at=valid_at,
+                invalid_at=invalid_at,
+            )
+        )
+
+    path_id = f"{group_id}:" + "|".join(
+        f"{hop.edge_id}:{hop.direction}" for hop in hops
+    )
+    return RelationPathCandidate(
+        scope=scope,
+        source="graphiti_relation_path",
+        score=_graphiti_rank_score(rank, result_count),
+        path_id=path_id,
+        start_entity_id=node_ids[0],
+        start_entity_name=node_names[0],
+        end_entity_id=node_ids[-1],
+        end_entity_name=node_names[-1],
+        hops=hops,
+        supporting_memory_ids=supporting_memory_ids,
+    )
+
+
+def _relation_edge_valid_for_path(
+    *,
+    valid_at: datetime | None,
+    invalid_at: datetime | None,
+    query: RelationPathQuery,
+) -> bool:
+    if query.valid_at is not None:
+        if valid_at is not None and valid_at > query.valid_at:
+            return False
+        return not (invalid_at is not None and invalid_at < query.valid_at)
+    if query.time_to is not None and valid_at is not None and valid_at > query.time_to:
+        return False
+    return not (
+        query.time_from is not None
+        and invalid_at is not None
+        and invalid_at < query.time_from
+    )
+
+
 def _graphiti_episode_body(record: MemoryRecord, fingerprint: str) -> str:
     reference_time = _graphiti_reference_time(record)
     valid_from = _record_valid_from(record)
@@ -1797,7 +2139,9 @@ def _core_record_valid_at(record: MemoryRecord, valid_at: datetime | None) -> bo
     return not (valid_to is not None and valid_to < valid_at)
 
 
-def _core_record_valid_for_relation(record: MemoryRecord, query: RelationQuery) -> bool:
+def _core_record_valid_for_relation(
+    record: MemoryRecord, query: RelationQuery | RelationPathQuery
+) -> bool:
     if query.valid_at is not None:
         return _core_record_valid_at(record, query.valid_at)
     if query.time_from is None and query.time_to is None:

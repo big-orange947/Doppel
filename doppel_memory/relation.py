@@ -118,6 +118,90 @@ class RelationQuery(BaseModel):
         return self
 
 
+class RelationPathStep(BaseModel):
+    """One host-typed hop in a bounded relation path.
+
+    Path steps are exact structural constraints, not model-generated Cypher or soft
+    semantic hints.  The host remains responsible for exposing a governed ontology
+    and for choosing the direction of every relation in that ontology.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    relation_types: list[str] = Field(min_length=1)
+    direction: Literal["outbound", "inbound", "either"] = "outbound"
+
+    @field_validator("relation_types", mode="before")
+    @classmethod
+    def _normalize_relation_types(cls, value: object) -> list[str]:
+        relation_types = [
+            str(item or "").strip().upper() for item in _list_items(value)
+        ]
+        normalized = list(dict.fromkeys(item for item in relation_types if item))
+        invalid = [
+            item
+            for item in normalized
+            if re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", item) is None
+        ]
+        if invalid:
+            raise ValueError(
+                f"relation types must be canonical uppercase identifiers: {invalid}"
+            )
+        return normalized
+
+
+class RelationPathQuery(BaseModel):
+    """Scope-free, explicitly typed relation path with at most two hops.
+
+    The fixed bound is intentional: it prevents an integration from turning a
+    personal-memory lookup into an open-ended graph walk.  Exact scopes are supplied
+    separately to ``RelationPathIndex.search_relation_paths``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    query_text: str
+    entity_mentions: list[str] = Field(default_factory=list)
+    steps: list[RelationPathStep] = Field(min_length=1, max_length=2)
+    subject: str
+    subject_id: str
+    valid_at: datetime | None = None
+    time_from: datetime | None = None
+    time_to: datetime | None = None
+
+    @field_validator("query_text", "subject", "subject_id", mode="before")
+    @classmethod
+    def _normalize_text(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @field_validator("entity_mentions", mode="before")
+    @classmethod
+    def _normalize_terms(cls, value: object) -> list[str]:
+        terms = [str(item or "").strip() for item in _list_items(value)]
+        return list(dict.fromkeys(item for item in terms if item))
+
+    @field_validator("valid_at", "time_from", "time_to")
+    @classmethod
+    def _normalize_time(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("relation path query times must include a timezone")
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def _validate_interval(self) -> RelationPathQuery:
+        if self.time_from and self.time_to and self.time_to < self.time_from:
+            raise ValueError("relation path time_to must not precede time_from")
+        if self.valid_at is not None and (
+            self.time_from is not None or self.time_to is not None
+        ):
+            raise ValueError(
+                "relation path query cannot mix valid_at with a time range"
+            )
+        return self
+
+
 class RelationRerankItem(BaseModel):
     """One opaque graph edge offered for textual relation scoring.
 
@@ -273,6 +357,151 @@ class RelationCandidate(BaseModel):
         return value.astimezone(UTC)
 
 
+class RelationPathHop(BaseModel):
+    """One graph edge whose provenance resolved to authoritative Store records."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    position: int = Field(ge=0, le=1)
+    relation_type: str
+    direction: Literal["outbound", "inbound"]
+    source_entity_id: str
+    source_entity_name: str = ""
+    target_entity_id: str
+    target_entity_name: str = ""
+    edge_id: str
+    fact: str = ""
+    episode_ids: list[str] = Field(min_length=1)
+    memory_ids: list[str] = Field(min_length=1)
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
+
+    @field_validator(
+        "relation_type",
+        "source_entity_id",
+        "source_entity_name",
+        "target_entity_id",
+        "target_entity_name",
+        "edge_id",
+        "fact",
+        mode="before",
+    )
+    @classmethod
+    def _strip_text(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @field_validator("relation_type", mode="before")
+    @classmethod
+    def _normalize_relation_type(cls, value: object) -> str:
+        return str(value or "").strip().upper()
+
+    @field_validator("relation_type", "source_entity_id", "target_entity_id", "edge_id")
+    @classmethod
+    def _require_text(cls, value: str) -> str:
+        if not value:
+            raise ValueError("relation path hop identifiers must not be empty")
+        return value
+
+    @field_validator("relation_type")
+    @classmethod
+    def _validate_relation_type(cls, value: str) -> str:
+        if re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", value) is None:
+            raise ValueError("relation path hop relation_type must be canonical")
+        return value
+
+    @field_validator("episode_ids", "memory_ids", mode="before")
+    @classmethod
+    def _normalize_ids(cls, value: object) -> list[str]:
+        items = [str(item or "").strip() for item in _list_items(value)]
+        return list(dict.fromkeys(item for item in items if item))
+
+    @field_validator("valid_at", "invalid_at")
+    @classmethod
+    def _normalize_candidate_time(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("relation path hop times must include a timezone")
+        return value.astimezone(UTC)
+
+
+class RelationPathCandidate(BaseModel):
+    """A complete path for which every hop survived authoritative revalidation."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    scope: MemoryScope
+    source: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    score: float = Field(ge=0.0, le=1.0)
+    path_id: str
+    start_entity_id: str
+    start_entity_name: str = ""
+    end_entity_id: str
+    end_entity_name: str = ""
+    hops: list[RelationPathHop] = Field(min_length=1, max_length=2)
+    supporting_memory_ids: list[str] = Field(min_length=1)
+
+    @field_validator(
+        "source",
+        "path_id",
+        "start_entity_id",
+        "start_entity_name",
+        "end_entity_id",
+        "end_entity_name",
+        mode="before",
+    )
+    @classmethod
+    def _strip_text(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @field_validator("path_id", "start_entity_id", "end_entity_id")
+    @classmethod
+    def _require_text(cls, value: str) -> str:
+        if not value:
+            raise ValueError("relation path candidate identifiers must not be empty")
+        return value
+
+    @field_validator("supporting_memory_ids", mode="before")
+    @classmethod
+    def _normalize_memory_ids(cls, value: object) -> list[str]:
+        items = [str(item or "").strip() for item in _list_items(value)]
+        return list(dict.fromkeys(item for item in items if item))
+
+    @model_validator(mode="after")
+    def _validate_path_integrity(self) -> RelationPathCandidate:
+        if [hop.position for hop in self.hops] != list(range(len(self.hops))):
+            raise ValueError("relation path hop positions must be contiguous")
+        traversal = [
+            (
+                hop.source_entity_id,
+                hop.target_entity_id,
+            )
+            if hop.direction == "outbound"
+            else (
+                hop.target_entity_id,
+                hop.source_entity_id,
+            )
+            for hop in self.hops
+        ]
+        if (
+            traversal[0][0] != self.start_entity_id
+            or traversal[-1][1] != self.end_entity_id
+            or any(
+                traversal[index][1] != traversal[index + 1][0]
+                for index in range(len(traversal) - 1)
+            )
+        ):
+            raise ValueError("relation path hops must form one continuous traversal")
+        hop_memory_ids = {
+            memory_id for hop in self.hops for memory_id in hop.memory_ids
+        }
+        if hop_memory_ids != set(self.supporting_memory_ids):
+            raise ValueError(
+                "relation path supporting_memory_ids must equal hop provenance"
+            )
+        return self
+
+
 @runtime_checkable
 class RelationIndex(Protocol):
     """Exact-scope graph relation source; never a factual authority."""
@@ -285,6 +514,20 @@ class RelationIndex(Protocol):
         filters: MemoryFilter | None = None,
         limit: int = 10,
     ) -> Sequence[RelationCandidate]: ...
+
+
+@runtime_checkable
+class RelationPathIndex(Protocol):
+    """Experimental exact-scope source for bounded, typed graph paths."""
+
+    async def search_relation_paths(
+        self,
+        request: RelationPathQuery,
+        scopes: Sequence[MemoryScope],
+        *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> Sequence[RelationPathCandidate]: ...
 
 
 def _list_items(value: object) -> list[object]:

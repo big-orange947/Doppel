@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add a module-only experimental protocol for explicitly typed one/two-hop relation
+  paths. `GraphitiRelationIndex.search_relation_paths()` uses one fixed bounded Cypher
+  query, requires a host-selected relation type and direction at every hop, and rejects
+  the complete path unless every edge stays in one exact scope, satisfies the requested
+  time window, resolves through Graphiti Episode provenance, and reloads at least one
+  eligible authoritative Store record. Existing one-hop `RelationQuery`, Planner v2,
+  query-engine execution, root exports, and fingerprints are unchanged; no natural-
+  language multi-hop planner or benchmark claim is introduced yet.
+- Harden the Windows ablation-runtime preflight for a broken Docker Desktop pipe.
+  Every read-only `docker version` probe now has a two-second process deadline, the
+  optional Desktop start helper is hidden and bounded by `WaitSeconds`, and both paths
+  fail with a clear timeout instead of hanging indefinitely under Windows PowerShell 5.
 - Add structured `PersonalMemoryCandidateEvidence` to every personal-query hit.
   It exposes accepted lexical/semantic/relation sources, literal or relation-backed
   entity binding, and relation edge metadata while explicitly leaving

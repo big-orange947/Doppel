@@ -835,6 +835,14 @@ relation score 独立进入解释与排序，不因它同时出现在向量源�
 明确带时间坐标的 history/as_of，`valid_from/valid_to` 优先于记录今天的 temporal-status 分类，避免
 把“过去已生效且现在仍 current”的状态排除。
 
+一跳候选之外，module-only experimental `RelationPathIndex` 定义 host-typed 的有界关系路径。
+当前 `GraphitiRelationIndex.search_relation_paths()` 只接受 1–2 个明确的 relation type/direction step，
+使用固定 Cypher 而不接受查询拼接或模型生成语句。路径上所有 node/edge 必须在同一个 exact scope，
+每条 edge 都必须满足查询时间，并分别从 Edge 的 Episode 集合解析出至少一个通过 filter、生命周期、
+scope 和有效期复核的权威 Store record。任意 hop 失败会丢弃完整路径；成功结果同时返回逐跳 provenance
+和全部 supporting memory IDs。该协议尚未接入 Planner/QueryEngine，也不计入现有单跳 benchmark；
+后续须先建立独立的两跳 direct/related/non-evidence 与时间/越权反例数据集，再决定是否新增 Plan v3。
+
 `candidate_fusion="anchored_union"` 是宽松 union 与旧式强 relation gate 之间的 opt-in
 候选准入策略。Planner 明确给出实体时，每条候选必须在权威 Store 正文/关系元数据中包含至少一个
 归一化后的实体原文，或有达到 relation threshold 的图边；没有显式实体时行为与 union 相同。
