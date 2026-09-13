@@ -4379,11 +4379,12 @@ def _build_final_hit_attribution(
     dataset: AblationDataset,
     per_mode: dict[str, dict[str, dict[str, Any]]],
 ) -> dict[str, Any]:
-    """Cross the engine's accepted final hits with per-edge graph mapping.
+    """Cross accepted final hits with direct index candidates, per planner mode.
 
     Only a candidate that survived Store revalidation and appears in the query
-    engine's final hit list counts as a final-hit contribution. Requires the
-    oracle mode so the plan is not itself a confound.
+    engine's final hit list counts as a final-hit contribution.  Planner modes
+    are never mixed: oracle remains the confound-free legacy view, while report
+    modes expose the contribution observed with that exact planner replay.
     """
     graph_direct = report.get("diagnostics", {}).get("graph_direct")
     attribution_by_query = (
@@ -4396,108 +4397,129 @@ def _build_final_hit_attribution(
             "graph": None,
             "vector": None,
         }
-    oracle_cases = [
-        case
-        for case in report.get("cases", [])
-        if case.get("mode") == PLANNER_MODE_ORACLE
-        and case.get("profile") == "lexical_graph"
-        and not case.get("error")
-    ]
-    by_query = {case["query_id"]: case for case in oracle_cases}
-    fallback_links: set[tuple[str, str, str, str]] = set()
-    rich_links: set[tuple[str, str, str, str]] = set()
-    fallback_hits: set[tuple[str, str]] = set()
-    rich_hits: set[tuple[str, str]] = set()
-    fallback_queries: set[str] = set()
-    rich_queries: set[str] = set()
-    mapped_queries = 0
-    for query in dataset.queries:
-        case = by_query.get(query.query_id)
-        if case is None:
-            continue
-        final_hits = set(case.get("hits", []))
-        rows = attribution_by_query.get(query.query_id, [])
-        if not rows:
-            continue
-        mapped_queries += 1
-        for row in rows:
-            memory_id = str(row.get("memory_id") or "")
-            if not memory_id or memory_id not in final_hits:
-                continue
-            link = (
-                query.query_id,
-                memory_id,
-                str(row.get("edge_uuid") or ""),
-                str(row.get("episode_uuid") or ""),
-            )
-            if row.get("edge_kind") == "fallback":
-                fallback_links.add(link)
-                fallback_hits.add((query.query_id, memory_id))
-                fallback_queries.add(query.query_id)
-            else:
-                rich_links.add(link)
-                rich_hits.add((query.query_id, memory_id))
-                rich_queries.add(query.query_id)
-    graph_result = {
-        "available": True,
-        "method": (
-            "unique edge/episode-to-hit links refined by oracle lexical_graph "
-            "final accepted hits (Store revalidation + ranking); link counts are "
-            "not unique hit counts"
-        ),
-        "fallback_edge_final_hit_links": len(fallback_links),
-        "rich_edge_final_hit_links": len(rich_links),
-        "unique_final_hits_with_fallback": len(fallback_hits),
-        "unique_final_hits_with_rich": len(rich_hits),
-        "unique_queries_with_fallback": len(fallback_queries),
-        "unique_queries_with_rich": len(rich_queries),
-        "queries_with_mapping": mapped_queries,
-    }
-    # ---- vector final-hit attribution ------------------------------------ #
     vector_direct = report.get("diagnostics", {}).get("vector_direct")
     vector_candidates_by_query = (
         vector_direct.get("candidate_memory_ids_by_query", {}) if vector_direct else {}
     )
-    vector_result = None
-    if vector_candidates_by_query:
-        oracle_vector_cases = [
+    executed_modes = sorted(
+        {
+            str(case.get("mode") or "")
+            for case in report.get("cases", [])
+            if case.get("profile") in {"lexical_graph", "lexical_vector"}
+            and not case.get("error")
+            and str(case.get("mode") or "") in per_mode
+        }
+    )
+    mode_results: dict[str, dict[str, Any]] = {}
+    for mode in executed_modes:
+        graph_cases = [
             case
             for case in report.get("cases", [])
-            if case.get("mode") == PLANNER_MODE_ORACLE
-            and case.get("profile") == "lexical_vector"
+            if case.get("mode") == mode
+            and case.get("profile") == "lexical_graph"
             and not case.get("error")
         ]
-        vector_by_query = {case["query_id"]: case for case in oracle_vector_cases}
-        vector_contribution = 0
-        vector_queries: set[str] = set()
-        vector_mapped_queries = 0
+        graph_by_query = {case["query_id"]: case for case in graph_cases}
+        fallback_links: set[tuple[str, str, str, str]] = set()
+        rich_links: set[tuple[str, str, str, str]] = set()
+        fallback_hits: set[tuple[str, str]] = set()
+        rich_hits: set[tuple[str, str]] = set()
+        fallback_queries: set[str] = set()
+        rich_queries: set[str] = set()
+        mapped_queries = 0
         for query in dataset.queries:
-            case = vector_by_query.get(query.query_id)
+            case = graph_by_query.get(query.query_id)
             if case is None:
                 continue
             final_hits = set(case.get("hits", []))
-            candidates = vector_candidates_by_query.get(query.query_id, [])
-            if not candidates:
+            rows = attribution_by_query.get(query.query_id, [])
+            if not rows:
                 continue
-            vector_mapped_queries += 1
-            for memory_id in candidates:
-                if memory_id in final_hits:
-                    vector_contribution += 1
-                    vector_queries.add(query.query_id)
-        vector_result = {
-            "available": True,
+            mapped_queries += 1
+            for row in rows:
+                memory_id = str(row.get("memory_id") or "")
+                if not memory_id or memory_id not in final_hits:
+                    continue
+                link = (
+                    query.query_id,
+                    memory_id,
+                    str(row.get("edge_uuid") or ""),
+                    str(row.get("episode_uuid") or ""),
+                )
+                if row.get("edge_kind") == "fallback":
+                    fallback_links.add(link)
+                    fallback_hits.add((query.query_id, memory_id))
+                    fallback_queries.add(query.query_id)
+                else:
+                    rich_links.add(link)
+                    rich_hits.add((query.query_id, memory_id))
+                    rich_queries.add(query.query_id)
+        graph_result = {
+            "available": bool(graph_cases),
             "method": (
-                "oracle lexical_vector final accepted hits intersected with "
-                "vector_direct candidate memory IDs per query"
+                f"{mode} lexical_graph final Store-revalidated hits crossed with "
+                "unique graph edge/episode mappings; link counts are not unique hits"
             ),
-            "vector_final_hit_links": vector_contribution,
+            "mode": mode,
+            "fallback_edge_final_hit_links": len(fallback_links),
+            "rich_edge_final_hit_links": len(rich_links),
+            "unique_final_hits_with_fallback": len(fallback_hits),
+            "unique_final_hits_with_rich": len(rich_hits),
+            "unique_queries_with_fallback": len(fallback_queries),
+            "unique_queries_with_rich": len(rich_queries),
+            "queries_with_mapping": mapped_queries,
+        }
+
+        vector_cases = [
+            case
+            for case in report.get("cases", [])
+            if case.get("mode") == mode
+            and case.get("profile") == "lexical_vector"
+            and not case.get("error")
+        ]
+        vector_by_query = {case["query_id"]: case for case in vector_cases}
+        vector_links: set[tuple[str, str]] = set()
+        vector_queries: set[str] = set()
+        vector_mapped_queries = 0
+        if vector_candidates_by_query:
+            for query in dataset.queries:
+                case = vector_by_query.get(query.query_id)
+                if case is None:
+                    continue
+                final_hits = set(case.get("hits", []))
+                candidates = vector_candidates_by_query.get(query.query_id, [])
+                if not candidates:
+                    continue
+                vector_mapped_queries += 1
+                for memory_id in candidates:
+                    if memory_id in final_hits:
+                        vector_links.add((query.query_id, memory_id))
+                        vector_queries.add(query.query_id)
+        vector_result = {
+            "available": bool(vector_cases and vector_candidates_by_query),
+            "method": (
+                f"{mode} lexical_vector final Store-revalidated hits intersected "
+                "with vector_direct candidate memory IDs per query"
+            ),
+            "mode": mode,
+            "vector_final_hit_links": len(vector_links),
             "unique_queries_with_vector": len(vector_queries),
             "queries_with_mapping": vector_mapped_queries,
         }
+        mode_results[mode] = {"graph": graph_result, "vector": vector_result}
+
+    oracle_result = mode_results.get(PLANNER_MODE_ORACLE)
     return {
-        "available": True,
-        "graph": graph_result,
-        "vector": vector_result,
+        "available": bool(mode_results),
+        "legacy_oracle_available": oracle_result is not None,
+        "per_mode": mode_results,
+        "graph": oracle_result["graph"] if oracle_result else None,
+        "vector": oracle_result["vector"] if oracle_result else None,
+        "reason": (
+            ""
+            if oracle_result
+            else "top-level graph/vector are oracle-only; inspect per_mode"
+        ),
     }
 
 

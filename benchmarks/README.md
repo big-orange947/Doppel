@@ -150,6 +150,10 @@ uv run python -m benchmarks.personal_retrieval_ablation `
 memory ID, target entity, or topic key. `relation_final_hit_attribution` counts only
 final Store-revalidated hits carrying `relation_match`, then checks them against
 required/forbidden gold. Raw graph adjacency does not count as a correct contribution.
+`graph_final_hit_attribution.per_mode` similarly crosses `graph_direct` edge/episode
+mappings and `vector_direct` candidate IDs with final accepted hits for each Planner
+mode independently. The legacy top-level `graph` / `vector` fields remain oracle-only,
+so a real Planner replay cannot be mislabeled as a confound-free oracle result.
 Each profile executes one discarded warm-up query before latency measurement so a
 later profile cannot inherit an unfair Neo4j/provider cold-start advantage. The
 dedicated PostgreSQL schema and exact Neo4j fixture scopes are both cleared in

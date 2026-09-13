@@ -2487,6 +2487,65 @@ class PlannerModeLiveGraphTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(graph_att["unique_queries_with_fallback"], 1)
         self.assertEqual(graph_att["unique_queries_with_rich"], 1)
 
+    def test_graph_and_vector_attribution_are_partitioned_by_report_mode(self) -> None:
+        from benchmarks.personal_retrieval_ablation import _build_final_hit_attribution
+
+        dataset = _dataset()
+        query_id = dataset.queries[0].query_id
+        report = {
+            "diagnostics": {
+                "graph_direct": {
+                    "edge_attribution_by_query": {
+                        query_id: [
+                            {
+                                "memory_id": "m-residence-current",
+                                "edge_uuid": "edge-rich-1",
+                                "episode_uuid": "episode-1",
+                                "edge_kind": "rich",
+                            }
+                        ]
+                    }
+                },
+                "vector_direct": {
+                    "candidate_memory_ids_by_query": {
+                        query_id: ["m-residence-current"]
+                    }
+                },
+            },
+            "cases": [
+                {
+                    "query_id": query_id,
+                    "mode": PLANNER_MODE_REPORT_V2,
+                    "profile": "lexical_graph",
+                    "error": "",
+                    "hits": ["m-residence-current"],
+                },
+                {
+                    "query_id": query_id,
+                    "mode": PLANNER_MODE_REPORT_V2,
+                    "profile": "lexical_vector",
+                    "error": "",
+                    "hits": ["m-residence-current"],
+                },
+            ],
+        }
+
+        attribution = _build_final_hit_attribution(
+            report=report,
+            dataset=dataset,
+            per_mode={PLANNER_MODE_REPORT_V2: {}},
+        )
+
+        self.assertTrue(attribution["available"])
+        self.assertFalse(attribution["legacy_oracle_available"])
+        self.assertIsNone(attribution["graph"])
+        self.assertIsNone(attribution["vector"])
+        mode = attribution["per_mode"][PLANNER_MODE_REPORT_V2]
+        self.assertEqual(mode["graph"]["rich_edge_final_hit_links"], 1)
+        self.assertEqual(mode["graph"]["unique_queries_with_rich"], 1)
+        self.assertEqual(mode["vector"]["vector_final_hit_links"], 1)
+        self.assertEqual(mode["vector"]["unique_queries_with_vector"], 1)
+
     def test_reproducibility_cli_args_exist(self) -> None:
         from benchmarks.personal_retrieval_ablation import _parser
 

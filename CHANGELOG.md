@@ -11,6 +11,10 @@
   candidate "abstention" metric remains labeled as a deprecated compatibility alias
   and is no longer a planner-promotion gate. Dataset-excluded candidates remain
   visible diagnostics but no longer masquerade as answer or security failures.
+- Partition graph/vector final-hit attribution by Planner mode. Real cached Planner
+  replays now expose their own `graph_final_hit_attribution.per_mode` instead of
+  silently reporting zero because the legacy attribution path only inspected oracle
+  cases; the top-level compatibility fields remain oracle-only.
 - Add opt-in `candidate_fusion="anchored_union"`. It preserves independent
   lexical/vector/relation discovery, but when a Planner supplies explicit entity
   mentions, a final candidate must bind one literal entity in authoritative Store
