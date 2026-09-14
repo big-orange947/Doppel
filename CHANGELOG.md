@@ -10,10 +10,18 @@
   eligible authoritative Store record. Existing one-hop `RelationQuery`, Planner v2,
   query-engine execution, root exports, and fingerprints are unchanged; no natural-
   language multi-hop planner or benchmark claim is introduced yet.
+- Add an opt-in live Neo4j contract test for bounded relation paths. It creates
+  uniquely prefixed Graphiti-compatible Entity/RELATES_TO/Episodic fixtures without
+  constructing an LLM or embedding client, verifies one-hop/two-hop traversal,
+  direction, time, orphan-provenance rejection, and same-name scope isolation, then
+  deletes and independently counts its fixture nodes. Neo4j 5.26 completed the test
+  with zero residual nodes and zero external model calls.
 - Harden the Windows ablation-runtime preflight for a broken Docker Desktop pipe.
   Every read-only `docker version` probe now has a two-second process deadline, the
   optional Desktop start helper is hidden and bounded by `WaitSeconds`, and both paths
-  fail with a clear timeout instead of hanging indefinitely under Windows PowerShell 5.
+  fail with a clear timeout instead of hanging indefinitely under Windows PowerShell
+  5. Existing running containers whose health is still `starting` now wait for their
+  healthcheck instead of producing a cold-start false failure.
 - Add structured `PersonalMemoryCandidateEvidence` to every personal-query hit.
   It exposes accepted lexical/semantic/relation sources, literal or relation-backed
   entity binding, and relation edge metadata while explicitly leaving

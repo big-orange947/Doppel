@@ -96,6 +96,23 @@ ready, `-Start` uses the Desktop CLI and waits for the server. Existing benchmar
 containers should use `restart=unless-stopped`; enable Docker Desktop's own
 “start when you sign in” setting separately if automatic boot is desired.
 
+The bounded relation-path adapter has a separate opt-in live contract test. It uses
+unique exact-scope fixture groups, creates no Graphiti LLM/embedder, and removes the
+fixture in `finally`; point it only at a disposable or explicitly authorized local
+Neo4j instance:
+
+```powershell
+$env:DOPPEL_LIVE_NEO4J = "1"
+$env:DOPPEL_NEO4J_URI = "bolt://127.0.0.1:7687"
+$env:DOPPEL_NEO4J_USER = "neo4j"
+$env:DOPPEL_NEO4J_PASSWORD = "<local-only password>"
+.\.venv\Scripts\python.exe -m pytest tests/test_graphiti_relation_path_live.py -q
+```
+
+Without `DOPPEL_LIVE_NEO4J=1` the test is skipped. A passing run requires successful
+one/two-hop traversal plus direction, temporal, provenance, isolation, and zero-residue
+assertions; a mock-driver pass is not reported as live coverage.
+
 `personal_retrieval_ablation.py` compares the same pre-extracted fixture set across
 four main execution profiles and three index-direct diagnostics. Every main profile
 runs the real `PersonalMemoryQueryEngine` end-to-end (planner -> lexical/semantic

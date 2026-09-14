@@ -120,6 +120,15 @@ $rows = foreach ($container in $Containers) {
         if ($LASTEXITCODE -ne 0) {
             throw "Could not start container $container."
         }
+        $state = & docker inspect --format `
+            "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.HostConfig.RestartPolicy.Name}}" `
+            $container
+        $parts = $state -split "\|", 3
+    }
+    if (
+        $Start -and
+        ($parts[0] -ne "running" -or $parts[1] -notin @("healthy", "none"))
+    ) {
         $deadline = [DateTime]::UtcNow.AddSeconds($WaitSeconds)
         do {
             $state = & docker inspect --format `
