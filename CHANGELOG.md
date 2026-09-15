@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add the repository-only `doppel-personal-relation-path-ablation-zh-v1` draft and
+  zero-model live Neo4j runner. The deterministic builder produces 26 oracle-path
+  queries across nine exact owner scopes: eight answerable two-hop chains, eight
+  one-hop controls, eight wrong-type adversaries, one not-yet-valid second hop, and
+  one orphan second hop. Reports compare typed one-hop, bounded path, and their union;
+  evidence completeness, path count/endpoint correctness, forbidden hits, scope
+  leakage, cleanup, and latency remain separate. Runtime failure is bounded and
+  structured without persisting credentials. The dataset is explicitly unfrozen and
+  not publication-ready; it does not add a natural-language Planner or product rules.
 - Add a module-only experimental protocol for explicitly typed one/two-hop relation
   paths. `GraphitiRelationIndex.search_relation_paths()` uses one fixed bounded Cypher
   query, requires a host-selected relation type and direction at every hop, and rejects

@@ -1,0 +1,1322 @@
+{
+  "suite": "doppel-personal-relation-path-ablation-zh-v1",
+  "suite_version": "1.0.0-draft.1",
+  "language": "zh-CN",
+  "status": "draft",
+  "frozen": false,
+  "publication_ready": false,
+  "description": "Generated oracle-path draft; no natural-language Planner or model output is involved.",
+  "relation_types": [
+    "BORN_IN",
+    "CARED_FOR_BY",
+    "CONTACTABLE_AT",
+    "HELD_BY",
+    "LOCATED_AT",
+    "PROVIDED_BY",
+    "RECEIVED_BY",
+    "REPAIRED_BY",
+    "RESTORED_BY",
+    "WORKS_AT"
+  ],
+  "scopes": {
+    "s01": {
+      "user_id": "path-owner-01",
+      "agent_id": "path-benchmark"
+    },
+    "s02": {
+      "user_id": "path-owner-02",
+      "agent_id": "path-benchmark"
+    },
+    "s03": {
+      "user_id": "path-owner-03",
+      "agent_id": "path-benchmark"
+    },
+    "s04": {
+      "user_id": "path-owner-04",
+      "agent_id": "path-benchmark"
+    },
+    "s05": {
+      "user_id": "path-owner-05",
+      "agent_id": "path-benchmark"
+    },
+    "s06": {
+      "user_id": "path-owner-06",
+      "agent_id": "path-benchmark"
+    },
+    "s07": {
+      "user_id": "path-owner-07",
+      "agent_id": "path-benchmark"
+    },
+    "s08": {
+      "user_id": "path-owner-08",
+      "agent_id": "path-benchmark"
+    },
+    "s09": {
+      "user_id": "path-owner-09",
+      "agent_id": "path-benchmark"
+    }
+  },
+  "fixtures": [
+    {
+      "memory_id": "m-camera-a-1",
+      "scope": "s01",
+      "content": "相机由小王保管。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-camera-a-2",
+      "scope": "s01",
+      "content": "小王目前住在上海。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-camera-b-1",
+      "scope": "s02",
+      "content": "相机由阿宁保管。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-camera-b-2",
+      "scope": "s02",
+      "content": "阿宁目前住在杭州。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-document-1",
+      "scope": "s03",
+      "content": "租房合同由林老师提供。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-document-2",
+      "scope": "s03",
+      "content": "林老师的联系邮箱是 lin@example.test。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-pet-1",
+      "scope": "s04",
+      "content": "豆包临时由陈姨照看。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-pet-2",
+      "scope": "s04",
+      "content": "陈姨目前住在苏州。",
+      "valid_from": "2026-07-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-device-1",
+      "scope": "s05",
+      "content": "徕卡相机由星海维修处理。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-device-2",
+      "scope": "s05",
+      "content": "星海维修位于徐汇区。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-key-1",
+      "scope": "s06",
+      "content": "备用钥匙交给表姐保管。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-key-2",
+      "scope": "s06",
+      "content": "表姐目前在创意园工作。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-package-1",
+      "scope": "s07",
+      "content": "快递由物业前台代收。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-package-2",
+      "scope": "s07",
+      "content": "物业前台位于一楼大厅。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-painting-1",
+      "scope": "s08",
+      "content": "旧画由周师傅修复。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-painting-2",
+      "scope": "s08",
+      "content": "周师傅目前在东湖仓库工作。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    },
+    {
+      "memory_id": "m-orphan-1",
+      "scope": "s09",
+      "content": "护照由小李保管。",
+      "valid_from": "2026-01-01T00:00:00+00:00",
+      "valid_to": ""
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "e-camera-a-anchor",
+      "scope": "s01",
+      "name": "相机"
+    },
+    {
+      "entity_id": "e-camera-a-middle",
+      "scope": "s01",
+      "name": "小王"
+    },
+    {
+      "entity_id": "e-camera-a-end",
+      "scope": "s01",
+      "name": "上海"
+    },
+    {
+      "entity_id": "e-camera-b-anchor",
+      "scope": "s02",
+      "name": "相机"
+    },
+    {
+      "entity_id": "e-camera-b-middle",
+      "scope": "s02",
+      "name": "阿宁"
+    },
+    {
+      "entity_id": "e-camera-b-end",
+      "scope": "s02",
+      "name": "杭州"
+    },
+    {
+      "entity_id": "e-document-anchor",
+      "scope": "s03",
+      "name": "租房合同"
+    },
+    {
+      "entity_id": "e-document-middle",
+      "scope": "s03",
+      "name": "林老师"
+    },
+    {
+      "entity_id": "e-document-end",
+      "scope": "s03",
+      "name": "lin@example.test"
+    },
+    {
+      "entity_id": "e-pet-anchor",
+      "scope": "s04",
+      "name": "豆包"
+    },
+    {
+      "entity_id": "e-pet-middle",
+      "scope": "s04",
+      "name": "陈姨"
+    },
+    {
+      "entity_id": "e-pet-end",
+      "scope": "s04",
+      "name": "苏州"
+    },
+    {
+      "entity_id": "e-device-anchor",
+      "scope": "s05",
+      "name": "徕卡相机"
+    },
+    {
+      "entity_id": "e-device-middle",
+      "scope": "s05",
+      "name": "星海维修"
+    },
+    {
+      "entity_id": "e-device-end",
+      "scope": "s05",
+      "name": "徐汇区"
+    },
+    {
+      "entity_id": "e-key-anchor",
+      "scope": "s06",
+      "name": "备用钥匙"
+    },
+    {
+      "entity_id": "e-key-middle",
+      "scope": "s06",
+      "name": "表姐"
+    },
+    {
+      "entity_id": "e-key-end",
+      "scope": "s06",
+      "name": "创意园"
+    },
+    {
+      "entity_id": "e-package-anchor",
+      "scope": "s07",
+      "name": "快递"
+    },
+    {
+      "entity_id": "e-package-middle",
+      "scope": "s07",
+      "name": "物业前台"
+    },
+    {
+      "entity_id": "e-package-end",
+      "scope": "s07",
+      "name": "一楼大厅"
+    },
+    {
+      "entity_id": "e-painting-anchor",
+      "scope": "s08",
+      "name": "旧画"
+    },
+    {
+      "entity_id": "e-painting-middle",
+      "scope": "s08",
+      "name": "周师傅"
+    },
+    {
+      "entity_id": "e-painting-end",
+      "scope": "s08",
+      "name": "东湖仓库"
+    },
+    {
+      "entity_id": "e-orphan-passport",
+      "scope": "s09",
+      "name": "护照"
+    },
+    {
+      "entity_id": "e-orphan-li",
+      "scope": "s09",
+      "name": "小李"
+    },
+    {
+      "entity_id": "e-orphan-beijing",
+      "scope": "s09",
+      "name": "北京"
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge-camera-a-1",
+      "scope": "s01",
+      "source_entity_id": "e-camera-a-anchor",
+      "target_entity_id": "e-camera-a-middle",
+      "relation_type": "HELD_BY",
+      "fact": "相机由小王保管。",
+      "memory_id": "m-camera-a-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-camera-a-2",
+      "scope": "s01",
+      "source_entity_id": "e-camera-a-middle",
+      "target_entity_id": "e-camera-a-end",
+      "relation_type": "LOCATED_AT",
+      "fact": "小王目前住在上海。",
+      "memory_id": "m-camera-a-2",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-camera-b-1",
+      "scope": "s02",
+      "source_entity_id": "e-camera-b-anchor",
+      "target_entity_id": "e-camera-b-middle",
+      "relation_type": "HELD_BY",
+      "fact": "相机由阿宁保管。",
+      "memory_id": "m-camera-b-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-camera-b-2",
+      "scope": "s02",
+      "source_entity_id": "e-camera-b-middle",
+      "target_entity_id": "e-camera-b-end",
+      "relation_type": "LOCATED_AT",
+      "fact": "阿宁目前住在杭州。",
+      "memory_id": "m-camera-b-2",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-document-1",
+      "scope": "s03",
+      "source_entity_id": "e-document-anchor",
+      "target_entity_id": "e-document-middle",
+      "relation_type": "PROVIDED_BY",
+      "fact": "租房合同由林老师提供。",
+      "memory_id": "m-document-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-document-2",
+      "scope": "s03",
+      "source_entity_id": "e-document-middle",
+      "target_entity_id": "e-document-end",
+      "relation_type": "CONTACTABLE_AT",
+      "fact": "林老师的联系邮箱是 lin@example.test。",
+      "memory_id": "m-document-2",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-pet-1",
+      "scope": "s04",
+      "source_entity_id": "e-pet-anchor",
+      "target_entity_id": "e-pet-middle",
+      "relation_type": "CARED_FOR_BY",
+      "fact": "豆包临时由陈姨照看。",
+      "memory_id": "m-pet-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-pet-2",
+      "scope": "s04",
+      "source_entity_id": "e-pet-middle",
+      "target_entity_id": "e-pet-end",
+      "relation_type": "LOCATED_AT",
+      "fact": "陈姨目前住在苏州。",
+      "memory_id": "m-pet-2",
+      "valid_at": "2026-07-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-device-1",
+      "scope": "s05",
+      "source_entity_id": "e-device-anchor",
+      "target_entity_id": "e-device-middle",
+      "relation_type": "REPAIRED_BY",
+      "fact": "徕卡相机由星海维修处理。",
+      "memory_id": "m-device-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-device-2",
+      "scope": "s05",
+      "source_entity_id": "e-device-middle",
+      "target_entity_id": "e-device-end",
+      "relation_type": "LOCATED_AT",
+      "fact": "星海维修位于徐汇区。",
+      "memory_id": "m-device-2",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-key-1",
+      "scope": "s06",
+      "source_entity_id": "e-key-anchor",
+      "target_entity_id": "e-key-middle",
+      "relation_type": "HELD_BY",
+      "fact": "备用钥匙交给表姐保管。",
+      "memory_id": "m-key-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-key-2",
+      "scope": "s06",
+      "source_entity_id": "e-key-middle",
+      "target_entity_id": "e-key-end",
+      "relation_type": "WORKS_AT",
+      "fact": "表姐目前在创意园工作。",
+      "memory_id": "m-key-2",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-package-1",
+      "scope": "s07",
+      "source_entity_id": "e-package-anchor",
+      "target_entity_id": "e-package-middle",
+      "relation_type": "RECEIVED_BY",
+      "fact": "快递由物业前台代收。",
+      "memory_id": "m-package-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-package-2",
+      "scope": "s07",
+      "source_entity_id": "e-package-middle",
+      "target_entity_id": "e-package-end",
+      "relation_type": "LOCATED_AT",
+      "fact": "物业前台位于一楼大厅。",
+      "memory_id": "m-package-2",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-painting-1",
+      "scope": "s08",
+      "source_entity_id": "e-painting-anchor",
+      "target_entity_id": "e-painting-middle",
+      "relation_type": "RESTORED_BY",
+      "fact": "旧画由周师傅修复。",
+      "memory_id": "m-painting-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-painting-2",
+      "scope": "s08",
+      "source_entity_id": "e-painting-middle",
+      "target_entity_id": "e-painting-end",
+      "relation_type": "WORKS_AT",
+      "fact": "周师傅目前在东湖仓库工作。",
+      "memory_id": "m-painting-2",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-orphan-1",
+      "scope": "s09",
+      "source_entity_id": "e-orphan-passport",
+      "target_entity_id": "e-orphan-li",
+      "relation_type": "HELD_BY",
+      "fact": "护照由小李保管。",
+      "memory_id": "m-orphan-1",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    },
+    {
+      "edge_id": "edge-orphan-2",
+      "scope": "s09",
+      "source_entity_id": "e-orphan-li",
+      "target_entity_id": "e-orphan-beijing",
+      "relation_type": "LOCATED_AT",
+      "fact": "小李目前在北京。",
+      "memory_id": "",
+      "valid_at": "2026-01-01T00:00:00+00:00",
+      "invalid_at": ""
+    }
+  ],
+  "queries": [
+    {
+      "query_id": "q-camera-a-two-hop",
+      "partition": "dev",
+      "category": "two_hop_answerable",
+      "scope": "s01",
+      "query": "相机现在最终在哪里？",
+      "entity_mentions": [
+        "相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-camera-a-1"
+        ],
+        [
+          "m-camera-a-2"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "上海",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-camera-a-one-hop",
+      "partition": "dev",
+      "category": "one_hop_control",
+      "scope": "s01",
+      "query": "相机直接关联的是谁或哪里？",
+      "entity_mentions": [
+        "相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-camera-a-1"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "小王",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-camera-a-wrong-type",
+      "partition": "dev",
+      "category": "wrong_relation_adversary",
+      "scope": "s01",
+      "query": "相机是否经由小王关联到一个不存在的出生地？",
+      "entity_mentions": [
+        "相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "BORN_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-camera-b-two-hop",
+      "partition": "heldout",
+      "category": "two_hop_answerable",
+      "scope": "s02",
+      "query": "相机现在最终在哪里？",
+      "entity_mentions": [
+        "相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-camera-b-1"
+        ],
+        [
+          "m-camera-b-2"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "杭州",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-camera-b-one-hop",
+      "partition": "heldout",
+      "category": "one_hop_control",
+      "scope": "s02",
+      "query": "相机直接关联的是谁或哪里？",
+      "entity_mentions": [
+        "相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-camera-b-1"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "阿宁",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-camera-b-wrong-type",
+      "partition": "heldout",
+      "category": "wrong_relation_adversary",
+      "scope": "s02",
+      "query": "相机是否经由阿宁关联到一个不存在的出生地？",
+      "entity_mentions": [
+        "相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "BORN_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-document-two-hop",
+      "partition": "dev",
+      "category": "two_hop_answerable",
+      "scope": "s03",
+      "query": "租房合同现在最终在哪里？",
+      "entity_mentions": [
+        "租房合同"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "PROVIDED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "CONTACTABLE_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-document-1"
+        ],
+        [
+          "m-document-2"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "lin@example.test",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-document-one-hop",
+      "partition": "dev",
+      "category": "one_hop_control",
+      "scope": "s03",
+      "query": "租房合同直接关联的是谁或哪里？",
+      "entity_mentions": [
+        "租房合同"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "PROVIDED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-document-1"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "林老师",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-document-wrong-type",
+      "partition": "dev",
+      "category": "wrong_relation_adversary",
+      "scope": "s03",
+      "query": "租房合同是否经由林老师关联到一个不存在的出生地？",
+      "entity_mentions": [
+        "租房合同"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "PROVIDED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "BORN_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-pet-two-hop",
+      "partition": "heldout",
+      "category": "two_hop_answerable",
+      "scope": "s04",
+      "query": "豆包现在最终在哪里？",
+      "entity_mentions": [
+        "豆包"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "CARED_FOR_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-pet-1"
+        ],
+        [
+          "m-pet-2"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "苏州",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-pet-one-hop",
+      "partition": "heldout",
+      "category": "one_hop_control",
+      "scope": "s04",
+      "query": "豆包直接关联的是谁或哪里？",
+      "entity_mentions": [
+        "豆包"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "CARED_FOR_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-pet-1"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "陈姨",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-pet-wrong-type",
+      "partition": "heldout",
+      "category": "wrong_relation_adversary",
+      "scope": "s04",
+      "query": "豆包是否经由陈姨关联到一个不存在的出生地？",
+      "entity_mentions": [
+        "豆包"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "CARED_FOR_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "BORN_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-device-two-hop",
+      "partition": "dev",
+      "category": "two_hop_answerable",
+      "scope": "s05",
+      "query": "徕卡相机现在最终在哪里？",
+      "entity_mentions": [
+        "徕卡相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "REPAIRED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-device-1"
+        ],
+        [
+          "m-device-2"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "徐汇区",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-device-one-hop",
+      "partition": "dev",
+      "category": "one_hop_control",
+      "scope": "s05",
+      "query": "徕卡相机直接关联的是谁或哪里？",
+      "entity_mentions": [
+        "徕卡相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "REPAIRED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-device-1"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "星海维修",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-device-wrong-type",
+      "partition": "dev",
+      "category": "wrong_relation_adversary",
+      "scope": "s05",
+      "query": "徕卡相机是否经由星海维修关联到一个不存在的出生地？",
+      "entity_mentions": [
+        "徕卡相机"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "REPAIRED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "BORN_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-key-two-hop",
+      "partition": "heldout",
+      "category": "two_hop_answerable",
+      "scope": "s06",
+      "query": "备用钥匙现在最终在哪里？",
+      "entity_mentions": [
+        "备用钥匙"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "WORKS_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-key-1"
+        ],
+        [
+          "m-key-2"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "创意园",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-key-one-hop",
+      "partition": "heldout",
+      "category": "one_hop_control",
+      "scope": "s06",
+      "query": "备用钥匙直接关联的是谁或哪里？",
+      "entity_mentions": [
+        "备用钥匙"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-key-1"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "表姐",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-key-wrong-type",
+      "partition": "heldout",
+      "category": "wrong_relation_adversary",
+      "scope": "s06",
+      "query": "备用钥匙是否经由表姐关联到一个不存在的出生地？",
+      "entity_mentions": [
+        "备用钥匙"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "BORN_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-package-two-hop",
+      "partition": "adversarial",
+      "category": "two_hop_answerable",
+      "scope": "s07",
+      "query": "快递现在最终在哪里？",
+      "entity_mentions": [
+        "快递"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "RECEIVED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-package-1"
+        ],
+        [
+          "m-package-2"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "一楼大厅",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-package-one-hop",
+      "partition": "adversarial",
+      "category": "one_hop_control",
+      "scope": "s07",
+      "query": "快递直接关联的是谁或哪里？",
+      "entity_mentions": [
+        "快递"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "RECEIVED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-package-1"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "物业前台",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-package-wrong-type",
+      "partition": "adversarial",
+      "category": "wrong_relation_adversary",
+      "scope": "s07",
+      "query": "快递是否经由物业前台关联到一个不存在的出生地？",
+      "entity_mentions": [
+        "快递"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "RECEIVED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "BORN_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-painting-two-hop",
+      "partition": "adversarial",
+      "category": "two_hop_answerable",
+      "scope": "s08",
+      "query": "旧画现在最终在哪里？",
+      "entity_mentions": [
+        "旧画"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "RESTORED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "WORKS_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-painting-1"
+        ],
+        [
+          "m-painting-2"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "东湖仓库",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-painting-one-hop",
+      "partition": "adversarial",
+      "category": "one_hop_control",
+      "scope": "s08",
+      "query": "旧画直接关联的是谁或哪里？",
+      "entity_mentions": [
+        "旧画"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "RESTORED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [
+        [
+          "m-painting-1"
+        ]
+      ],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "周师傅",
+      "expected_path_count": 1
+    },
+    {
+      "query_id": "q-painting-wrong-type",
+      "partition": "adversarial",
+      "category": "wrong_relation_adversary",
+      "scope": "s08",
+      "query": "旧画是否经由周师傅关联到一个不存在的出生地？",
+      "entity_mentions": [
+        "旧画"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "RESTORED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "BORN_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-pet-before-second-hop",
+      "partition": "adversarial",
+      "category": "second_hop_not_yet_valid",
+      "scope": "s04",
+      "query": "三月份豆包经由陈姨最终在哪里？",
+      "entity_mentions": [
+        "豆包"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "CARED_FOR_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-03-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [
+        "m-pet-2"
+      ],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    },
+    {
+      "query_id": "q-orphan-missing-second-provenance",
+      "partition": "adversarial",
+      "category": "orphan_second_hop",
+      "scope": "s09",
+      "query": "护照经由小李最终在哪里？",
+      "entity_mentions": [
+        "护照"
+      ],
+      "steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "valid_at": "2026-08-01T00:00:00+00:00",
+      "required_hop_memory_ids": [],
+      "forbidden_memory_ids": [],
+      "expected_end_entity": "",
+      "expected_path_count": 0
+    }
+  ],
+  "requirements": {
+    "min_queries": 25,
+    "min_scopes": 9,
+    "max_hops": 2,
+    "complete_hop_evidence": true,
+    "publication_ready": false
+  }
+}

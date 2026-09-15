@@ -113,6 +113,32 @@ Without `DOPPEL_LIVE_NEO4J=1` the test is skipped. A passing run requires succes
 one/two-hop traversal plus direction, temporal, provenance, isolation, and zero-residue
 assertions; a mock-driver pass is not reported as live coverage.
 
+After the contract test passes, run the independent oracle-path ablation:
+
+```powershell
+$env:DOPPEL_NEO4J_PASSWORD = "<local-only password>"
+.\.venv\Scripts\python.exe -m benchmarks.personal_relation_path_ablation `
+  --output data/doppel/personal-relation-path-ablation-v1.json
+```
+
+`personal-relation-path-ablation-zh-v1.json` is generated deterministically by
+`build_personal_relation_path_v1.py`. Its 26-query draft has nine exact owner scopes,
+eight answerable two-hop chains, eight one-hop controls, eight wrong-type adversaries,
+one second-hop time boundary, and one orphan-provenance boundary. Two owners deliberately
+receive identical “相机” entities and query text; uniqueness is enforced per scope so
+the collision remains an isolation test instead of being renamed away.
+
+The runner executes `typed_one_hop`, `typed_bounded_path`, and
+`typed_one_hop_path_union` over the same preseeded rich edges and authoritative
+in-memory Store records. It reports evidence recall and complete-evidence rate
+separately from forbidden hits, scope leakage, expected path count, endpoint accuracy,
+cleanup, and latency. A one-hop candidate may be useful related context without being
+mistaken for a complete two-hop answer. No Planner, extractor, embedding model, external
+HTTP request, or paid LLM is involved. Neo4j failures produce a non-zero, structured
+`runtime_unavailable` report rather than fabricated metrics. The suite remains
+`frozen=false` and `publication_ready=false` until independent semantic review and a
+larger path/adversarial corpus are complete.
+
 `personal_retrieval_ablation.py` compares the same pre-extracted fixture set across
 four main execution profiles and three index-direct diagnostics. Every main profile
 runs the real `PersonalMemoryQueryEngine` end-to-end (planner -> lexical/semantic
