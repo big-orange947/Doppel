@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an independent 32-case Chinese relation-path Planner v3 draft and offline
+  evaluator. Unlike the graph-preseeded structural retrieval fixture, every Planner
+  gold path is justified by the question wording and governed relation definitions.
+  The suite separates 12 explicit two-hop chains, 12 one-hop controls, and eight
+  no-path cases, including inbound traversal, nearby-relation confusions, unsupported/
+  ambiguous relations, non-relation requests, and an over-bound three-hop request.
+  Metrics keep whole-path, hop, type, direction, entity, false/missed path, forbidden
+  type, and error outcomes separate; planner exceptions cannot pass as abstention.
 - Add a module-only experimental relation-path Planner v3 draft. It preserves the v2
   operation/time model while adding at most two exact typed/directed path steps and a
   whole-path confidence. Exact steps require host definitions with endpoint roles;

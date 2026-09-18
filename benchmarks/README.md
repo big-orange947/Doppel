@@ -148,6 +148,23 @@ structural ceiling measurements, not natural-language Planner or answer-quality
 scores. [`personal-relation-path-ablation-result.schema.json`](personal-relation-path-ablation-result.schema.json)
 versions the success and structured runtime-failure envelopes.
 
+Natural-language path planning is evaluated on a separate draft,
+[`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
+The structural retrieval fixture above intentionally contains graph-known intermediate
+relations that its short questions do not always state; using those hidden paths as
+Planner gold would reward guessing. The independent Planner draft instead contains 32
+questions whose expected path comes only from wording plus the governed relation
+catalog: 12 explicit two-hop chains, 12 one-hop controls, and eight no-path cases.
+It includes inbound traversal, nearby-relation confusions, unsupported and ambiguous
+relations, non-relation queries, and an explicitly over-bound three-hop request.
+
+`relation_path_planner_quality.py` scores whole-path exactness, hop count, per-hop type,
+direction, entity anchors, missed/false path selection, forbidden nearby types, and
+planner errors independently. An exception never counts as a correct no-path decision.
+The dataset remains unfrozen and not publication-ready; the committed tests exercise a
+gold Planner only to verify the evaluator. A real provider result must be cached and
+reported separately before the experimental Planner v3 can gain execution authority.
+
 `personal_retrieval_ablation.py` compares the same pre-extracted fixture set across
 four main execution profiles and three index-direct diagnostics. Every main profile
 runs the real `PersonalMemoryQueryEngine` end-to-end (planner -> lexical/semantic

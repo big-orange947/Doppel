@@ -1,0 +1,772 @@
+{
+  "suite": "doppel-relation-path-planner-zh-v1",
+  "suite_version": "1.0.0-draft.1",
+  "frozen": false,
+  "publication_ready": false,
+  "relation_catalog": "../catalogs/personal-relations-v1.json",
+  "cases": [
+    {
+      "case_id": "p01",
+      "partition": "dev",
+      "category": "two_hop",
+      "query": "先找出现在保管相机的人，再查那个人现在位于哪里。",
+      "expected_entity_mentions": [
+        "相机"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain"
+      ],
+      "forbidden_relation_types": [
+        "OWNED_BY",
+        "PURCHASED_BY"
+      ]
+    },
+    {
+      "case_id": "p02",
+      "partition": "heldout",
+      "category": "two_hop",
+      "query": "从护照查到签发机关，然后告诉我该机关位于哪里。",
+      "expected_entity_mentions": [
+        "护照"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "ISSUED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain"
+      ],
+      "forbidden_relation_types": [
+        "HELD_BY"
+      ]
+    },
+    {
+      "case_id": "p03",
+      "partition": "dev",
+      "category": "two_hop",
+      "query": "先看这本书是谁推荐的，再查推荐人受雇于哪家机构。",
+      "expected_entity_mentions": [
+        "书"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "RECOMMENDED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "EMPLOYED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain"
+      ],
+      "forbidden_relation_types": [
+        "PURCHASED_BY"
+      ]
+    },
+    {
+      "case_id": "p04",
+      "partition": "heldout",
+      "category": "two_hop",
+      "query": "先确定谁在照顾豆包，再找出照顾人现在的位置。",
+      "expected_entity_mentions": [
+        "豆包"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "CARED_FOR_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain"
+      ],
+      "forbidden_relation_types": [
+        "OWNED_BY"
+      ]
+    },
+    {
+      "case_id": "p05",
+      "partition": "adversarial",
+      "category": "two_hop",
+      "query": "沿着旧画的修复者继续查，修复者目前位于哪里？",
+      "expected_entity_mentions": [
+        "旧画"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "REPAIRED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain",
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "REPAIRED_AT"
+      ]
+    },
+    {
+      "case_id": "p06",
+      "partition": "heldout",
+      "category": "two_hop",
+      "query": "先查礼物的购买者，再查购买者现在在哪里。",
+      "expected_entity_mentions": [
+        "礼物"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "PURCHASED_BY"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain",
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "PURCHASED_AT",
+        "OWNED_BY"
+      ]
+    },
+    {
+      "case_id": "p07",
+      "partition": "dev",
+      "category": "two_hop",
+      "query": "从相机包找到借用人，然后查借用人的当前位置。",
+      "expected_entity_mentions": [
+        "相机包"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "LOANED_TO"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain",
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "HELD_BY",
+        "OWNED_BY"
+      ]
+    },
+    {
+      "case_id": "p08",
+      "partition": "adversarial",
+      "category": "two_hop",
+      "query": "文件存在哪个柜子里？再查那个柜子位于哪里。",
+      "expected_entity_mentions": [
+        "文件"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "STORED_IN"
+          ],
+          "direction": "outbound"
+        },
+        {
+          "relation_types": [
+            "LOCATED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain",
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "HELD_BY"
+      ]
+    },
+    {
+      "case_id": "p09",
+      "partition": "heldout",
+      "category": "two_hop",
+      "query": "从小王反向找出由他保管的物品，再查物品存在哪个容器里。",
+      "expected_entity_mentions": [
+        "小王"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "inbound"
+        },
+        {
+          "relation_types": [
+            "STORED_IN"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain",
+        "inbound"
+      ],
+      "forbidden_relation_types": [
+        "OWNED_BY"
+      ]
+    },
+    {
+      "case_id": "p10",
+      "partition": "dev",
+      "category": "two_hop",
+      "query": "先找出由星海维修处理的设备，再查每台设备现在归谁所有。",
+      "expected_entity_mentions": [
+        "星海维修"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "REPAIRED_BY"
+          ],
+          "direction": "inbound"
+        },
+        {
+          "relation_types": [
+            "OWNED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain",
+        "inbound",
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "REPAIRED_AT",
+        "HELD_BY"
+      ]
+    },
+    {
+      "case_id": "p11",
+      "partition": "adversarial",
+      "category": "two_hop",
+      "query": "从林老师反向找他推荐过的书，再查这些书是谁购买的。",
+      "expected_entity_mentions": [
+        "林老师"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "RECOMMENDED_BY"
+          ],
+          "direction": "inbound"
+        },
+        {
+          "relation_types": [
+            "PURCHASED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain",
+        "inbound"
+      ],
+      "forbidden_relation_types": [
+        "OWNED_BY"
+      ]
+    },
+    {
+      "case_id": "p12",
+      "partition": "dev",
+      "category": "two_hop",
+      "query": "先找出在北京店购买的物品，再查这些物品目前由谁保管。",
+      "expected_entity_mentions": [
+        "北京店"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "PURCHASED_AT"
+          ],
+          "direction": "inbound"
+        },
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "explicit_chain",
+        "inbound",
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "PURCHASED_BY",
+        "OWNED_BY"
+      ]
+    },
+    {
+      "case_id": "p13",
+      "partition": "dev",
+      "category": "one_hop",
+      "query": "这本书是谁买的？",
+      "expected_entity_mentions": [
+        "书"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "PURCHASED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "OWNED_BY",
+        "HELD_BY"
+      ]
+    },
+    {
+      "case_id": "p14",
+      "partition": "heldout",
+      "category": "one_hop",
+      "query": "相机现在归谁所有？",
+      "expected_entity_mentions": [
+        "相机"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "OWNED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "HELD_BY",
+        "PURCHASED_BY"
+      ]
+    },
+    {
+      "case_id": "p15",
+      "partition": "adversarial",
+      "category": "one_hop",
+      "query": "护照目前由谁保管？",
+      "expected_entity_mentions": [
+        "护照"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "HELD_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "OWNED_BY",
+        "ISSUED_BY"
+      ]
+    },
+    {
+      "case_id": "p16",
+      "partition": "heldout",
+      "category": "one_hop",
+      "query": "这本护照由哪个机关签发？",
+      "expected_entity_mentions": [
+        "护照"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "ISSUED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "HELD_BY"
+      ]
+    },
+    {
+      "case_id": "p17",
+      "partition": "dev",
+      "category": "one_hop",
+      "query": "谁修了这台相机？",
+      "expected_entity_mentions": [
+        "相机"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "REPAIRED_BY"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "REPAIRED_AT"
+      ]
+    },
+    {
+      "case_id": "p18",
+      "partition": "adversarial",
+      "category": "one_hop",
+      "query": "这台相机是在哪里维修的？",
+      "expected_entity_mentions": [
+        "相机"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "REPAIRED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "REPAIRED_BY"
+      ]
+    },
+    {
+      "case_id": "p19",
+      "partition": "heldout",
+      "category": "one_hop",
+      "query": "这块表是在哪家店买的？",
+      "expected_entity_mentions": [
+        "表"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "PURCHASED_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "PURCHASED_BY"
+      ]
+    },
+    {
+      "case_id": "p20",
+      "partition": "dev",
+      "category": "one_hop",
+      "query": "豆包出生在哪里？",
+      "expected_entity_mentions": [
+        "豆包"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "BORN_AT"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "ADOPTED_FROM",
+        "LOCATED_AT"
+      ]
+    },
+    {
+      "case_id": "p21",
+      "partition": "adversarial",
+      "category": "one_hop",
+      "query": "豆包是从哪里领养的？",
+      "expected_entity_mentions": [
+        "豆包"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "ADOPTED_FROM"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "BORN_AT",
+        "PURCHASED_AT"
+      ]
+    },
+    {
+      "case_id": "p22",
+      "partition": "heldout",
+      "category": "one_hop",
+      "query": "护照上次是什么日期续签的？",
+      "expected_entity_mentions": [
+        "护照"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "RENEWED_ON"
+          ],
+          "direction": "outbound"
+        }
+      ],
+      "traits": [
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "ISSUED_BY"
+      ]
+    },
+    {
+      "case_id": "p23",
+      "partition": "dev",
+      "category": "one_hop",
+      "query": "从小王反向查他购买过哪些物品。",
+      "expected_entity_mentions": [
+        "小王"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "PURCHASED_BY"
+          ],
+          "direction": "inbound"
+        }
+      ],
+      "traits": [
+        "inbound"
+      ],
+      "forbidden_relation_types": [
+        "OWNED_BY"
+      ]
+    },
+    {
+      "case_id": "p24",
+      "partition": "heldout",
+      "category": "one_hop",
+      "query": "星海维修修过哪些设备？",
+      "expected_entity_mentions": [
+        "星海维修"
+      ],
+      "expected_path_steps": [
+        {
+          "relation_types": [
+            "REPAIRED_BY"
+          ],
+          "direction": "inbound"
+        }
+      ],
+      "traits": [
+        "inbound",
+        "nearby_relation"
+      ],
+      "forbidden_relation_types": [
+        "REPAIRED_AT"
+      ]
+    },
+    {
+      "case_id": "p25",
+      "partition": "dev",
+      "category": "no_path",
+      "query": "我最近看过哪些书？",
+      "expected_entity_mentions": [
+        "书"
+      ],
+      "expected_path_steps": [],
+      "traits": [
+        "nonrelation"
+      ],
+      "forbidden_relation_types": []
+    },
+    {
+      "case_id": "p26",
+      "partition": "heldout",
+      "category": "no_path",
+      "query": "我去年一共旅行了几次？",
+      "expected_entity_mentions": [],
+      "expected_path_steps": [],
+      "traits": [
+        "nonrelation",
+        "count"
+      ],
+      "forbidden_relation_types": []
+    },
+    {
+      "case_id": "p27",
+      "partition": "adversarial",
+      "category": "no_path",
+      "query": "相机和小王到底是什么关系？",
+      "expected_entity_mentions": [
+        "相机",
+        "小王"
+      ],
+      "expected_path_steps": [],
+      "traits": [
+        "ambiguous_relation"
+      ],
+      "forbidden_relation_types": []
+    },
+    {
+      "case_id": "p28",
+      "partition": "heldout",
+      "category": "no_path",
+      "query": "这本书是谁签名的？",
+      "expected_entity_mentions": [
+        "书"
+      ],
+      "expected_path_steps": [],
+      "traits": [
+        "unsupported_relation"
+      ],
+      "forbidden_relation_types": []
+    },
+    {
+      "case_id": "p29",
+      "partition": "adversarial",
+      "category": "no_path",
+      "query": "从相机找到保管人，再找他的雇主，最后查雇主的位置。",
+      "expected_entity_mentions": [
+        "相机"
+      ],
+      "expected_path_steps": [],
+      "traits": [
+        "over_bound",
+        "explicit_chain"
+      ],
+      "forbidden_relation_types": []
+    },
+    {
+      "case_id": "p30",
+      "partition": "dev",
+      "category": "no_path",
+      "query": "帮我订一张明天去北京的机票。",
+      "expected_entity_mentions": [
+        "北京"
+      ],
+      "expected_path_steps": [],
+      "traits": [
+        "nonrelation",
+        "agent_action"
+      ],
+      "forbidden_relation_types": []
+    },
+    {
+      "case_id": "p31",
+      "partition": "heldout",
+      "category": "no_path",
+      "query": "我通常喜欢什么口味？",
+      "expected_entity_mentions": [],
+      "expected_path_steps": [],
+      "traits": [
+        "nonrelation"
+      ],
+      "forbidden_relation_types": []
+    },
+    {
+      "case_id": "p32",
+      "partition": "adversarial",
+      "category": "no_path",
+      "query": "这台设备与星海维修之间是所有权还是维修关系？",
+      "expected_entity_mentions": [
+        "设备",
+        "星海维修"
+      ],
+      "expected_path_steps": [],
+      "traits": [
+        "ambiguous_relation",
+        "explicit_alternatives"
+      ],
+      "forbidden_relation_types": [
+        "OWNED_BY",
+        "REPAIRED_BY"
+      ]
+    }
+  ],
+  "fingerprint": "2b0a4be8ccd3cf4b756f2d12898966c1085ea67b5e3ca3c76875b8a997724eb4"
+}
