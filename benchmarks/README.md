@@ -139,6 +139,15 @@ HTTP request, or paid LLM is involved. Neo4j failures produce a non-zero, struct
 `frozen=false` and `publication_ready=false` until independent semantic review and a
 larger path/adversarial corpus are complete.
 
+The first live Neo4j development run is recorded in
+[`reports/personal-relation-path-live-2026-09-19.md`](reports/personal-relation-path-live-2026-09-19.md).
+On this deliberately narrow oracle-path draft, bounded paths raised evidence recall
+from 0.667 to 1.000 and complete-evidence rate from 0.500 to 1.000, with zero
+forbidden hits, scope leakage, path-count failures, or endpoint failures. These are
+structural ceiling measurements, not natural-language Planner or answer-quality
+scores. [`personal-relation-path-ablation-result.schema.json`](personal-relation-path-ablation-result.schema.json)
+versions the success and structured runtime-failure envelopes.
+
 `personal_retrieval_ablation.py` compares the same pre-extracted fixture set across
 four main execution profiles and three index-direct diagnostics. Every main profile
 runs the real `PersonalMemoryQueryEngine` end-to-end (planner -> lexical/semantic

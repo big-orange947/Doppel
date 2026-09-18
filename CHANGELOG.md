@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Record the first live Neo4j run of the bounded relation-path ablation and version its
+  JSON result envelope. Across the 26-query draft, the typed path profile improved
+  evidence recall from 0.667 to 1.000 and complete-evidence rate from 0.500 to 1.000,
+  with zero forbidden hits, scope leakage, path-count failures, endpoint failures, or
+  fixture residue. The report explicitly remains a narrow oracle-path development
+  ceiling, not a natural-language planning or answer-quality claim.
 - Add the repository-only `doppel-personal-relation-path-ablation-zh-v1` draft and
   zero-model live Neo4j runner. The deterministic builder produces 26 oracle-path
   queries across nine exact owner scopes: eight answerable two-hop chains, eight
