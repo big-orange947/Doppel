@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -17,6 +18,9 @@ from benchmarks.personal_relation_path_ablation import (
 ROOT = Path(__file__).resolve().parents[1]
 DATASET = (
     ROOT / "benchmarks" / "datasets" / "personal-relation-path-ablation-zh-v1.json"
+)
+RESULT_SCHEMA = (
+    ROOT / "benchmarks" / "personal-relation-path-ablation-result.schema.json"
 )
 
 
@@ -50,7 +54,7 @@ def test_committed_relation_path_dataset_is_deterministic_and_draft() -> None:
 
 
 def test_relation_path_dataset_rejects_cross_scope_topology() -> None:
-    payload = build_dataset()
+    payload = cast(dict[str, Any], build_dataset())
     payload["edges"][0]["source_entity_id"] = "e-camera-b-anchor"
 
     with pytest.raises(ValueError, match="cross-scope topology"):
@@ -103,3 +107,35 @@ def test_relation_path_metrics_keep_recall_and_security_separate() -> None:
     one_hop = _summarize_profile(rows, includes_path=False)
     assert one_hop["path_count_failures"] is None
     assert one_hop["endpoint_failures"] is None
+
+
+def test_relation_path_result_schema_tracks_runner_envelope() -> None:
+    schema = json.loads(RESULT_SCHEMA.read_text(encoding="utf-8"))
+
+    assert schema["properties"]["result_schema_version"]["const"] == 1
+    assert schema["properties"]["runner"]["const"] == (
+        "doppel.personal-relation-path-ablation.v1"
+    )
+    assert set(schema["required"]) == {
+        "result_schema_version",
+        "runner",
+        "dataset",
+        "runtime",
+        "gate",
+    }
+    assert set(schema["properties"]["profiles"]["required"]) == {
+        "typed_one_hop",
+        "typed_bounded_path",
+        "typed_one_hop_path_union",
+    }
+    profile_required = set(schema["$defs"]["profile"]["required"])
+    assert {
+        "evidence_recall",
+        "complete_evidence_rate",
+        "forbidden_hits",
+        "scope_leakage",
+        "path_count_failures",
+        "endpoint_failures",
+        "latency_ms",
+        "details",
+    }.issubset(profile_required)

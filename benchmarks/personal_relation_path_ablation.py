@@ -452,6 +452,7 @@ async def run_ablation(
     if not cleaned:
         gate_failures.append("fixture_cleanup")
     return {
+        "result_schema_version": 1,
         "runner": "doppel.personal-relation-path-ablation.v1",
         "dataset": {
             "suite": dataset.suite,
@@ -568,6 +569,7 @@ async def _main_async(args: argparse.Namespace) -> int:
         )
     except Exception as exc:  # noqa: BLE001 - benchmark emits a safe failure artifact
         report = {
+            "result_schema_version": 1,
             "runner": "doppel.personal-relation-path-ablation.v1",
             "dataset": {
                 "suite": dataset.suite,
