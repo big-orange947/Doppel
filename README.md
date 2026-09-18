@@ -1364,6 +1364,18 @@ Graphiti/Neo4j 从不成为事实权威。
 这是有意的分阶段边界。先验证路径结构、安全性和时间语义，再用独立的多跳数据集测量增益与误召回，
 通过后才设计 Planner v3，避免修改已经冻结的 v2 wire shape，更不会针对固定问句写路径特判。
 
+第一轮结构消融通过后，`doppel_memory.query_path` 现提供 module-only experimental 的
+`PersonalMemoryRelationPathDraftV3` 和 `ReferencePersonalMemoryRelationPathPlannerV3`，用于隔离评估“自然
+语言 → 有界类型化路径”。它继承 v2 的 operation/time 语义，但使用独立 `schema_version=3`，最多输出
+两个 `RelationPathStep` 以及整条路径的置信度。精确路径只能选择 host 提供完整定义（含 source/target
+角色）的关系类型；只有机器标签、关系歧义、隐含中间步骤或超过两跳时必须不生成路径。模型无权输出
+scope、memory ID、节点 ID 或 Cypher，host 绑定 subject，未知字段会被投影丢弃。软性的 v2
+`relation_types` 与硬性的 `path_steps` 不允许同时存在。
+
+该 v3 草案仍未接入默认引擎或根包导出；当前阶段只冻结输出边界并建立离线 Planner 评测。只有在扩大且
+独立复核的数据集上验证 hop 数、逐跳类型、方向、时间与拒绝猜测后，才考虑添加新的执行入口；v1/v2
+Planner、缓存、指纹和现有查询结果不会被静默升级。
+
 高召回部署可以显式设置 `PersonalMemoryQueryConfig(candidate_fusion="union")`，让通过
 scope/时间/生命周期/Store 回源门的词法、向量和关系候选并集参与排序。若这类普通
 lookup/current/history/planned/as-of 草案已有实体或关系锚点、却把 `search_text` 留空，

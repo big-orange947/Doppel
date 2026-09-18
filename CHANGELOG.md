@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a module-only experimental relation-path Planner v3 draft. It preserves the v2
+  operation/time model while adding at most two exact typed/directed path steps and a
+  whole-path confidence. Exact steps require host definitions with endpoint roles;
+  soft v2 relation candidates and hard path constraints cannot coexist. The Reference
+  adapter discards unknown fields, restores host-bound subject authority, reuses host
+  calendar grounding, and rejects types outside the definitions. It has no scope,
+  graph-execution, node-ID, memory-ID, Cypher, query-engine, or root-export authority.
 - Record the first live Neo4j run of the bounded relation-path ablation and version its
   JSON result envelope. Across the 26-query draft, the typed path profile improved
   evidence recall from 0.667 to 1.000 and complete-evidence rate from 0.500 to 1.000,
