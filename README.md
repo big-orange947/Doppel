@@ -1,1590 +1,477 @@
-# Doppel（分身）
+<div align="center">
 
-> An open-source, provenance-aware personal memory and context core for long-running
-> personal agents.
->
-> 面向长期个人 Agent 的记忆与个人上下文中枢：聊天优先、说话人感知、精确作用域、完整溯源、
-> 可插拔后端。
+# Doppel · 分身
 
-Doppel 把聊天以及未来来自文件、日历、邮件和工具的个人事件，整理为带说话人、事实权威、
-作用域、时间解释和来源证据的记忆，为上层个人 Agent 提供摄入、生命周期、过滤检索和结构化
-材料能力。Doppel 不生成回复，不负责消息路由或发送，也不规定开发者如何消费记忆。
+### 为长期个人 Agent 设计的个人记忆与上下文中枢
 
-“让机器人更接近号主的表达方式”是一个可选 preset；你也可以只使用事件记忆、关系
-记忆、自定义记忆类型，或者完全替换材料构建逻辑。
+让 Agent 在长期、多会话、多用户环境中记住**正确的人、正确的时间、正确的关系与原始证据**。
 
-## 框架边界
+[![CI](https://github.com/big-orange947/Doppel/actions/workflows/ci.yml/badge.svg)](https://github.com/big-orange947/Doppel/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Version](https://img.shields.io/badge/version-0.8.3-blue)
+![Status](https://img.shields.io/badge/status-alpha-orange)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+[快速开始](#快速开始) · [核心能力](#核心能力) · [检索架构](#面向个人记忆的检索架构) · [质量与测评](#质量与测评) · [文档](#文档导航)
+
+</div>
+
+---
+
+Doppel 不是一个通用向量数据库包装器，也不是负责回复、工具调用和消息路由的 Agent Runtime。
+
+它专注于一件事：成为长期个人 Agent 的**个人记忆权威核心**——把聊天、文件、日历、邮件或工具
+观察中的个人事实、经历、偏好、计划与关系，整理为带有作用域、时间、说话人、事实权威和来源证据
+的长期记忆，再以结构化结果交给上层 Agent 使用。
 
 ```text
-IM Platform / Agent Runtime
-          │ normalized events / explicit scopes
-          ▼
-        Doppel
- put · ingest · process · search · lifecycle · index maintenance · materials
- role · authority · scope · provenance
-          │
-          ▼
- InMemory / SQLite / PostgreSQL / custom Store
-          + explicit pgvector / Graphiti semantic indexes
+“我临时去北京出差两个月”
+               │
+               ▼
+Doppel 知道这是有有效期的临时状态，而不是永久覆盖“长期住在上海”
+               │
+               ▼
+五个月后查询当前住处 → 上海
+查询出差期间的住处     → 北京
 ```
 
-Doppel 负责：
+## 为什么是 Doppel
 
-- 标准化 IM 消息和开放式 actor；
-- 无碰撞、可扩展的 exact scope namespace；
-- 通用记忆写入、幂等、状态转换和删除；
-- 可插拔 MemoryProcessor、周期 BatchTask、MemoryProposal、状态策略和有限 hooks；
-- 按 kind、actor、authority、state、tag、重要性和时间过滤；
-- 可追溯的检索结果和结构化材料；
-- 可替换后端及明确的能力声明；
-- 派生语义索引的幂等写入、指纹校验、恢复和孤儿清理。
+| 长期 Agent 的真实问题 | Doppel 的处理方式 |
+|---|---|
+| 多个用户、群聊和私聊容易串台 | Store 只执行 **exact scope** 查询；跨会话读取必须由 host 明确授权 |
+| Agent 自己说过的话被误记成用户事实 | 区分 actor、subject 与 fact authority；Agent 输出默认不能成为 owner 事实 |
+| “曾经、现在、计划、取消、临时”被压成一条静态文本 | 记录时间状态、有效区间、纠正、撤回、冲突与生命周期 |
+| 向量相似不等于关系正确 | 词法、向量、时间与类型化关系检索分工明确，最终回到权威 Store 复核 |
+| 记忆命中了，却不知道从哪里来的 | 每条派生记忆保留消息、事件、处理器与版本化 provenance |
+| 一个通用 memory API 无法支撑个人 Agent | 提供个人事实、事件计数、关系、风格、材料装配和治理协议，同时保持 host 可控 |
 
-Doppel 不负责：
+## 适合什么场景
 
-- 对话路由、回复生成、工具调用和消息发送；
-- 完整短期上下文管理和具体平台协议；
-- 确认 UI、模型/账号选择、API key 托管或强制 prompt 模板；
-- 替开发者决定哪些记忆应该参与当前回复。
+- **长期个人助手**：在不同时间和来源中维护主人的事实、偏好、关系、经历、计划与承诺。
+- **聊天代理 / IM Agent**：安全处理私聊、群聊、不同联系人和不同平台的长期记忆。
+- **多 Agent 个人系统**：主 Agent 获得经过授权的全局个人记忆；子 Agent 只接收当前任务或会话范围。
+- **跨会话个人信息中枢**：由 host 明确把会话记忆提升到 user scope，并在新会话中重新使用。
+- **可审计的个性化生成**：为上层模型提供结构化事实、关系、冲突、原话样本与风格指导。
+- **自定义个人记忆产品**：替换 Store、Processor、Planner、Embedding、Reranker 或材料渲染器。
 
-这里的“个人记忆与上下文中枢”有明确的所有权边界：Doppel 作为关于个人的长期事实、状态、
-经历、关系与证据的权威核心，不接管 Agent 的工作流 checkpoint、程序性任务经验、完整文档库或
-日历/邮件等实时业务事实源。聊天是当前最成熟的输入适配器，不是领域边界。Graphiti 与 pgvector
-始终是权威 Store 的派生候选索引。完整约束见
-[`docs/personal-memory-boundary.md`](docs/personal-memory-boundary.md)。
+不适合直接拿 Doppel 替代：
 
-## 安装
+- Agent 的短期上下文窗口、工作流 checkpoint 或 scratchpad；
+- 完整文档库和通用知识库；
+- 日历、邮件、金融账户等实时业务系统本身；
+- Agent 编排、工具执行、消息发送和最终回答生成。
 
-核心包依赖 Pydantic 和异步 HTTP 客户端 httpx，默认包含 InMemory、SQLite 后端以及
-OpenAI-compatible 结构化输出 provider：
+完整边界见 [Personal memory ownership boundary](docs/personal-memory-boundary.md)。
 
-```bash
-pip install doppel-memory
+## 核心能力
+
+### 1. 不串台的精确作用域
+
+`MemoryScope` 可以表达用户、Agent、平台、私聊/群聊、会话、联系人以及自定义维度。所有 Store
+操作都绑定完整 `scope_key`，不会自行扩大读取范围。
+
+```python
+from doppel_memory import MemoryScope
+
+conversation = MemoryScope(
+    user_id="owner-42",
+    agent_id="personal-agent",
+    platform="qq",
+    chat_type="private",
+    chat_id="contact-7",
+)
+
+# 跨会话读取不是隐式行为，由 host 显式选择授权范围。
+authorized_scopes = [conversation, conversation.user_scope()]
 ```
 
-PostgreSQL 是独立可选依赖，不会增加默认安装体积：
+这意味着同一个进程可以处理多个账号、用户和会话，但调用方只能读取自己明确传入的 scope。
+Doppel 提供隔离原语，应用负责决定主 Agent、子 Agent 和具体任务分别拥有哪些 scope。
 
-```bash
-pip install "doppel-memory[postgres]"
+### 2. 说话人、主体与事实权威分离
+
+Doppel 不把“出现在聊天记录里”直接等同于“这是主人的事实”。记忆会区分：
+
+- 谁说的：`actor`；
+- 事实描述的是谁：`subject` / `subject_id`；
+- 证据权威：owner、contact、agent output、imported source 等；
+- 原始消息或事件：source message/event；
+- 哪个抽取器或任务产生了它：processor/model/version。
+
+这套边界可以阻止群成员的陈述、机器人回复或跨用户数据被静默提升成主人的长期事实。
+
+### 3. 时间感知与可演化记忆
+
+Doppel 的个人记忆不是只含正文的 chunk。它可以表达：
+
+- current / historical / planned / timeless；
+- `valid_from` / `valid_to`；
+- correction / retraction；
+- candidate / confirmed / superseded / expired；
+- 相互矛盾但暂时无法裁决的 conflict；
+- 强化、显式短期衰减、归档与恢复。
+
+查询层把 `lookup / list / count` 与 `current / prior / planned / as-of / interval` 分开，避免把
+“去年去过几次”和“现在住哪里”压成同一种搜索。
+
+### 4. 词法、向量、时间与关系联合检索
+
+Doppel 支持从轻量到高配置的渐进部署：
+
+| 层级 | 组合 | 适用场景 |
+|---|---|---|
+| 最小配置 | SQLite + 词法检索 | 本地开发、小规模机器人、协议验证 |
+| 服务端配置 | PostgreSQL Store | 多进程、共享连接池、服务端部署 |
+| 语义增强 | PostgreSQL + pgvector | 中文语义改写、近义表达和高召回候选发现 |
+| 时间/关系增强 | Neo4j + Graphiti relation index | 实体关系、时点状态、类型化关系检索 |
+| 最高质量 | PostgreSQL + pgvector + Graphiti + Planner/Reranker | 长期个人 Agent 的混合候选召回与关系约束 |
+
+向量和图始终只是**派生候选索引**。命中的 memory ID 必须重新加载权威 Store，并重新检查 scope、
+subject、authority、生命周期、时间和 provenance。
+
+### 5. 可追溯的抽取、整理与治理
+
+```text
+消息 / 事件 / 文件摘要
+        │
+        ▼
+MemoryProcessor / PersonalMemoryAnalyzer
+        │ 只提出 proposal，不直接写 Store
+        ▼
+ProposalWriter
+        │ scope · authority · evidence · policy · idempotency
+        ▼
+Authoritative Store
+        │
+        ├── Consolidation：合并、纠正、冲突
+        ├── Governance：强化、衰减、归档、恢复
+        └── IndexMaintainer：同步 pgvector / Graphiti 派生索引
 ```
 
-使用 PostgreSQL 上的可选 pgvector 语义索引：
+在线 Processor 保持无状态；需要统计历史的风格、互动模式或长期聚合通过周期 BatchTask 运行。
+模型只负责提出结构化判断，最终写入权限始终留在受约束的 host 管线中。
 
-```bash
-pip install "doppel-memory[pgvector]"
+### 6. 结构化内容与风格材料
+
+- `ContentPart` / `MediaRef` 可以表示文字、文件、图片等输入；是否解析和是否形成长期记忆由 host 决定。
+- `ContentResolver` 可以把外部内容解析为可引用摘要，不要求把完整文件复制进记忆库。
+- `StyleMiner` 从 owner 历史原话形成可观察风格统计。
+- `StyleProfessor` 把 profile 编译成受限生成指导，不让风格材料覆盖事实与安全约束。
+- `MaterialBundle` 向上层提供事件、背景、关系、风格样本、指导与 provenance，而不是强制某种 prompt。
+
+## 面向个人记忆的检索架构
+
+```mermaid
+flowchart LR
+    Q[用户问题] --> P[Query Planner]
+    P --> L[Lexical]
+    P --> V[pgvector]
+    P --> G[Graphiti Relation]
+    L --> C[候选融合 / 排序]
+    V --> C
+    G --> C
+    C --> R[权威 Store 回源]
+    R --> A{"Scope · Subject · Authority<br/>State · Time · Provenance"}
+    A --> H[结构化 Memory Hits]
+    H --> X[上层上下文选择 / 回答模型]
 ```
 
-这个 extra 提供异步 PostgreSQL 客户端；数据库服务器仍需单独安装并启用 pgvector extension。
+Planner 负责把自然语言问题转换为结构化检索意图，例如：
 
-实验性 Graphiti 语义/图索引需要额外依赖：
+- 当前事实还是历史事实；
+- 单条 lookup、完整 list，还是必须精确的 count；
+- 查询时间点或时间区间；
+- 显式实体与关系提示；
+- host ontology 中允许的关系类型。
 
-```bash
-pip install "doppel-memory[graphiti]"
+Planner **不选择 scope，不生成答案，也不能绕过 Store 安全门**。确定性 Planner 不包含饮食、旅行、
+住所、工作等 benchmark 领域词典；更强语义规划由可替换的 Reference Planner 完成。
+
+### 有界关系多跳
+
+对于“物品 → 保管人 → 保管人所在地”这类问题，实验性 `RelationPathIndex` 已支持最多两跳的
+类型化、定向路径。每一跳都必须单独通过：
+
+```text
+exact scope → time → Edge → Episode → memory_id → Store revalidation
 ```
+
+真实 Neo4j 开发消融中，两跳路径把证据召回率从 `0.667` 提升到 `1.000`，完整证据率从
+`0.500` 提升到 `1.000`，同时保持 0 forbidden hit、0 scope leakage 和 0 provenance failure。
+
+自然语言 Planner v3 与路径执行目前仍是 **module-only experimental**：它们没有接入默认查询引擎，
+也不会静默改变 v1/v2 Planner。详见
+[关系路径实测报告](benchmarks/reports/personal-relation-path-live-2026-09-19.md)。
 
 ## 快速开始
 
-```python
-from doppel_memory import ChatMessage, DoppelClient, MemoryScope, WriteStatus
+### 安装
 
-memory = DoppelClient(backend="sqlite", database="doppel.sqlite3")
+项目目前处于 Alpha，建议先从源码安装：
 
-scope = MemoryScope(
-    user_id="u1",
-    agent_id="qq-bot",
-    platform="qq",
-    chat_type="private",
-    chat_id="3807050597",
-)
-
-result = await memory.ingest(
-    scope,
-    ChatMessage.of(
-        "contact",
-        "快完成了，下午发给你",
-        "2026-08-26T16:51:00+08:00",
-        event_id="evt-123",
-    ),
-)
-assert result.status is WriteStatus.CREATED
-
-hits = await memory.recall("下午发", [scope])
-bundle = await memory.materials(scope, query="项目进度")
-prompt_block = bundle.render()  # 默认 renderer 只是便利工具，可以替换
-
-await memory.close()
+```bash
+git clone https://github.com/big-orange947/Doppel.git
+cd Doppel
+pip install -e .
 ```
 
-完整零配置示例：
+按需安装可选后端：
+
+```bash
+pip install -e ".[postgres]"   # PostgreSQL / pgvector 客户端
+pip install -e ".[graphiti]"   # Graphiti + Neo4j + FastEmbed
+pip install -e ".[dev]"        # 测试、Ruff、Pyright
+```
+
+### 30 秒体验
+
+```python
+import asyncio
+
+from doppel_memory import ChatMessage, DoppelClient, MemoryScope
+
+
+async def main() -> None:
+    memory = DoppelClient(backend="sqlite", database="doppel.sqlite3")
+
+    scope = MemoryScope(
+        user_id="owner-42",
+        agent_id="personal-agent",
+        platform="qq",
+        chat_type="private",
+        chat_id="contact-7",
+    )
+
+    await memory.ingest_messages(
+        scope,
+        [
+            ChatMessage.of(
+                "owner",
+                "我下个月会去北京出差两个月，之后还是回上海住。",
+                "2026-09-21T10:00:00+08:00",
+                event_id="message-1",
+            ),
+            ChatMessage.of(
+                "contact",
+                "到了北京记得告诉我。",
+                "2026-09-21T10:01:00+08:00",
+                event_id="message-2",
+            ),
+        ],
+    )
+
+    # 轻量召回：显式传入允许读取的 scope。
+    hits = await memory.recall("北京出差", [scope])
+    for hit in hits:
+        print(hit.fact, hit.memory_id)
+
+    # 给上层 Agent 的结构化材料；默认 renderer 只是便利工具，可以替换。
+    bundle = await memory.materials(scope, query="最近有什么出行安排？")
+    print(bundle.render())
+
+    await memory.close()
+
+
+asyncio.run(main())
+```
+
+也可以直接运行：
 
 ```bash
 python examples/basic.py
 ```
 
-## 三层 API
-
-### 低层：Store 协议
-
-自定义 kind 和底层工具可以直接通过通用 `MemoryRecord` 写入：
+### 时间感知的个人记忆查询
 
 ```python
-from doppel_memory import MemoryRecord, MemoryState
+from datetime import UTC, datetime
 
-result = await memory.put(
-    MemoryRecord(
-        scope=scope,
-        kind="my_agent.preference",
-        content="偏好短回复",
-        actor="moderator",
-        state=MemoryState.CANDIDATE,
-    ),
-    idempotency_key="preference:short-replies",
-)
-```
-
-`WriteResult.status` 会明确区分 `created`、`updated`、`duplicate`、`skipped` 和
-`failed`，不会用一个空字符串同时表示多种结果。
-
-### 中层：摄入与检索
-
-```python
-from doppel_memory import FactAuthority, MemoryFilter
-
-await memory.ingest_messages(scope, messages)
-
-hits = await memory.recall(
-    "搬家",
+result = await memory.query_personal_memory(
+    "去年一共旅行了几次？",
     [scope, scope.user_scope()],
-    filters=MemoryFilter(
-        kinds={"event", "background"},
-        exclude_authorities={FactAuthority.AGENT_OUTPUT},
-    ),
-)
-```
-
-Store 只做 exact scope 匹配。需要会话级、联系人级和用户级多层召回时，由开发者显式
-传入多个 scope，或者在高层 API 注册 `ScopePolicy`。
-
-需要服务端并发和多进程共享时可以直接使用 PostgreSQL 后端；连接池和迁移在第一次操作时
-懒初始化，DSN 不会出现在 health 输出中：
-
-```python
-from doppel_memory import DoppelClient, PostgreSQLStore
-
-store = PostgreSQLStore(
-    "postgresql://doppel:secret@127.0.0.1:5432/agent_memory",
-    min_pool_size=1,
-    max_pool_size=10,
-)
-memory = DoppelClient(store)
-
-# 等价的 facade 写法：
-memory = DoppelClient(
-    backend="postgres",
-    dsn="postgresql://doppel:secret@127.0.0.1:5432/agent_memory",
-)
-```
-
-后端会在已有 schema（默认 `public`）内创建和迁移 Doppel 自己的表/索引；生产角色没有
-`CREATE SCHEMA` 权限时不受影响。只有显式传入 `create_schema=True` 才会创建自定义 schema。
-当前 PostgreSQL 核心后端提供 substring/filter 检索，不把外部 embedding 调用混入 Store 事务。
-语义能力通过独立索引和 RetrievalStrategy 显式组合：
-
-```python
-from collections.abc import Sequence
-
-from doppel_memory import (
-    HybridRetrievalStrategy,
-    PostgreSQLVectorIndex,
-    Retriever,
-    VectorIndexConfig,
-)
-
-class MyEmbeddingProvider:
-    name = "my-embedding-model"
-    version = "2026-08"
-    dimensions = 768
-
-    async def embed(
-        self, texts: Sequence[str]
-    ) -> Sequence[Sequence[float]]:
-        return await my_embedding_service.embed(texts)
-
-    # Optional additive extension for instruction-aware/asymmetric models.
-    # Include this instruction/template in ``version`` so it gets a new
-    # vector namespace when changed.
-    async def embed_queries(
-        self, texts: Sequence[str]
-    ) -> Sequence[Sequence[float]]:
-        return await my_embedding_service.embed_queries(texts)
-
-vector_index = PostgreSQLVectorIndex(
-    store,
-    MyEmbeddingProvider(),
-    VectorIndexConfig(
-        # 只应在有权限、明确允许安装 extension 的数据库启用：
-        create_extension=False,
-        # 默认 exact NN；确认规模和构建成本后再启用 HNSW：
-        create_hnsw_index=False,
-    ),
-)
-
-created = await store.write_background(scope, "周末想去山里徒步")
-if created.record is not None:
-    report = await vector_index.index_record(created.record)
-    if not report.ok:
-        handle_failures(report.failures)
-
-retriever = Retriever(
-    store,
-    strategy=HybridRetrievalStrategy(vector_index),
-)
-hits = await retriever.recall("户外散步计划", [scope], limit=5)
-```
-
-`VectorIndexReport` 本身是结构化结果，使用 `report.ok` 和 `report.failures` 检查，不会把 provider
-失败伪装成 Store 写入失败。已有记录通过 bounded page 回填，cursor 由调用方持久化：
-
-```python
-cursor = ""
-while True:
-    page = await vector_index.backfill(scope, cursor=cursor, page_size=100)
-    handle_failures(page.report.failures)
-    cursor = page.next_cursor
-    if not page.has_more:
-        break
-```
-
-provider 的 `name + version + dimensions + cosine metric` 会形成 profile fingerprint；每个 profile
-使用独立向量表，所以模型升级和维度变化不会静默混用。相同 stored content hash 会跳过重复 embedding。
-默认 hybrid 策略只对已知的 provider/unavailable 错误降级为 lexical；数据库错误不会被吞掉。
-
-候选召回与重排是独立扩展点：
-
-```python
-class SimilarityReranker:
-    async def rerank(self, query, candidates, *, limit):
-        return sorted(
-            candidates,
-            key=lambda item: item.similarity,
-            reverse=True,
-        )[:limit]
-
-memory = DoppelClient(
-    backend="sqlite",
-    reranker=SimilarityReranker(),
-    candidate_multiplier=4,
-)
-```
-
-`RetrievalStrategy` 决定如何产生候选，默认实现转发到 `MemoryStore.search()`；`Reranker`
-只接收已经通过 scope 检查的候选。有 Reranker 时，Retriever 会按
-`limit * candidate_multiplier` 多取候选。自定义 strategy 与 reranker 的输出都会再次经过
-exact-scope 白名单和去重，不能注入未授权记忆。
-
-### IM 历史导入
-
-`IMImportBatch` 是可序列化的跨平台 envelope，每条消息携带自己的 exact scope：
-
-```python
-from doppel_memory import ChatMessage, IMImportBatch, IMImportItem
-
-batch = IMImportBatch(
-    source="qq-export",
-    batch_id="page-1",
-    items=[
-        IMImportItem(
-            scope=scope,
-            source_id="row-42",
-            message=ChatMessage.of(
-                "contact",
-                "回复上一条消息",
-                "2026-08-26T12:01:00+08:00",
-                message_id="m2",
-                sender_id="contact-1",
-                reply_to_id="m1",
-                quoted_message_id="m0",
-                thread_id="thread-7",
-                thread_root_id="m0",
-            ),
-        )
-    ],
-)
-
-result = await memory.import_batch(batch)
-result.created
-result.duplicates
-result.failed
-```
-
-导入仍使用普通事件的 scope 级幂等语义，因此同一批可安全重放。消息没有平台
-message/event ID 时，导入器使用 `source + source_id`（或 batch ID + 序号）生成稳定 fallback
-event ID；批次来源保存在 `raw.doppel_import`。`thread_id`、reply、quote 和 thread root 默认
-只是消息 provenance；框架不会根据 thread 自动改变 namespace。需要 thread 级隔离时，应在
-`IMImportItem.scope` 中显式使用
-`scope.with_dimension("thread_id", "thread-7")`。
-
-### 结构化事件与可选内容解析
-
-`ChatMessage.text` 和 `attachments` 继续兼容。新适配器可以用 `ContentPart` 和 `MediaRef` 无损表示
-图片、语音、视频、文件、贴纸或平台自定义内容，而不把二进制塞进消息模型：
-
-```python
-from doppel_memory import ChatMessage, ContentPart, MediaRef
-
-image = ChatMessage.of(
-    "owner",
-    "",
-    "2026-08-27T10:00:00Z",
-    event_id="image-1",
-    message_type="image",
-    parts=[
-        ContentPart(
-            type="image",
-            media=MediaRef(
-                media_id="platform-image-1",
-                uri="platform://media/image-1",
-                mime_type="image/png",
-                width=1280,
-                height=720,
-            ),
-        )
-    ],
-)
-```
-
-`ContentPart.type` 是开放字符串；part 可以携带 text、MediaRef 或自定义 metadata。`MediaRef` 只是
-轻量引用，支持 ID/URI、MIME、文件名、大小、SHA-256、宽高和时长；Doppel 不读取 URI、不下载
-媒体、不持有访问凭证，也不保存二进制。签名 URL 可能过期或包含敏感信息，是否持久化由适配器
-决定。
-
-平台非标准事件继续由 `message_type` 表示，并可用结构化 part 保留参数：
-
-```python
-nudge = ChatMessage.of(
-    "contact",
-    "",
-    at,
-    message_type="nudge",
-    parts=[
-        ContentPart(
-            type="interaction",
-            metadata={"action": "nudge", "target_id": "u1"},
-        )
-    ],
-)
-```
-
-OCR、语音转写、图片描述等能力实现 async `ContentResolver`。Resolver 只返回额外的派生 part：
-
-```python
-from doppel_memory import ContentPart, resolve_content
-
-class MyOCR:
-    name = "my-ocr"
-    version = "1"
-
-    async def resolve(self, message):
-        return [ContentPart(type="text", text="图片中的文字")]
-
-resolution = await resolve_content(image, [MyOCR()])
-resolution.message       # 新 ChatMessage 副本
-resolution.derived_parts # 带 resolver/version provenance
-resolution.errors        # 单个 resolver 失败不隐藏其他成功结果
-```
-
-Resolver 按顺序运行，后一个能看到前一个产生的文本，但每次收到的都是副本，不能修改原消息。
-`resolve_content()` 保留原 `message_type`，不会调用 Store、Processor 或 StyleMiner。即使图片解析出
-文字，默认 StyleMiner 仍因 `message_type="image"` 而忽略它；开发者必须显式把 `image` 加入
-`accepted_message_types` 才会用于风格分析。
-
-如果 `text` 为空而消息直接携带 text part，ChatMessage 会提供兼容的纯文本投影；显式传入的
-`text` 始终优先。旧 `attachments` 不会自动猜测或转换为 MediaRef，以免丢失平台私有字段。
-显式 `ingest()` 仍表示开发者决定保存该事件；只构造或 resolve 消息不会产生长期记忆。
-
-完整示例：
-
-```bash
-python examples/structured_events.py
-```
-
-### Processor 管线
-
-Processor 只分析标准化消息并返回 proposal，不直接接触 Store。下面的规则处理器只是示例；
-你可以换成自己的规则、模型或远程服务：
-
-```python
-from doppel_memory import (
-    MemoryKind,
-    MemoryProposal,
-    MemoryState,
-)
-
-class PreferenceProcessor:
-    name = "my.preference"
-    version = "1"
-
-    async def process(self, scope, message):
-        if "短回复" not in message.text:
-            return []
-        return [
-            MemoryProposal(
-                scope=scope.user_scope(),
-                kind=MemoryKind.FACT,
-                content="用户偏好短回复",
-                actor=message.actor,
-                confidence=0.9,
-                proposed_state=MemoryState.CANDIDATE,
-                idempotency_key="preference:short-replies",
-                source_message_id=message.message_id,
-                processor=self.name,
-                processor_version=self.version,
-            )
-        ]
-
-result = await memory.process(
-    scope,
-    message,
-    processors=[PreferenceProcessor()],
-    # 跨到 user scope 必须由调用方显式授权。
-    allowed_scopes=[scope.user_scope()],
-)
-```
-
-`ProposalPolicy.evaluate()` 可以保留、修改或拒绝 proposal。默认 policy 原样保留
-`proposed_state`，不会内置置信度阈值或确认规则。`before_process`、`after_proposal`、
-`before_write`、`after_write`、`on_error` 是全部生命周期 hooks；框架不建立无限扩张的
-中间件体系。
-
-`client.process()` 不传 `processors` 时是 no-op，不会把所有输入悄悄变成长时事件记忆。
-需要保存原始事件时使用 `client.ingest()`，或者显式传入确定性的 `EventProcessor()`。
-
-### 个人记忆参考抽取（v0.7.2）
-
-`ReferencePersonalMemoryAnalyzer` 提供模型无关的结构化 schema 和高精度参考指令；v0.8.3 提供
-`OpenAICompatibleStructuredOutputModel`，也仍允许开发者实现很小的
-`StructuredOutputModel.generate()` 边界。在线路径适合一条消息中明确、自包含的个人事实：
-
-```python
-import os
-
-from doppel_memory import (
-    OpenAICompatibleStructuredOutputConfig,
-    OpenAICompatibleStructuredOutputModel,
-    PersonalMemoryExtractor,
-    ReferencePersonalMemoryAnalyzer,
-)
-
-provider = OpenAICompatibleStructuredOutputModel(
-    OpenAICompatibleStructuredOutputConfig(
-        model="your-model-id",
-        # OpenAI 默认值是 https://api.openai.com/v1；本地/兼容服务可替换。
-        base_url="https://api.openai.com/v1",
-    ),
-    # key 由 host 注入，不进入 config、fingerprint、异常或记忆 provenance。
-    api_key=os.environ["DOPPEL_API_KEY"],
-)
-try:
-    extractor = PersonalMemoryExtractor(
-        ReferencePersonalMemoryAnalyzer(provider)
-    )
-    result = await memory.process(
-        scope,
-        message,
-        processors=[extractor],
-        # owner 记忆默认提议到 user scope，仍必须由 host 明确授权。
-        allowed_scopes=[scope.user_scope()],
-    )
-finally:
-    await provider.aclose()
-```
-
-完整可运行入口见 [`examples/openai_compatible.py`](examples/openai_compatible.py)。设置
-`DOPPEL_MODEL`、可选的 `DOPPEL_API_KEY` 和 `DOPPEL_OPENAI_BASE_URL` 后运行即可。同一个 provider
-也可注入 `ReferencePersonalMemoryQueryPlanner` 和 `ReferenceMemoryConsolidator`。
-
-默认 `schema_mode="json_schema"`，但 `strict_schema=False`。这是刻意的：Doppel 的开放 metadata 和
-带默认值字段不是 OpenAI strict JSON Schema 子集；模型结果返回后仍会经过对应 Pydantic 模型验证。
-若自定义输出 schema 已满足 strict 子集，可显式启用 `strict_schema=True`。只支持 JSON Object 的本地
-服务可设 `schema_mode="json_object"`，provider 会把完整 schema 放入 system instruction，再进行本地
-JSON object 门禁。旧兼容服务若只接受 `max_tokens`，可设置
-`max_tokens_parameter="max_tokens"`；默认使用当前的 `max_completion_tokens`。
-
-provider 不自动重试，避免在不明确的幂等/成本条件下重复调用。`StructuredOutputProviderError` 提供
-`code`、HTTP status、`retryable` 和 `retry_after_seconds`，由 MemoEcho/AstrBot 等 host 决定退避、
-熔断或转入 shadow failure；异常不会包含 API key、prompt、响应正文或模型拒绝原文。
-
-模型输出只是 `PersonalMemoryDraft`，不能选择 Store、memory ID、authority、最终 scope 或生命周期
-动作。Doppel 会重新验证每个 evidence ID，只从可信消息推导 actor/authority/subject ID；owner
-事实默认提议到 user scope，contact 事实固定留在来源会话。Agent/system 消息默认不进入分析，
-低于 `minimum_confidence` 的草稿被丢弃，所有通过门禁的记录仍以 `candidate` 状态进入普通
-proposal/policy/Store 路径。
-
-需要比较“以前喜欢蓝色、现在喜欢绿色”或把多次相同陈述绑定为多条证据时，使用读取封闭窗口的
-`PersonalMemoryMiner`，而不是给在线 Processor 偷偷注入 Store：
-
-```python
-from doppel_memory import HistoryWindow, PersonalMemoryMiner
-
-miner = PersonalMemoryMiner(
-    ReferencePersonalMemoryAnalyzer(MyStructuredModel())
-)
-result = await memory.run_batch_task(
-    miner,
-    scope,
-    HistoryWindow(start=window_start, end=window_end),
-    allowed_scopes=[scope.user_scope()],
-)
-```
-
-抽取层只负责证据绑定，不会擅自把冲突草稿合并、覆盖或标记过期。核心包不绑定供应商 SDK；官方
-OpenAI-compatible HTTP 实现和任意自定义 provider 都通过同一 provisional 协议接入。
-
-### 个人记忆整理与冲突安全（v0.7.3–v0.8.2）
-
-`MemoryConsolidator` 与抽取器分离：它周期性审计一个 exact scope 内已有的 active
-`personal-memory`，只提议“哪些现有记录应合并/纠正，以及哪条现有记录作为 canonical”，不能生成
-替代文本或选择写入 scope。保守的确定性实现可直接用于重复证据整理：
-
-```python
-from doppel_memory import DeterministicMemoryConsolidator
-
-result = await memory.consolidate(
-    DeterministicMemoryConsolidator(),
-    scope,
-    checkpoint=checkpoint,
-    run_id="nightly-personal-memory",
-)
-if result.committable_checkpoint is not None:
-    await my_checkpoint_store.save(result.committable_checkpoint)
-```
-
-每次运行先生成可序列化、带完整性校验的 `ConsolidationPlan`，再幂等写入保留 canonical 内容和全部
-证据链的新记录，最后以乐观并发把来源记录转为 `superseded`。中途失败不会释放 checkpoint；保存原
-plan 并重放即可继续，不会复制 canonical。需要将计划持久化后再执行时，可直接使用
-`ConsolidationRunner.plan_once()` 与 `execute()` 两阶段接口。
-
-调度器必须保证同一 exact scope 同时只有一个 consolidation plan 在执行（多实例部署应使用数据库
-租约）。重放解决的是同一 plan 的部分失败，不把无事务的通用 Store 协议伪装成分布式锁。
-
-确定性纠错必须同时满足相同 subject、类型、非空 `topic_key` 和时间类别，只在 `current` 内或
-`planned` 内接受严格更新、且带 `revision_kind="correction"` 或 `"retraction"` 的记录。单纯“说得
-更晚”不是旧事实错误的证据；两条同 slot 的不相容普通 assertion 会产生 `CONFLICT`。该动作写入独立的
-`memory_conflict` marker，但不选择赢家，也不 supersede 两条来源。模型语义版即使提出 `CORRECT`，也
-必须通过同一 runner 门禁。
-
-因此“目前住上海”与“计划去北京住两个月”会并存，计划不会被当成已经发生；historical/unknown 记录
-也不会覆盖当前事实。无事件身份的相同旅行文本不会自动合并，不同 topic 即使文本相同也保持独立。
-冲突 marker 没有 `personal-memory` tag，不会伪装成用户事实进入普通召回。
-
-v0.7.3 不负责临时状态到期、推断计划已经发生、旅行事件去重/计数或凭空综合新事实；这些边界分别
-留给时间治理、事件身份与查询聚合阶段。
-
-### 个人记忆查询（v0.8.0）
-
-通用 recall() 仍适合后端无关的候选召回；需要回答“现在、以前、计划、某个时间点、列举、计数”
-这类个人问题时，使用结构化查询层：
-
-~~~python
-result = await memory.query_personal_memory(
-    "我现在住在哪里？",
-    [scope.user_scope(), scope],
-)
-
-for hit in result.hits:
-    print(hit.record.content, hit.reasons)
-~~~
-
-需要排查漏召/错召时，宿主可显式启用有上限的诊断记录：
-
-~~~python
-result = await memory.query_personal_memory(
-    "我现在住在哪里？",
-    [scope.user_scope()],
-    trace_limit=200,
-)
-if result.trace is not None:
-    print(result.trace.counts)
-    for event in result.trace.events:
-        print(event.stage, event.reason, event.memory_id)
-~~~
-
-`trace_limit=0` 默认关闭；上限为 10000。诊断不改变分数、阈值、查询 plan 或召回结果，
-也不复制问句、记忆正文、模型输出或异常原文。越权与不存在的候选只记匿名计数。
-当前覆盖引擎边界，不能解释索引内部未返回的记录；数量统计不是唯一记忆数，也不应作为
-“记忆质量分数”。诊断含授权 scope 内的记忆 ID，应作为宿主排障数据而非默认注入 Agent。
-详见 [查询诊断协议](docs/query-diagnostics.md)。
-
-可选的 [证据支持校验](docs/evidence-verification.md) 可在现有安全门之后，
-检查候选是否真正支持问题所问的关系，而不仅是主题相关。默认关闭；
-由接入方提供模型，只能剔除候选，不改变 scope、时间门或排名权重。
-目前完成离线协议验证，尚未证明真实模型的准确率收益，不支持精确计数查询。
-
-最高质量配置还可启用 [个人记忆级重排](docs/personal-memory-reranking.md)。它位于
-Store 回源、scope/主体/权限/生命周期/时间门以及可选证据校验之后，只把原始问题、匿名
-`item_N` 和已授权正文交给宿主提供的 cross-encoder。它只能调整有界候选窗口的顺序，不能增删
-候选或绕过门禁；异常、超时或 ID 绑定错误会保留原排序。默认关闭，精确计数不调用它。
-离线整候选重排实验在不改变候选集合的前提下提高了排序指标，因此这里提供协议和运行时落点，
-具体模型仍需在扩大后的 held-out/adversarial 数据上校准。
-
-默认 DeterministicPersonalMemoryQueryPlanner 只提供透明的时间、统计与查询形态规则，不包含饮食、
-工作、居住、宠物等领域词典；需要更开放的结构规划时，
-注入 ReferencePersonalMemoryQueryPlanner(MyStructuredModel())。planner 只能输出 scope-free draft，
-不能选择读哪些用户、memory ID、Store 操作或最终答案。engine 会把它重新绑定到 host 明确传入的
-exact scopes 和可信 subject，同一次查询禁止跨 user_id。
-
-为解决 v1 `intent` 同时表示“查询动作”和“时间切面”的歧义，Doppel 另外提供了
-显式选用的 Query Plan v2。`operation` 只回答要查询、列举还是计数；`temporal_view`
-独立表示无时间限制、当前、过去、计划、某一时点或时间区间。因此“2025 年一共旅行
-多少次”能表示为 `count + interval`，而“护照由谁签发”可以是
-`lookup + unbounded`。像“上次在哪里维修”这类明确限定某次历史事件的问题则可表示为
-`lookup + prior`，不会再把查询动作和时间限制压进一个枚举值。
-
-`prior` 表示排除仅在当前成立的可变状态，而不是“只接受 historical 标签”。因此引擎会同时
-接受 `historical` 与 `timeless`：前者用于已经结束或被取代的状态，后者覆盖来源、作者、签发者、
-维修者等没有失效边界的事实。`planned` 仍不会混入，带 `as_of`/`interval` 坐标时仍以
-`valid_from`/`valid_to` 为准。这条规则只读取标准时间元数据，不包含领域词表。
-
-~~~python
-from doppel_memory import ReferencePersonalMemoryQueryPlannerV2
-
-planner = ReferencePersonalMemoryQueryPlannerV2(my_structured_model)
-result = await engine.query(
-    planner,
-    "2025年一共旅行多少次？",
-    [scope.user_scope()],
-    now=now,
+    now=datetime.now(UTC),
     calendar_timezone="+08:00",
+    trace_limit=100,
 )
-assert result.plan.schema_version == 2
-assert result.plan.operation == "count"
-assert result.plan.temporal_view == "interval"
-~~~
 
-v2 不会覆盖 v1：`ReferencePersonalMemoryQueryPlanner` v13 仍是现有默认路径，
-旧 Draft/Plan 的字段、schema version 和 plan fingerprint 保持不变。v2 Plan 额外保留一个
-确定性的 legacy `intent` 投影，只用于旧日志/观测代码阅读；引擎的计数与时间门会读取
-正交字段。v2 继续保持 opt-in；切换默认值前必须通过独立标注的关系集与完整操作/时间矩阵，
-并在端到端检索指标上确认没有退化。仓库 benchmark 支持把同一次真实生成的 v1/v2 报告以
-`report_v1,report_v2` 零付费回放到同一个 Store、pgvector 与 Graphiti 实例，保留 v2 正交语义并
-输出逐 profile 的质量、安全和延迟差异；具体命令见 `benchmarks/README.md`。
-
-Planner 输出与可信 plan 绑定之间还有一层领域无关的显式日历校验。宿主通过
-`calendar_timezone` 显式提供 `UTC`、固定偏移（如 `+08:00`）或运行环境可用的 IANA 时区。
-完整日期以及缺年份的“月日”绑定为当地正午的 `as_of`，单个月或年份绑定为当地闭区间，随后统一
-转换为 UTC。对于一个明确数字日期，binder 会覆盖模型自行换算出的 point 或闭区间坐标；单边
-before/after 区间仍归 Planner，避免擅自扩大范围。`count/list/planned` 保留原查询动作。非法日期或
-包含多个日期的复杂问句不会被这一层猜成某个范围。这里不读取物品、人名或业务词，因此不是针对
-benchmark 问句的关键词补丁。
-
-Reference Planner 的投影边界允许一种受限的中间态：provider 已明确选择 `as_of`、但漏掉
-`as_of` 坐标时，可先让上述单一数字日期规则完成绑定；返回 draft 前会重新执行完整 Pydantic
-校验。这个例外不会放宽时区、区间顺序或其他结构约束，也不会猜测相对时间或含多个日期的问句。
-评测缓存位于原始 provider 输出边界，
-因此缓存命中仍会重新执行当前版本的投影、日期绑定和严格校验。
-
-线上接入可以显式用 `FallbackPersonalMemoryQueryPlanner(reference, deterministic)`
-包住模型 Planner。它只调用主 Planner 一次；主调用或 schema 校验失败后才执行宿主选择的
-fallback，并把 `fallback_used:<primary>-><fallback>:<error type>` 写入最终 plan 的
-`explanation` 供审计。它不会复制异常正文、修改 scope/subject 权限，默认也不会自动启用。
-
-执行顺序是结构化门禁优先：subject → personal memory type → topic → temporal status →
-valid_from/valid_to，之后才进行中文字符词法和可选语义评分。配置 SemanticIndex 的普通查询使用
-index-first：先取有界 lexical/semantic 候选，再从 authoritative Store 的 exact scope 逐条重载和
-验证；未知 ID、非 active personal-memory 或越权 scope 不会进入结果。精确 count 则仍完整扫描，
-绝不以 top-k 估算总数：
-
-~~~python
-result = await memory.query_personal_memory(
-    "告诉我北京旅行的记忆",
-    [scope.user_scope()],
-    semantic_index=my_semantic_index,
-)
-~~~
-
-这是广义 RAG 的 retrieval 层，但不是单一的“切块 + 向量”算法。纯 Store 路径使用中文字符
-unigram/bigram；`PostgreSQLVectorIndex` 使用 cosine，通用 `HybridRetrievalStrategy` 用 weighted RRF
-融合词法与向量排名；`GraphitiSemanticIndex` 的默认 Graphiti 0.29 路径使用 edge BM25 + cosine，再用
-RRF 融合。若索引实现 `TemporalSemanticIndex`，current/as_of 查询还会把准确时点传给索引。无论候选
-来自哪种算法，都必须回源 Store 通过 scope、subject、状态和有效区间验证；答案生成始终留给上层 Agent。
-
-最高质量配置可以用 provisional `CompositeSemanticIndex` 并行组合 pgvector 与 Graphiti。它只融合
-候选 `(scope, memory_id)`，不会把任一 sidecar 提升为权威来源；单个已知索引故障会降级到仍可用的
-来源，全部不可用时才让 query engine 执行其显式 lexical fallback。融合结果保留每个语义来源的
-贡献，query hit 的 `reasons` 会出现 `semantic_source:vector`、`semantic_source:graph` 等解释：
-
-```python
-from doppel_memory import CompositeSemanticIndex
-
-semantic = CompositeSemanticIndex(
-    {"vector": vector_index, "graph": graph_index},
-    weights={"vector": 1.0, "graph": 1.0},
-)
-result = await memory.query_personal_memory(
-    "我在 2025 年 2 月临时住在哪里？",
-    [scope.user_scope()],
-    semantic_index=semantic,
-)
+print(result.count.status, result.count.value)
+for hit in result.hits:
+    print(hit.record.content, hit.candidate_evidence)
 ```
 
-返回值不是一段不可审计的自然语言，而是 PersonalMemoryQueryPlan、带完整 MemoryRecord provenance
-的 hits、透明分数/原因、结构化 conflicts、warning 和可选 count。上层 Agent 根据这些材料组织回答：
+`count` 不会拿 top-k 搜索结果假装完整集合。缺少稳定事件标识或读边界不完整时，它会返回
+`indeterminate`，而不是给出看似精确的错误数字。
 
-~~~python
-if result.conflicts:
-    # 不猜赢家；可以向用户澄清，或在回答中同时陈述两份来源
-    for conflict in result.conflicts:
-        print(conflict.topic_key, conflict.source_memory_ids)
-~~~
+### 使用 OpenAI-compatible 模型
 
-旅行计数使用 episode 的稳定 event_key，而不是直接数记忆条数。同一次北京旅行被提到两次、两条
-记录使用同一 key 时只计一次；只要有一条匹配 episode 缺少 key，结果就是 indeterminate。计数
-不会调用 top-k SemanticIndex；它只在完整 exact-scope 结构/词法扫描上计算，避免漏掉向量候选窗口外
-的事件却仍声称 exact：
-
-~~~python
-if result.count.status == "exact":
-    print(result.count.value)
-else:
-    print(result.count.reason)
-~~~
-
-“当前住上海”只匹配 current，“计划去北京住两个月”只匹配 planned；明确时间点查询使用有效区间，
-但不会把 planned 自动当作已经发生。若同一 topic 仍有两条冲突的 current 记录，Doppel 返回两条证据
-并标记 ambiguous=True，不会只按更新时间偷偷选一条。
-
-### 个人记忆治理（v0.8.1）
-
-治理是周期任务，不在每次 recall 时偷偷修改记忆。默认策略只做两类保守动作：同一条个人记忆拥有至少
-三份不同的 owner/peer 证据时提高 importance；`state`、`plan` 或 `commitment` 带有已经结束的明确
-`valid_to` 时归档。长期事实、偏好、关系和历史经历不会因为“很久没问”自动衰减或消失：
-
-```python
-from doppel_memory import DeterministicMemoryGovernancePolicy
-
-result = await memory.govern_personal_memory(
-    scope.user_scope(),
-    policy=DeterministicMemoryGovernancePolicy(),
-    checkpoint=checkpoint,
-    run_id="nightly-governance",
-)
-if result.committable_checkpoint is not None:
-    await my_checkpoint_store.save(result.committable_checkpoint)
-```
-
-每个动作先形成可持久化、带完整性指纹的 `MemoryGovernancePlan`。执行时通过普通 ProposalWriter 幂等
-写入替代快照，再以 expected-state 乐观并发把 active 来源转为 `superseded`。归档快照使用既有的
-`expired` 状态并保留 content、时间区间、evidence、来源 fingerprint、策略/配置版本、原因和治理时间；
-框架不删除证据，也没有扩展 Store 协议或状态枚举。
-
-衰减默认完全关闭。确实需要短命线索时，host 必须同时在记录上标记
-`metadata.retention_class="ephemeral"`，并显式启用策略配置：
-
-```python
-from doppel_memory import (
-    DeterministicGovernancePolicyConfig,
-    DeterministicMemoryGovernancePolicy,
-)
-
-policy = DeterministicMemoryGovernancePolicy(
-    DeterministicGovernancePolicyConfig(
-        enable_decay=True,
-        decay_after_days=30,
-        decay_step=0.1,
-    )
-)
-```
-
-恢复必须由 host 明确指定 Doppel 生成的 archive ID；默认恢复为 candidate，并保留原来的 valid_to，
-避免把一条已结束的临时状态悄悄改写成当前事实：
-
-```python
-restored = await memory.restore_personal_memory(
-    scope.user_scope(),
-    archived_memory_id,
-    target_state=MemoryState.CANDIDATE,
-)
-```
-
-生产调度需要对同一个 exact scope 设置单写者租约，并持久化 plan/checkpoint。重放保证同一计划的部分
-失败可恢复，不代替多实例分布式锁。Doppel 不根据“最后召回时间”强化或衰减，因为被系统多问不等于
-事实更真实，没被问也不等于事实已经失效。即使周期治理尚未运行，current 查询也会用查询 plan 绑定的
-`now` 检查 validity interval，不会把已结束的临时状态当成当前状态返回。
-
-### 周期聚合任务
-
-需要“累计多次戳一戳后形成关系记忆”或 StyleMiner 这类历史统计时，使用独立的
-`MemoryBatchTask`，不向在线 `MemoryProcessor` 注入 Store：
-
-```python
-from doppel_memory import (
-    BatchCheckpoint,
-    BatchProposalPlan,
-    HistoryWindow,
-    MemoryKind,
-    MemoryProposal,
-)
-
-class InteractionPatternTask:
-    name = "interaction-pattern"
-    version = "1"
-
-    async def propose(self, context):
-        cursor = context.checkpoint.cursor
-        nudges = []
-        while True:
-            page = await context.history.read(
-                cursor=cursor,
-                time_from=context.window.start,
-                time_to=context.window.end,
-            )
-            nudges.extend(
-                m for m in page.messages if m.message_type == "nudge"
-            )
-            cursor = page.next_cursor
-            if not page.has_more:
-                break
-        proposals = []
-        if len(nudges) >= 3:
-            proposals.append(
-                MemoryProposal(
-                    scope=context.scope,
-                    kind=MemoryKind.RELATION,
-                    content="双方有频繁的轻互动",
-                    processor=self.name,
-                    processor_version=self.version,
-                    idempotency_key=(
-                        f"interaction:{context.window.start.isoformat()}"
-                    ),
-                )
-            )
-        return BatchProposalPlan(
-            proposals=proposals,
-            next_checkpoint=BatchCheckpoint(cursor=cursor),
-        )
-
-result = await memory.run_batch_task(
-    InteractionPatternTask(),
-    scope,
-    HistoryWindow(start=window_start, end=window_end),
-    checkpoint=last_checkpoint,
-)
-if result.committable_checkpoint is not None:
-    await my_checkpoint_store.save(result.committable_checkpoint)
-```
-
-任务只拿到 exact-scope 的只读 `ScopedHistoryReader` 和 `ScopedMemoryReader`，返回 proposal，
-最终写入仍统一经过 policy、scope 白名单、幂等、hooks 和 Store。调度频率、分布式锁、重试与
-checkpoint 持久化由 Agent runtime 决定；Doppel 只运行一次任务，并且仅在本次没有错误时
-返回 `committable_checkpoint`。
-
-默认 `StoreHistoryReader` 从支持稳定分页的 Store 读取 `event`。如果表情包、戳一戳等瞬时
-事件不应成为长期记忆，可以实现 `ScopedHistoryReader`，直接读取应用自己的聊天事件日志；
-它们只作为统计输入存在，达到阈值后生成的关系/风格 proposal 才进入长期记忆。
-
-`next_cursor` 是本页最后已读位置形成的持久 watermark，即使 `has_more=False` 仍然返回；
-`has_more` 只控制当前运行是否继续翻页。watermark 是前向的：晚到且排序位置早于 cursor 的
-事件不会自动重现，生产调度应使用处理延迟、回看窗口或源端高水位线处理迟到数据。任务切换
-filters 时也不应复用旧 cursor。
-checkpoint 的 host key 应包含 task name、version 以及影响历史选择的配置摘要；修改事件类型、
-阈值或过滤规则时应使用新 key，而不是继续推进旧 watermark。
-
-完整可运行配方把外部 SQLite 事件日志、exact-scope reader、host-owned checkpoint 表和互动
-聚合任务组合在一起，原始戳一戳不会进入 Doppel Store：
+Doppel 自带不依赖厂商 SDK 的结构化输出 adapter，可连接 OpenAI-compatible
+`/chat/completions` endpoint。API key 只通过构造参数传入，不进入配置指纹、计划、缓存或错误文本。
 
 ```bash
-python examples/periodic_memory.py
+set DOPPEL_MODEL=your-model
+set DOPPEL_API_KEY=your-key
+set DOPPEL_OPENAI_BASE_URL=https://your-endpoint.example/v1
+python examples/openai_compatible.py
 ```
 
-Runner 会用 `GuardedHistoryReader` 包装默认或第三方 reader。默认单次运行最多读取 100 页、
-50,000 条消息，单页请求最多 2,000 条；可按任务显式收紧或放宽：
+PowerShell 使用：
 
-```python
-from doppel_memory import BatchReadLimits
-
-result = await memory.run_batch_task(
-    task,
-    scope,
-    window,
-    read_limits=BatchReadLimits(
-        max_pages=20,
-        max_messages=5_000,
-        max_page_size=500,
-    ),
-)
-
-result.history_pages_read
-result.history_messages_read
+```powershell
+$env:DOPPEL_MODEL = "your-model"
+$env:DOPPEL_API_KEY = "your-key"
+$env:DOPPEL_OPENAI_BASE_URL = "https://your-endpoint.example/v1"
+python examples/openai_compatible.py
 ```
 
-非空页必须返回并推进 cursor（包括最终页），reader 必须遵守请求的 limit，`has_more=True`
-时必须有消息。违反协议或耗尽预算会形成 `history_read` 错误，不释放 checkpoint，也不会写入
-proposal。
+## 后端与能力状态
 
-checkpoint 会绑定 task name/version/schema。任务改变 checkpoint metadata 结构时声明新版本：
+### 权威 Store
 
-```python
-class MyTask:
-    name = "my-task"
-    version = "2"
-    checkpoint_schema_version = 2
+| 后端 | 状态 | 典型用途 |
+|---|---|---|
+| `InMemoryStore` | Stable | 单元测试、临时任务 |
+| `SQLiteStore` | Stable / 默认参考实现 | 本地 Agent、单实例部署 |
+| `PostgreSQLStore` | Provisional | 多进程服务端、共享连接池 |
+| 自定义 `MemoryStore` | Conformance-gated | 接入已有基础设施 |
+
+### 派生索引
+
+| 索引 | 状态 | 作用 |
+|---|---|---|
+| `PostgreSQLVectorIndex` | Provisional | pgvector 语义候选召回 |
+| `GraphitiSemanticIndex` | Experimental | Graphiti hybrid 兼容路径 |
+| `GraphitiRelationIndex` | Experimental | 类型化关系与时间候选 |
+| `RelationPathIndex` | Experimental | 最多两跳的有界关系路径 |
+
+派生索引不拥有记忆。权威状态转换、删除、冲突、时间与权限始终由 Store 决定。
+
+## 质量与测评
+
+Doppel 不用单一“准确率”掩盖不同层的问题。仓库内的评测把以下责任分开：
+
+- 抽取：是否从消息中形成正确的个人记忆；
+- 整理：重复、纠正、撤回和无依据冲突如何处理；
+- Planner：是否识别 operation、时间、实体与关系；
+- 候选召回：词法、向量和图是否找到所需证据；
+- 安全门：scope、subject、authority、state、time、provenance；
+- 回答：候选是否足以证明答案——当前与检索指标明确分离。
+
+关键原则：**检索到相关上下文，不等于 Doppel 宣称它证明了答案。**
+`PersonalMemoryQueryHit.candidate_evidence.answer_support` 固定为 `unassessed`，最终证据判断属于可选
+verifier 或上层回答模型。详细说明见 [Retrieval evaluation boundary](docs/retrieval-evaluation.md)。
+
+代表性验证：
+
+| 验证 | 当前结论 |
+|---|---|
+| Store conformance | InMemory、SQLite、PostgreSQL 共享同一契约测试 |
+| 多租户隔离 | 评测中的 scope leakage 必须为 0，不能用召回率抵消 |
+| pgvector / Graphiti | 每个候选都进行权威 Store 回源复核 |
+| 类型化关系检索 | typed oracle 结构上限与自然语言 Planner 质量分轨测量 |
+| 两跳关系路径 | 26 条 live Neo4j 结构消融，完整证据率 0.500 → 1.000 |
+| 回归检查 | Python 3.11/3.12、pytest、Ruff、Pyright、版本化结果 schema |
+
+评测入口与完整限制见 [benchmarks/README.md](benchmarks/README.md)。数据集在冻结前都明确标记
+`frozen=false`、`publication_ready=false`，不会把开发集数字包装成公开质量结论。
+
+## API 分层
+
+| 层 | 入口 | 面向对象 |
+|---|---|---|
+| Stable core | `MemoryScope`、`MemoryRecord`、`MemoryStore`、`DoppelClient` | 普通接入方 |
+| Provisional | Personal query、consolidation、governance、pgvector | 愿意跟随 minor 版本迁移的接入方 |
+| Module-only experimental | Graphiti、多跳路径、Planner v3 | 评测与高级实验，不承诺兼容 |
+
+应用应优先从包根导入。稳定和 provisional 名单由
+[`docs/public-api.json`](docs/public-api.json) 记录并由测试锁定。详细规则见
+[API stability policy](docs/api-stability.md)。
+
+## 与 Agent Runtime 的协作边界
+
+一个推荐的多 Agent 结构是：
+
+```text
+                     ┌──────────────────────────┐
+                     │ 主 Agent / Personal Agent │
+                     │ 可获得授权后的用户级记忆   │
+                     └────────────┬─────────────┘
+                                  │ host policy
+                  ┌───────────────┴───────────────┐
+                  ▼                               ▼
+       会话子 Agent A                    会话子 Agent B
+       仅收到 scope A                    仅收到 scope B
+                  │                               │
+                  └───────────────┬───────────────┘
+                                  ▼
+                       Doppel authoritative Store
 ```
 
-不匹配的输入 checkpoint 会要求 host 迁移或重置；任务返回错误 schema 的 checkpoint 时，
-proposal 会在落库前被拦截。旧版未绑定 identity 的 schema 1 checkpoint 仍可兼容读取。
+Doppel 提供 scope、证据和检索材料，但不接管：
 
-第三方 adapter 可以在测试或诊断脚本中运行无 pytest 的 conformance probe：
+- 子 Agent 的创建与销毁；
+- 上下文窗口清理；
+- task progress 汇报；
+- token budget；
+- prompt 组装策略；
+- 是否在某一轮对话触发记忆查询。
 
-```python
-from doppel_memory import audit_batch_task, audit_history_reader
+未来的上下文选择与装配层会建立在现有结构化命中和权限边界之上，而不会把 Agent 编排塞进 Store。
 
-reader_report = await audit_history_reader(reader, page_size=2)
-reader_report.raise_for_errors()
+## 文档导航
 
-task_report = await audit_batch_task(task, context)
-task_report.raise_for_errors()
+| 文档 | 内容 |
+|---|---|
+| [设计说明](docs/design.md) | 核心不变量、三层 API、Store 与批处理协议 |
+| [个人记忆边界](docs/personal-memory-boundary.md) | Doppel 拥有什么、不拥有什么 |
+| [候选融合](docs/candidate-fusion.md) | lexical / vector / relation 候选如何组合 |
+| [检索评测边界](docs/retrieval-evaluation.md) | candidate、evidence 与 answer 的区别 |
+| [证据验证](docs/evidence-verification.md) | 可选 verifier 协议与安全边界 |
+| [查询诊断](docs/query-diagnostics.md) | trace 与召回调试 |
+| [个人记忆重排](docs/personal-memory-reranking.md) | host-supplied reranker |
+| [API 稳定性](docs/api-stability.md) | stable / provisional / experimental |
+| [Benchmark 指南](benchmarks/README.md) | 数据集、运行方式、门禁和报告 |
+| [变更记录](CHANGELOG.md) | 版本演进与迁移说明 |
+
+## 项目状态与下一步
+
+Doppel 当前版本为 **v0.8.3 Alpha**。核心 Store、scope、provenance、生命周期与基础材料 API 已经稳定；
+个人记忆智能、混合检索和治理处于 provisional；Graphiti 与多跳路径仍是 experimental。
+
+接下来的重点不是增加更多特定场景规则，而是：
+
+1. 扩大并冻结个人记忆抽取、时间、关系和多跳 Planner 的 held-out / adversarial 数据集；
+2. 完成自然语言 Planner v3 的缓存、预算和真实模型质量评测；
+3. 继续验证 PostgreSQL + pgvector + Graphiti 最高配置下的召回、延迟与多实例可靠性；
+4. 增加上下文选择与装配协议，让上层 Agent 按任务需要获取最小充分记忆；
+5. 在核心质量稳定后，再建设可视化记忆管理、用户增删改查和文档补充界面；
+6. PyPI 发布放在协议与质量门进一步收敛之后。
+
+## 开发
+
+```bash
+git clone https://github.com/big-orange947/Doppel.git
+cd Doppel
+pip install -e ".[dev]"
+
+pytest -q
+ruff check .
+pyright
 ```
 
-reader audit 会检查多页推进和最终 exhausted read；应针对不会并发写入的测试 fixture 执行。
-task audit 只运行纯 proposal 阶段，不写 Doppel Store，并检查 checkpoint 与 proposal scope。
-
-### 第三方 Store conformance kit
-
-`audit_store()` 是安装包内可直接调用、无 pytest 依赖的 Store 验收工具。它把 InMemory/SQLite 原先
-只存在于测试目录的合同变成第三方后端可以在自己 CI 中运行的结构化检查：
-
-```python
-from doppel_memory import StoreConformanceConfig, audit_store
-
-report = await audit_store(
-    my_store,
-    config=StoreConformanceConfig(
-        run_id="my-backend-ci",
-        required_capabilities={"pagination"},
-    ),
-)
-report.raise_for_errors()
-```
-
-核心检查覆盖 health、exact-scope/user/extra-dimension 隔离、空 scope 拒绝、幂等、通用 record
-往返与副本隔离、filter/provenance、结构化 owner samples、生命周期和 convenience writers。分页、
-时区过滤和 hard delete 按 `StoreCapabilities` 运行：未声明时是 `skipped`，但列入
-`required_capabilities` 后会成为结构化失败。
-
-每项检查有独立的唯一 scope namespace；一个失败不会隐藏后续结果。`StoreConformanceReport`
-包含 Store identity、能力快照、每项 passed/skipped/failed、结构化 issue 和汇总计数。调用方仍拥有
-Store 生命周期，auditor 不会调用 `close()`。
-
-⚠️ 这是一套会写数据、改变自己所建记录状态并在声明 hard-delete 时删除测试记录的验收工具。
-没有 hard-delete 的后端会留下唯一命名的测试数据，所以只能对一次性数据库、测试 tenant 或明确
-隔离的 namespace 运行，不能直接指向生产数据。
-
-安装包同时提供命令行工具。SQLite 模式拒绝已有文件，以免误写应用数据库；不传路径时使用一次性
-临时数据库：
+内置后端可以运行独立 conformance CLI：
 
 ```bash
 doppel-conformance --backend memory
-doppel-conformance --backend sqlite --output store-conformance.json
-doppel-conformance --backend postgres \
-  --dsn "postgresql://doppel:secret@127.0.0.1:5432/disposable_test" \
-  --allow-mutating-audit \
-  --output postgres-conformance.json
+doppel-conformance --backend sqlite
 ```
 
-PostgreSQL 模式必须同时给出 DSN 和 `--allow-mutating-audit`。这个开关只是防误操作确认，不会
-把生产数据库变安全；目标仍必须是一次性数据库或明确隔离的测试 namespace。
-
-可以用 `StoreConformanceConfig(checks={...})` 运行子集，但正式声明兼容 Doppel 的后端应运行完整
-核心套件，并把产品承诺的可选能力列入 `required_capabilities`。Graphiti 无法通过核心
-lifecycle/get/provenance 合同，因此不再作为候选 Store；它只在显式 `SemanticIndex` 层保持
-experimental，不能因 capability skip 被误标为稳定后端。
-
-### StyleMiner：从历史文本形成风格材料
-
-`StyleMiner` 是基于 `MemoryBatchTask` 的可选周期工具。它只读取一个 exact scope 中号主发送的
-非空文本，生成透明的 `StyleProfile`，再通过统一 proposal writer 写入一条 `style` 记忆：
-
-```text
-external event log / StoreHistoryReader
-        ↓ owner + accepted text types only
-StyleAnalyzer
-        ↓ StyleProfile
-StyleMiner
-        ↓ MemoryProposal(kind="style")
-policy / scope authorization / idempotency / Store
-        ↓
-materials().style_summary
-```
-
-默认 `DeterministicStyleAnalyzer` 不调用 LLM，也不声称理解人格或意图。它报告消息数、平均/中位
-长度、短消息、问句、感叹、emoji、多行、句末标点比例和达到阈值的高频文本片段。每个数值都能
-从输入复算；完整 profile 保存在 style memory 的 `metadata.style_profile`，content 是可直接用于
-材料装配的摘要。
-
-高频片段虽然限制为短 n-gram、要求跨多条消息重复，但仍可能包含人名或话题片段；敏感场景可把
-`max_common_phrases=0`，或者替换 analyzer 做领域脱敏。默认实现不把完整原文复制进 profile。
-
-```python
-from doppel_memory import StyleMiner, StyleMinerConfig
-
-task = StyleMiner(
-    StyleMinerConfig(
-        min_messages=20,
-        accepted_message_types={"message", "text"},
-    )
-)
-
-result = await memory.run_batch_task(
-    task,
-    scope,
-    closed_window,
-    history=my_event_log.history(scope),
-    checkpoint=checkpoint,
-)
-```
-
-联系人消息、空文本、图片、表情、动图、戳一戳等非接受类型默认不参与分析，也不会因为运行
-StyleMiner 而成为长期记忆。接入方可以显式扩展 `accepted_message_types`，但应先把该类型解析为
-确实适合风格分析的文本。
-
-默认 profile 写回当前会话 scope；配置 `target_scope="user"` 可以形成跨会话号主材料，但调用
-`run_batch_task()` 时必须把 `scope.user_scope()` 放入 `allowed_scopes`，不会绕过 exact-scope
-授权。配置或 analyzer 改变时 `task.checkpoint_key` 会变化，host 不应继续复用旧 checkpoint。
-StyleMiner 面向已经关闭的窗口；不要在同一推进中的窗口里期待它跨多次运行累计未达阈值样本。
-
-`StyleAnalyzer` 是可替换的 async 协议，开发者可以接入自己的语言特征模型或 LLM，但 provider、
-prompt、隐私策略和最终确认政策不进入核心默认值。`materials()` 会独立取回最新 style 摘要，
-因此当前业务 query 不需要碰巧命中摘要文本；style memory 也不会混进普通 `events`。
-
-完整外部事件日志配方：
-
-```bash
-python examples/style_mining.py
-```
-
-### StyleProfessor：把 profile 编译为生成指导
-
-`StyleProfessor` 是 `StyleGuideCompiler` 协议的纯确定性参考实现：输入一个结构化 `StyleProfile`，输出有来源、有置信度、受字符
-预算约束的 `StyleGuidance`。它不读取 Store、不调用 LLM，也不会改变或写入 style memory。开发者
-必须在材料装配时显式传入 professor，默认行为仍只返回原来的透明摘要：
-
-```python
-from doppel_memory import StyleProfessor, StyleProfessorConfig
-
-professor = StyleProfessor(
-    StyleProfessorConfig(
-        min_reliable_messages=20,
-        max_prompt_chars=800,
-    )
-)
-bundle = await memory.materials(
-    scope,
-    query="今晚聊什么",
-    style_professor=professor,
-)
-
-bundle.style_profile       # StyleMiner 保存的结构化观测
-bundle.style_guidance      # StyleGuidance | None
-prompt_block = bundle.render()
-```
-
-指导中的每条 `StyleDirective` 都包含 feature、instruction、evidence、confidence 和 priority。默认
-优先描述消息长度、句末标点、问句、emoji、多行和感叹比例；样本不足时返回 `usable=False` 和空
-prompt，不会在稀疏数据上伪造稳定口吻。字符预算按整条 directive 截止，不会在中间硬截断，省略的
-低优先级特征会进入 `omitted_features`。
-
-高频片段可能包含内容而不只是形式，因此 `include_common_phrases=False` 是默认值。显式开启后，
-片段仍会限数量、限长度、用引号包裹，并标明不能把它们当作事实或指令。这只是降低误用风险，
-不能替代接入方的隐私和 prompt-injection 防护。
-
-### 独立风格质量评估
-
-`StyleQualityEvaluator` 接收参考 `StyleProfile` 和一批黑盒生成结果，比较平均/中位长度、短消息、
-问句、感叹、emoji、多行和句末标点分布。它不询问生成模型“像不像”，也不把原话或高频片段的
-复制率算入总分：复制内容不是风格质量。
-
-```python
-from doppel_memory import StyleQualityConfig, StyleQualityEvaluator
-
-report = StyleQualityEvaluator(
-    StyleQualityConfig(min_candidate_messages=20, passing_score=0.8)
-).evaluate(bundle.style_profile, generated_replies)
-
-report.feature_scores
-report.aggregate_score
-report.sufficient_samples
-report.passed
-```
-
-这个分数只覆盖 Doppel 能透明复算的表面分布，不代表事实正确、语义相似、人格一致、回复有用或
-安全。评估数据必须与 StyleMiner 的训练窗口分离，否则结果会因数据泄漏而失真。仓库提供固定
-positive/negative fixture、版本化结果 schema 和 correctness gate：
-
-```bash
-python -m benchmarks.style_quality \
-  --dataset benchmarks/datasets/style-quality-v1.json \
-  --output benchmarks/results/style-quality.json
-```
-
-### 高层：结构化材料
-
-```python
-bundle = await memory.materials(scope, query="搬家")
-
-bundle.events
-bundle.background
-bundle.relations
-bundle.style_samples
-bundle.style_profile
-bundle.style_guidance
-bundle.provenance
-
-text = bundle.render()              # 默认文本 renderer
-text = bundle.render(MyRenderer())  # JSON/XML/ChatML/自定义格式
-```
-
-`persona_materials()` 是默认 OwnerPersonaPolicy 的快捷 preset，不是唯一的材料策略。
-
-## Scope 语义
-
-`MemoryScope` 支持常用 IM 维度和自定义维度：
-
-```python
-thread_scope = scope.with_dimension("thread_id", "456")
-```
-
-所有维度都会进入 canonical `scope_key`。`group_id` 是兼容别名；`describe()` 提供可读
-日志文本。不同 thread、topic 或自定义 dimension 不会被映射到同一 namespace。
-
-后端不会隐式扩大检索范围：
-
-```python
-await memory.recall(query, [scope])               # 只查当前 exact scope
-await memory.recall(query, [scope, user_scope])   # 显式加入用户全局记忆
-```
-
-读取、状态转换和删除都必须携带 scope，避免仅凭一个 memory ID 跨 namespace 操作。
-
-## 生命周期
-
-内置状态为：
-
-```text
-candidate · confirmed · rejected · superseded · expired
-```
-
-普通检索默认只返回 candidate 和 confirmed；可通过
-`MemoryFilter(include_inactive=True)` 显式查询其他状态。
-
-```python
-confirmed = await memory.transition(
-    scope,
-    memory_id,
-    MemoryState.CONFIRMED,
-    expected_state=MemoryState.CANDIDATE,
-)
-
-await memory.forget(scope, memory_id)            # 软删除：转为 expired
-await memory.forget(scope, memory_id, hard=True) # 后端支持时硬删除
-```
-
-`expected_state` 提供乐观并发保护。
-
-## 后端
-
-| 后端 | 状态 | substring | full text | semantic | temporal | pagination | graph | hard delete | transactions |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `memory` | 稳定，测试/示例 | ✅ | — | — | ✅ | ✅ | — | ✅ | — |
-| `sqlite` | 稳定，默认参考实现 | ✅ | ✅ FTS5 | — | ✅ | ✅ | — | ✅ | ✅ |
-| `postgres` | provisional，生产候选 | ✅ | — | — | ✅ | ✅ | — | ✅ | ✅ |
-
-SQLite 使用 scope 级幂等约束、UTC 时间、WAL/串行连接操作和版本化 schema migration。
-schema v3 会在 FTS5 可用时重建已有记录的 content/metadata 索引，并用 trigger 同步后续
-insert/update/delete。FTS5 不可用、显式 `enable_fts=False` 或全文查询无结果时，自动回退到
-escaped substring search。合法的旧 scope 会自动迁移；空 user/agent 的旧数据需要先修正。
-InMemory、SQLite 与 PostgreSQL 运行同一套 Store conformance suite。
-
-语义能力是显式 sidecar，不改变核心 Store 的能力声明：
-
-| 语义索引 | 状态 | 权威记录来源 | exact scope | 可组合 hybrid | 时点查询 | 图派生 |
-|---|---|---|---:|---:|---:|---:|
-| `PostgreSQLVectorIndex` | provisional | `PostgreSQLStore` | ✅ | ✅ | — | — |
-| `GraphitiSemanticIndex` | module-only experimental | 任意合规 Store | ✅ | ✅ | ✅ | ✅ |
-
-Graphiti 的正确组合方式是先把 `MemoryRecord` 提交给合规 Store，再显式调用
-`GraphitiSemanticIndex.index_record()`；检索结果是 Graphiti 派生候选，不拥有核心记录的状态和删除
-语义。v3 projection 会把 evidence observation time、temporal status、`valid_from` 和 `valid_to`
-显式提交给 Graphiti；current/as_of 使用 Graphiti 的 valid/invalid/expired date filters。edge 命中后
-按 source episode 恢复权威 `(scope, memory_id)`，重新从 Store 验证 kind/actor/authority/tag/
-importance/state/time filters。配置了 `HybridRetrievalStrategy(fallback_to_lexical=True)` 时，Graphiti
-不可用才回退到 Store。旧
-`GraphitiMemoryStore` 暂时保留并发出弃用警告，供迁移使用。
-
-```python
-from doppel_memory import HybridRetrievalStrategy, Retriever
-from doppel_memory.graphiti_store import GraphitiSemanticIndex
-
-graph = GraphitiSemanticIndex(store, llm_api_key="...")
-created = await store.write_background(scope, "号主喜欢周末徒步")
-if created.record is not None:
-    await graph.index_record(created.record)
-
-retriever = Retriever(store, strategy=HybridRetrievalStrategy(graph))
-hits = await retriever.recall("户外爱好", [scope])
-```
-
-## 派生索引生命周期
-
-Store 是记忆状态、scope、provenance 和删除语义的唯一权威来源。`SemanticIndex` 只描述查询；
-需要被周期维护的 pgvector、Graphiti 或第三方索引另外实现 `IndexWriter`。这样检索协议不会被迫承担
-写入和清理职责，也不会把某个 sidecar 误当成核心 Store。
-
-`IndexMaintainer` 每次只处理一个有界页面。第一阶段扫描权威记录，补齐活跃记录并移除 inactive
-记录；第二阶段反向扫描索引目录，清理硬删除孤儿并修复两阶段之间发生的变化：
-
-```python
-from doppel_memory import IndexMaintainer
-
-maintainer = IndexMaintainer(store, semantic_index)
-checkpoint = await my_checkpoint_store.load(
-    semantic_index.identity,
-    scope.scope_key,
-)
-
-report = await maintainer.reconcile(
-    scope,
-    checkpoint=checkpoint,
-    page_size=100,
-)
-if report.committable_checkpoint is not None:
-    await my_checkpoint_store.save(report.committable_checkpoint)
-```
-
-checkpoint 同时绑定 index identity、exact scope 和 schema。任一条操作失败时，本页不会释放新
-checkpoint；已经成功的 `upsert`/`delete` 是幂等的，可以从旧 checkpoint 重放。`complete=True`
-表示本轮两阶段审计完成，返回的 checkpoint 已回到 records 阶段并递增 `cycle`，可供下一次周期任务
-继续使用。调度、租约和 checkpoint 数据库仍由 Agent runtime 决定。
-
-`PostgreSQLVectorIndex` 和 `GraphitiSemanticIndex` 已实现该协议。索引条目保存完整
-`MemoryRecord` 指纹和 source version；pgvector 对仅生命周期/元数据变化只更新 manifest，不重复调用
-embedding provider。Graphiti 会把旧 v1/v2 episode 视为 stale 并在维护时升级，硬删除后遗留的 episode
-会在 entries 阶段清除。
-
-## Benchmark
-
-中文 IM 长期记忆质量基线包含 10 个手工标注场景，覆盖稳定事实、明确纠正、说话人/权威
-归属、跨用户 scope 对抗、显式 user scope、长程干扰、重复证据、过时事实和应当拒答的情况：
-
-```bash
-uv run python -m benchmarks.memory_quality \
-  --dataset benchmarks/datasets/memory-quality-zh-v1.json \
-  --output benchmarks/results/memory-quality.json
-```
-
-同一份数据运行 `no_memory`、`recent_window`、透明中文字符 n-gram 的 `raw_lexical` 和当前
-  `doppel_v0_7_events` 四个确定性基线。报告分别给出 evidence recall、candidate precision、MRR、
-拒答、禁止证据、重复上下文、字符预算、延迟和 scope leakage；越权候选是硬失败。抽取、整理、冲突
-解决、最终回答正确性和模型成本仍明确标为尚未测量，不会用原始事件召回分数冒充“记忆智能”。
-v0.7.2 另提供可注入真实 `PersonalMemoryAnalyzer` 的抽取层评测，独立计算 gold evidence coverage、
-supported candidate precision、subject/scope accuracy、噪声写入和跨用户泄漏；仅仅引用正确证据不会
-被当作内容语义已经正确。
-
-v0.9 新增混合检索消融评测（repository-only，零外部 LLM 调用、零付费 token）：
-
-```bash
-uv run python -m benchmarks.personal_retrieval_ablation \
-  --dataset benchmarks/datasets/personal-retrieval-ablation-zh-v1.json \
-  --profiles lexical,lexical_vector,lexical_graph,lexical_vector_graph \
-  --output data/doppel/personal-retrieval-ablation.json
-```
-
-四个主 profile 都走真实 `PersonalMemoryQueryEngine`（planner → 词法/语义候选 →
-exact-scope Store 重载 → 主体/权威/生命周期/时间硬门 → 排序命中）。Graphiti 关系为
-预置图（本地 bge-small-zh 向量），pgvector 使用同一本地 embedding provider；
-Neo4j/PostgreSQL 不可用时相应 profile 结构化标记 `unavailable`。报告区分
-fallback vs rich 图边、按 `semantic_source:` 统计 vector/graph/both 贡献，并对
-planner 的时间/意图识别能力如实标注（`as_of_recognized`）。数据集为候选草案，
-未冻结、非 publication-ready。
-
-评测同时运行 fixture-bound `oracle` plan 和真实 deterministic plan：前者隔离检索/索引质量，后者单独
-暴露自然语言规划缺口。`lexical_vector_graph` 只有在 vector 与 graph 同时可用时才执行，单源 Composite
-降级不会冒充 full hybrid。普通 owner/contact 事实查询会在 Store filter 与最终重载门同时拒绝
-`agent_output`；current/history/planned intent 会在 planner 漏填时补上对应的领域无关时间硬门；
-history/as-of 可读取带明确有效区间的 superseded/expired 记录，current 不可读取。
-
-Graphiti 现在有两个明确角色。`GraphitiSemanticIndex` 保留为兼容的完整 Graphiti hybrid search；
-新的 `GraphitiRelationIndex` 不调用 Graphiti embedding/BM25/RRF，只查询显式实体锚点相邻的 rich
-关系边，并排除 `DOPPEL_MEMORY_FALLBACK`。推荐高配置组合是 PostgreSQL 权威 Store + pgvector
-普通语义召回 + Graphiti relation-only 时间/关系扩展，而不是把 pgvector 与完整 Graphiti search
-再次等权 RRF：
-
-```python
-from doppel_memory import PersonalMemoryQueryEngine
-from doppel_memory.graphiti_store import GraphitiRelationIndex
-
-relation_index = GraphitiRelationIndex(
-    store,
-    neo4j_uri="bolt://127.0.0.1:7687",
-    neo4j_user="neo4j",
-    neo4j_password=neo4j_password,
-    # Optional: inject a host-supplied RelationReranker together with an
-    # explicitly calibrated minimum_reranker_score.
-)
-engine = PersonalMemoryQueryEngine(
-    store,
-    semantic_index=pgvector_index,
-    relation_index=relation_index,
-)
-```
-
-Reference planner 只有在问题明确提到人、地点、物品或命名概念时才填写 `entity_mentions`；如果问题
-只以“我/主人”作为关系起点，则由 host 已绑定的 subject 生成 scope-salted 图锚点，不把“我”伪装成
-普通实体；模型输出也不能把问题中提到的宠物、人物或物品擅自改成 memory subject。只要问题明确
-询问关系或属性，即使目标是“谁/哪里/哪一个”这样的未知端点，也必须保留问句中最短、同语言的
-谓词作为 `relation_hints`，不带实体和疑问端点，不翻译成 ontology 标签。它是通用的关系相关性
-提示，不是领域关键词表。Graphiti edge name 或自然语言 fact 匹配前，会把模型产生的过长中文提示
-展开成有界的连续 2–4 字片段；单字永不成为合格关系，展开数量有上限，运行时代码不包含同义词、
-实体、benchmark 或领域词表。命中提示时保留正常关系分；只命中实体却没有回答所问关系的边会降至默认阈值以下，但不会从底层
-候选中硬删除。默认 `relation_hints_require_match=True` 会把结构化的关系提示当作事实资格门：
-pgvector/词法候选仍可在合格关系事实之间辅助排序，却不能用“实体相似”回答另一个关系；关系索引
-正常返回“无匹配”时安全拒答，后端故障时才按照 `relation_fallback_to_nonrelation` 降级。需要保留
-旧式纯加分融合的接入方可以显式关闭该门。Deterministic planner 不猜实体，因此不会为了 benchmark
-问句触发图查询。Graph relation candidate 必须完成 Edge→Episode→memory_id 映射并回 Store 复核，
-Graphiti/Neo4j 从不成为事实权威。
-
-对于“物品 → 当前保管人 → 保管人所在地”这类确实需要组合两段关系的问题，
-`GraphitiRelationIndex` 还提供 module-only experimental 的
-`search_relation_paths()`。它不是让模型任意生成 Cypher，也不是默认把所有相邻边向外扩散：host 必须
-用 `RelationPathQuery` 明确提供 1–2 个 `RelationPathStep`，每一步指定 ontology 中允许的关系类型和
-方向。固定 Cypher 最多走两跳；每条边、每个节点必须属于同一个授权 scope，每一跳分别检查查询时点/
-区间，并经 Edge → Episode → memory ID 回到权威 Store。任意一步没有合格来源，整条路径都不返回。
-结果保留逐跳 edge、方向、时间、Episode 和 supporting memory IDs，方便后续上下文装配层把两段原始
-记忆一起交给回答模型，而不是把图路径本身冒充最终答案。
-
-这条接口当前没有接入自然语言 Planner 或 `PersonalMemoryQueryEngine`，也没有纳入现有单跳质量数字；
-这是有意的分阶段边界。先验证路径结构、安全性和时间语义，再用独立的多跳数据集测量增益与误召回，
-通过后才设计 Planner v3，避免修改已经冻结的 v2 wire shape，更不会针对固定问句写路径特判。
-
-第一轮结构消融通过后，`doppel_memory.query_path` 现提供 module-only experimental 的
-`PersonalMemoryRelationPathDraftV3` 和 `ReferencePersonalMemoryRelationPathPlannerV3`，用于隔离评估“自然
-语言 → 有界类型化路径”。它继承 v2 的 operation/time 语义，但使用独立 `schema_version=3`，最多输出
-两个 `RelationPathStep` 以及整条路径的置信度。精确路径只能选择 host 提供完整定义（含 source/target
-角色）的关系类型；只有机器标签、关系歧义、隐含中间步骤或超过两跳时必须不生成路径。模型无权输出
-scope、memory ID、节点 ID 或 Cypher，host 绑定 subject，未知字段会被投影丢弃。软性的 v2
-`relation_types` 与硬性的 `path_steps` 不允许同时存在。
-
-该 v3 草案仍未接入默认引擎或根包导出；当前阶段只冻结输出边界并建立离线 Planner 评测。只有在扩大且
-独立复核的数据集上验证 hop 数、逐跳类型、方向、时间与拒绝猜测后，才考虑添加新的执行入口；v1/v2
-Planner、缓存、指纹和现有查询结果不会被静默升级。
-
-高召回部署可以显式设置 `PersonalMemoryQueryConfig(candidate_fusion="union")`，让通过
-scope/时间/生命周期/Store 回源门的词法、向量和关系候选并集参与排序。若这类普通
-lookup/current/history/planned/as-of 草案已有实体或关系锚点、却把 `search_text` 留空，
-union 会用原始问句仅启动有界的独立语义候选发现，并在结果 warning/trace 中记录
-`raw_query_candidate_fallback`；保存的 plan、词法分数和所有权限/事实门都不改。Planner
-从白名单中选择的关系类型在 union 中是软排序信号：匹配类型可以加分，类型冲突的边即使
-文本相似也只保留低权重邻接分；它不会删除独立向量候选，也不会升级为事实证明。
-默认 `relation_gate` 不启用这项召回降级，count 也永远不使用 top-k 估算完整集合。
-
-需要严格抑制未知实体的近邻替代时，可以显式选择
-`candidate_fusion="anchored_union"`。它保留 union 的词法/向量/关系候选并集，但当 Planner
-明确给出 `entity_mentions` 时，最终候选还必须满足其一：权威 Store 记录的正文或标准关系元数据
-包含至少一个归一化后的实体原文，或者该记录拥有达到 `minimum_relation_score` 的 Graphiti
-关系边。它不会要求问句谓词与证据关系完全相同，因此“同一物品的相关记忆但不足以证明答案”仍可
-作为上下文返回；不存在的物品则不会仅凭最近邻被替换成另一个物品。没有显式实体的查询保持普通
-union 行为。这里没有别名表、翻译、ontology 推断或领域关键词特判。
-这是高精度 opt-in 模式，不是一般高召回查询的推荐默认值：在 canonical entity/alias 图尚未
-建立时，字面实体门可能漏掉别名、指代、跨语言名称和文档改写。普通个人记忆检索应优先使用
-`union` 保留候选，并依据每条 hit 的 `candidate_evidence` 把实体/关系支持作为软判断信号。
-
-`PersonalMemoryQueryHit.candidate_evidence` 将候选发现来源、实体绑定方式及关系边信息结构化返回。
-其中 `answer_support` 当前固定为 `unassessed`：Doppel 查询引擎只证明候选已经通过 scope、事实状态、
-时间与 Store 回源门，不声称它足以回答问题。接入方可以把相关候选交给后续 verifier、上下文装配器
-或 LLM 判定；旧 `reasons` 字段继续保留以兼容已有观察代码。
-
-如果 host 使用稳定的关系 ontology，还可以在调用 `engine.query(...)` 时通过
-`available_relation_types` 提供允许的机器标签。Planner 只能从该白名单选择
-草案中的 `relation_types`。从 Reference Planner v10 对应的执行层修订开始，所有 Planner
-草案中的这些标签绑定为 `plan.candidate_relation_types`，用于补充召回候选，不能直接证明相关性。
-宿主若需要精确过滤，通过 `engine.plan/query` 或 `client.query_personal_memory` 的
-`required_relation_types=[...]` 参数传入；它绑定为 `plan.relation_types`，执行层与 Graphiti
-adapter 继续按白名单和标签验证。即使 Planner 给出不同类型，也不能扩大该宿主约束。
-类型映射由 host/Planner 决定，Doppel 核心不维护问句、语言或业务领域的特判词典。
-
-**迁移说明（provisional API 行为变更）：** 自定义 Planner 或旧模型报告返回的
-`draft.relation_types` 现在也只产生候选。此前依赖其硬过滤行为的接入方，需要由可信宿主显式
-传入 `required_relation_types`，不能自动把模型的输出原样提升为宿主约束。已保存的执行计划
-`plan.relation_types` 仍按显式约束解释；不要将不可信 JSON 直接作为宿主执行计划。
-
-Graphiti 每次先取最多 `2 × limit` 条受授权 scope、实体锚点和时间限制的基础候选，再按建议
-类型补取最多 `limit` 条，按 edge ID 去重后一起交给相关性判断/重排，总计最多 `3 × limit`。
-建议类型不会从基础候选中排除其他类型；与宿主硬约束冲突的建议不会扩大查询范围。标签匹配
-本身不增加候选分数；没有关系提示或合格重排分数时，仅有建议类型的边保持低分。当前补充读取
-可能增加一次图查询，候选集合仍然有界，不能保证任意规模图上的召回完整性。
-
-为了避免 Planner 仅凭机器标签猜语义，`engine.plan/query(...)` 还支持可选的
-`relation_type_definitions`。每个 `RelationTypeDefinition` 描述含义、固定的
-source → target 方向、两端角色以及适用边界。例如宿主自定义的校准关系：
-
-```python
-from doppel_memory import RelationTypeDefinition
-
-relation_catalog = [
-    RelationTypeDefinition(
-        name="CALIBRATED_BY",
-        description="目标为来源设备提供校准。",
-        source_description="接受校准的设备。",
-        target_description="执行校准的人或机构。",
-        constraints=("校准不代表维修、持有或拥有设备。",),
-    ),
-]
-result = await engine.query(
-    planner, question, authorized_scopes, now=now,
-    relation_type_definitions=relation_catalog,
-)
-```
-
-未提供或为空的 `available_relation_types` 会使用目录名称作为白名单；同时提供非空白名单时，
-目录只能补充其中的类型定义，不得扩大白名单，允许只解释部分标签。重复名称、空定义、非法名称
-和额外字段会在调用 Planner 前被拒绝。只传旧标签列表仍可使用，发送给 provider 的输入字段保持
-兼容；Reference Planner v9 更新了两种模式共用的语义判断提示词，缓存按版本区分。
-
-定义用于 Planner 理解 schema，本身不会把候选提升为精确约束。定义不是事实，
-不会强迫模型选择类型，也不授权任何 scope、subject、时间或证据状态变更。v9 按问句请求的谓词、
-端点角色和明确排除项判断类型：答案未知、事实尚未确认，或同一实体可能存在其他关系，都不自动
-构成谓词歧义。候选类型交由实际关系证据和重排判断，宽泛问题仍可留空。
-接入方应把同一份目录用于抽取
-和查询适配，但当前不会自动配置 Graphiti 的写入提示词、重标已有边或迁移数据。不要把消息正文、
-测试问句、答案或私有事实放进目录；Reference Planner 会把完整目录发送给其模型 provider。
-
-Reference Planner 还要求保留普通物品名作为实体锚点、不把被否定的关系作为目标谓词，并优先省略
-`explanation` 或只返回不超过 80 字符的短说明。短说明是生成指导，不是新硬门：不会截断已返回的
-草案、拒绝旧报告或自动重试。`PersonalMemoryQueryDraft` 的既有时间约束现在分别返回内容无关的
-`query_as_of_required`、`query_time_range_reversed`、`query_time_timezone_required` 错误码，
-仍然拒绝缺失时点、倒置区间和无时区时间；不会猜时间、修复输出或放宽召回。
-
-高配置部署可以向 `GraphitiRelationIndex` 注入 `RelationReranker`，用于弥补 Planner 输出的关系短语
-与 Graphiti edge 文本之间的同义改写。该协议一次只接收 `query_text`、`relation_hints` 以及每条边的
-不透明 `item_id + relation_type + fact`；它看不到 scope、subject ID、memory ID、生命周期或时间字段，
-也无权决定事实是否成立。调用方必须同时显式给出 `minimum_reranker_score`，Doppel 不从当前 30 条
-draft fixture 猜一个“通用阈值”。缺失分数不会被补齐，重复/未知 item ID、非法分数或 provider 异常
-均 fail closed：只保留原有 exact/2–4 字词面资格，不会因重排器故障扩大召回面。重排命中的 Edge
-仍须完成 Episode provenance 与权威 Store 二次校验。`RelationCandidate.match_kind`、`fact` 和
-`reranker_score` 用于审计这条边是 adjacency、type、lexical、reranker 还是未满足关系资格；当前只提供
-通用协议与安全接线，不内置 cross-encoder 模型，也不宣称已有生产阈值。虽然协议不暴露身份与
-权限字段，query 和 edge fact 本身仍可能包含私人内容；接入远程 scorer 会把这些文本发给其 provider，
-应优先使用本地模型，或由 host 明确处理授权、脱敏、留存策略和传输安全。
-
-仓库测评 runner 已将无重排与重排路径拆成独立 profile：
-`lexical_relation_reranked` / `lexical_vector_relation_reranked` 只有在本地模型和显式阈值都可用时才执行；
-缺模型、缺阈值或加载失败会结构化标为 `unavailable`，不会退化成原关系路径后继续挂着“reranked”名称。
-FastEmbed cross-encoder 原始 logit 会通过 sigmoid 归一化到协议要求的 0..1，并在报告中记录模型、版本、
-阈值、重排贡献和延迟。当前仍没有默认阈值，示例参数不构成生产推荐。
-
-自然语言 Planner 与检索层必须分开评测。`benchmarks.relation_planner_quality` 直接复用 65 条
-relation ablation 问句，在不执行 Store/pgvector/Graphiti 的情况下测量 intent、as-of、实体锚点和
-关系提示是否正确；宿主提供的封闭 `relation_types` 本体还会独立测量精确选择、召回率、精确率和
-越界标签，并把无依据的 `memory_types/topic_keys` 硬过滤器单独记为错误；Reference Planner
-支持内容寻址缓存、调用次数上限、provider token 汇总和旧报告零付费 replay。
-这样真实模型漏掉“以前”、把日期解析错、没有识别物品名，都会归因到 Planner，而不会被记成
-Graphiti 召回缺陷。Deterministic Planner 继续保持无领域词典，不承担实体/关系抽取职责。
-成功的 planner report 还能作为消融评测的 `report` planner mode，按 dataset fingerprint 严格绑定后
-在多个本地检索 profile 间复用；重放不发 HTTP，也不会把模型漏掉关系提示或误加硬过滤器造成的
-失败算到 pgvector/Graphiti 头上。
-关系查询协议同时支持单点 `valid_at` 与互斥的 `time_from/time_to`。月份/年份问题会在 Neo4j rich
-edge 过滤和权威 Store 回源两处执行有效区间重叠；显式历史窗口不再用记录今天的 `historical/current`
-分类覆盖有效期，因此“当时已经生效、今天仍然有效”的 current 状态也可以被历史时点正确召回。
-
-v0.8.0 增加独立的中文 personal query fixture，对查询意图、必须/禁止命中、时间语义、精确/拒绝
-计数、歧义和 scope leakage 分项报告。该 fixture 的确定性路径明确是无领域词典的纯词法基线，
-当前保留 3 个 missing evidence hit 和 1 个 over-broad hit，不用特判抹平；CI 只冻结不回退上限，
-语义能力在独立 hybrid E2E 中评估：
-
-~~~bash
-uv run python -m benchmarks.personal_query_quality \
-  --max-missing-hits 3 \
-  --max-forbidden-hits 1 \
-  --output benchmarks/results/personal-query-quality.json
-~~~
-
-v0.7.3 的独立 consolidation fixture 运行真实 Store/runner 路径，对重复、显式纠正和四类误合并陷阱
-进行硬门禁；任何 false action、missing action、canonical 选择错误或 scope leakage 都使进程失败：
-
-```bash
-uv run python -m benchmarks.consolidation_quality \
-  --output benchmarks/results/consolidation-quality.json
-```
-
-首份版本化结果保存在 [`benchmarks/reference-results/`](benchmarks/reference-results/)，完整方法和边界
-见 [`benchmarks/README.md`](benchmarks/README.md)。
-
-仓库包含后端无关的 Store benchmark，用固定 seed 生成相同的 scope、记忆、查询和分页负载：
-
-```bash
-uv run python -m benchmarks.store_benchmark \
-  --backend sqlite \
-  --output benchmarks/results/sqlite-small.json
-```
-
-结果包含写入与幂等重放吞吐、exact-scope/过滤检索延迟、分页扫描吞吐，以及 expected recall、
-跨 scope 泄漏、重复记录和漏读检查。正确性失败会返回非零退出码；性能数值不设置 CI 阈值，
-因为共享 runner 的抖动不适合做可靠回归判断。
-
-这套基准只评估 Doppel 自己负责的 Store 合同，不把 embedding、LLM 抽取器、reranker 或应用的
-保留策略混成一个“记忆智能”分数。数据集、复现规则和结果 schema 见
-[`benchmarks/README.md`](benchmarks/README.md)。
-
-pgvector 另有独立 correctness benchmark，fixture 直接提供固定向量，只验证 index/search/hybrid
-和 scope 隔离，不把某个 embedding 模型的语义能力算作 Doppel 的能力：
-
-```bash
-uv run python -m benchmarks.vector_quality \
-  --dsn "postgresql://doppel:secret@127.0.0.1:5432/disposable_test" \
-  --allow-mutating-benchmark \
-  --output benchmarks/results/vector-quality.json
-```
-
-## 开发状态
-
-- [x] v0.2：框架定位、SQLite/InMemory、三层 API、能力声明和 provenance
-- [x] v0.2.1：稳定 scope、通用 Store、WriteResult、UTC 时间、生命周期、并发与迁移契约
-- [x] v0.3：MemoryProposal/MemoryProcessor 管线、状态策略和有限生命周期 hooks
-- [x] v0.4：检索器/Reranker 协议、FTS5、IM 导入格式及 reply/quote/thread 原语
-- [x] v0.4.1：周期历史聚合任务、只读 reader、稳定分页和统一 proposal writer
-- [x] v0.4.2：持久 watermark、外部事件日志/checkpoint 配方和恢复边界测试
-- [x] v0.4.3：读取预算、checkpoint schema 绑定和第三方扩展 conformance probe
-- [x] v0.4.4：公共 API 清单、稳定性分级和兼容性快照
-- [x] v0.5.0：确定性 Store benchmark、结果 schema 和 correctness gates
-- [x] v0.5.1：StyleMiner、可替换 StyleAnalyzer 和 persona materials 闭环
-- [x] v0.5.2：结构化事件 ContentPart/MediaRef/ContentResolver
-- [x] v0.5.3：StyleProfessor、受限风格指导和独立可观察质量评测
-- [x] v0.5.4：可复用、能力感知的 Store conformance kit 与 CLI
-- [x] v0.6.0：PostgreSQL 核心 Store、异步连接池和真实数据库 conformance CI
-- [x] v0.6.1：pgvector 可选语义索引、hybrid RRF、分页回填与独立质量门禁
-- [x] v0.6.2：Graphiti 重新定位为专用语义/图索引，旧 partial Store 进入弃用窗口
-- [x] v0.7.0：派生索引 IndexWriter、双阶段 reconciliation、指纹与孤儿清理
-- [x] v0.7.1：中文 IM 记忆质量数据集、四类基线、分层指标与版本化报告
-- [x] v0.7.2：个人记忆参考抽取、模型无关结构化输出、证据/角色/作用域门禁与独立抽取评测
-- [x] v0.7.3：可重放 Memory Consolidator、保守重复/纠错决策与独立质量门禁
-- [x] v0.8.0：中文个人记忆 Query Planner、时间感知检索、安全事件计数与词法/语义融合
-- [x] v0.8.1：类型感知的强化、显式短期衰减、可审计归档与恢复
-- [x] v0.8.2：显式纠正证据、持久冲突标记、查询冲突 provenance 与生命周期质量门禁
-- [x] v0.8.3：OpenAI-compatible 结构化输出 provider、错误边界与模型身份绑定
-
-详细设计见 [`docs/design.md`](docs/design.md)。
-从 v0.2 升级时请同时阅读 [`CHANGELOG.md`](CHANGELOG.md) 的 API 迁移说明。
-
-## API 稳定性
-
-应用和第三方扩展应优先从包根导入，例如 `from doppel_memory import MemoryStore`。
-根包的公开名称记录在版本化的 [`docs/public-api.json`](docs/public-api.json) 中，并由测试锁定；
-其中 `stable` 是当前 minor 系列承诺保持兼容的核心表面，`provisional` 是仍在收敛、但不会在补丁版本中
-静默破坏的批处理和 conformance 扩展表面。
-
-未列入清单的子模块对象不是冻结 API。`GraphitiSemanticIndex` 与迁移期的
-`GraphitiMemoryStore` 都是 module-only experimental；配方目录下的 host adapter 也不是安装包
-合同。完整的兼容、弃用和扩展协议规则见
-[`docs/api-stability.md`](docs/api-stability.md)。
+第三方 Store 在自己的测试中调用 `audit_store(my_store)`，并通过
+`StoreConformanceConfig.required_capabilities` 声明必须验证的可选能力。
+
+提交扩展前，请阅读 [API stability policy](docs/api-stability.md) 和
+[Personal memory ownership boundary](docs/personal-memory-boundary.md)。
 
 ## License
 
-MIT
+[MIT](LICENSE)
