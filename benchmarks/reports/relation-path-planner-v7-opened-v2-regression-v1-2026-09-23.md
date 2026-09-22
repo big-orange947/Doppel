@@ -8,7 +8,8 @@ regression evidence only and is not eligible as unseen evidence.
 - Source commit: `86be56e3a46939e44f3b6c52e065fc1d8e803fa2`
 - Planner: `doppel.reference-personal-memory-relation-path-planner-v7`
 - Protocol: `v7_two_pass_atom_review_host_compilation`
-- Provider: `deepseek-v4-flash`, non-thinking
+- Provider model parameter: `deepseek-v4-flash`, non-thinking. DeepSeek currently
+  routes that legacy identifier to its V4.1 Flash service.
 - Provider calls: 96 / 96 (two per case)
 - Doppel cache hits/misses: 0 / 96
 - Input/output/total tokens: 350,012 / 19,211 / 369,223
