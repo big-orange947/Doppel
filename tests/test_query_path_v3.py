@@ -149,6 +149,10 @@ async def test_reference_v3_binds_subject_and_emits_only_schema_fields() -> None
     )
     assert "Do not downgrade an exact one-hop traversal" in generated.instructions
     assert "Determine each direction from traversal topology" in generated.instructions
+    assert "Grammatical voice" in generated.instructions
+    assert "stored endpoint roles" in generated.instructions
+    assert "human actor" in generated.instructions
+    assert "always the source" in generated.instructions
     assert "invalid boundless interval" in generated.instructions
     assert generated.input["relation_type_definitions"][0]["name"] == "HELD_BY"
 

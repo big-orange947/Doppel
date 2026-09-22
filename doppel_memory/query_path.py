@@ -133,6 +133,14 @@ outbound traverses source to target and inbound traverses target to source. The 
 step starts at the endpoint reached by the previous step. Use either only when the
 definition and question genuinely leave orientation unresolved.
 
+Grammatical voice and the semantic role of the requested answer do not override the
+stored endpoint roles. In particular, when a definition says its source is an entity
+that an action concerns and its target is the actor, a question that starts from that
+entity and asks for the actor still traverses source to target, so it is outbound.
+Conversely, a question that starts from the actor and asks for affected entities is
+inbound. Apply this role comparison generically; do not assume that a human actor is
+always the source of an edge.
+
 entity_mentions must retain the explicit non-trusted-subject starting anchor. The
 trusted owner/agent may be the start with no entity mention because the host binds it
 outside the model. path_steps must remain empty for ordinary semantic similarity,
@@ -156,7 +164,7 @@ class ReferencePersonalMemoryRelationPathPlannerV3:
     """Schema-constrained experimental path Planner using a host-owned model."""
 
     name = "doppel.reference-personal-memory-relation-path-planner-v3"
-    version = "2"
+    version = "3"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model

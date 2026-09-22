@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Strengthen V3 traversal direction without adding domain labels or query-specific
+  rules: grammatical voice and a requested human actor no longer override the host
+  definition's source/target roles. Traversing from an acted-on source entity to its
+  actor target is outbound; starting at that actor and finding affected entities is
+  inbound. The Reference Planner version advances to 3 before sealed evaluation.
 - Clarify the experimental V3 path contract after its first live dev run: an exact
   directed one-hop question belongs in one `path_steps` item rather than the older
   unordered `relation_types` candidates; path direction is derived from the explicit
