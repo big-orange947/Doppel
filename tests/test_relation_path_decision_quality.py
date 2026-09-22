@@ -80,6 +80,7 @@ async def test_gold_v4_planner_scores_paths_decisions_and_reasons() -> None:
         "wrong_abstain_count": 0,
         "invalid_decision_count": 0,
     }
+    assert report["decision_valid_case_metrics"] == report["decision_metrics"]
     assert report["decision_by_trait"]["over_bound"][
         "over_bound_reason_accuracy"
     ] == 1

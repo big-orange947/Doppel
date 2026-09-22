@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Record two incomplete V7 Flash thinking diagnostics. A 4K generation ceiling
+  truncated after six cases and an 8K ceiling truncated after 21; both returned HTTP
+  200 with an incomplete generation, not a network timeout. The completed 8K prefix
+  was promising but still contained a wrong abstention and forbidden nearby type,
+  while no no-path controls had run. Stop increasing online Planner output budgets.
+- Add an experimental exact-plus-candidate relation-path retrieval layer. Host code
+  compiles bounded candidate atom graphs, validates every alternative type against
+  the ontology, derives directions, rejects disconnected or over-bound topologies,
+  and searches every accepted route through `RelationPathIndex`. Route results are
+  deduplicated with RRF attribution. Plans permanently require independent semantic
+  fallback and forbid a global relation gate; this module is not connected to the
+  stable query engine.
+- Add valid-only diagnostic metrics beside the unchanged hard whole-corpus metrics
+  for incomplete relation-path evaluations. Provider errors and unrun cases continue
+  to fail gates, while reports can now show what completed cases actually measured.
 - Record the V7 Pro non-thinking single-variable comparison. With the same opened V2
   corpus, two-pass protocol, host compiler, and gates, Pro regressed exact-path
   accuracy from 0.875 to 0.7083, decision accuracy from 0.9583 to 0.7708, two-hop

@@ -89,6 +89,10 @@ async def run_relation_path_decision_quality(
         ),
     }
     report["decision_metrics"] = _summarize(report["cases"])
+    valid_rows = [row for row in report["cases"] if not row["error"]]
+    report["decision_valid_case_metrics"] = (
+        _summarize(valid_rows) if valid_rows else None
+    )
     report["decision_by_partition"] = _group(report["cases"], "partition")
     report["decision_by_category"] = _group(report["cases"], "category")
     trait_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)

@@ -843,6 +843,19 @@ scope 和有效期复核的权威 Store record。任意 hop 失败会丢弃完�
 和全部 supporting memory IDs。该协议尚未接入 Planner/QueryEngine，也不计入现有单跳 benchmark；
 后续须先建立独立的两跳 direct/related/non-evidence 与时间/越权反例数据集，再决定是否新增 Plan v3。
 
+实验性 `relation_path_retrieval` 模块在该低层协议之上区分 exact route 与 candidate route。候选原子
+允许每一跳携带少量 host ontology 白名单内的替代类型，用于处理 `LOCATED_AT`/`STORED_IN` 这类
+检索上应扩大候选、但不能伪装成唯一精确事实的情况。宿主仍负责把固定 `anchor` 到 `answer` 的原子图
+编译成最多两跳、推导方向、拒绝断链/分叉/越界拓扑；任何未知类型立即失败。多个 route 独立查询后按
+路径 edge identity 去重并用 RRF 合并，同时保留命中来自 exact/candidate route 的归因。
+
+这个图分支永远不是全局 relation gate：plan 固定声明 `semantic_fallback_required=true` 与
+`global_relation_gate=false`。即使 exact route 被 Planner 误标，pgvector/lexical/Graphiti semantic
+候选也不能因此被删除；所有图候选仍必须通过 exact scope、时间、Edge→Episode provenance 与
+authoritative Store 复核。该模块目前不接默认 QueryEngine，也不生成候选 topology；下一步先用静态
+fixture 和 live Neo4j 验证 widened candidate route 的 evidence recall、forbidden noise、scope leakage、
+时间泄漏与延迟，再决定 Planner 如何表达不确定路径。
+
 `candidate_fusion="anchored_union"` 是宽松 union 与旧式强 relation gate 之间的 opt-in
 候选准入策略。Planner 明确给出实体时，每条候选必须在权威 Store 正文/关系元数据中包含至少一个
 归一化后的实体原文，或有达到 relation threshold 的图边；没有显式实体时行为与 union 相同。

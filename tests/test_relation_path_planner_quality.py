@@ -95,6 +95,7 @@ async def test_gold_planner_scores_every_axis_without_graph_execution() -> None:
         "error_count": 0,
         "error_types": {},
     }
+    assert report["valid_case_metrics"] == report["metrics"]
     assert report["execution"] == {
         "complete": True,
         "stopped_early": False,
@@ -135,3 +136,31 @@ async def test_planner_errors_never_masquerade_as_correct_no_path() -> None:
     assert report["metrics"]["hop_count_accuracy"] == 0
     assert report["metrics"]["no_path_accuracy"] == 0
     assert report["metrics"]["error_types"] == {"RuntimeError": 1}
+    assert report["valid_case_metrics"] is None
+
+
+@pytest.mark.asyncio
+async def test_partial_report_separates_valid_only_diagnostics_from_hard_score() -> None:
+    source = load_dataset(DATASET)
+    selected = source.model_copy(update={"cases": source.cases[:2]})
+
+    class PartiallyFailingPlanner(_GoldPlanner):
+        async def plan(
+            self, request: PersonalMemoryQueryRequest
+        ) -> PersonalMemoryRelationPathDraftV3:
+            if request.query == selected.cases[1].query:
+                raise RuntimeError("synthetic failure")
+            return await super().plan(request)
+
+    report = await run_relation_path_planner_quality(
+        selected,
+        PartiallyFailingPlanner(selected),
+        load_relation_catalog(CATALOG),
+    )
+
+    assert report["metrics"]["case_count"] == 2
+    assert report["metrics"]["valid_case_count"] == 1
+    assert report["metrics"]["exact_path_accuracy"] == 0.5
+    assert report["valid_case_metrics"]["case_count"] == 1
+    assert report["valid_case_metrics"]["valid_case_count"] == 1
+    assert report["valid_case_metrics"]["exact_path_accuracy"] == 1

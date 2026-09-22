@@ -152,6 +152,7 @@ async def run_relation_path_planner_quality(
         )
 
     summary = _summarize(rows)
+    valid_rows = [row for row in rows if not row["error"]]
     by_partition = {
         key: _summarize(items)
         for key, items in _group_rows(rows, "partition").items()
@@ -190,6 +191,7 @@ async def run_relation_path_planner_quality(
             "not_run_case_count": not_run,
         },
         "metrics": summary,
+        "valid_case_metrics": _summarize(valid_rows) if valid_rows else None,
         "by_partition": by_partition,
         "by_category": by_category,
         "by_trait": by_trait,
