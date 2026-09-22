@@ -226,7 +226,11 @@ def _quality_gate(
     report: dict[str, Any],
     *,
     min_exact_path_accuracy: float,
+    min_path_recall: float,
+    min_relation_type_accuracy: float,
+    min_direction_accuracy: float,
     min_no_path_accuracy: float,
+    max_false_path_count: int,
     max_forbidden_relation_type_hits: int,
 ) -> dict[str, Any]:
     metrics = report["metrics"]
@@ -235,8 +239,16 @@ def _quality_gate(
         failures.append("provider evaluation was incomplete")
     if metrics["exact_path_accuracy"] < min_exact_path_accuracy:
         failures.append("exact_path_accuracy below threshold")
+    if metrics["path_recall"] < min_path_recall:
+        failures.append("path_recall below threshold")
+    if metrics["relation_type_accuracy"] < min_relation_type_accuracy:
+        failures.append("relation_type_accuracy below threshold")
+    if metrics["direction_accuracy"] < min_direction_accuracy:
+        failures.append("direction_accuracy below threshold")
     if metrics["no_path_accuracy"] < min_no_path_accuracy:
         failures.append("no_path_accuracy below threshold")
+    if metrics["false_path_count"] > max_false_path_count:
+        failures.append("false path count exceeds threshold")
     if (
         metrics["forbidden_relation_type_hits"]
         > max_forbidden_relation_type_hits
@@ -246,7 +258,11 @@ def _quality_gate(
         "passed": not failures,
         "thresholds": {
             "min_exact_path_accuracy": min_exact_path_accuracy,
+            "min_path_recall": min_path_recall,
+            "min_relation_type_accuracy": min_relation_type_accuracy,
+            "min_direction_accuracy": min_direction_accuracy,
             "min_no_path_accuracy": min_no_path_accuracy,
+            "max_false_path_count": max_false_path_count,
             "max_forbidden_relation_type_hits": max_forbidden_relation_type_hits,
         },
         "failures": failures,
@@ -304,7 +320,11 @@ def _parser() -> argparse.ArgumentParser:
         "--thinking", choices=("enabled", "disabled"), default="disabled"
     )
     parser.add_argument("--min-exact-path-accuracy", type=float, default=0.0)
+    parser.add_argument("--min-path-recall", type=float, default=0.0)
+    parser.add_argument("--min-relation-type-accuracy", type=float, default=0.0)
+    parser.add_argument("--min-direction-accuracy", type=float, default=0.0)
     parser.add_argument("--min-no-path-accuracy", type=float, default=0.0)
+    parser.add_argument("--max-false-path-count", type=int, default=0)
     parser.add_argument("--max-forbidden-relation-type-hits", type=int, default=0)
     return parser
 
@@ -312,12 +332,19 @@ def _parser() -> argparse.ArgumentParser:
 async def _async_main(args: argparse.Namespace) -> int:
     if args.max_calls < 0:
         raise ValueError("--max-calls must be non-negative")
-    for name in ("min_exact_path_accuracy", "min_no_path_accuracy"):
+    for name in (
+        "min_exact_path_accuracy",
+        "min_path_recall",
+        "min_relation_type_accuracy",
+        "min_direction_accuracy",
+        "min_no_path_accuracy",
+    ):
         value = getattr(args, name)
         if not 0 <= value <= 1:
             raise ValueError(f"--{name.replace('_', '-')} must be between 0 and 1")
-    if args.max_forbidden_relation_type_hits < 0:
-        raise ValueError("--max-forbidden-relation-type-hits must be non-negative")
+    for name in ("max_false_path_count", "max_forbidden_relation_type_hits"):
+        if getattr(args, name) < 0:
+            raise ValueError(f"--{name.replace('_', '-')} must be non-negative")
     partitions = args.partitions or ["dev"]
     plan = build_plan(
         dataset_path=args.dataset,
@@ -370,7 +397,11 @@ async def _async_main(args: argparse.Namespace) -> int:
     report["quality_gate"] = _quality_gate(
         report,
         min_exact_path_accuracy=args.min_exact_path_accuracy,
+        min_path_recall=args.min_path_recall,
+        min_relation_type_accuracy=args.min_relation_type_accuracy,
+        min_direction_accuracy=args.min_direction_accuracy,
         min_no_path_accuracy=args.min_no_path_accuracy,
+        max_false_path_count=args.max_false_path_count,
         max_forbidden_relation_type_hits=args.max_forbidden_relation_type_hits,
     )
     output = args.output or (

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Pre-register sealed relation-path Planner gates before opening the heldout and
+  adversarial partitions: exact path and path recall, per-hop type and direction,
+  no-path behavior, false paths, forbidden types, and execution completeness are
+  independent thresholds. Entity-string exactness remains diagnostic because the
+  draft gold does not yet distinguish equivalent referring expressions.
 - Strengthen V3 traversal direction without adding domain labels or query-specific
   rules: grammatical voice and a requested human actor no longer override the host
   definition's source/target roles. Traversing from an acted-on source entity to its

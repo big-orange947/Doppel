@@ -198,8 +198,18 @@ adversarial cases be opened together:
 ```powershell
 .\.venv\Scripts\python.exe -m benchmarks.relation_path_planner_live `
   --live --max-calls 21 --partition heldout --partition adversarial `
+  --min-exact-path-accuracy 0.85 --min-path-recall 0.85 `
+  --min-relation-type-accuracy 0.90 --min-direction-accuracy 0.90 `
+  --min-no-path-accuracy 1 --max-false-path-count 0 `
+  --max-forbidden-relation-type-hits 0 `
   --output data/doppel/relation-path-planner/sealed-v1.json
 ```
+
+These sealed thresholds were registered before inspecting any heldout/adversarial
+provider output. Entity-mention exactness is diagnostic rather than a gate because
+the current draft gold does not yet encode equivalent surface references separately.
+The sealed result remains valid evidence if it fails; do not tune against it and rerun
+under the same held-out label.
 
 Every result records dataset/catalog/selection fingerprints, provider settings without
 credentials, cache hits/misses, provider call budget, aggregate token usage, per-case

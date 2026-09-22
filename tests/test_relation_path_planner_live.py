@@ -194,7 +194,11 @@ def test_quality_gate_separates_completion_and_quality_thresholds() -> None:
         "execution": {"complete": True},
         "metrics": {
             "exact_path_accuracy": 0.75,
+            "path_recall": 0.8,
+            "relation_type_accuracy": 0.85,
+            "direction_accuracy": 0.75,
             "no_path_accuracy": 1.0,
+            "false_path_count": 0,
             "forbidden_relation_type_hits": 1,
         },
     }
@@ -202,12 +206,19 @@ def test_quality_gate_separates_completion_and_quality_thresholds() -> None:
     gate = _quality_gate(
         report,
         min_exact_path_accuracy=0.8,
+        min_path_recall=0.9,
+        min_relation_type_accuracy=0.9,
+        min_direction_accuracy=0.9,
         min_no_path_accuracy=1.0,
+        max_false_path_count=0,
         max_forbidden_relation_type_hits=0,
     )
 
     assert gate["passed"] is False
     assert gate["failures"] == [
         "exact_path_accuracy below threshold",
+        "path_recall below threshold",
+        "relation_type_accuracy below threshold",
+        "direction_accuracy below threshold",
         "forbidden relation-type hits exceed threshold",
     ]
