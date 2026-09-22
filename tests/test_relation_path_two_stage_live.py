@@ -133,4 +133,3 @@ async def test_v5_live_regression_caches_observations_and_host_decisions(
     assert second["cache"]["hits"] == 32
     assert second["budget"]["provider_calls"] == 0
     assert second["execution"]["complete"] is True
-
