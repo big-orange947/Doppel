@@ -138,9 +138,18 @@ async def test_reference_v3_binds_subject_and_emits_only_schema_fields() -> None
     generated = model.requests[0]
     assert generated.output_schema["properties"]["schema_version"]["const"] == 3
     assert generated.output_schema["properties"]["path_steps"]["maxItems"] == 2
+    assert "Use exactly one step" in generated.output_schema["properties"][
+        "path_steps"
+    ]["description"]
+    assert "Soft unordered candidate types only" in generated.output_schema[
+        "properties"
+    ]["relation_types"]["description"]
     assert "Never infer path semantics from a machine label alone" in (
         generated.instructions
     )
+    assert "Do not downgrade an exact one-hop traversal" in generated.instructions
+    assert "Determine each direction from traversal topology" in generated.instructions
+    assert "invalid boundless interval" in generated.instructions
     assert generated.input["relation_type_definitions"][0]["name"] == "HELD_BY"
 
 

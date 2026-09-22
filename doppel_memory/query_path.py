@@ -44,8 +44,31 @@ class PersonalMemoryRelationPathDraftV3(PersonalMemoryQueryDraftV2):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: Literal[3] = 3
-    path_steps: list[RelationPathStep] = Field(default_factory=list, max_length=2)
-    path_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    relation_types: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Soft unordered candidate types only. For an exact directed one-hop or "
+            "two-hop traversal, use path_steps and leave relation_types empty."
+        ),
+    )
+    path_steps: list[RelationPathStep] = Field(
+        default_factory=list,
+        max_length=2,
+        description=(
+            "Complete ordered traversal from the question's explicit starting "
+            "anchor. Use exactly one step for one exact directed relationship and "
+            "two steps for an explicit two-relation chain."
+        ),
+    )
+    path_confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confidence in the complete ordered path; positive only when path_steps "
+            "is nonempty and exactly zero otherwise."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_path_contract(self) -> PersonalMemoryRelationPathDraftV3:
@@ -92,6 +115,24 @@ their traversal order. Do not add a second step merely because related context m
 exist. When the intermediate relationship is omitted, ambiguous, unsupported by the
 definitions, or would require more than two hops, return no path instead of guessing.
 
+Apply this V3 decision order before filling the older V2 relation_types field:
+1. If the question asks for one exact relationship and a definition establishes its
+   meaning and endpoint roles, emit exactly one path_steps item and leave
+   relation_types empty. Do not downgrade an exact one-hop traversal into the soft
+   relation_types field merely because that field can name the same relation.
+2. If the question explicitly composes two such relationships, emit exactly two
+   ordered path_steps items and leave relation_types empty.
+3. Otherwise leave path_steps empty. relation_types may then contain only genuinely
+   soft, unordered candidate types allowed by the V2 contract; it is not a substitute
+   representation for a known directed path.
+
+Determine each direction from traversal topology, not sentence word order. First
+identify the explicit starting anchor retained in entity_mentions. For each step,
+compare the entity being traversed from with the definition's source and target roles:
+outbound traverses source to target and inbound traverses target to source. The next
+step starts at the endpoint reached by the previous step. Use either only when the
+definition and question genuinely leave orientation unresolved.
+
 entity_mentions must retain the explicit non-trusted-subject starting anchor. The
 trusted owner/agent may be the start with no entity mention because the host binds it
 outside the model. path_steps must remain empty for ordinary semantic similarity,
@@ -103,6 +144,11 @@ otherwise use exactly 0. When path_steps is nonempty, leave the V2 relation_type
 empty so exact path constraints and soft one-hop candidates cannot contradict each
 other. The other V2 operation, temporal, subject, and search fields retain their
 existing meanings.
+
+Qualitative recency wording without a resolvable calendar boundary does not authorize
+invented interval coordinates. When no concrete interval bound can be grounded from
+the question and host calendar, keep temporal_view unbounded and preserve the recency
+meaning in search_text instead of emitting an invalid boundless interval.
 """
 
 
@@ -110,7 +156,7 @@ class ReferencePersonalMemoryRelationPathPlannerV3:
     """Schema-constrained experimental path Planner using a host-owned model."""
 
     name = "doppel.reference-personal-memory-relation-path-planner-v3"
-    version = "1"
+    version = "2"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model

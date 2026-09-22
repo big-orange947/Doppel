@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Clarify the experimental V3 path contract after its first live dev run: an exact
+  directed one-hop question belongs in one `path_steps` item rather than the older
+  unordered `relation_types` candidates; path direction is derived from the explicit
+  starting anchor and definition endpoint roles rather than sentence order; and
+  qualitative recency cannot create a boundless interval. The generic rules and JSON
+  Schema descriptions contain no dataset entities or per-case relation mappings, and
+  the Reference Planner version advances to 2 so old outputs remain identifiable.
 - Add a dry-run-first, budgeted live provider runner for the 32-case relation-path
   Planner v3 draft. It defaults to the 11-case dev partition, supports a separately
   opened heldout/adversarial run, performs at most one no-retry request per case, and
