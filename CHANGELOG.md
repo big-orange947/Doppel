@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Record V7's opened V2 regression: the independent atom-review pass raised decision
+  accuracy from 0.8542 to 0.9583, path recall from 0.78125 to 0.9375, direction
+  accuracy from 0.7083 to 0.9167, and two-hop exact accuracy from 0.5625 to 0.75.
+  Exact-path accuracy reached 0.875 and missed the 0.90 gate; two forbidden nearby
+  types, two wrong abstentions, and four inexact executed paths prevent promotion.
+  Stop prompt tuning on opened V2 and isolate the model-quality ceiling next.
 - Add experimental Planner V7 for opened regression only. It performs one V6 atom
   extraction and one independent schema-constrained review, then sends only the
   reviewed observation through the unchanged host ontology validation and path
