@@ -165,6 +165,11 @@ async def run_relation_path_planner_quality(
         for trait in row["traits"]:
             trait_rows[trait].append(row)
     by_trait = {key: _summarize(items) for key, items in sorted(trait_rows.items())}
+    provider_errors = sum(
+        row["error"] == "StructuredOutputProviderError" for row in rows
+    )
+    validation_errors = sum(row["error"] == "ValidationError" for row in rows)
+    not_run = sum(row["error"] == "PlannerNotRun" for row in rows)
     return {
         "runner": "doppel.relation-path-planner-quality.v1",
         "dataset": {
@@ -180,6 +185,9 @@ async def run_relation_path_planner_quality(
             "complete": not stop_reason and not summary["error_count"],
             "stopped_early": bool(stop_reason),
             "stop_reason": stop_reason,
+            "provider_error_count": provider_errors,
+            "planner_validation_error_count": validation_errors,
+            "not_run_case_count": not_run,
         },
         "metrics": summary,
         "by_partition": by_partition,

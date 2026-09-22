@@ -202,7 +202,7 @@ async def execute_live(
             "execution": {
                 **report.get("execution", {}),
                 "complete": metrics["valid_case_count"] == metrics["case_count"],
-                "provider_errors": metrics["error_count"],
+                "failed_case_count": metrics["error_count"],
                 "graph_execution_enabled": False,
             },
             "environment": {

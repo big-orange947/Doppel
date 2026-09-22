@@ -95,6 +95,14 @@ async def test_gold_planner_scores_every_axis_without_graph_execution() -> None:
         "error_count": 0,
         "error_types": {},
     }
+    assert report["execution"] == {
+        "complete": True,
+        "stopped_early": False,
+        "stop_reason": "",
+        "provider_error_count": 0,
+        "planner_validation_error_count": 0,
+        "not_run_case_count": 0,
+    }
     assert set(report["by_partition"]) == {"dev", "heldout", "adversarial"}
     assert set(report["by_category"]) == {"one_hop", "two_hop", "no_path"}
     assert report["by_trait"]["inbound"]["exact_path_accuracy"] == 1

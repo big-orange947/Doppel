@@ -141,6 +141,8 @@ async def test_budget_blocks_calls_before_provider_and_reports_incomplete(
     assert report["metrics"]["valid_case_count"] == 2
     assert report["metrics"]["error_count"] == 9
     assert report["execution"]["complete"] is False
+    assert report["execution"]["provider_error_count"] == 0
+    assert report["execution"]["not_run_case_count"] == 8
     assert report["cases"][2]["error_code"] == "budget_exhausted"
     assert all(
         case["error"] == "PlannerNotRun" for case in report["cases"][3:]
@@ -183,6 +185,8 @@ async def test_systemic_provider_error_stops_after_one_attempt(tmp_path: Path) -
     assert report["cases"][0]["http_status"] == 401
     assert report["cases"][1]["error_code"] == "previous_fatal_provider_error"
     assert report["execution"]["complete"] is False
+    assert report["execution"]["provider_error_count"] == 1
+    assert report["execution"]["not_run_case_count"] == 10
 
 
 def test_quality_gate_separates_completion_and_quality_thresholds() -> None:
