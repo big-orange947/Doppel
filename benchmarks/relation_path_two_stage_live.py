@@ -38,7 +38,10 @@ from doppel_memory import (
     OpenAICompatibleStructuredOutputConfig,
     OpenAICompatibleStructuredOutputModel,
 )
-from doppel_memory.query_path import ReferencePersonalMemoryRelationPathPlannerV5
+from doppel_memory.query_path import (
+    ReferencePersonalMemoryRelationPathPlannerV5,
+    ReferencePersonalMemoryRelationPathPlannerV6,
+)
 from doppel_memory.relation import RelationTypeDefinition
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +78,7 @@ def build_plan(
     max_calls: int,
     cache_enabled: bool,
     sealed_first_run: bool = False,
+    atom_protocol: bool = False,
 ) -> dict[str, Any]:
     dataset = load_dataset(dataset_path)
     if sealed_first_run and not dataset.frozen:
@@ -95,7 +99,11 @@ def build_plan(
     plan.update(
         {
             "runner": "doppel.relation-path-two-stage-live.v1",
-            "planner_protocol": "v5_model_observation_host_decision",
+            "planner_protocol": (
+                "v6_relation_atoms_host_compilation"
+                if atom_protocol
+                else "v5_model_observation_host_decision"
+            ),
             "corpus_role": (
                 "sealed_first_run" if sealed_first_run else "opened_regression"
             ),
@@ -109,7 +117,12 @@ def build_plan(
                 ),
                 "Dry-run construction never reads DOPPEL_API_KEY or opens a network client.",
                 "The model describes up to eight edges and has no execute/abstain field.",
-                "Trusted host code alone applies the executable two-hop bound.",
+                (
+                    "Trusted host code orders relation atoms, derives directions, and "
+                    "applies the executable bound."
+                    if atom_protocol
+                    else "Trusted host code alone applies the executable two-hop bound."
+                ),
                 "No graph query is executed by this scorer.",
             ],
         }
@@ -127,6 +140,7 @@ async def execute_live(
     max_calls: int,
     provider_metadata: dict[str, Any],
     sealed_first_run: bool = False,
+    atom_protocol: bool = False,
 ) -> dict[str, Any]:
     report = await execute_decision_live(
         dataset=dataset,
@@ -136,12 +150,20 @@ async def execute_live(
         cache_dir=cache_dir,
         max_calls=max_calls,
         provider_metadata=provider_metadata,
-        planner_type=ReferencePersonalMemoryRelationPathPlannerV5,
+        planner_type=(
+            ReferencePersonalMemoryRelationPathPlannerV6
+            if atom_protocol
+            else ReferencePersonalMemoryRelationPathPlannerV5
+        ),
     )
     report.update(
         {
             "runner": "doppel.relation-path-two-stage-quality.v1",
-            "planner_protocol": "v5_model_observation_host_decision",
+            "planner_protocol": (
+                "v6_relation_atoms_host_compilation"
+                if atom_protocol
+                else "v5_model_observation_host_decision"
+            ),
             "model_execution_authority": False,
             "host_executable_path_bound": 2,
             "corpus_status": {
@@ -185,6 +207,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Require a frozen dataset, empty cache, and new output path.",
     )
+    parser.add_argument(
+        "--atom-protocol",
+        action="store_true",
+        help="Use experimental V6 declarative relation atoms and host compilation.",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--max-calls", type=int, default=32)
     parser.add_argument(
@@ -219,6 +246,10 @@ def _parser() -> argparse.ArgumentParser:
 async def _async_main(args: argparse.Namespace) -> int:
     if args.max_calls < 0:
         raise ValueError("--max-calls must be non-negative")
+    if args.sealed_first_run and args.atom_protocol:
+        raise ValueError(
+            "atom protocol has no pre-registered sealed corpus; run it as opened regression"
+        )
     for name in (
         "min_exact_path_accuracy",
         "min_decision_accuracy",
@@ -244,6 +275,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         max_calls=args.max_calls,
         cache_enabled=not args.no_cache,
         sealed_first_run=args.sealed_first_run,
+        atom_protocol=args.atom_protocol,
     )
     if not args.live:
         sys.stdout.write(json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
@@ -284,6 +316,7 @@ async def _async_main(args: argparse.Namespace) -> int:
             max_calls=args.max_calls,
             provider_metadata={**plan["provider"], "version": provider.version},
             sealed_first_run=args.sealed_first_run,
+            atom_protocol=args.atom_protocol,
         )
     finally:
         await provider.aclose()

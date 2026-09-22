@@ -682,3 +682,266 @@ def _decide_observed_path_v5(
         }
     )
     return PersonalMemoryRelationPathDraftV4.model_validate(payload)
+
+
+class RelationPathAtomV6(BaseModel):
+    """One declarative relation with definition-oriented endpoint bindings."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    relation_type: str = Field(min_length=1)
+    source_ref: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
+    target_ref: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
+
+    @model_validator(mode="after")
+    def _validate_atom(self) -> RelationPathAtomV6:
+        if self.source_ref == self.target_ref:
+            raise ValueError("relation atom endpoints must differ")
+        canonical = self.relation_type.strip().upper()
+        if not canonical:
+            raise ValueError("relation atom type must not be empty")
+        object.__setattr__(self, "relation_type", canonical)
+        return self
+
+
+class PersonalMemoryRelationPathObservationV6(PersonalMemoryQueryDraftV2):
+    """A declarative relation graph whose traversal is compiled by the host."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[6] = 6
+    observed_path_semantics: ObservedPathSemantics
+    anchor_ref: Literal["anchor"] = "anchor"
+    answer_ref: Literal["answer"] = "answer"
+    relation_atoms: list[RelationPathAtomV6] = Field(default_factory=list, max_length=8)
+    relation_atoms_truncated: bool = False
+    path_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _validate_observation(self) -> PersonalMemoryRelationPathObservationV6:
+        if self.observed_path_semantics == "exact":
+            if not self.relation_atoms:
+                raise ValueError("an exact atom observation requires relation atoms")
+            if self.path_confidence <= 0:
+                raise ValueError("an exact atom observation requires positive confidence")
+        else:
+            if self.relation_atoms:
+                raise ValueError("a non-exact atom observation requires empty atoms")
+            if self.relation_atoms_truncated:
+                raise ValueError("only an exact atom observation may be truncated")
+            if self.path_confidence != 0:
+                raise ValueError("a non-exact atom observation requires zero confidence")
+        return self
+
+
+REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V6_INSTRUCTIONS = """\
+Describe the requested relationship topology as declarative relation_atoms. This is a
+non-authoritative observation. Do not emit path_steps, direction, path_decision, or
+path_reason. Trusted host code orders the atoms, derives traversal direction, and decides
+whether the resulting path may execute.
+
+Use the fixed reference anchor for the explicit starting entity retained in
+entity_mentions, and answer for the entity requested by the question. Use short
+lowercase references such as middle, person, organization, place, or container for
+intermediate entities. Reuse the exact same reference wherever two atoms share an
+entity. References identify semantic roles only; they are not database IDs, node IDs,
+memory IDs, scopes, or answers.
+
+For each atom, relation_type must be one host definition. source_ref names the entity
+that fills that definition's source_description role and target_ref names the entity
+that fills its target_description role. Bind definition endpoint roles regardless of
+sentence order, grammatical voice, or the order in which predicates are mentioned. Do
+not encode traversal direction: the host derives outbound when traversing source to
+target and inbound when traversing target to source.
+
+Set observed_path_semantics exact only when all requested predicates and their endpoint
+bindings form one complete, unambiguous relationship path from anchor to answer. Emit
+every required atom, including both sides of shared-endpoint comparisons. Do not omit an
+implicit atom merely because the intermediate entity is unnamed. Whether matching facts
+exist in storage is an evidence question, not topology ambiguity.
+
+Use ambiguous when the requested predicate or endpoint binding is genuinely unresolved;
+unsupported when a requested predicate has no host definition; and nonrelation when the
+question requests no graph relationship topology. Those states require no atoms and zero
+path confidence. Exact observations use positive confidence.
+
+The schema represents at most eight atoms. For a longer exact path, emit the first eight
+connected atoms and set relation_atoms_truncated true. Otherwise set it false. Never
+shorten a relation graph to an execution limit. All V2 temporal and authority rules
+remain in force. The older relation_types field is only a soft ordinary-recall hint and
+never participates in topology compilation.
+"""
+
+
+class ReferencePersonalMemoryRelationPathPlannerV6:
+    """Model relation atoms, then compile their traversal entirely in trusted code."""
+
+    name = "doppel.reference-personal-memory-relation-path-planner-v6"
+    version = "1"
+
+    def __init__(self, model: StructuredOutputModel) -> None:
+        self.model = model
+        _require_identity(model, "structured output model")
+        self.version = _model_bound_version(self.version, model)
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryRelationPathDraftV4:
+        bound = PersonalMemoryQueryRequest.model_validate(request)
+        raw = await self.model.generate(
+            StructuredGenerationRequest(
+                instructions=(
+                    REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS
+                    + REFERENCE_RELATION_DEFINITION_INSTRUCTIONS
+                    + REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V6_INSTRUCTIONS
+                ),
+                input=bound.to_planner_input(),
+                output_schema=PersonalMemoryRelationPathObservationV6.model_json_schema(),
+            )
+        )
+        if isinstance(raw, BaseModel):
+            raw = raw.model_dump(warnings=False)
+        observation = _project_reference_relation_path_observation_v6(
+            raw, allow_incomplete_time_view=True
+        )
+        grounded = _ground_explicit_query_time_v2(observation, bound)
+        observation = PersonalMemoryRelationPathObservationV6.model_validate(
+            grounded.model_dump(mode="python")
+        )
+        _validate_atom_ontology_v6(observation, bound)
+        return _compile_relation_atoms_v6(observation, bound)
+
+
+def _project_reference_relation_path_observation_v6(
+    raw: Any, *, allow_incomplete_time_view: bool = False
+) -> PersonalMemoryRelationPathObservationV6:
+    context = (
+        {"allow_incomplete_time_view": True} if allow_incomplete_time_view else None
+    )
+    if not isinstance(raw, Mapping):
+        return PersonalMemoryRelationPathObservationV6.model_validate(raw, context=context)
+    known = PersonalMemoryRelationPathObservationV6.model_fields.keys()
+    projected = {name: raw[name] for name in known if name in raw}
+    if not projected:
+        return PersonalMemoryRelationPathObservationV6.model_validate(raw, context=context)
+    unknown_count = len(raw) - len(projected)
+    if unknown_count:
+        logger.warning(
+            "reference relation path planner v6 discarded %d unknown output field(s)",
+            unknown_count,
+        )
+    return PersonalMemoryRelationPathObservationV6.model_validate(
+        projected, context=context
+    )
+
+
+def _validate_atom_ontology_v6(
+    observation: PersonalMemoryRelationPathObservationV6,
+    request: PersonalMemoryQueryRequest,
+) -> None:
+    defined = {definition.name for definition in request.relation_type_definitions}
+    selected = {atom.relation_type for atom in observation.relation_atoms}
+    if selected and not defined:
+        raise PersonalMemoryQueryPlanningError(
+            "relation atom observations require host relation type definitions"
+        )
+    unknown = sorted(selected.difference(defined))
+    if unknown:
+        raise PersonalMemoryQueryPlanningError(
+            f"planner observed atom relation types outside host definitions: {unknown}"
+        )
+
+
+def _compile_relation_atoms_v6(
+    observation: PersonalMemoryRelationPathObservationV6,
+    request: PersonalMemoryQueryRequest,
+) -> PersonalMemoryRelationPathDraftV4:
+    """Compile one unique anchor-to-answer chain and derive every direction."""
+
+    semantics = observation.observed_path_semantics
+    if semantics != "exact":
+        return _atom_decision_draft_v6(
+            observation, request, decision="abstain", reason=semantics, steps=[]
+        )
+    if observation.relation_atoms_truncated or len(observation.relation_atoms) > 2:
+        return _atom_decision_draft_v6(
+            observation, request, decision="abstain", reason="over_bound", steps=[]
+        )
+
+    adjacency: dict[str, list[tuple[int, str]]] = {}
+    for index, atom in enumerate(observation.relation_atoms):
+        adjacency.setdefault(atom.source_ref, []).append((index, atom.target_ref))
+        adjacency.setdefault(atom.target_ref, []).append((index, atom.source_ref))
+    if (
+        "anchor" not in adjacency
+        or "answer" not in adjacency
+        or any(len(edges) > 2 for edges in adjacency.values())
+    ):
+        return _atom_decision_draft_v6(
+            observation, request, decision="abstain", reason="ambiguous", steps=[]
+        )
+
+    current = "anchor"
+    used: set[int] = set()
+    steps: list[RelationPathStep] = []
+    while current != "answer":
+        options = [item for item in adjacency[current] if item[0] not in used]
+        if len(options) != 1:
+            return _atom_decision_draft_v6(
+                observation, request, decision="abstain", reason="ambiguous", steps=[]
+            )
+        index, next_ref = options[0]
+        atom = observation.relation_atoms[index]
+        direction = "outbound" if current == atom.source_ref else "inbound"
+        steps.append(
+            RelationPathStep(
+                relation_types=[atom.relation_type], direction=direction
+            )
+        )
+        used.add(index)
+        current = next_ref
+        if len(steps) > len(observation.relation_atoms):
+            return _atom_decision_draft_v6(
+                observation, request, decision="abstain", reason="ambiguous", steps=[]
+            )
+    if len(used) != len(observation.relation_atoms):
+        return _atom_decision_draft_v6(
+            observation, request, decision="abstain", reason="ambiguous", steps=[]
+        )
+    return _atom_decision_draft_v6(
+        observation, request, decision="execute", reason="exact", steps=steps
+    )
+
+
+def _atom_decision_draft_v6(
+    observation: PersonalMemoryRelationPathObservationV6,
+    request: PersonalMemoryQueryRequest,
+    *,
+    decision: PathDecision,
+    reason: PathDecisionReason,
+    steps: list[RelationPathStep],
+) -> PersonalMemoryRelationPathDraftV4:
+    payload = observation.model_dump(mode="python")
+    for field in (
+        "anchor_ref",
+        "answer_ref",
+        "observed_path_semantics",
+        "relation_atoms",
+        "relation_atoms_truncated",
+        "path_confidence",
+    ):
+        payload.pop(field, None)
+    execute = decision == "execute"
+    payload.update(
+        {
+            "schema_version": 4,
+            "subject": request.default_subject,
+            "subject_id": request.default_subject_id,
+            "relation_types": [] if execute else observation.relation_types,
+            "path_decision": decision,
+            "path_reason": reason,
+            "path_steps": steps,
+            "path_confidence": observation.path_confidence if execute else 0.0,
+        }
+    )
+    return PersonalMemoryRelationPathDraftV4.model_validate(payload)

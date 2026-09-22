@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Add experimental Planner V6 after the sealed V2 failure, without changing the
+  default query engine. The model now emits unordered declarative relation atoms that
+  bind definition source/target roles to fixed `anchor`/`answer` and shared
+  intermediate references; it emits no traversal direction, ordered path, or
+  execution decision. Host code validates the ontology and atom graph, finds the
+  unique anchor-to-answer chain, orders edges, derives inbound/outbound, and retains
+  the existing two-edge execution bound. The opened V2 corpus can evaluate this
+  representation only as regression evidence.
+- Record V5's immutable sealed V2 failure without weakening or reinterpreting its
+  pre-registered gates. The complete 48-call run achieved perfect no-path and
+  over-bound handling with zero wrong execution, but only 0.75 exact path, 0.8542
+  decision, and 0.3125 two-hop exact accuracy. Inbound, shared-endpoint, implicit, and
+  double-inbound compositions exposed over-abstention, omitted edges, reversed
+  traversal, sentence-order sequencing, and one nearby-type error. V5 receives no
+  default query-engine execution authority; V2 is now opened regression data.
 - Record V5's first opened regression: 0.96875 exact-path accuracy and perfect
   execute/abstain, reason, over-bound, type, recall, and no-path metrics, with zero
   wrong execution, wrong abstention, forbidden types, or validation errors. One
