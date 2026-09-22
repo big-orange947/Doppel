@@ -211,6 +211,15 @@ the current draft gold does not yet encode equivalent surface references separat
 The sealed result remains valid evidence if it fails; do not tune against it and rerun
 under the same held-out label.
 
+The first sealed run is recorded unchanged in
+[`reports/relation-path-planner-v3-sealed-2026-09-22.md`](reports/relation-path-planner-v3-sealed-2026-09-22.md).
+It failed the pre-registered gate because one adversarial three-hop request produced a
+schema-rejected three-step draft instead of an explicit no-path outcome. Heldout was
+12/12 exact; all 15 answerable one/two-hop cases had exact types and directions; no
+valid draft produced a false or forbidden path. The safety boundary worked, but a
+validation error is not relabeled as a correct abstention, so V3 receives no default
+query-engine execution authority.
+
 Every result records dataset/catalog/selection fingerprints, provider settings without
 credentials, cache hits/misses, provider call budget, aggregate token usage, per-case
 sanitized errors, implementation hashes, partition/category/trait metrics, and a

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Record the first immutable sealed Planner v3 result. The pre-registered gate failed:
+  exact path was 0.9524, all 15 answerable one/two-hop cases had exact types and
+  directions, and false/forbidden paths stayed zero, but one adversarial three-hop
+  request returned three correct steps instead of an explicit no-path decision. The
+  host's two-hop schema rejected it, proving the safety boundary while still counting
+  as a Planner validation/reliability failure. V3 therefore receives no default query-
+  engine execution authority, and the opened partition will not be reused as unseen
+  evidence.
 - Pre-register sealed relation-path Planner gates before opening the heldout and
   adversarial partitions: exact path and path recall, per-hop type and direction,
   no-path behavior, false paths, forbidden types, and execution completeness are
