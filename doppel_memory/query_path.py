@@ -432,3 +432,253 @@ def _project_reference_relation_path_draft_v4(
     return PersonalMemoryRelationPathDraftV4.model_validate(
         projected, context=validation_context
     )
+
+
+ObservedPathSemantics = Literal["exact", "ambiguous", "unsupported", "nonrelation"]
+
+
+class PersonalMemoryRelationPathObservationV5(PersonalMemoryQueryDraftV2):
+    """Non-authoritative description of the complete relation path in a query.
+
+    This model intentionally has no execute/abstain field.  The model describes the
+    requested traversal, while trusted host code applies the executable two-hop bound.
+    Longer paths can therefore be observed without ever becoming executable drafts.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[5] = 5
+    observed_path_semantics: ObservedPathSemantics
+    observed_path_steps: list[RelationPathStep] = Field(
+        default_factory=list,
+        max_length=8,
+        description=(
+            "Complete ordered relation edges requested from the explicit starting "
+            "anchor. This is an observation only and grants no execution authority."
+        ),
+    )
+    observed_path_truncated: bool = Field(
+        default=False,
+        description=(
+            "True only when the complete exact path contains more than eight edges; "
+            "observed_path_steps then contains its first eight edges."
+        ),
+    )
+    path_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _validate_observation(self) -> PersonalMemoryRelationPathObservationV5:
+        if self.observed_path_semantics == "exact":
+            if not self.observed_path_steps:
+                raise ValueError("an exact observation requires path steps")
+            if self.path_confidence <= 0:
+                raise ValueError("an exact observation requires positive confidence")
+        else:
+            if self.observed_path_steps:
+                raise ValueError("a non-exact observation requires empty path steps")
+            if self.observed_path_truncated:
+                raise ValueError("only an exact observation may be truncated")
+            if self.path_confidence != 0:
+                raise ValueError("a non-exact observation requires zero confidence")
+        return self
+
+
+@runtime_checkable
+class PersonalMemoryRelationPathPlannerV5(Protocol):
+    """Produce the safe V4 execution draft through a two-stage V5 observation."""
+
+    name: str
+    version: str
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryRelationPathDraftV4: ...
+
+
+REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V5_INSTRUCTIONS = """\
+Describe the complete directed relationship traversal requested by the question in
+observed_path_steps. This is a non-authoritative observation: do not decide whether it
+may execute, do not emit path_decision/path_reason, and do not shorten a path to fit an
+execution limit. Trusted host code makes that decision after validating your output.
+
+Set observed_path_semantics to exact when the requested relation meanings, endpoint
+roles, directions, and complete traversal are all determined by the question and
+relation_type_definitions. Emit every required relationship edge in traversal order.
+An anchor followed by a relationship to an intermediate entity and another relationship
+to the requested endpoint has two observed steps. Count relationship edges, not entities,
+noun phrases, clauses, or requested outputs.
+
+Never infer semantics from a machine label alone and never invent a relation type,
+Cypher fragment, node ID, memory ID, scope, hidden intermediate entity, or answer. Each
+observed type must come from relation_type_definitions. Direction is relative to
+traversal from the question's starting anchor: outbound follows a definition's source
+to target and inbound traverses target to source. Determine it from endpoint roles, not
+sentence word order or grammatical voice. The next step begins at the endpoint reached
+by the previous step. Use either only when the definition and question genuinely leave
+orientation unresolved.
+
+entity_mentions must retain the explicit non-trusted-subject starting anchor. The
+trusted owner or agent may be the start without an entity mention because the host binds
+that authority outside the model. Ordinary semantic similarity, enumeration, or counting
+questions that do not request a relationship traversal are nonrelation.
+
+The observation schema can represent at most eight edges. If an exact requested path is
+longer, emit its first eight edges and set observed_path_truncated true. Otherwise set it
+false. Never omit an edge merely because the path is long. A truncated observation is
+diagnostic only and can never authorize execution.
+
+Use ambiguous when the requested relationship meaning, direction, or chain is genuinely
+underdetermined; unsupported when a requested relationship has no matching host
+definition; and nonrelation when no exact graph traversal is requested. For those three
+states leave observed_path_steps empty, observed_path_truncated false, and path_confidence
+zero. Whether matching facts exist in storage is an answer-evidence question, not path
+ambiguity. For an exact observation use positive confidence.
+
+relation_types remains an optional soft unordered V2 candidate field. It is not part of
+the observed traversal and grants no authority. Prefer it only for non-exact ordinary
+recall. If it is also emitted with an exact observation, the host ignores it rather than
+mixing soft candidates with an executable path. All V2 temporal and authority rules
+remain in force.
+"""
+
+
+class ReferencePersonalMemoryRelationPathPlannerV5:
+    """Two-stage Planner: model observes a path; host decides execution deterministically."""
+
+    name = "doppel.reference-personal-memory-relation-path-planner-v5"
+    version = "1"
+
+    def __init__(self, model: StructuredOutputModel) -> None:
+        self.model = model
+        _require_identity(model, "structured output model")
+        self.version = _model_bound_version(self.version, model)
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryRelationPathDraftV4:
+        bound = PersonalMemoryQueryRequest.model_validate(request)
+        instructions = (
+            REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS
+            + REFERENCE_RELATION_DEFINITION_INSTRUCTIONS
+            + REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V5_INSTRUCTIONS
+        )
+        raw = await self.model.generate(
+            StructuredGenerationRequest(
+                instructions=instructions,
+                input=bound.to_planner_input(),
+                output_schema=PersonalMemoryRelationPathObservationV5.model_json_schema(),
+            )
+        )
+        if isinstance(raw, BaseModel):
+            raw = raw.model_dump(warnings=False)
+        observation = _project_reference_relation_path_observation_v5(
+            raw, allow_incomplete_time_view=True
+        )
+        grounded = _ground_explicit_query_time_v2(observation, bound)
+        observation = PersonalMemoryRelationPathObservationV5.model_validate(
+            grounded.model_dump(mode="python")
+        )
+        _validate_observed_path_ontology(observation, bound)
+        return _decide_observed_path_v5(observation, bound)
+
+
+def _project_reference_relation_path_observation_v5(
+    raw: Any, *, allow_incomplete_time_view: bool = False
+) -> PersonalMemoryRelationPathObservationV5:
+    """Project JSON-object output onto the strict non-authoritative V5 schema."""
+
+    validation_context = (
+        {"allow_incomplete_time_view": True} if allow_incomplete_time_view else None
+    )
+    if not isinstance(raw, Mapping):
+        return PersonalMemoryRelationPathObservationV5.model_validate(
+            raw, context=validation_context
+        )
+    known = PersonalMemoryRelationPathObservationV5.model_fields.keys()
+    projected = {name: raw[name] for name in known if name in raw}
+    unknown_count = len(raw) - len(projected)
+    if not projected:
+        return PersonalMemoryRelationPathObservationV5.model_validate(
+            raw, context=validation_context
+        )
+    if unknown_count:
+        logger.warning(
+            "reference relation path planner v5 discarded %d unknown output field(s)",
+            unknown_count,
+        )
+    return PersonalMemoryRelationPathObservationV5.model_validate(
+        projected, context=validation_context
+    )
+
+
+def _validate_observed_path_ontology(
+    observation: PersonalMemoryRelationPathObservationV5,
+    request: PersonalMemoryQueryRequest,
+) -> None:
+    if not observation.observed_path_steps:
+        return
+    defined = {definition.name for definition in request.relation_type_definitions}
+    if not defined:
+        raise PersonalMemoryQueryPlanningError(
+            "observed relation paths require host relation type definitions"
+        )
+    selected = {
+        relation_type
+        for step in observation.observed_path_steps
+        for relation_type in step.relation_types
+    }
+    unknown = sorted(selected.difference(defined))
+    if unknown:
+        raise PersonalMemoryQueryPlanningError(
+            f"planner observed path relation types outside host definitions: {unknown}"
+        )
+
+
+def _decide_observed_path_v5(
+    observation: PersonalMemoryRelationPathObservationV5,
+    request: PersonalMemoryQueryRequest,
+) -> PersonalMemoryRelationPathDraftV4:
+    """Apply the executable bound without trusting a model-authored decision."""
+
+    exact = observation.observed_path_semantics == "exact"
+    over_bound = exact and (
+        observation.observed_path_truncated
+        or len(observation.observed_path_steps) > 2
+    )
+    execute = exact and not over_bound
+    if execute:
+        reason: PathDecisionReason = "exact"
+        path_steps = observation.observed_path_steps
+        confidence = observation.path_confidence
+        relation_types: list[str] = []
+    else:
+        reason = (
+            "over_bound"
+            if over_bound
+            else observation.observed_path_semantics
+        )
+        path_steps = []
+        confidence = 0.0
+        relation_types = observation.relation_types
+
+    payload = observation.model_dump(mode="python")
+    for field in (
+        "observed_path_semantics",
+        "observed_path_steps",
+        "observed_path_truncated",
+        "path_confidence",
+    ):
+        payload.pop(field, None)
+    payload.update(
+        {
+            "schema_version": 4,
+            "subject": request.default_subject,
+            "subject_id": request.default_subject_id,
+            "relation_types": relation_types,
+            "path_decision": "execute" if execute else "abstain",
+            "path_reason": reason,
+            "path_steps": path_steps,
+            "path_confidence": confidence,
+        }
+    )
+    return PersonalMemoryRelationPathDraftV4.model_validate(payload)

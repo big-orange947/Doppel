@@ -135,11 +135,12 @@ async def execute_live(
     cache_dir: Path | None,
     max_calls: int,
     provider_metadata: dict[str, Any],
+    planner_type: Any = ReferencePersonalMemoryRelationPathPlannerV4,
 ) -> dict[str, Any]:
     selected = select_dataset(dataset, partitions)
     budget = StructuredOutputCallBudget(model, max_calls=max_calls)
     cache = CachedStructuredOutputModel(budget, cache_dir)
-    planner = ReferencePersonalMemoryRelationPathPlannerV4(cache)
+    planner = planner_type(cache)
     report = await run_relation_path_decision_quality(selected, planner, definitions)
     metrics = report["metrics"]
     report.update(

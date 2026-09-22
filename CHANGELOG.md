@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Record V4 v2's opened regression at 0.78125 exact-path/decision accuracy. It
+  preserved zero wrong execution and perfect known over-bound handling, but still
+  over-abstained five exact two-hop paths, called one exact inbound path ambiguous,
+  and produced one contradictory hard/soft path shape. Prompt-only tuning on the
+  opened corpus stops; V4 v2 receives no execution authority.
+- Add an experimental two-stage relation-path Planner V5 without changing the default
+  query engine. The model emits a non-authoritative complete observation of up to
+  eight typed/directed edges and has no execute/abstain field. Host code validates the
+  ontology, deterministically executes only exact one/two-edge observations, maps
+  longer or truncated paths to `abstain/over_bound`, and maps non-exact semantics to
+  safe abstention. A separate dry-run-first live runner retains cache, budget, token,
+  provenance-of-run, and opened-corpus labels for regression testing.
 - Record V4's first opened regression without promoting it to held-out evidence. The
   original three-hop case correctly became `abstain/over_bound` and wrong execution
   stayed zero, but eight valid two-hop chains were over-abstained, one valid inbound
