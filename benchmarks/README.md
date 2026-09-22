@@ -249,6 +249,14 @@ wrong execution, wrong abstention, and invalid decisions. Passing it only qualif
 V4 for a new-corpus experiment; it does not grant graph execution authority. A new V2
 dev corpus and independently unopened sealed corpus remain required.
 
+The first opened V4 regression is recorded in
+[`reports/relation-path-planner-v4-opened-regression-v1-2026-09-22.md`](reports/relation-path-planner-v4-opened-regression-v1-2026-09-22.md).
+It fixed the original three-hop abstention and kept wrong execution at zero, but failed
+the gate because it over-abstained on eight valid two-hop questions, rejected one valid
+inbound one-hop question as ambiguous, and treated one safe ambiguous soft-candidate
+result as schema-invalid. These findings informed V4 version 2; they are not unseen
+quality evidence.
+
 Every result records dataset/catalog/selection fingerprints, provider settings without
 credentials, cache hits/misses, provider call budget, aggregate token usage, per-case
 sanitized errors, implementation hashes, partition/category/trait metrics, and a

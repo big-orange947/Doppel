@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Record V4's first opened regression without promoting it to held-out evidence. The
+  original three-hop case correctly became `abstain/over_bound` and wrong execution
+  stayed zero, but eight valid two-hop chains were over-abstained, one valid inbound
+  relation was called ambiguous, and one safe soft-candidate abstention failed strict
+  validation. The 0.6875 decision/path result failed its gate and motivated V4 v2.
+- Refine experimental Planner V4 after its first opened regression, advancing the
+  Reference version to 2. Hop count now explicitly means relationship edges, so a
+  start-to-intermediate-to-end chain is two hops and only a third edge is over-bound.
+  Ambiguity concerns relation planning rather than downstream evidence sufficiency.
+  Structured abstention may retain non-executing V2 soft relation candidates for
+  ordinary recall, while steps stay empty and confidence stays zero; those candidates
+  never acquire exact-filter or graph-execution authority.
 - Add a module-only experimental Planner v4 decision protocol without changing V3 or
   the default query engine. V4 separates `execute` from structured `abstain`; exact
   one/two-hop paths require `path_reason=exact`, while ambiguous, unsupported,

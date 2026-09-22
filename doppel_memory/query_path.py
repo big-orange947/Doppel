@@ -301,8 +301,6 @@ class PersonalMemoryRelationPathDraftV4(PersonalMemoryRelationPathDraftV3):
                 raise ValueError("abstain requires empty path_steps")
             if self.path_confidence != 0:
                 raise ValueError("abstain requires zero path_confidence")
-            if self.relation_types:
-                raise ValueError("abstain requires empty relation_types")
         return self
 
 
@@ -329,7 +327,7 @@ path_reason exact, emit every required step in order, set positive path_confiden
 and leave the older relation_types field empty.
 
 Use path_decision abstain for every other case. Abstention must have empty path_steps,
-zero path_confidence, and empty relation_types. Choose exactly one reason:
+and zero path_confidence. Choose exactly one reason:
 - over_bound: the complete requested traversal needs more than two relationships;
 - ambiguous: direction, relationship meaning, or the required chain is unresolved;
 - unsupported: the requested relationship has no matching host definition;
@@ -341,6 +339,23 @@ execute it: report over_bound and abstain. Do not use unsupported merely because
 underlying fact may be absent; planning concerns the requested relation semantics, not
 whether an answer is known. All V3 endpoint-role, direction, temporal, authority, and
 ontology rules remain in force.
+
+Count hops as directed relationship edges, not entities, noun phrases, clauses, or
+requested outputs. A start anchor followed by one relationship to an intermediate
+entity and a second relationship to the requested endpoint is exactly two hops and may
+execute. It becomes over_bound only when reaching the requested endpoint requires a
+third relationship edge.
+
+Ambiguous means the requested relation type, direction, or chain cannot be determined;
+it does not mean that retrieved evidence might later prove insufficient for the final
+answer. If one definition uniquely represents the requested predicate but stored facts
+may or may not establish completion, current validity, or another answer-level nuance,
+the path may still execute so retrieval can return evidence for the caller to assess.
+
+When abstaining from an exact path, relation_types may retain V2 soft unordered
+candidate suggestions for ordinary recall. They never become path_steps, exact graph
+filters, proof, or execution authority. Leave them empty when no candidate meaning is
+supported; do not add neighboring types merely to widen recall.
 """
 
 
@@ -348,7 +363,7 @@ class ReferencePersonalMemoryRelationPathPlannerV4:
     """Schema-constrained experimental V4 decision Planner."""
 
     name = "doppel.reference-personal-memory-relation-path-planner-v4"
-    version = "1"
+    version = "2"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model

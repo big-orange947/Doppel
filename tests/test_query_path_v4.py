@@ -135,10 +135,6 @@ def test_v4_accepts_exact_execution_and_explicit_over_bound_abstention() -> None
             },
             "abstain requires empty path_steps",
         ),
-        (
-            {**_abstain_response(), "relation_types": ["HELD_BY"]},
-            "abstain requires empty relation_types",
-        ),
     ],
 )
 def test_v4_rejects_inconsistent_decisions(
@@ -159,6 +155,17 @@ def test_v4_still_rejects_three_steps_instead_of_silently_truncating() -> None:
         PersonalMemoryRelationPathDraftV4.model_validate(payload)
 
 
+def test_v4_abstention_may_retain_non_executing_soft_candidates() -> None:
+    payload = {**_abstain_response("ambiguous"), "relation_types": ["HELD_BY"]}
+
+    draft = PersonalMemoryRelationPathDraftV4.model_validate(payload)
+
+    assert draft.path_decision == "abstain"
+    assert draft.path_steps == []
+    assert draft.path_confidence == 0
+    assert draft.relation_types == ["HELD_BY"]
+
+
 @pytest.mark.asyncio
 async def test_reference_v4_binds_authority_and_emits_decision_schema() -> None:
     raw = {**_execute_response(), "cypher": "MATCH (n) RETURN n"}
@@ -176,6 +183,9 @@ async def test_reference_v4_binds_authority_and_emits_decision_schema() -> None:
     assert set(properties["path_decision"]["enum"]) == {"execute", "abstain"}
     assert "Never emit a prefix of an over-bound chain" in generated.instructions
     assert "report over_bound and abstain" in generated.instructions
+    assert "Count hops as directed relationship edges" in generated.instructions
+    assert "evidence might later prove insufficient" in generated.instructions
+    assert "V2 soft unordered" in generated.instructions
     assert "cypher" not in PersonalMemoryRelationPathDraftV4.model_fields
 
 
