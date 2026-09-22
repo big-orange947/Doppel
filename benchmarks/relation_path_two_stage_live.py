@@ -44,6 +44,21 @@ from doppel_memory.relation import RelationTypeDefinition
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CACHE = ROOT / "data/doppel/relation-path-two-stage-cache"
 DEFAULT_OUTPUT_ROOT = ROOT / "data/doppel/relation-path-two-stage"
+SEALED_THRESHOLDS = {
+    "min_exact_path_accuracy": 0.90,
+    "min_decision_accuracy": 0.95,
+    "min_reason_accuracy": 0.90,
+    "min_over_bound_reason_accuracy": 1.0,
+    "max_wrong_execute_count": 0,
+    "min_relation_type_accuracy": 0.98,
+    "min_direction_accuracy": 0.95,
+    "min_path_recall": 0.95,
+    "min_one_hop_exact_path_accuracy": 0.90,
+    "min_two_hop_exact_path_accuracy": 0.85,
+    "min_no_path_accuracy": 1.0,
+    "max_forbidden_relation_type_hits": 0,
+    "max_error_count": 0,
+}
 
 
 def build_plan(
@@ -59,7 +74,11 @@ def build_plan(
     thinking: str | None,
     max_calls: int,
     cache_enabled: bool,
+    sealed_first_run: bool = False,
 ) -> dict[str, Any]:
+    dataset = load_dataset(dataset_path)
+    if sealed_first_run and not dataset.frozen:
+        raise ValueError("a sealed first run requires a frozen dataset")
     plan = build_decision_plan(
         dataset_path=dataset_path,
         catalog_path=catalog_path,
@@ -77,8 +96,17 @@ def build_plan(
         {
             "runner": "doppel.relation-path-two-stage-live.v1",
             "planner_protocol": "v5_model_observation_host_decision",
+            "corpus_role": (
+                "sealed_first_run" if sealed_first_run else "opened_regression"
+            ),
+            "eligible_as_unseen_evidence": sealed_first_run,
             "notes": [
-                "All V1 partitions are opened regression data after the V3 sealed run.",
+                (
+                    "The frozen corpus is eligible as unseen evidence only for this "
+                    "first cache-empty run."
+                    if sealed_first_run
+                    else "The selected corpus is treated as opened regression data."
+                ),
                 "Dry-run construction never reads DOPPEL_API_KEY or opens a network client.",
                 "The model describes up to eight edges and has no execute/abstain field.",
                 "Trusted host code alone applies the executable two-hop bound.",
@@ -98,6 +126,7 @@ async def execute_live(
     cache_dir: Path | None,
     max_calls: int,
     provider_metadata: dict[str, Any],
+    sealed_first_run: bool = False,
 ) -> dict[str, Any]:
     report = await execute_decision_live(
         dataset=dataset,
@@ -115,6 +144,19 @@ async def execute_live(
             "planner_protocol": "v5_model_observation_host_decision",
             "model_execution_authority": False,
             "host_executable_path_bound": 2,
+            "corpus_status": {
+                "role": (
+                    "sealed_first_run" if sealed_first_run else "opened_regression"
+                ),
+                "eligible_as_unseen_evidence": sealed_first_run,
+                "opened_by_this_run": sealed_first_run,
+                "notes": (
+                    "The frozen corpus and fresh cache were opened by this run. Any "
+                    "later run is regression evidence only."
+                    if sealed_first_run
+                    else "The selected corpus was already open before this run."
+                ),
+            },
         }
     )
     report["implementation"].update(
@@ -138,6 +180,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument(
+        "--sealed-first-run",
+        action="store_true",
+        help="Require a frozen dataset, empty cache, and new output path.",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--max-calls", type=int, default=32)
     parser.add_argument(
@@ -196,10 +243,18 @@ async def _async_main(args: argparse.Namespace) -> int:
         thinking=args.thinking,
         max_calls=args.max_calls,
         cache_enabled=not args.no_cache,
+        sealed_first_run=args.sealed_first_run,
     )
     if not args.live:
         sys.stdout.write(json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
         return 0
+    if args.sealed_first_run:
+        _validate_sealed_first_run(
+            dataset_path=args.dataset,
+            cache_dir=args.cache_dir,
+            cache_disabled=args.no_cache,
+            output=args.output,
+        )
     api_key = os.environ.get("DOPPEL_API_KEY", "").strip()
     if args.max_calls > 0 and not api_key:
         raise RuntimeError(
@@ -228,18 +283,33 @@ async def _async_main(args: argparse.Namespace) -> int:
             cache_dir=None if args.no_cache else args.cache_dir,
             max_calls=args.max_calls,
             provider_metadata={**plan["provider"], "version": provider.version},
+            sealed_first_run=args.sealed_first_run,
         )
     finally:
         await provider.aclose()
     report["usage"] = usage.report()
+    base_thresholds = {
+        "min_exact_path_accuracy": args.min_exact_path_accuracy,
+        "min_decision_accuracy": args.min_decision_accuracy,
+        "min_reason_accuracy": args.min_reason_accuracy,
+        "min_over_bound_reason_accuracy": args.min_over_bound_reason_accuracy,
+        "max_wrong_execute_count": args.max_wrong_execute_count,
+    }
+    if args.sealed_first_run:
+        for name in tuple(base_thresholds):
+            registered = SEALED_THRESHOLDS[name]
+            if name.startswith("min_"):
+                base_thresholds[name] = max(base_thresholds[name], registered)
+            else:
+                base_thresholds[name] = min(base_thresholds[name], registered)
     report["quality_gate"] = _quality_gate(
         report,
-        min_exact_path_accuracy=args.min_exact_path_accuracy,
-        min_decision_accuracy=args.min_decision_accuracy,
-        min_reason_accuracy=args.min_reason_accuracy,
-        min_over_bound_reason_accuracy=args.min_over_bound_reason_accuracy,
-        max_wrong_execute_count=args.max_wrong_execute_count,
+        **base_thresholds,
     )
+    if args.sealed_first_run:
+        report["quality_gate"] = _apply_sealed_quality_gates(
+            report, report["quality_gate"]
+        )
     output = args.output or (
         DEFAULT_OUTPUT_ROOT
         / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-regression.json"
@@ -252,6 +322,82 @@ async def _async_main(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     return asyncio.run(_async_main(_parser().parse_args(argv)))
+
+
+def _validate_sealed_first_run(
+    *,
+    dataset_path: Path,
+    cache_dir: Path,
+    cache_disabled: bool,
+    output: Path | None,
+) -> None:
+    dataset = load_dataset(dataset_path)
+    if not dataset.frozen:
+        raise RuntimeError("sealed first run requires dataset.frozen=true")
+    if cache_disabled:
+        raise RuntimeError("sealed first run requires raw-output caching")
+    if output is None:
+        raise RuntimeError("sealed first run requires an explicit --output path")
+    if output.exists() or Path(f"{output}.sha256").exists():
+        raise RuntimeError("sealed first-run output or sidecar already exists")
+    cache_entries = (
+        list(cache_dir.rglob("*.json")) if cache_dir.exists() else []
+    )
+    if cache_entries:
+        raise RuntimeError("sealed first run requires an empty dedicated cache directory")
+
+
+def _apply_sealed_quality_gates(
+    report: dict[str, Any], gate: dict[str, Any]
+) -> dict[str, Any]:
+    """Add pre-registered path-shape gates to the generic decision gates."""
+
+    metrics = report["metrics"]
+    by_category = report["by_category"]
+    checks = {
+        "relation_type_accuracy": (
+            metrics["relation_type_accuracy"],
+            SEALED_THRESHOLDS["min_relation_type_accuracy"],
+        ),
+        "direction_accuracy": (
+            metrics["direction_accuracy"],
+            SEALED_THRESHOLDS["min_direction_accuracy"],
+        ),
+        "path_recall": (
+            metrics["path_recall"],
+            SEALED_THRESHOLDS["min_path_recall"],
+        ),
+        "one_hop_exact_path_accuracy": (
+            by_category["one_hop"]["exact_path_accuracy"],
+            SEALED_THRESHOLDS["min_one_hop_exact_path_accuracy"],
+        ),
+        "two_hop_exact_path_accuracy": (
+            by_category["two_hop"]["exact_path_accuracy"],
+            SEALED_THRESHOLDS["min_two_hop_exact_path_accuracy"],
+        ),
+        "no_path_accuracy": (
+            by_category["no_path"]["no_path_accuracy"],
+            SEALED_THRESHOLDS["min_no_path_accuracy"],
+        ),
+    }
+    failures = list(gate["failures"])
+    for name, (value, threshold) in checks.items():
+        if value < threshold:
+            failures.append(f"{name} below sealed threshold")
+    if (
+        metrics["forbidden_relation_type_hits"]
+        > SEALED_THRESHOLDS["max_forbidden_relation_type_hits"]
+    ):
+        failures.append("forbidden relation type hits exceed sealed threshold")
+    if metrics["error_count"] > SEALED_THRESHOLDS["max_error_count"]:
+        failures.append("error count exceeds sealed threshold")
+    return {
+        **gate,
+        "passed": not failures,
+        "thresholds": {**gate["thresholds"], **SEALED_THRESHOLDS},
+        "failures": failures,
+        "pre_registered": True,
+    }
 
 
 if __name__ == "__main__":

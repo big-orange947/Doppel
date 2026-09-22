@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Record V5's first opened regression: 0.96875 exact-path accuracy and perfect
+  execute/abstain, reason, over-bound, type, recall, and no-path metrics, with zero
+  wrong execution, wrong abstention, forbidden types, or validation errors. One
+  `HELD_BY` direction fluctuation remains real. The opened result authorizes a new
+  sealed evaluation, not default-query-engine execution.
+- Add a frozen 48-case provider-unseen V2 relation-path corpus with no V1 query
+  overlap. It covers every governed type, all four two-hop direction combinations,
+  implicit/shared-endpoint compositions, and balanced over-bound, ambiguous,
+  unsupported, and non-relation controls. The pre-registered plan fixes gates before
+  opening while explicitly keeping the small corpus non-publication-ready.
+- Harden the V5 runner with `--sealed-first-run`: a frozen dataset, raw-output cache,
+  empty dedicated cache directory, and new explicit report path are required before
+  the provider is opened. Sealed path/type/direction/recall/category/error gates are
+  enforced in addition to the generic decision gates, and the report permanently
+  records that the first run opened the corpus.
 - Record V4 v2's opened regression at 0.78125 exact-path/decision accuracy. It
   preserved zero wrong execution and perfect known over-bound handling, but still
   over-abstained five exact two-hop paths, called one exact inbound path ambiguous,

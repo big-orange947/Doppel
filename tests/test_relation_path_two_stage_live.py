@@ -14,7 +14,12 @@ from benchmarks.relation_path_planner_quality import (
     load_dataset,
     load_relation_catalog,
 )
-from benchmarks.relation_path_two_stage_live import build_plan, execute_live
+from benchmarks.relation_path_two_stage_live import (
+    _apply_sealed_quality_gates,
+    _validate_sealed_first_run,
+    build_plan,
+    execute_live,
+)
 from doppel_memory.intelligence import StructuredGenerationRequest
 
 
@@ -130,6 +135,63 @@ async def test_v5_live_regression_caches_observations_and_host_decisions(
     assert first["budget"]["provider_calls"] == 32
     assert first["model_execution_authority"] is False
     assert first["host_executable_path_bound"] == 2
+    sealed_gate = _apply_sealed_quality_gates(
+        first, {"passed": True, "thresholds": {}, "failures": []}
+    )
+    assert sealed_gate["passed"] is True
+    assert sealed_gate["pre_registered"] is True
     assert second["cache"]["hits"] == 32
     assert second["budget"]["provider_calls"] == 0
     assert second["execution"]["complete"] is True
+
+
+def test_sealed_first_run_requires_frozen_data_empty_cache_and_new_output(
+    tmp_path: Path,
+) -> None:
+    frozen_dataset = (
+        Path(__file__).resolve().parents[1]
+        / "benchmarks/datasets/relation-path-planner-quality-zh-v2.json"
+    )
+    cache_dir = tmp_path / "fresh-cache"
+    output = tmp_path / "sealed.json"
+
+    _validate_sealed_first_run(
+        dataset_path=frozen_dataset,
+        cache_dir=cache_dir,
+        cache_disabled=False,
+        output=output,
+    )
+
+    cache_dir.mkdir()
+    (cache_dir / "existing.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="empty dedicated cache"):
+        _validate_sealed_first_run(
+            dataset_path=frozen_dataset,
+            cache_dir=cache_dir,
+            cache_disabled=False,
+            output=output,
+        )
+
+
+def test_sealed_first_run_rejects_opened_dataset_and_implicit_output(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(RuntimeError, match="dataset.frozen=true"):
+        _validate_sealed_first_run(
+            dataset_path=DEFAULT_DATASET,
+            cache_dir=tmp_path / "cache",
+            cache_disabled=False,
+            output=tmp_path / "sealed.json",
+        )
+
+    frozen_dataset = (
+        Path(__file__).resolve().parents[1]
+        / "benchmarks/datasets/relation-path-planner-quality-zh-v2.json"
+    )
+    with pytest.raises(RuntimeError, match="explicit --output"):
+        _validate_sealed_first_run(
+            dataset_path=frozen_dataset,
+            cache_dir=tmp_path / "cache",
+            cache_disabled=False,
+            output=None,
+        )
