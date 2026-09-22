@@ -115,6 +115,7 @@ def test_v7_dry_run_declares_two_pass_budget_and_opened_status() -> None:
         max_calls=96,
         cache_enabled=True,
         review_protocol=True,
+        timeout_seconds=180,
     )
 
     assert plan["corpus_role"] == "opened_regression"
@@ -124,6 +125,7 @@ def test_v7_dry_run_declares_two_pass_budget_and_opened_status() -> None:
     )
     assert plan["provider_calls_per_case"] == 2
     assert plan["one_provider_call_per_case"] is False
+    assert plan["provider"]["timeout_seconds"] == 180
 
 
 def test_runner_rejects_atom_and_review_protocol_together() -> None:

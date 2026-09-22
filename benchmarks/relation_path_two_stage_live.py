@@ -81,9 +81,12 @@ def build_plan(
     sealed_first_run: bool = False,
     atom_protocol: bool = False,
     review_protocol: bool = False,
+    timeout_seconds: float = 60.0,
 ) -> dict[str, Any]:
     if atom_protocol and review_protocol:
         raise ValueError("atom_protocol and review_protocol are mutually exclusive")
+    if not 0 < timeout_seconds <= 600:
+        raise ValueError("timeout_seconds must be greater than 0 and at most 600")
     dataset = load_dataset(dataset_path)
     if sealed_first_run and not dataset.frozen:
         raise ValueError("a sealed first run requires a frozen dataset")
@@ -142,6 +145,7 @@ def build_plan(
             ],
         }
     )
+    plan["provider"]["timeout_seconds"] = timeout_seconds
     return plan
 
 
@@ -260,6 +264,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-completion-tokens", type=int, default=1024)
     parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=60.0,
+        help="Per-provider-call HTTP timeout; does not change the generation budget.",
+    )
+    parser.add_argument(
         "--max-tokens-parameter",
         choices=("max_completion_tokens", "max_tokens"),
         default="max_tokens",
@@ -278,6 +288,8 @@ def _parser() -> argparse.ArgumentParser:
 async def _async_main(args: argparse.Namespace) -> int:
     if args.max_calls < 0:
         raise ValueError("--max-calls must be non-negative")
+    if not 0 < args.timeout_seconds <= 600:
+        raise ValueError("--timeout-seconds must be greater than 0 and at most 600")
     if args.atom_protocol and args.review_protocol:
         raise ValueError("--atom-protocol and --review-protocol are mutually exclusive")
     if args.sealed_first_run and (args.atom_protocol or args.review_protocol):
@@ -312,6 +324,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         sealed_first_run=args.sealed_first_run,
         atom_protocol=args.atom_protocol,
         review_protocol=args.review_protocol,
+        timeout_seconds=args.timeout_seconds,
     )
     if not args.live:
         sys.stdout.write(json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
@@ -338,6 +351,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         max_tokens_parameter=args.max_tokens_parameter,
         temperature=0,
         thinking=args.thinking,
+        timeout_seconds=args.timeout_seconds,
     )
     provider = OpenAICompatibleStructuredOutputModel(
         config, api_key=api_key, usage_observer=usage.observe

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Record the V7 Pro non-thinking single-variable comparison. With the same opened V2
+  corpus, two-pass protocol, host compiler, and gates, Pro regressed exact-path
+  accuracy from 0.875 to 0.7083, decision accuracy from 0.9583 to 0.7708, two-hop
+  exact accuracy from 0.75 to 0.4375, and no-path accuracy from 1.0 to 0.8125. It
+  introduced three wrong executions and three forbidden-type hits. The complete,
+  error-free run rejects the assumption that the larger non-thinking model is a
+  better governed path Planner.
+- Expose a bounded per-request timeout in the staged relation-path live runner so
+  thinking-mode comparisons can allow slower inference without changing generation
+  budgets, schemas, prompts, or quality gates.
 - Record V7's opened V2 regression: the independent atom-review pass raised decision
   accuracy from 0.8542 to 0.9583, path recall from 0.78125 to 0.9375, direction
   accuracy from 0.7083 to 0.9167, and two-hop exact accuracy from 0.5625 to 0.75.
