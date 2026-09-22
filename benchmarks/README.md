@@ -192,7 +192,7 @@ Remove-Item Env:DOPPEL_API_KEY -ErrorAction SilentlyContinue
   --output data/doppel/relation-path-planner/dev-v1-rescored.json
 ```
 
-Only after the prompt/contract is frozen from `dev` should the 11 held-out and ten
+Only after the prompt/contract is frozen from `dev` should the 12 held-out and nine
 adversarial cases be opened together:
 
 ```powershell
@@ -219,6 +219,35 @@ schema-rejected three-step draft instead of an explicit no-path outcome. Heldout
 valid draft produced a false or forbidden path. The safety boundary worked, but a
 validation error is not relabeled as a correct abstention, so V3 receives no default
 query-engine execution authority.
+
+Planner V4 is a new module-only protocol, not a reinterpretation of the sealed result.
+It adds explicit `execute`/`abstain` and `exact`, `ambiguous`, `unsupported`,
+`over_bound`, or `nonrelation` reasons. An executable decision still requires exactly
+one or two bounded steps; abstention requires empty steps, zero path confidence, and
+no soft relation candidates. Host validation continues to reject malformed output and
+never truncates an over-bound chain.
+
+Because every V1 partition has now been opened, V4 evaluation over these 32 cases is
+permanently labeled `opened_regression` and is ineligible as unseen evidence:
+
+```powershell
+# Dry run: 32-case topology, no key read and no network call.
+.\.venv\Scripts\python.exe -m benchmarks.relation_path_decision_live
+
+# One opened-corpus regression run. This does not create a new held-out claim.
+.\.venv\Scripts\python.exe -m benchmarks.relation_path_decision_live `
+  --live --max-calls 32 `
+  --min-exact-path-accuracy 0.90 `
+  --min-decision-accuracy 0.95 --min-reason-accuracy 0.90 `
+  --min-over-bound-reason-accuracy 1 --max-wrong-execute-count 0 `
+  --output data/doppel/relation-path-decision/v4-regression-v1.json
+```
+
+The regression report keeps V3 path-shape metrics and independently measures decision
+accuracy, reason accuracy, execute/abstain accuracy, explicit over-bound handling,
+wrong execution, wrong abstention, and invalid decisions. Passing it only qualifies
+V4 for a new-corpus experiment; it does not grant graph execution authority. A new V2
+dev corpus and independently unopened sealed corpus remain required.
 
 Every result records dataset/catalog/selection fingerprints, provider settings without
 credentials, cache hits/misses, provider call budget, aggregate token usage, per-case

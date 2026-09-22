@@ -441,7 +441,7 @@ Doppel 当前版本为 **v0.8.3 Alpha**。核心 Store、scope、provenance、�
 接下来的重点不是增加更多特定场景规则，而是：
 
 1. 扩大并冻结个人记忆抽取、时间、关系和多跳 Planner 的 held-out / adversarial 数据集；
-2. 在已完成缓存与预算保护的基础上，冻结 Planner v3 的 dev 方案并执行独立 held-out / adversarial 真实模型评测；
+2. 基于 Planner v3 密封评测暴露的超界拒绝问题，验证带显式 `execute/abstain` 决策的 V4，并建设全新的 V2 dev / sealed 语料；
 3. 继续验证 PostgreSQL + pgvector + Graphiti 最高配置下的召回、延迟与多实例可靠性；
 4. 增加上下文选择与装配协议，让上层 Agent 按任务需要获取最小充分记忆；
 5. 在核心质量稳定后，再建设可视化记忆管理、用户增删改查和文档补充界面；

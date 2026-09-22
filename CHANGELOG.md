@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Add a module-only experimental Planner v4 decision protocol without changing V3 or
+  the default query engine. V4 separates `execute` from structured `abstain`; exact
+  one/two-hop paths require `path_reason=exact`, while ambiguous, unsupported,
+  over-bound, and non-relation requests require empty steps, zero path confidence,
+  and no soft relation candidates. Three-step output remains invalid and is never
+  truncated. The Reference adapter retains host-bound subject authority, ontology
+  validation, temporal grounding, and the V3 endpoint-direction rules.
+- Add a separate V4 decision scorer over the now-opened 32-case V1 corpus. It preserves
+  the existing path-shape metrics while independently measuring execute/abstain,
+  abstention reason, wrong execution, wrong abstention, and explicit over-bound
+  handling. Reports permanently label this corpus `opened_regression` and ineligible
+  as unseen evidence.
+- Add a dry-run-first, no-retry V4 live regression runner with content-addressed raw
+  output caching, provider-call and token accounting, failure-origin separation, and
+  independent gates for path shape, decision, reason, over-bound abstention, and wrong
+  execution. Every report marks all V1 partitions as opened regression data and grants
+  no graph execution authority.
 - Record the first immutable sealed Planner v3 result. The pre-registered gate failed:
   exact path was 0.9524, all 15 answerable one/two-hop cases had exact types and
   directions, and false/forbidden paths stayed zero, but one adversarial three-hop

@@ -1,4 +1,4 @@
-"""Experimental additive Planner v3 protocol for bounded typed relation paths.
+"""Experimental additive Planner protocols for bounded typed relation paths.
 
 This module deliberately does not change the stable query Planner v1/v2 wire models
 or connect path execution to :class:`PersonalMemoryQueryEngine`.  It defines the
@@ -255,3 +255,165 @@ def _validate_path_ontology(
         raise PersonalMemoryQueryPlanningError(
             f"planner selected path relation types outside host definitions: {unknown}"
         )
+
+
+PathDecision = Literal["execute", "abstain"]
+PathDecisionReason = Literal[
+    "exact", "ambiguous", "unsupported", "over_bound", "nonrelation"
+]
+
+
+class PersonalMemoryRelationPathDraftV4(PersonalMemoryRelationPathDraftV3):
+    """V3 path shape plus an explicit execute/abstain decision.
+
+    ``abstain`` is a valid, structured Planner result rather than a validation
+    failure. It never authorizes a graph operation. Host validation still rejects
+    malformed or over-bound step arrays instead of silently truncating them.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[4] = 4
+    path_decision: PathDecision = Field(
+        description=(
+            "Execute only an exact one/two-hop path; otherwise abstain with empty "
+            "path_steps and a reason."
+        )
+    )
+    path_reason: PathDecisionReason = Field(
+        description=(
+            "Use exact only with execute. Abstention reasons are ambiguous, "
+            "unsupported, over_bound, or nonrelation."
+        )
+    )
+
+    @model_validator(mode="after")
+    def _validate_path_decision(self) -> PersonalMemoryRelationPathDraftV4:
+        if self.path_decision == "execute":
+            if self.path_reason != "exact":
+                raise ValueError("execute requires path_reason='exact'")
+            if not self.path_steps:
+                raise ValueError("execute requires one or two path_steps")
+        else:
+            if self.path_reason == "exact":
+                raise ValueError("abstain requires a non-exact path_reason")
+            if self.path_steps:
+                raise ValueError("abstain requires empty path_steps")
+            if self.path_confidence != 0:
+                raise ValueError("abstain requires zero path_confidence")
+            if self.relation_types:
+                raise ValueError("abstain requires empty relation_types")
+        return self
+
+
+@runtime_checkable
+class PersonalMemoryRelationPathPlannerV4(Protocol):
+    """Produce a scope-free V4 decision without executing or authorizing a path."""
+
+    name: str
+    version: str
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryRelationPathDraftV4: ...
+
+
+REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V4_INSTRUCTIONS = """\
+V4 requires an explicit path_decision and path_reason in addition to the V3 fields.
+These fields describe whether a complete path is safe to execute; they never grant
+execution authority.
+
+Use path_decision execute only when the complete requested traversal consists of one
+or two exact directed relationships supported by relation_type_definitions. Then use
+path_reason exact, emit every required step in order, set positive path_confidence,
+and leave the older relation_types field empty.
+
+Use path_decision abstain for every other case. Abstention must have empty path_steps,
+zero path_confidence, and empty relation_types. Choose exactly one reason:
+- over_bound: the complete requested traversal needs more than two relationships;
+- ambiguous: direction, relationship meaning, or the required chain is unresolved;
+- unsupported: the requested relationship has no matching host definition;
+- nonrelation: no exact graph relationship traversal is requested.
+
+Never emit a prefix of an over-bound chain, never truncate it to two steps, and never
+emit three or more steps. Recognizing a longer chain is not permission to represent or
+execute it: report over_bound and abstain. Do not use unsupported merely because the
+underlying fact may be absent; planning concerns the requested relation semantics, not
+whether an answer is known. All V3 endpoint-role, direction, temporal, authority, and
+ontology rules remain in force.
+"""
+
+
+class ReferencePersonalMemoryRelationPathPlannerV4:
+    """Schema-constrained experimental V4 decision Planner."""
+
+    name = "doppel.reference-personal-memory-relation-path-planner-v4"
+    version = "1"
+
+    def __init__(self, model: StructuredOutputModel) -> None:
+        self.model = model
+        _require_identity(model, "structured output model")
+        self.version = _model_bound_version(self.version, model)
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryRelationPathDraftV4:
+        bound = PersonalMemoryQueryRequest.model_validate(request)
+        instructions = (
+            REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS
+            + REFERENCE_RELATION_DEFINITION_INSTRUCTIONS
+            + REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V3_INSTRUCTIONS
+            + REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V4_INSTRUCTIONS
+        )
+        raw = await self.model.generate(
+            StructuredGenerationRequest(
+                instructions=instructions,
+                input=bound.to_planner_input(),
+                output_schema=PersonalMemoryRelationPathDraftV4.model_json_schema(),
+            )
+        )
+        if isinstance(raw, BaseModel):
+            raw = raw.model_dump(warnings=False)
+        draft = _project_reference_relation_path_draft_v4(
+            raw, allow_incomplete_time_view=True
+        )
+        grounded = _ground_explicit_query_time_v2(draft, bound)
+        draft = PersonalMemoryRelationPathDraftV4.model_validate(
+            grounded.model_dump(mode="python")
+        )
+        _validate_path_ontology(draft, bound)
+        return draft.model_copy(
+            update={
+                "subject": bound.default_subject,
+                "subject_id": bound.default_subject_id,
+            }
+        )
+
+
+def _project_reference_relation_path_draft_v4(
+    raw: Any, *, allow_incomplete_time_view: bool = False
+) -> PersonalMemoryRelationPathDraftV4:
+    """Make unknown JSON-object provider fields inert, preserving strict values."""
+
+    validation_context = (
+        {"allow_incomplete_time_view": True} if allow_incomplete_time_view else None
+    )
+    if not isinstance(raw, Mapping):
+        return PersonalMemoryRelationPathDraftV4.model_validate(
+            raw, context=validation_context
+        )
+    known = PersonalMemoryRelationPathDraftV4.model_fields.keys()
+    projected = {name: raw[name] for name in known if name in raw}
+    unknown_count = len(raw) - len(projected)
+    if not projected:
+        return PersonalMemoryRelationPathDraftV4.model_validate(
+            raw, context=validation_context
+        )
+    if unknown_count:
+        logger.warning(
+            "reference relation path planner v4 discarded %d unknown output field(s)",
+            unknown_count,
+        )
+    return PersonalMemoryRelationPathDraftV4.model_validate(
+        projected, context=validation_context
+    )
