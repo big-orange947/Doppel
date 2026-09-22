@@ -165,6 +165,50 @@ The dataset remains unfrozen and not publication-ready; the committed tests exer
 gold Planner only to verify the evaluator. A real provider result must be cached and
 reported separately before the experimental Planner v3 can gain execution authority.
 
+`relation_path_planner_live.py` is the bounded provider runner for that separate
+measurement. It is dry-run by default, selects only the 11-case `dev` partition by
+default, makes at most one provider request per selected case, performs no retries,
+and never executes a graph path. Successful raw JSON objects are stored in the same
+content-addressed provider-output cache used by the earlier Planner benchmarks. Cache
+hits are revalidated by the current Planner and consume zero call budget. An
+authentication, rate-limit, transport, timeout, or other provider-level failure stops
+the run after its first occurrence; remaining cases are recorded as not run rather
+than issuing the same failing request repeatedly.
+
+```powershell
+# Preview the exact dev call topology. No key read, network client, or output file.
+.\.venv\Scripts\python.exe -m benchmarks.relation_path_planner_live --max-calls 11
+
+# Development measurement. Set the key in this same PowerShell process first.
+$env:DOPPEL_API_KEY = "<provider key>"
+.\.venv\Scripts\python.exe -m benchmarks.relation_path_planner_live `
+  --live --max-calls 11 --partition dev `
+  --output data/doppel/relation-path-planner/dev-v1.json
+
+# Re-score the same dev provider outputs after local scorer changes: zero HTTP calls.
+Remove-Item Env:DOPPEL_API_KEY -ErrorAction SilentlyContinue
+.\.venv\Scripts\python.exe -m benchmarks.relation_path_planner_live `
+  --live --max-calls 0 --partition dev `
+  --output data/doppel/relation-path-planner/dev-v1-rescored.json
+```
+
+Only after the prompt/contract is frozen from `dev` should the 11 held-out and ten
+adversarial cases be opened together:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.relation_path_planner_live `
+  --live --max-calls 21 --partition heldout --partition adversarial `
+  --output data/doppel/relation-path-planner/sealed-v1.json
+```
+
+Every result records dataset/catalog/selection fingerprints, provider settings without
+credentials, cache hits/misses, provider call budget, aggregate token usage, per-case
+sanitized errors, implementation hashes, partition/category/trait metrics, and a
+SHA-256 sidecar. A completed low-quality run is distinct from an incomplete provider
+run. Optional exact-path/no-path thresholds affect only the report gate; they do not
+change model output or scoring. Do not tune against the sealed partitions and then
+describe a rerun as held out.
+
 `personal_retrieval_ablation.py` compares the same pre-extracted fixture set across
 four main execution profiles and three index-direct diagnostics. Every main profile
 runs the real `PersonalMemoryQueryEngine` end-to-end (planner -> lexical/semantic

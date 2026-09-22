@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from doppel_memory import StructuredOutputProviderError
 from doppel_memory.query import PersonalMemoryQueryRequest
 from doppel_memory.query_path import PersonalMemoryRelationPathPlannerV3
 from doppel_memory.relation import RelationPathStep, RelationTypeDefinition
@@ -72,26 +73,42 @@ async def run_relation_path_planner_quality(
 ) -> dict[str, Any]:
     allowed = [definition.name for definition in definitions]
     rows: list[dict[str, Any]] = []
+    stop_reason = ""
     for case in dataset.cases:
-        try:
-            draft = await planner.plan(
-                PersonalMemoryQueryRequest(
-                    query=case.query,
-                    now=datetime(2026, 9, 19, tzinfo=UTC),
-                    calendar_timezone="+08:00",
-                    default_subject="owner",
-                    default_subject_id="planner-quality-owner",
-                    available_relation_types=allowed,
-                    relation_type_definitions=definitions,
-                )
-            )
-            actual_steps = draft.path_steps
-            error = ""
-            entity_mentions = draft.entity_mentions
-        except Exception as exc:  # noqa: BLE001 - evaluator records planner failures
+        error_code = ""
+        http_status: int | None = None
+        if stop_reason:
             actual_steps = []
             entity_mentions = []
-            error = type(exc).__name__
+            error = "PlannerNotRun"
+            error_code = "previous_fatal_provider_error"
+        else:
+            try:
+                draft = await planner.plan(
+                    PersonalMemoryQueryRequest(
+                        query=case.query,
+                        now=datetime(2026, 9, 19, tzinfo=UTC),
+                        calendar_timezone="+08:00",
+                        default_subject="owner",
+                        default_subject_id="planner-quality-owner",
+                        available_relation_types=allowed,
+                        relation_type_definitions=definitions,
+                    )
+                )
+                actual_steps = draft.path_steps
+                error = ""
+                entity_mentions = draft.entity_mentions
+            except Exception as exc:  # noqa: BLE001 - sanitized evaluator outcome
+                actual_steps = []
+                entity_mentions = []
+                error = type(exc).__name__
+                if isinstance(exc, StructuredOutputProviderError):
+                    error_code = exc.code
+                    http_status = exc.status_code
+                    stop_reason = exc.code
+                elif error == "PlannerCallBudgetExceeded":
+                    error_code = "budget_exhausted"
+                    stop_reason = error_code
         expected_steps = case.expected_path_steps
         expected_shape = [step.model_dump(mode="json") for step in expected_steps]
         actual_shape = [step.model_dump(mode="json") for step in actual_steps]
@@ -129,6 +146,8 @@ async def run_relation_path_planner_quality(
                 and set(entity_mentions) == set(case.expected_entity_mentions),
                 "forbidden_relation_types": forbidden,
                 "error": error,
+                "error_code": error_code,
+                "http_status": http_status,
             }
         )
 
@@ -157,6 +176,11 @@ async def run_relation_path_planner_quality(
             "publication_ready": dataset.publication_ready,
         },
         "planner": {"name": planner.name, "version": planner.version},
+        "execution": {
+            "complete": not stop_reason and not summary["error_count"],
+            "stopped_early": bool(stop_reason),
+            "stop_reason": stop_reason,
+        },
         "metrics": summary,
         "by_partition": by_partition,
         "by_category": by_category,

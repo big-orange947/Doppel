@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a dry-run-first, budgeted live provider runner for the 32-case relation-path
+  Planner v3 draft. It defaults to the 11-case dev partition, supports a separately
+  opened heldout/adversarial run, performs at most one no-retry request per case, and
+  caches successful raw provider JSON by content before local Planner validation.
+  Cache-only re-scoring consumes zero calls; provider-level and budget failures stop
+  further requests while preserving explicit not-run rows. Reports bind input and
+  implementation hashes, sanitized provider settings, cache/budget/token accounting,
+  partition/category/trait metrics, quality gates, and a SHA-256 sidecar. The runner
+  scores plans only and grants no graph execution authority.
 - Add an independent 32-case Chinese relation-path Planner v3 draft and offline
   evaluator. Unlike the graph-preseeded structural retrieval fixture, every Planner
   gold path is justified by the question wording and governed relation definitions.
