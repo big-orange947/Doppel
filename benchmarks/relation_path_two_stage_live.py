@@ -1,4 +1,4 @@
-"""Budgeted live regression for the two-stage relation-path Planner V5."""
+"""Budgeted live regression for staged relation-path Planner protocols."""
 
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ from doppel_memory import (
 from doppel_memory.query_path import (
     ReferencePersonalMemoryRelationPathPlannerV5,
     ReferencePersonalMemoryRelationPathPlannerV6,
+    ReferencePersonalMemoryRelationPathPlannerV7,
 )
 from doppel_memory.relation import RelationTypeDefinition
 
@@ -79,7 +80,10 @@ def build_plan(
     cache_enabled: bool,
     sealed_first_run: bool = False,
     atom_protocol: bool = False,
+    review_protocol: bool = False,
 ) -> dict[str, Any]:
+    if atom_protocol and review_protocol:
+        raise ValueError("atom_protocol and review_protocol are mutually exclusive")
     dataset = load_dataset(dataset_path)
     if sealed_first_run and not dataset.frozen:
         raise ValueError("a sealed first run requires a frozen dataset")
@@ -100,10 +104,16 @@ def build_plan(
         {
             "runner": "doppel.relation-path-two-stage-live.v1",
             "planner_protocol": (
-                "v6_relation_atoms_host_compilation"
-                if atom_protocol
-                else "v5_model_observation_host_decision"
+                "v7_two_pass_atom_review_host_compilation"
+                if review_protocol
+                else (
+                    "v6_relation_atoms_host_compilation"
+                    if atom_protocol
+                    else "v5_model_observation_host_decision"
+                )
             ),
+            "provider_calls_per_case": 2 if review_protocol else 1,
+            "one_provider_call_per_case": not review_protocol,
             "corpus_role": (
                 "sealed_first_run" if sealed_first_run else "opened_regression"
             ),
@@ -118,10 +128,15 @@ def build_plan(
                 "Dry-run construction never reads DOPPEL_API_KEY or opens a network client.",
                 "The model describes up to eight edges and has no execute/abstain field.",
                 (
-                    "Trusted host code orders relation atoms, derives directions, and "
-                    "applies the executable bound."
-                    if atom_protocol
-                    else "Trusted host code alone applies the executable two-hop bound."
+                    "A second non-authoritative model pass reviews the first atom "
+                    "observation before unchanged host compilation."
+                    if review_protocol
+                    else (
+                        "Trusted host code orders relation atoms, derives directions, "
+                        "and applies the executable bound."
+                        if atom_protocol
+                        else "Trusted host code alone applies the executable two-hop bound."
+                    )
                 ),
                 "No graph query is executed by this scorer.",
             ],
@@ -141,7 +156,10 @@ async def execute_live(
     provider_metadata: dict[str, Any],
     sealed_first_run: bool = False,
     atom_protocol: bool = False,
+    review_protocol: bool = False,
 ) -> dict[str, Any]:
+    if atom_protocol and review_protocol:
+        raise ValueError("atom_protocol and review_protocol are mutually exclusive")
     report = await execute_decision_live(
         dataset=dataset,
         definitions=definitions,
@@ -151,19 +169,28 @@ async def execute_live(
         max_calls=max_calls,
         provider_metadata=provider_metadata,
         planner_type=(
-            ReferencePersonalMemoryRelationPathPlannerV6
-            if atom_protocol
-            else ReferencePersonalMemoryRelationPathPlannerV5
+            ReferencePersonalMemoryRelationPathPlannerV7
+            if review_protocol
+            else (
+                ReferencePersonalMemoryRelationPathPlannerV6
+                if atom_protocol
+                else ReferencePersonalMemoryRelationPathPlannerV5
+            )
         ),
     )
     report.update(
         {
             "runner": "doppel.relation-path-two-stage-quality.v1",
             "planner_protocol": (
-                "v6_relation_atoms_host_compilation"
-                if atom_protocol
-                else "v5_model_observation_host_decision"
+                "v7_two_pass_atom_review_host_compilation"
+                if review_protocol
+                else (
+                    "v6_relation_atoms_host_compilation"
+                    if atom_protocol
+                    else "v5_model_observation_host_decision"
+                )
             ),
+            "provider_calls_per_case": 2 if review_protocol else 1,
             "model_execution_authority": False,
             "host_executable_path_bound": 2,
             "corpus_status": {
@@ -212,6 +239,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use experimental V6 declarative relation atoms and host compilation.",
     )
+    parser.add_argument(
+        "--review-protocol",
+        action="store_true",
+        help="Use experimental V7 two-pass atom extraction and review.",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--max-calls", type=int, default=32)
     parser.add_argument(
@@ -246,9 +278,12 @@ def _parser() -> argparse.ArgumentParser:
 async def _async_main(args: argparse.Namespace) -> int:
     if args.max_calls < 0:
         raise ValueError("--max-calls must be non-negative")
-    if args.sealed_first_run and args.atom_protocol:
+    if args.atom_protocol and args.review_protocol:
+        raise ValueError("--atom-protocol and --review-protocol are mutually exclusive")
+    if args.sealed_first_run and (args.atom_protocol or args.review_protocol):
         raise ValueError(
-            "atom protocol has no pre-registered sealed corpus; run it as opened regression"
+            "experimental protocols have no pre-registered sealed corpus; "
+            "run them as opened regression"
         )
     for name in (
         "min_exact_path_accuracy",
@@ -276,6 +311,7 @@ async def _async_main(args: argparse.Namespace) -> int:
         cache_enabled=not args.no_cache,
         sealed_first_run=args.sealed_first_run,
         atom_protocol=args.atom_protocol,
+        review_protocol=args.review_protocol,
     )
     if not args.live:
         sys.stdout.write(json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
@@ -317,6 +353,7 @@ async def _async_main(args: argparse.Namespace) -> int:
             provider_metadata={**plan["provider"], "version": provider.version},
             sealed_first_run=args.sealed_first_run,
             atom_protocol=args.atom_protocol,
+            review_protocol=args.review_protocol,
         )
     finally:
         await provider.aclose()

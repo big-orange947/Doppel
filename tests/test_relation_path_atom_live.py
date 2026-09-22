@@ -101,6 +101,50 @@ def test_v6_dry_run_is_opened_regression_and_declares_atom_protocol() -> None:
     assert plan["planner_protocol"] == "v6_relation_atoms_host_compilation"
 
 
+def test_v7_dry_run_declares_two_pass_budget_and_opened_status() -> None:
+    plan = build_plan(
+        dataset_path=DATASET,
+        catalog_path=DEFAULT_CATALOG,
+        partitions=["heldout", "adversarial"],
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        schema_mode="json_object",
+        max_completion_tokens=1024,
+        max_tokens_parameter="max_tokens",
+        thinking="disabled",
+        max_calls=96,
+        cache_enabled=True,
+        review_protocol=True,
+    )
+
+    assert plan["corpus_role"] == "opened_regression"
+    assert plan["eligible_as_unseen_evidence"] is False
+    assert plan["planner_protocol"] == (
+        "v7_two_pass_atom_review_host_compilation"
+    )
+    assert plan["provider_calls_per_case"] == 2
+    assert plan["one_provider_call_per_case"] is False
+
+
+def test_runner_rejects_atom_and_review_protocol_together() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        build_plan(
+            dataset_path=DATASET,
+            catalog_path=DEFAULT_CATALOG,
+            partitions=["heldout", "adversarial"],
+            model="deepseek-v4-flash",
+            base_url="https://api.deepseek.com",
+            schema_mode="json_object",
+            max_completion_tokens=1024,
+            max_tokens_parameter="max_tokens",
+            thinking="disabled",
+            max_calls=96,
+            cache_enabled=True,
+            atom_protocol=True,
+            review_protocol=True,
+        )
+
+
 @pytest.mark.asyncio
 async def test_v6_live_runner_compiles_gold_atoms(tmp_path: Path) -> None:
     dataset = load_dataset(DATASET)
@@ -119,6 +163,33 @@ async def test_v6_live_runner_compiles_gold_atoms(tmp_path: Path) -> None:
 
     assert model.calls == 48
     assert report["planner_protocol"] == "v6_relation_atoms_host_compilation"
+    assert report["metrics"]["exact_path_accuracy"] == 1
+    assert report["metrics"]["direction_accuracy"] == 1
+    assert report["decision_metrics"]["wrong_execute_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_v7_live_runner_reviews_then_compiles_gold_atoms(tmp_path: Path) -> None:
+    dataset = load_dataset(DATASET)
+    model = _GoldAtomModel({case.query: case for case in dataset.cases})
+
+    report = await execute_live(
+        dataset=dataset,
+        definitions=load_relation_catalog(DEFAULT_CATALOG),
+        model=model,
+        partitions=["heldout", "adversarial"],
+        cache_dir=tmp_path,
+        max_calls=96,
+        provider_metadata={"model": "fake"},
+        review_protocol=True,
+    )
+
+    assert model.calls == 96
+    assert report["planner_protocol"] == (
+        "v7_two_pass_atom_review_host_compilation"
+    )
+    assert report["provider_calls_per_case"] == 2
+    assert report["budget"]["provider_calls"] == 96
     assert report["metrics"]["exact_path_accuracy"] == 1
     assert report["metrics"]["direction_accuracy"] == 1
     assert report["decision_metrics"]["wrong_execute_count"] == 0

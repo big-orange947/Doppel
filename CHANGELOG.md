@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add experimental Planner V7 for opened regression only. It performs one V6 atom
+  extraction and one independent schema-constrained review, then sends only the
+  reviewed observation through the unchanged host ontology validation and path
+  compiler. The review may repair omitted predicates, endpoint bindings, shared
+  references, or unjustified ambiguity, but still emits no direction, ordered path,
+  or execution decision. The live runner records the two-provider-call-per-case
+  contract and keeps the existing cache, hard budget, and host safety boundaries.
+- Record V6's opened V2 regression: declarative atoms and host compilation improved
+  exact path from 0.75 to 0.8333, two-hop exact from 0.3125 to 0.5625, removed the
+  forbidden type, and repaired shared-endpoint/double-inbound ordering. Decision and
+  path recall remained unchanged at 0.8542 and 0.78125 because seven answerable cases
+  were still rejected or incompletely extracted before compilation. V6 remains
+  experimental and receives no execution authority.
 - Add experimental Planner V6 after the sealed V2 failure, without changing the
   default query engine. The model now emits unordered declarative relation atoms that
   bind definition source/target roles to fixed `anchor`/`answer` and shared

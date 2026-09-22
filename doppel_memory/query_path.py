@@ -799,17 +799,96 @@ class ReferencePersonalMemoryRelationPathPlannerV6:
                 output_schema=PersonalMemoryRelationPathObservationV6.model_json_schema(),
             )
         )
-        if isinstance(raw, BaseModel):
-            raw = raw.model_dump(warnings=False)
-        observation = _project_reference_relation_path_observation_v6(
-            raw, allow_incomplete_time_view=True
-        )
-        grounded = _ground_explicit_query_time_v2(observation, bound)
-        observation = PersonalMemoryRelationPathObservationV6.model_validate(
-            grounded.model_dump(mode="python")
-        )
+        observation = _normalize_relation_path_observation_v6(raw, bound)
         _validate_atom_ontology_v6(observation, bound)
         return _compile_relation_atoms_v6(observation, bound)
+
+
+REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V7_REVIEW_INSTRUCTIONS = """\
+Review the candidate_observation against the original query and the host relation type
+definitions. Return one complete corrected V6 observation. The original query and host
+definitions are authoritative; the candidate is only a fallible first-pass analysis.
+
+Check the relationship topology independently before deciding whether to preserve or
+repair the candidate. In particular, verify that every relationship predicate requested
+by the question is represented, that definition source and target roles are bound
+correctly, that repeated or shared entities reuse one reference, and that the complete
+atom graph connects the fixed anchor to the requested answer. Include implicit
+intermediate atoms when the question specifies their predicate even if the intermediate
+entity is unnamed. Do not add a relationship merely because it may be useful, plausible,
+or present in storage.
+
+Do not emit traversal directions, ordered path steps, or an execution decision. Do not
+answer the question and do not infer stored facts. Preserve correct query-planning fields
+from the candidate, but repair entity_mentions when necessary so the first explicit
+starting entity is the anchor. Use ambiguous only for a genuinely unresolved predicate
+or endpoint binding, unsupported only when no host definition represents a requested
+predicate, and nonrelation only when no exact graph relationship topology is requested.
+Possible absence of matching evidence in storage is not a reason to mark an otherwise
+well-defined topology ambiguous. All V6 atom and reference rules remain in force.
+"""
+
+
+class ReferencePersonalMemoryRelationPathPlannerV7:
+    """Extract relation atoms, review them once, then compile in trusted host code."""
+
+    name = "doppel.reference-personal-memory-relation-path-planner-v7"
+    version = "1"
+
+    def __init__(self, model: StructuredOutputModel) -> None:
+        self.model = model
+        _require_identity(model, "structured output model")
+        self.version = _model_bound_version(self.version, model)
+
+    async def plan(
+        self, request: PersonalMemoryQueryRequest
+    ) -> PersonalMemoryRelationPathDraftV4:
+        bound = PersonalMemoryQueryRequest.model_validate(request)
+        base_instructions = (
+            REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS
+            + REFERENCE_RELATION_DEFINITION_INSTRUCTIONS
+            + REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V6_INSTRUCTIONS
+        )
+        first = await self.model.generate(
+            StructuredGenerationRequest(
+                instructions=base_instructions,
+                input=bound.to_planner_input(),
+                output_schema=PersonalMemoryRelationPathObservationV6.model_json_schema(),
+            )
+        )
+        initial = _normalize_relation_path_observation_v6(first, bound)
+        _validate_atom_ontology_v6(initial, bound)
+
+        review_input = bound.to_planner_input()
+        review_input["candidate_observation"] = initial.model_dump(mode="json")
+        reviewed = await self.model.generate(
+            StructuredGenerationRequest(
+                instructions=(
+                    base_instructions
+                    + REFERENCE_PERSONAL_MEMORY_RELATION_PATH_V7_REVIEW_INSTRUCTIONS
+                ),
+                input=review_input,
+                output_schema=PersonalMemoryRelationPathObservationV6.model_json_schema(),
+            )
+        )
+        observation = _normalize_relation_path_observation_v6(reviewed, bound)
+        _validate_atom_ontology_v6(observation, bound)
+        return _compile_relation_atoms_v6(observation, bound)
+
+
+def _normalize_relation_path_observation_v6(
+    raw: Any,
+    request: PersonalMemoryQueryRequest,
+) -> PersonalMemoryRelationPathObservationV6:
+    if isinstance(raw, BaseModel):
+        raw = raw.model_dump(warnings=False)
+    observation = _project_reference_relation_path_observation_v6(
+        raw, allow_incomplete_time_view=True
+    )
+    grounded = _ground_explicit_query_time_v2(observation, request)
+    return PersonalMemoryRelationPathObservationV6.model_validate(
+        grounded.model_dump(mode="python")
+    )
 
 
 def _project_reference_relation_path_observation_v6(
