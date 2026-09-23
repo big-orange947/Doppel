@@ -189,6 +189,24 @@ hits or scope leakage, and five occurrences of related but non-required candidat
 This is generated-topology retrieval evidence; it does not measure whether a model
 can produce those candidate topologies from natural-language questions.
 
+The downstream candidate assembly has a separate opened-corpus live ablation. It
+compares independent Store lexical + PostgreSQL/pgvector retrieval, Graphiti typed
+paths, and their bounded Store-revalidated union on the same 36 cases:
+
+```powershell
+$env:DOPPEL_NEO4J_PASSWORD = "<local-only password>"
+$env:DOPPEL_ABLATION_PG_PASSWORD = "<local-only password>"
+.\.venv\Scripts\python.exe -m benchmarks.hybrid_path_candidate_ablation `
+  --output data/doppel/hybrid-path-candidate-ablation.json
+```
+
+Its fixed interpretation and gates are recorded in
+[`reports/hybrid-path-candidate-preregistered-2026-09-23.md`](reports/hybrid-path-candidate-preregistered-2026-09-23.md).
+This run uses dataset-supplied topology to isolate retrieval and assembly. It keeps
+candidate noise separate from temporal/provenance-forbidden evidence and leaves answer
+support unassessed. Both live backends are required; there is no silent degraded mode,
+and the run makes no external or paid model calls.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

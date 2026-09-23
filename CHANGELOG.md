@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add an experimental Store-revalidated assembly for independent memory hits and
+  typed relation paths. It reserves independent recall, retains paths atomically,
+  caps duplicate path rank, preserves path provenance, and leaves answer support
+  explicitly unassessed. Add a preregistered live lexical/pgvector versus Graphiti
+  path versus assembled-union development ablation over the existing 36-query corpus.
+
 - Record the V7 Planner-backed candidate comparison. Its exact-path abstention policy
   returned only 4/9 required routes versus V3's 7/9, while two-hop stayed 2/4. Do not
   unify exact and candidate decision contracts; stop natural-language path tuning on
