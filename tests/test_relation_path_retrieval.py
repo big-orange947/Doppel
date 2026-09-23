@@ -19,6 +19,7 @@ from doppel_memory.relation import (
 from doppel_memory.relation_path_retrieval import (
     CandidateRelationAtom,
     CandidateRelationTopology,
+    RelationPathCandidateLimitError,
     RelationPathCandidateOntologyError,
     build_relation_path_retrieval_plan,
     search_relation_path_routes,
@@ -172,6 +173,25 @@ def test_candidate_compiler_rejects_types_outside_host_ontology() -> None:
         )
 
 
+def test_candidate_compiler_rejects_more_than_eight_observations_up_front() -> None:
+    topology = _topology(
+        [
+            CandidateRelationAtom(
+                relation_types=["HELD_BY"],
+                source_ref="anchor",
+                target_ref="answer",
+            )
+        ]
+    )
+
+    with pytest.raises(RelationPathCandidateLimitError, match="at most eight"):
+        build_relation_path_retrieval_plan(
+            _draft(execute=False),
+            candidate_topologies=[topology] * 9,
+            allowed_relation_types=ALLOWED,
+        )
+
+
 class _FakePathIndex:
     def __init__(self, results: list[list[RelationPathCandidate]]) -> None:
         self.results = results
@@ -266,6 +286,8 @@ async def test_route_search_rrf_fuses_and_attributes_duplicate_graph_paths() -> 
     assert hits[0].route_indexes == [0, 1]
     assert hits[0].route_modes == ["exact", "candidate"]
     assert hits[0].rrf_score > hits[1].rrf_score
+    assert hits[0].rrf_score == pytest.approx(0.9 / 61 + 0.6 / 62)
+    assert hits[1].rrf_score == pytest.approx(0.6 / 61)
     assert len(index.calls) == 2
     assert index.calls[0][0].valid_at == datetime(2026, 9, 23, tzinfo=UTC)
     assert index.calls[1][0].steps[0].relation_types == [

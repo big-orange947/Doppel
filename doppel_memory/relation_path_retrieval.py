@@ -31,6 +31,10 @@ class RelationPathCandidateOntologyError(ValueError):
     """A candidate path selected a relation type outside the host ontology."""
 
 
+class RelationPathCandidateLimitError(ValueError):
+    """Candidate observations exceeded the fixed retrieval-plan resource bound."""
+
+
 class CandidateRelationAtom(BaseModel):
     """One non-authoritative edge with bounded alternative host relation types."""
 
@@ -144,6 +148,10 @@ def build_relation_path_retrieval_plan(
 ) -> RelationPathRetrievalPlan:
     """Compile trusted exact output and retrieval-only alternatives without guessing."""
 
+    if len(candidate_topologies) > 8:
+        raise RelationPathCandidateLimitError(
+            "a retrieval plan accepts at most eight candidate topology observations"
+        )
     bound = PersonalMemoryRelationPathDraftV4.model_validate(draft)
     allowed = {str(item or "").strip().upper() for item in allowed_relation_types}
     routes: list[RelationPathRetrievalRoute] = []
@@ -268,7 +276,7 @@ async def search_relation_path_routes(
         for rank, candidate in enumerate(found):
             key = _candidate_key(candidate)
             candidates.setdefault(key, candidate)
-            scores[key] += 1.0 / (rrf_k + rank + 1)
+            scores[key] += route.confidence / (rrf_k + rank + 1)
             route_indexes[key].append(route_index)
             if route.mode not in route_modes[key]:
                 route_modes[key].append(route.mode)

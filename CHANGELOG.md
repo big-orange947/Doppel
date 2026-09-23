@@ -13,6 +13,10 @@
   unchanged deterministic RRF merge. The plan still caps route count at nine and any
   route error fails the whole graph branch; independent Neo4j I/O no longer adds
   linearly to highest-configuration latency.
+- Enforce the candidate-route resource bound before compiling any observation and
+  weight route-level RRF contributions by the already bounded route confidence.
+  Low-confidence widening can improve recall without receiving the same ranking
+  influence as a high-confidence exact route.
 - Record two incomplete V7 Flash thinking diagnostics. A 4K generation ceiling
   truncated after six cases and an 8K ceiling truncated after 21; both returned HTTP
   200 with an incomplete generation, not a network timeout. The completed 8K prefix

@@ -850,6 +850,9 @@ scope 和有效期复核的权威 Store record。任意 hop 失败会丢弃完�
 路径 edge identity 去重并用 RRF 合并，同时保留命中来自 exact/candidate route 的归因。
 route 查询在固定最多九条的 plan 上并发执行，结果仍按 plan 顺序进入确定性 RRF；任一查询异常会使整个
 图分支失败并交给既有 source fallback 处理，不返回难以审计的半成功路径集合。
+candidate observation 在任何逐条编译前硬限八个，避免大量无效/重复拓扑绕过最终 route 数量限制。
+RRF contribution 乘以 schema 已约束到 `(0, 1]` 的 route confidence；它只影响候选排序，不会改变
+scope、时间、provenance 或 Store 回源门禁，也不会把 candidate route 提升为答案证明。
 
 这个图分支永远不是全局 relation gate：plan 固定声明 `semantic_fallback_required=true` 与
 `global_relation_gate=false`。即使 exact route 被 Planner 误标，pgvector/lexical/Graphiti semantic
