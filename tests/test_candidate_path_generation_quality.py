@@ -22,6 +22,10 @@ from benchmarks.candidate_path_generation_quality import (
     load_dataset,
     score_candidate_generation,
 )
+from benchmarks.candidate_path_planner_backbone import (
+    PlannerBackedCandidatePathGenerator,
+    _candidate_topologies_from_steps,
+)
 from benchmarks.relation_path_planner_quality import load_relation_catalog
 from doppel_memory.intelligence import StructuredGenerationRequest
 from doppel_memory.query_path_candidate import (
@@ -189,6 +193,70 @@ def test_review_generator_repairs_a_missing_intermediate_hop() -> None:
     )
     assert "scope" not in review_input
     assert "memory_id" not in str(review_input)
+
+
+def test_planner_backbone_converts_compiled_directions_to_atoms() -> None:
+    topologies = _candidate_topologies_from_steps(
+        [
+            RelationPathStep(relation_types=["LOANED_TO"], direction="inbound"),
+            RelationPathStep(relation_types=["OWNED_BY"], direction="outbound"),
+        ],
+        confidence=0.8,
+    )
+    atoms = topologies[0].atoms
+    assert atoms[0].model_dump() == {
+        "relation_types": ["LOANED_TO"],
+        "source_ref": "middle_1",
+        "target_ref": "anchor",
+    }
+    assert atoms[1].model_dump() == {
+        "relation_types": ["OWNED_BY"],
+        "source_ref": "middle_1",
+        "target_ref": "answer",
+    }
+
+
+def test_planner_backbone_uses_reviewed_v7_host_compilation() -> None:
+    observation = {
+        "schema_version": 6,
+        "operation": "lookup",
+        "temporal_view": "unbounded",
+        "search_text": "谁拥有借给小岚的刻刀",
+        "entity_mentions": ["小岚"],
+        "observed_path_semantics": "exact",
+        "relation_atoms": [
+            {
+                "relation_type": "LOANED_TO",
+                "source_ref": "item",
+                "target_ref": "anchor",
+            },
+            {
+                "relation_type": "OWNED_BY",
+                "source_ref": "item",
+                "target_ref": "answer",
+            },
+        ],
+        "relation_atoms_truncated": False,
+        "path_confidence": 0.9,
+    }
+    model = SequenceModel([observation, observation])
+    generated = asyncio.run(
+        PlannerBackedCandidatePathGenerator(model).generate(
+            CandidateRelationGenerationRequest(
+                query="谁拥有借给小岚的刻刀？",
+                anchor="小岚",
+                relation_type_definitions=load_relation_catalog(CATALOG),
+            )
+        )
+    )
+    assert len(model.requests) == 2
+    assert [
+        (atom.relation_types, atom.source_ref, atom.target_ref)
+        for atom in generated.topologies[0].atoms
+    ] == [
+        (["LOANED_TO"], "middle_1", "anchor"),
+        (["OWNED_BY"], "middle_1", "answer"),
+    ]
 
 
 def test_scorer_separates_coverage_from_extra_types_and_no_path() -> None:

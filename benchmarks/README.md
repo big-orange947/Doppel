@@ -1339,3 +1339,12 @@ authority. A fresh run therefore requires up to two provider calls per case. Whe
 single-pass raw-output cache is reused, first-pass hits consume no call budget and only
 the review requests reach the provider. Reports identify the protocol and generator
 version explicitly.
+
+The experimental `--planner-backbone` profile is a controlled architectural comparison,
+not another candidate prompt. It runs the existing two-pass V7 relation-atom Planner,
+lets its trusted host compiler order steps and derive directions, then converts that
+compiled route back into a retrieval-only candidate topology. It grants the Planner no
+graph or scope authority and uses up to two provider calls per uncached case. Use a
+separate cache because its structured requests differ from the candidate-generator
+protocol. The profile exists to decide whether Doppel should share one path-understanding
+backbone instead of maintaining two competing natural-language topology protocols.

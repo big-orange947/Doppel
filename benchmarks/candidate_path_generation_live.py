@@ -19,6 +19,9 @@ from benchmarks.candidate_path_generation_quality import (
     load_dataset,
     score_candidate_generation,
 )
+from benchmarks.candidate_path_planner_backbone import (
+    PlannerBackedCandidatePathGenerator,
+)
 from benchmarks.relation_path_planner_quality import load_relation_catalog
 from benchmarks.relation_planner_quality import (
     CachedStructuredOutputModel,
@@ -119,6 +122,11 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use a second non-authoritative model pass to review the first topology.",
     )
+    result.add_argument(
+        "--planner-backbone",
+        action="store_true",
+        help="Adapt the existing two-pass V7 exact Planner into candidate topologies.",
+    )
     result.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     result.add_argument("--relation-catalog", type=Path, default=DEFAULT_CATALOG)
     result.add_argument("--partition", action="append", choices=PARTITIONS)
@@ -149,6 +157,8 @@ def parser() -> argparse.ArgumentParser:
 async def run(args: argparse.Namespace) -> int:
     if args.max_calls < 0:
         raise ValueError("max-calls must be non-negative")
+    if args.review_protocol and args.planner_backbone:
+        raise ValueError("review-protocol and planner-backbone are mutually exclusive")
     partitions = list(dict.fromkeys(args.partition or list(PARTITIONS)))
     dataset = _selected(load_dataset(args.dataset), partitions)
     definitions = load_relation_catalog(args.relation_catalog)
@@ -171,9 +181,13 @@ async def run(args: argparse.Namespace) -> int:
         "catalog_sha256": _sha256(args.relation_catalog),
         "maximum_provider_calls": args.max_calls,
         "generator_protocol": (
-            "v3_two_pass_review" if args.review_protocol else "v2_single_pass"
+            "v7_planner_backbone"
+            if args.planner_backbone
+            else ("v3_two_pass_review" if args.review_protocol else "v2_single_pass")
         ),
-        "provider_calls_per_uncached_case": 2 if args.review_protocol else 1,
+        "provider_calls_per_uncached_case": (
+            2 if args.review_protocol or args.planner_backbone else 1
+        ),
         "quality_gate": SEALED_THRESHOLDS,
         "model": configuration.model,
         "schema_mode": configuration.schema_mode,
@@ -188,7 +202,9 @@ async def run(args: argparse.Namespace) -> int:
     if args.sealed_first_run:
         if set(partitions) != set(PARTITIONS):
             raise ValueError("sealed run must include every dataset partition")
-        required_calls = len(dataset.cases) * (2 if args.review_protocol else 1)
+        required_calls = len(dataset.cases) * (
+            2 if args.review_protocol or args.planner_backbone else 1
+        )
         if args.max_calls < required_calls:
             raise ValueError("sealed run call budget must cover every selected case")
         if not dataset.frozen or args.output is None or args.output.exists():
@@ -206,11 +222,12 @@ async def run(args: argparse.Namespace) -> int:
     )
     budget = StructuredOutputCallBudget(provider, max_calls=args.max_calls)
     cached = CachedStructuredOutputModel(budget, args.cache_dir)
-    generator = (
-        ReferenceCandidateRelationPathGeneratorV3(cached)
-        if args.review_protocol
-        else ReferenceCandidateRelationPathGenerator(cached)
-    )
+    if args.planner_backbone:
+        generator = PlannerBackedCandidatePathGenerator(cached)
+    elif args.review_protocol:
+        generator = ReferenceCandidateRelationPathGeneratorV3(cached)
+    else:
+        generator = ReferenceCandidateRelationPathGenerator(cached)
     try:
         report = await score_candidate_generation(dataset, generator, definitions)
     finally:

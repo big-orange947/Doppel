@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add an experimental V7 Planner-backed candidate profile. It reuses the established
+  two-pass relation-atom Planner and trusted host path compiler, then deterministically
+  converts compiled directions into retrieval-only candidate atoms. This isolates
+  shared path understanding from candidate-specific prompt behavior without adding
+  graph, scope, answer, or execution authority.
 - Record the opened V3 reviewed candidate-path result. Reusing 12 cached first passes,
   12 review calls improved required recall from 6/9 to 7/9, one-hop from 4/5 to 5/5,
   removed the only no-path false candidate, and halved extra routes, but two-hop stayed
