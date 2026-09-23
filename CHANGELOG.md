@@ -11,8 +11,9 @@
   scenario rules.
 - Execute the bounded exact/candidate relation-path routes concurrently before the
   unchanged deterministic RRF merge. The plan still caps route count at nine and any
-  route error fails the whole graph branch; independent Neo4j I/O no longer adds
-  linearly to highest-configuration latency.
+  route error cancels its siblings, preserves the original error type, and fails the
+  whole graph branch; independent Neo4j I/O no longer adds linearly to
+  highest-configuration latency.
 - Enforce the candidate-route resource bound before compiling any observation and
   weight route-level RRF contributions by the already bounded route confidence.
   Low-confidence widening can improve recall without receiving the same ranking

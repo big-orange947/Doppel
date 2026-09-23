@@ -849,7 +849,8 @@ scope 和有效期复核的权威 Store record。任意 hop 失败会丢弃完�
 编译成最多两跳、推导方向、拒绝断链/分叉/越界拓扑；任何未知类型立即失败。多个 route 独立查询后按
 路径 edge identity 去重并用 RRF 合并，同时保留命中来自 exact/candidate route 的归因。
 route 查询在固定最多九条的 plan 上并发执行，结果仍按 plan 顺序进入确定性 RRF；任一查询异常会使整个
-图分支失败并交给既有 source fallback 处理，不返回难以审计的半成功路径集合。
+图分支失败、取消仍在运行的 sibling 并保留原异常类型，交给既有 source fallback 处理，不返回难以
+审计的半成功路径集合。
 candidate observation 在任何逐条编译前硬限八个，避免大量无效/重复拓扑绕过最终 route 数量限制。
 RRF contribution 乘以 schema 已约束到 `(0, 1]` 的 route confidence；它只影响候选排序，不会改变
 scope、时间、provenance 或 Store 回源门禁，也不会把 candidate route 提升为答案证明。

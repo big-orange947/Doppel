@@ -357,3 +357,54 @@ async def test_route_search_executes_independent_routes_concurrently() -> None:
 
     assert await search_relation_path_routes(index, plan, [scope]) == []
     assert index.peak == 2
+
+
+class _FailingPathIndex:
+    def __init__(self) -> None:
+        self.candidate_started = asyncio.Event()
+        self.candidate_cancelled = False
+
+    async def search_relation_paths(
+        self,
+        request: RelationPathQuery,
+        scopes: list[MemoryScope],
+        *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> list[RelationPathCandidate]:
+        del scopes, filters, limit
+        if len(request.steps[0].relation_types) == 1:
+            await asyncio.wait_for(self.candidate_started.wait(), timeout=1)
+            raise RuntimeError("route failed")
+        self.candidate_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.candidate_cancelled = True
+            raise
+        return []
+
+
+@pytest.mark.asyncio
+async def test_route_search_cancels_siblings_and_preserves_original_error() -> None:
+    scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
+    index = _FailingPathIndex()
+    plan = build_relation_path_retrieval_plan(
+        _draft(),
+        candidate_topologies=[
+            _topology(
+                [
+                    CandidateRelationAtom(
+                        relation_types=["LOCATED_AT", "STORED_IN"],
+                        source_ref="anchor",
+                        target_ref="answer",
+                    )
+                ]
+            )
+        ],
+        allowed_relation_types=ALLOWED,
+    )
+
+    with pytest.raises(RuntimeError, match="route failed"):
+        await search_relation_path_routes(index, plan, [scope])
+    assert index.candidate_cancelled is True

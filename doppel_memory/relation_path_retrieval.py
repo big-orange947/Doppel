@@ -267,9 +267,15 @@ async def search_relation_path_routes(
             query, scopes, filters=filters, limit=limit
         )
 
-    route_results = await asyncio.gather(
-        *(search_route(route) for route in bound.routes)
-    )
+    route_tasks = [asyncio.create_task(search_route(route)) for route in bound.routes]
+    try:
+        route_results = await asyncio.gather(*route_tasks)
+    except BaseException:
+        for task in route_tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*route_tasks, return_exceptions=True)
+        raise
     for route_index, (route, found) in enumerate(
         zip(bound.routes, route_results, strict=True)
     ):
