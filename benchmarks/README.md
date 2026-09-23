@@ -1331,3 +1331,11 @@ from compiler or scoring defects.
 A partition-only diagnostic cannot pass the complete quality gate unless its selection
 contains at least one one-hop route, one two-hop route, and one no-path control. Its
 individual metrics remain valid, but an absent category is not positive evidence.
+
+The optional `--review-protocol` adds one non-authoritative review pass over the first
+topology observation. It receives the same question, fixed anchor, host ontology, and
+the fallible first output; it still has no scope, graph, memory ID, answer, or execution
+authority. A fresh run therefore requires up to two provider calls per case. When the
+single-pass raw-output cache is reused, first-pass hits consume no call budget and only
+the review requests reach the provider. Reports identify the protocol and generator
+version explicitly.

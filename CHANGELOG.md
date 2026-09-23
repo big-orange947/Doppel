@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add an optional two-pass candidate-path generator. A second non-authoritative model
+  review can repair missing predicates, endpoint-role reversals, split chains, and
+  unjustified alternatives before unchanged host ontology validation and compilation.
+  The budgeted runner records the protocol and requires two calls per case for a fresh
+  sealed run; existing first-pass cache entries can be reused without paid calls.
 - Record the 12-case opened V2 heldout/adversarial regression. V2 improved required
   recall from 5/9 to 6/9, one-hop recall from 3/5 to 4/5, cut extra routes from 16 to
   four, and eliminated three invalid topologies, but two-hop recall stayed 2/4 and

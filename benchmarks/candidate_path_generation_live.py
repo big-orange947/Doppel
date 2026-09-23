@@ -29,7 +29,10 @@ from doppel_memory.openai_compatible import (
     OpenAICompatibleStructuredOutputConfig,
     OpenAICompatibleStructuredOutputModel,
 )
-from doppel_memory.query_path_candidate import ReferenceCandidateRelationPathGenerator
+from doppel_memory.query_path_candidate import (
+    ReferenceCandidateRelationPathGenerator,
+    ReferenceCandidateRelationPathGeneratorV3,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET = ROOT / "benchmarks/datasets/candidate-path-generation-zh-v1.json"
@@ -111,6 +114,11 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--live", action="store_true")
     result.add_argument("--sealed-first-run", action="store_true")
+    result.add_argument(
+        "--review-protocol",
+        action="store_true",
+        help="Use a second non-authoritative model pass to review the first topology.",
+    )
     result.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     result.add_argument("--relation-catalog", type=Path, default=DEFAULT_CATALOG)
     result.add_argument("--partition", action="append", choices=PARTITIONS)
@@ -162,6 +170,10 @@ async def run(args: argparse.Namespace) -> int:
         "dataset_sha256": _sha256(args.dataset),
         "catalog_sha256": _sha256(args.relation_catalog),
         "maximum_provider_calls": args.max_calls,
+        "generator_protocol": (
+            "v3_two_pass_review" if args.review_protocol else "v2_single_pass"
+        ),
+        "provider_calls_per_uncached_case": 2 if args.review_protocol else 1,
         "quality_gate": SEALED_THRESHOLDS,
         "model": configuration.model,
         "schema_mode": configuration.schema_mode,
@@ -176,7 +188,8 @@ async def run(args: argparse.Namespace) -> int:
     if args.sealed_first_run:
         if set(partitions) != set(PARTITIONS):
             raise ValueError("sealed run must include every dataset partition")
-        if args.max_calls < len(dataset.cases):
+        required_calls = len(dataset.cases) * (2 if args.review_protocol else 1)
+        if args.max_calls < required_calls:
             raise ValueError("sealed run call budget must cover every selected case")
         if not dataset.frozen or args.output is None or args.output.exists():
             raise ValueError("sealed run needs frozen data and a new explicit output")
@@ -193,10 +206,13 @@ async def run(args: argparse.Namespace) -> int:
     )
     budget = StructuredOutputCallBudget(provider, max_calls=args.max_calls)
     cached = CachedStructuredOutputModel(budget, args.cache_dir)
+    generator = (
+        ReferenceCandidateRelationPathGeneratorV3(cached)
+        if args.review_protocol
+        else ReferenceCandidateRelationPathGenerator(cached)
+    )
     try:
-        report = await score_candidate_generation(
-            dataset, ReferenceCandidateRelationPathGenerator(cached), definitions
-        )
+        report = await score_candidate_generation(dataset, generator, definitions)
     finally:
         await provider.aclose()
     report.update(
@@ -209,6 +225,7 @@ async def run(args: argparse.Namespace) -> int:
             "usage": usage.report(),
             "budget": {"provider_calls": budget.calls, "maximum": args.max_calls},
             "cache": {"hits": cached.hits, "misses": cached.misses},
+            "generator": {"name": generator.name, "version": generator.version},
             "quality_gate": quality_gate(report["metrics"], SEALED_THRESHOLDS),
         }
     )

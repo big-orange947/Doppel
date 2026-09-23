@@ -28,6 +28,7 @@ from doppel_memory.query_path_candidate import (
     REFERENCE_CANDIDATE_RELATION_PATH_INSTRUCTIONS,
     CandidateRelationGenerationRequest,
     ReferenceCandidateRelationPathGenerator,
+    ReferenceCandidateRelationPathGeneratorV3,
 )
 from doppel_memory.relation import RelationPathStep
 
@@ -47,6 +48,19 @@ class FakeModel:
     async def generate(self, request: StructuredGenerationRequest) -> dict[str, Any]:
         self.request = request
         return self.output
+
+
+class SequenceModel:
+    name = "sequence"
+    version = "1"
+
+    def __init__(self, outputs: list[dict[str, Any]]) -> None:
+        self.outputs = list(outputs)
+        self.requests: list[StructuredGenerationRequest] = []
+
+    async def generate(self, request: StructuredGenerationRequest) -> dict[str, Any]:
+        self.requests.append(request)
+        return self.outputs.pop(0)
 
 
 def _observation(*relation_types: str) -> dict[str, Any]:
@@ -133,6 +147,48 @@ def test_generator_rejects_unknown_type_and_provider_scope_field() -> None:
                 FakeModel({**_observation("LOCATED_AT"), "scope": "all"})
             ).generate(request)
         )
+
+
+def test_review_generator_repairs_a_missing_intermediate_hop() -> None:
+    initial = _observation("ADOPTED_FROM")
+    reviewed = {
+        "topologies": [
+            {
+                "atoms": [
+                    {
+                        "relation_types": ["ADOPTED_FROM"],
+                        "source_ref": "pet",
+                        "target_ref": "anchor",
+                    },
+                    {
+                        "relation_types": ["OWNED_BY"],
+                        "source_ref": "pet",
+                        "target_ref": "answer",
+                    },
+                ],
+                "confidence": 0.9,
+            }
+        ]
+    }
+    model = SequenceModel([initial, reviewed])
+    observation = asyncio.run(
+        ReferenceCandidateRelationPathGeneratorV3(model).generate(
+            CandidateRelationGenerationRequest(
+                query="从救助站领养的宠物归谁所有？",
+                anchor="救助站",
+                relation_type_definitions=load_relation_catalog(CATALOG),
+            )
+        )
+    )
+    assert observation.model_dump(mode="json") == reviewed
+    assert len(model.requests) == 2
+    review_input = model.requests[1].input
+    assert (
+        review_input["candidate_observation"]["topologies"][0]["atoms"]
+        == initial["topologies"][0]["atoms"]
+    )
+    assert "scope" not in review_input
+    assert "memory_id" not in str(review_input)
 
 
 def test_scorer_separates_coverage_from_extra_types_and_no_path() -> None:
@@ -257,3 +313,21 @@ def test_cache_only_live_run_never_requires_key_or_network(
     assert report["budget"]["provider_calls"] == 0
     assert report["usage"]["calls_with_usage"] == 0
     assert report["metrics"]["errors"] == 18
+
+
+def test_sealed_review_budget_must_cover_two_calls_per_case(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("DOPPEL_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="call budget"):
+        candidate_live_main(
+            [
+                "--live",
+                "--sealed-first-run",
+                "--review-protocol",
+                "--max-calls",
+                "18",
+                "--output",
+                str(tmp_path / "sealed.json"),
+            ]
+        )

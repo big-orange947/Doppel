@@ -94,6 +94,27 @@ topic alone. The host will validate ontology membership, path shape, temporal/sc
 authority, and Store provenance before any retrieved candidate is exposed.
 """
 
+REFERENCE_CANDIDATE_RELATION_PATH_REVIEW_INSTRUCTIONS = """\
+Review candidate_observation against the original query, the fixed anchor value, and
+the host relation definitions. Return one complete corrected observation. The original
+inputs are authoritative; the first observation is only a fallible proposal.
+
+Independently identify the semantic role filled by the fixed anchor, the final entity
+role requested as answer, and every distinct relationship predicate needed to connect
+them. Check that every retained topology is a minimal connected path from anchor to
+answer, contains every required predicate, and binds each atom's source_ref and
+target_ref to the definition's source and target roles. Repair a reversed anchor,
+missing intermediate predicate, split chain, misplaced answer reference, or unjustified
+alternative. Do not preserve an error merely because it had high confidence.
+
+Remove neighboring or implied relations that the question did not request. Preserve an
+empty observation when the query has no governed relationship path, is genuinely
+unspecified, or requests an unsupported predicate. Do not invent a path merely to make
+the candidate nonempty. All V2 minimal-candidate, ontology, authority, and fixed-reference
+rules remain unchanged. This review still cannot select scopes, query a graph, provide
+an answer, or authorize execution.
+"""
+
 
 class ReferenceCandidateRelationPathGenerator:
     """One structured model observation, with no runtime scenario rules."""
@@ -109,26 +130,67 @@ class ReferenceCandidateRelationPathGenerator:
         self, request: CandidateRelationGenerationRequest
     ) -> CandidateRelationObservation:
         bound = CandidateRelationGenerationRequest.model_validate(request)
-        raw = await self.model.generate(
+        raw = await self.model.generate(_candidate_generation_request(bound))
+        return _validate_candidate_observation(raw, bound)
+
+
+class ReferenceCandidateRelationPathGeneratorV3:
+    """Generate once, review once, and leave compilation to trusted host code."""
+
+    name = "doppel.reference-candidate-relation-path-generator-v3"
+    version = "1"
+
+    def __init__(self, model: StructuredOutputModel) -> None:
+        self.model = model
+        self.version = f"1:{model.name}:{model.version}"
+
+    async def generate(
+        self, request: CandidateRelationGenerationRequest
+    ) -> CandidateRelationObservation:
+        bound = CandidateRelationGenerationRequest.model_validate(request)
+        initial_raw = await self.model.generate(_candidate_generation_request(bound))
+        initial = _validate_candidate_observation(initial_raw, bound)
+        review_input = bound.model_dump(mode="json")
+        review_input["candidate_observation"] = initial.model_dump(mode="json")
+        reviewed_raw = await self.model.generate(
             StructuredGenerationRequest(
-                instructions=REFERENCE_CANDIDATE_RELATION_PATH_INSTRUCTIONS,
-                input=bound.model_dump(mode="json"),
+                instructions=(
+                    REFERENCE_CANDIDATE_RELATION_PATH_INSTRUCTIONS
+                    + REFERENCE_CANDIDATE_RELATION_PATH_REVIEW_INSTRUCTIONS
+                ),
+                input=review_input,
                 output_schema=CandidateRelationObservation.model_json_schema(),
             )
         )
-        observation = CandidateRelationObservation.model_validate(raw)
-        allowed = {item.name for item in bound.relation_type_definitions}
-        unknown = sorted(
-            {
-                relation_type
-                for topology in observation.topologies
-                for atom in topology.atoms
-                for relation_type in atom.relation_types
-            }
-            - allowed
-        )
-        if unknown:
-            raise ValueError(
-                f"candidate path selected unknown relation types: {unknown}"
-            )
-        return observation
+        return _validate_candidate_observation(reviewed_raw, bound)
+
+
+def _candidate_generation_request(
+    request: CandidateRelationGenerationRequest,
+) -> StructuredGenerationRequest:
+    return StructuredGenerationRequest(
+        instructions=REFERENCE_CANDIDATE_RELATION_PATH_INSTRUCTIONS,
+        input=request.model_dump(mode="json"),
+        output_schema=CandidateRelationObservation.model_json_schema(),
+    )
+
+
+def _validate_candidate_observation(
+    raw: object, request: CandidateRelationGenerationRequest
+) -> CandidateRelationObservation:
+    if isinstance(raw, BaseModel):
+        raw = raw.model_dump(mode="json", warnings=False)
+    observation = CandidateRelationObservation.model_validate(raw)
+    allowed = {item.name for item in request.relation_type_definitions}
+    unknown = sorted(
+        {
+            relation_type
+            for topology in observation.topologies
+            for atom in topology.atoms
+            for relation_type in atom.relation_types
+        }
+        - allowed
+    )
+    if unknown:
+        raise ValueError(f"candidate path selected unknown relation types: {unknown}")
+    return observation
