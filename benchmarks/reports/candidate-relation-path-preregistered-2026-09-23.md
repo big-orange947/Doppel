@@ -1,7 +1,9 @@
 # Candidate relation-path live ablation: pre-registration
 
-Date: 2026-09-23  
-Status: pre-registered, not yet executed  
+Date: 2026-09-23
+
+Status: pre-registered, not yet executed
+
 Repository commit at registration: `17737a1906ca9f3ddbf04b572c7cb95735d3181c`
 
 This document fixes the first live Neo4j interpretation before any v2 result exists.
@@ -85,4 +87,3 @@ WSL distribution. The exact stale reparse point could not be renamed while Docke
 stopped (`ERROR 1920`); it was not deleted, WSL was not shut down, and Docker data,
 containers, and volumes were not reset. `check-ablation-runtime.ps1` now recognizes
 this content-free failure signature and exits early without repair.
-
