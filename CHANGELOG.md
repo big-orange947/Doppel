@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record the 12-case opened V2 heldout/adversarial regression. V2 improved required
+  recall from 5/9 to 6/9, one-hop recall from 3/5 to 4/5, cut extra routes from 16 to
+  four, and eliminated three invalid topologies, but two-hop recall stayed 2/4 and
+  the complete gate failed. The next experiment uses a non-authoritative review pass.
 - Record the opened V2 dev regression: required-route recall stayed 6/6 while
   generated routes fell from 12 to 6, extra routes from six to zero, and extra types
   from seven to zero. Mark partition-only runs as incomplete gates when one-hop,
