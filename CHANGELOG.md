@@ -11,6 +11,11 @@
   distinguishes hard scope/time/authority/provenance violations from an active,
   authoritative first-hop candidate that is useful context but insufficient proof of
   a complete typed path; the projection uses record invariants rather than scenarios.
+- Record the passing V2 live hybrid-path result: the assembled branch raises evidence
+  recall from 0.900 to 1.000 and complete-evidence rate from 0.833 to 1.000 over
+  lexical + pgvector, with zero hard-forbidden hits, scope leakage, Store revalidation
+  failures, path-budget omissions, or backend residue. Candidate IDs are unchanged
+  from V1, confirming that only the preregistered evaluation label contract changed.
 
 - Record the V7 Planner-backed candidate comparison. Its exact-path abstention policy
   returned only 4/9 required routes versus V3's 7/9, while two-hop stayed 2/4. Do not

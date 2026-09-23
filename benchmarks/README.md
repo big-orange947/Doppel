@@ -215,6 +215,14 @@ leave answer support unassessed, V2 preregisters a domain-neutral label correcti
 [`reports/hybrid-path-candidate-v2-preregistered-2026-09-23.md`](reports/hybrid-path-candidate-v2-preregistered-2026-09-23.md).
 Hard authorization, lifecycle, time, scope, and provenance failures remain forbidden;
 active authoritative but incomplete first-hop context is measured as related noise.
+The [V2 live result](reports/hybrid-path-candidate-v2-live-2026-09-23.md) passed:
+assembled evidence recall was `1.000` versus `0.900` for independent lexical +
+pgvector, complete-evidence rate was `1.000` versus `0.833`, and hard forbidden hits,
+scope leakage, Store-revalidation failures, path-budget omissions, and backend residue
+were all zero. Per-query candidate IDs were identical to V1; only the preregistered
+candidate-versus-proof label projection changed. The corpus is still opened and uses
+dataset-supplied topology, so this is architectural evidence rather than a publication
+or natural-language generation claim.
 
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
