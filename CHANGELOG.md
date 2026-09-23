@@ -7,6 +7,10 @@
   caps duplicate path rank, preserves path provenance, and leaves answer support
   explicitly unassessed. Add a preregistered live lexical/pgvector versus Graphiti
   path versus assembled-union development ablation over the existing 36-query corpus.
+- Preserve the first failed hybrid-path run and version its evaluation contract. V2
+  distinguishes hard scope/time/authority/provenance violations from an active,
+  authoritative first-hop candidate that is useful context but insufficient proof of
+  a complete typed path; the projection uses record invariants rather than scenarios.
 
 - Record the V7 Planner-backed candidate comparison. Its exact-path abstention policy
   returned only 4/9 required routes versus V3's 7/9, while two-hop stayed 2/4. Do not

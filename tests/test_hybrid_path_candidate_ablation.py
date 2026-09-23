@@ -15,6 +15,7 @@ from benchmarks.candidate_relation_path_ablation import load_dataset
 from benchmarks.hybrid_path_candidate_ablation import (
     RUNNER,
     _DatasetPlanner,
+    _hybrid_retrieval_labels,
     _metric_row,
     _record,
 )
@@ -93,6 +94,40 @@ def test_metric_row_keeps_related_noise_separate_from_forbidden() -> None:
     assert row["forbidden_memory_ids"] == ["m2"]
     assert row["dedupe_ok"] is True
     assert row["graph_route_queries"] == 2
+
+
+def test_hybrid_labels_separate_active_first_hop_from_temporal_violation() -> None:
+    dataset = load_dataset(DATASET)
+    scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
+    fixtures = {item.memory_id: _record(item, scope) for item in dataset.fixtures}
+    orphan = next(
+        item
+        for item in dataset.queries
+        if item.query_id == "q-orphan-missing-second-provenance"
+    )
+    before_second_hop = next(
+        item
+        for item in dataset.queries
+        if item.query_id == "q-pet-before-second-hop"
+    )
+
+    orphan_forbidden, orphan_related = _hybrid_retrieval_labels(
+        orphan,
+        records=fixtures,
+        scope=scope,
+        valid_at=_timestamp(orphan.valid_at),
+    )
+    temporal_forbidden, temporal_related = _hybrid_retrieval_labels(
+        before_second_hop,
+        records=fixtures,
+        scope=scope,
+        valid_at=_timestamp(before_second_hop.valid_at),
+    )
+
+    assert orphan_forbidden == []
+    assert orphan_related == ["m-orphan-1"]
+    assert temporal_forbidden == ["m-pet-2"]
+    assert temporal_related == []
 
 
 @pytest.mark.asyncio

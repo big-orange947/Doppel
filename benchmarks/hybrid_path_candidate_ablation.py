@@ -66,7 +66,7 @@ from doppel_memory.relation_path_retrieval import (
     search_relation_path_routes,
 )
 
-RUNNER = "doppel.hybrid-path-candidate-ablation.v1"
+RUNNER = "doppel.hybrid-path-candidate-ablation.v2"
 PROFILES = ("independent_lexical_vector", "typed_path", "assembled_union")
 FILTERS = MemoryFilter(
     tags={"personal-memory"},
@@ -281,6 +281,12 @@ async def run_ablation(
                 )
             )
             assembled_ids = [item.record.memory_id for item in assembly.candidates]
+            hard_forbidden, related_incomplete = _hybrid_retrieval_labels(
+                case,
+                records=record_by_id,
+                scope=scope,
+                valid_at=valid_at,
+            )
             for profile, memory_ids, scope_keys, latency, route_queries in (
                 (
                     "independent_lexical_vector",
@@ -312,6 +318,8 @@ async def run_ablation(
                         authorized_scope_key=scope.scope_key,
                         graph_route_queries=route_queries,
                         latency_ms=latency,
+                        forbidden_memory_ids=hard_forbidden,
+                        candidate_noise_memory_ids=related_incomplete,
                     )
                 )
     finally:
@@ -383,7 +391,7 @@ async def run_ablation(
     if not postgres_reset:
         failures.append("postgres_cleanup")
     return {
-        "result_schema_version": 1,
+        "result_schema_version": 2,
         "runner": RUNNER,
         "dataset": {
             "suite": dataset.suite,
@@ -408,6 +416,15 @@ async def run_ablation(
         },
         "profiles": profiles,
         "assembly": assembly_totals,
+        "label_contract": {
+            "hard_forbidden": (
+                "wrong scope, inactive time, disallowed authority/lifecycle, or "
+                "missing authoritative memory provenance"
+            ),
+            "related_incomplete": (
+                "active authoritative memory that is insufficient to prove a full path"
+            ),
+        },
         "gain": {
             "vs_independent_evidence_recall": round(
                 assembled["evidence_recall"] - base["evidence_recall"], 6
@@ -501,6 +518,8 @@ def _metric_row(
     authorized_scope_key: str,
     graph_route_queries: int,
     latency_ms: float,
+    forbidden_memory_ids: list[str] | None = None,
+    candidate_noise_memory_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
         "query_id": case.query_id,
@@ -508,8 +527,16 @@ def _metric_row(
         "partition": case.partition,
         "memory_ids": memory_ids,
         "required_hop_memory_ids": case.required_hop_memory_ids,
-        "forbidden_memory_ids": case.forbidden_memory_ids,
-        "candidate_noise_memory_ids": case.candidate_noise_memory_ids,
+        "forbidden_memory_ids": (
+            case.forbidden_memory_ids
+            if forbidden_memory_ids is None
+            else forbidden_memory_ids
+        ),
+        "candidate_noise_memory_ids": (
+            case.candidate_noise_memory_ids
+            if candidate_noise_memory_ids is None
+            else candidate_noise_memory_ids
+        ),
         "authorized_scope_key": authorized_scope_key,
         "scope_keys": scope_keys,
         "recovery_expected": case.recovery_expected,
@@ -519,6 +546,54 @@ def _metric_row(
         "graph_route_queries": graph_route_queries,
         "latency_ms": latency_ms,
     }
+
+
+def _hybrid_retrieval_labels(
+    case: Any,
+    *,
+    records: dict[str, MemoryRecord],
+    scope: MemoryScope,
+    valid_at: Any,
+) -> tuple[list[str], list[str]]:
+    """Project path-output labels into candidate-retrieval semantics.
+
+    The source dataset's ``forbidden_memory_ids`` means that a record must not be
+    returned as a complete typed path.  A Store-authoritative first hop can still be
+    safe, useful candidate context.  This projection is domain-neutral: it checks
+    authority, lifecycle, provenance, exact scope, and validity rather than query IDs,
+    entities, relation labels, or natural-language vocabulary.
+    """
+
+    hard_forbidden: list[str] = []
+    related = list(case.candidate_noise_memory_ids)
+    for memory_id in case.forbidden_memory_ids:
+        record = records.get(memory_id)
+        if record is not None and _is_authoritative_at(record, scope, valid_at):
+            if memory_id not in related:
+                related.append(memory_id)
+        else:
+            hard_forbidden.append(memory_id)
+    return hard_forbidden, related
+
+
+def _is_authoritative_at(
+    record: MemoryRecord, scope: MemoryScope, valid_at: Any
+) -> bool:
+    if record.scope.scope_key != scope.scope_key:
+        return False
+    if record.state is not MemoryState.CONFIRMED:
+        return False
+    if record.authority is FactAuthority.AGENT_OUTPUT:
+        return False
+    if "personal-memory" not in record.tags:
+        return False
+    if not record.metadata.get("evidence"):
+        return False
+    valid_from = _timestamp(str(record.metadata.get("valid_from", "") or ""))
+    valid_to = _timestamp(str(record.metadata.get("valid_to", "") or ""))
+    if valid_from is not None and valid_from > valid_at:
+        return False
+    return valid_to is None or valid_to >= valid_at
 
 
 async def _main_async(args: argparse.Namespace) -> int:
@@ -547,7 +622,7 @@ async def _main_async(args: argparse.Namespace) -> int:
         )
     except Exception as exc:  # noqa: BLE001
         report = {
-            "result_schema_version": 1,
+            "result_schema_version": 2,
             "runner": RUNNER,
             "dataset": {
                 "suite": dataset.suite,

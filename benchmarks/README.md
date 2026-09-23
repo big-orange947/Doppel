@@ -207,6 +207,15 @@ candidate noise separate from temporal/provenance-forbidden evidence and leaves 
 support unassessed. Both live backends are required; there is no silent degraded mode,
 and the run makes no external or paid model calls.
 
+The [first opened run](reports/hybrid-path-candidate-first-live-2026-09-23.md)
+improved evidence recall from `0.900` to `1.000`, but correctly exited non-zero under
+the original labels: the path-only corpus called a valid first-hop memory forbidden
+when it could not prove the complete second hop. Since assembled candidates explicitly
+leave answer support unassessed, V2 preregisters a domain-neutral label correction in
+[`reports/hybrid-path-candidate-v2-preregistered-2026-09-23.md`](reports/hybrid-path-candidate-v2-preregistered-2026-09-23.md).
+Hard authorization, lifecycle, time, scope, and provenance failures remain forbidden;
+active authoritative but incomplete first-hop context is measured as related noise.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate
