@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/big-orange947/Doppel/benchmarks/candidate-relation-path-ablation-result.schema.json",
+  "title": "Doppel candidate relation-path ablation result",
+  "type": "object",
+  "required": [
+    "result_schema_version",
+    "runner",
+    "dataset",
+    "runtime",
+    "gate"
+  ],
+  "properties": {
+    "result_schema_version": { "const": 2 },
+    "runner": { "const": "doppel.candidate-relation-path-ablation.v2" },
+    "dataset": {
+      "type": "object",
+      "required": ["suite", "version", "fingerprint"],
+      "properties": {
+        "suite": { "const": "doppel-candidate-relation-path-ablation-zh-v2" },
+        "version": { "type": "string" },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "queries": { "type": "integer", "minimum": 1 },
+        "scopes": { "type": "integer", "minimum": 1 },
+        "memories": { "type": "integer", "minimum": 1 },
+        "edges": { "type": "integer", "minimum": 1 },
+        "frozen": { "type": "boolean" },
+        "publication_ready": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "backend",
+        "llm_calls",
+        "external_http_calls",
+        "provider_tokens",
+        "credentials_persisted"
+      ],
+      "properties": {
+        "backend": { "const": "neo4j" },
+        "llm_calls": { "const": 0 },
+        "external_http_calls": { "const": 0 },
+        "provider_tokens": { "const": 0 },
+        "credentials_persisted": { "const": false },
+        "fixture_cleanup_performed": { "type": "boolean" },
+        "cleanup_errors": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "profiles": {
+      "type": "object",
+      "required": ["strict_path", "candidate_path", "exact_candidate_union"],
+      "properties": {
+        "strict_path": { "$ref": "#/$defs/profile" },
+        "candidate_path": { "$ref": "#/$defs/profile" },
+        "exact_candidate_union": { "$ref": "#/$defs/profile" }
+      },
+      "additionalProperties": false
+    },
+    "candidate_gain": {
+      "type": "object",
+      "required": [
+        "evidence_recall",
+        "complete_evidence_rate",
+        "average_candidates",
+        "candidate_noise_hits"
+      ],
+      "properties": {
+        "evidence_recall": { "type": "number", "minimum": -1, "maximum": 1 },
+        "complete_evidence_rate": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "average_candidates": { "type": "number" },
+        "candidate_noise_hits": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "compilation_failures": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "hard_failure": { "type": "string", "minLength": 1 },
+    "gate": {
+      "type": "object",
+      "required": ["ok", "failures"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "failures": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["profiles", "candidate_gain", "compilation_failures"],
+      "not": { "required": ["hard_failure"] }
+    },
+    {
+      "required": ["hard_failure"],
+      "not": {
+        "anyOf": [
+          { "required": ["profiles"] },
+          { "required": ["candidate_gain"] },
+          { "required": ["compilation_failures"] }
+        ]
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "required": [
+        "queries",
+        "evidence_recall",
+        "complete_evidence_rate",
+        "missing_required_evidence",
+        "forbidden_hits",
+        "candidate_noise_hits",
+        "scope_leakage",
+        "recovery_cases",
+        "recovered_cases",
+        "recovery_rate",
+        "dual_attribution_failures",
+        "deduplication_failures",
+        "average_candidates",
+        "latency_ms",
+        "details"
+      ],
+      "properties": {
+        "queries": { "type": "integer", "minimum": 1 },
+        "evidence_recall": { "type": "number", "minimum": 0, "maximum": 1 },
+        "complete_evidence_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "missing_required_evidence": { "type": "integer", "minimum": 0 },
+        "forbidden_hits": { "type": "integer", "minimum": 0 },
+        "candidate_noise_hits": { "type": "integer", "minimum": 0 },
+        "scope_leakage": { "type": "integer", "minimum": 0 },
+        "recovery_cases": { "type": "integer", "minimum": 0 },
+        "recovered_cases": { "type": "integer", "minimum": 0 },
+        "recovery_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "dual_attribution_failures": { "type": "integer", "minimum": 0 },
+        "deduplication_failures": { "type": "integer", "minimum": 0 },
+        "average_candidates": { "type": "number", "minimum": 0 },
+        "latency_ms": {
+          "type": "object",
+          "required": ["p50", "p95"],
+          "properties": {
+            "p50": { "type": "number", "minimum": 0 },
+            "p95": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "details": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/detail" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "detail": {
+      "type": "object",
+      "required": [
+        "query_id",
+        "memory_ids",
+        "missing_required",
+        "forbidden_hits",
+        "candidate_noise_hits",
+        "both_attributed"
+      ],
+      "properties": {
+        "query_id": { "type": "string", "minLength": 1 },
+        "memory_ids": { "type": "array", "items": { "type": "string" } },
+        "missing_required": { "type": "array", "items": { "type": "string" } },
+        "forbidden_hits": { "type": "array", "items": { "type": "string" } },
+        "candidate_noise_hits": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "both_attributed": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

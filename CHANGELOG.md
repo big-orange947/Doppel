@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a deterministic 36-query candidate relation-path ablation over live Neo4j. It
+  compares strict, candidate-only, and exact-plus-candidate routes; separates
+  ontology-drift recovery from related candidate noise; and hard-gates scope,
+  temporal/provenance, Store revalidation, topology compilation, route attribution,
+  deduplication, and fixture cleanup. The experiment makes no LLM or external HTTP
+  calls and keeps all alternative type groups in the dataset rather than runtime
+  scenario rules.
 - Record two incomplete V7 Flash thinking diagnostics. A 4K generation ceiling
   truncated after six cases and an 8K ceiling truncated after 21; both returned HTTP
   200 with an incomplete generation, not a network timeout. The completed 8K prefix

@@ -856,6 +856,14 @@ authoritative Store 复核。该模块目前不接默认 QueryEngine，也不生
 fixture 和 live Neo4j 验证 widened candidate route 的 evidence recall、forbidden noise、scope leakage、
 时间泄漏与延迟，再决定 Planner 如何表达不确定路径。
 
+上述验证由独立的 candidate relation-path v2 draft 执行，不覆盖原有 exact-path v1 ceiling。三组 profile
+在同一组预置 rich edge 上比较 strict、candidate-only 与 exact+candidate union；八个 ontology-drift
+case 测量候选路线是否恢复严格类型漏召回，一个额外分支显式测量扩大类型后的相关噪声，另有断链、
+三跳越界、未生效边、孤儿 Episode provenance 和同名跨 scope 反例。替代类型组全部属于 fixture 标签，
+运行时代码不读取实体或场景词表。硬门只约束完整证据恢复、时间/来源 forbidden、scope、去重、双路线
+归因和清理；相关但非所需候选单独计数，不伪装成答案证据，也不作为安全泄漏。该 runner 零模型调用、
+零外部 HTTP、零付费 token；其 live 数字必须在真实 Neo4j 可用后生成，环境失败不能产生替代指标。
+
 `candidate_fusion="anchored_union"` 是宽松 union 与旧式强 relation gate 之间的 opt-in
 候选准入策略。Planner 明确给出实体时，每条候选必须在权威 Store 正文/关系元数据中包含至少一个
 归一化后的实体原文，或有达到 relation threshold 的图边；没有显式实体时行为与 union 相同。
