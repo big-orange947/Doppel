@@ -1,0 +1,27 @@
+{
+  "suite": "doppel-candidate-path-generation-zh-v1",
+  "version": "1.0.0",
+  "frozen": true,
+  "publication_ready": false,
+  "relation_catalog": "benchmarks/catalogs/personal-relations-v1.json",
+  "cases": [
+    {"case_id":"d01","partition":"dev","query":"我那台短波收音机现在收在哪个柜子里？","anchor":"短波收音机","required_routes":[[{"relation_types":["STORED_IN"],"direction":"outbound"}] ]},
+    {"case_id":"d02","partition":"dev","query":"谁临时替我保管了折叠拐杖？","anchor":"折叠拐杖","required_routes":[[{"relation_types":["HELD_BY"],"direction":"outbound"}] ]},
+    {"case_id":"d03","partition":"dev","query":"那份结业证书最初由哪个机构发出？","anchor":"结业证书","required_routes":[[{"relation_types":["ISSUED_BY"],"direction":"outbound"}] ]},
+    {"case_id":"d04","partition":"dev","query":"我养的仓鼠布丁现在是谁在照料？","anchor":"布丁","required_routes":[[{"relation_types":["CARED_FOR_BY"],"direction":"outbound"}] ]},
+    {"case_id":"d05","partition":"dev","query":"是谁把那本手工装帧指南推荐给我的？","anchor":"手工装帧指南","required_routes":[[{"relation_types":["RECOMMENDED_BY"],"direction":"outbound"}] ]},
+    {"case_id":"d06","partition":"dev","query":"上周是谁替我修理了台灯？","anchor":"台灯","required_routes":[[{"relation_types":["REPAIRED_BY"],"direction":"outbound"}] ]},
+    {"case_id":"h01","partition":"heldout","query":"修理那台台灯的师傅在哪家公司上班？","anchor":"台灯","required_routes":[[{"relation_types":["REPAIRED_BY"],"direction":"outbound"},{"relation_types":["EMPLOYED_BY"],"direction":"outbound"}]]},
+    {"case_id":"h02","partition":"heldout","query":"那家发给我登山证的机构还签发过哪些证件？","anchor":"登山证","required_routes":[[{"relation_types":["ISSUED_BY"],"direction":"outbound"},{"relation_types":["ISSUED_BY"],"direction":"inbound"}]]},
+    {"case_id":"h03","partition":"heldout","query":"是谁拥有借给小岚的那套刻刀？","anchor":"小岚","required_routes":[[{"relation_types":["LOANED_TO"],"direction":"inbound"},{"relation_types":["OWNED_BY"],"direction":"outbound"}]]},
+    {"case_id":"h04","partition":"heldout","query":"从星河救助站领养来的宠物现归谁所有？","anchor":"星河救助站","required_routes":[[{"relation_types":["ADOPTED_FROM"],"direction":"inbound"},{"relation_types":["OWNED_BY"],"direction":"outbound"}]]},
+    {"case_id":"h05","partition":"heldout","query":"那幅版画是谁买下的？","anchor":"版画","required_routes":[[{"relation_types":["PURCHASED_BY"],"direction":"outbound"}]]},
+    {"case_id":"h06","partition":"heldout","query":"北岸咖啡馆售出过哪些我买的器具？","anchor":"北岸咖啡馆","required_routes":[[{"relation_types":["PURCHASED_AT"],"direction":"inbound"}]]},
+    {"case_id":"a01","partition":"adversarial","query":"我的耳机现在究竟放在什么地方？","anchor":"耳机","required_routes":[[{"relation_types":["LOCATED_AT"],"direction":"outbound"}],[{"relation_types":["STORED_IN"],"direction":"outbound"}]]},
+    {"case_id":"a02","partition":"adversarial","query":"那把雨伞是由谁买的，不是现在由谁拿着？","anchor":"雨伞","required_routes":[[{"relation_types":["PURCHASED_BY"],"direction":"outbound"}]]},
+    {"case_id":"a03","partition":"adversarial","query":"我最近偏爱什么气味的香薰？","anchor":"我","required_routes":[]},
+    {"case_id":"a04","partition":"adversarial","query":"明天提醒我确认驾照的有效期。","anchor":"我","required_routes":[]},
+    {"case_id":"a05","partition":"adversarial","query":"这幅水彩是谁临摹的？","anchor":"水彩","required_routes":[]},
+    {"case_id":"a06","partition":"adversarial","query":"那只袋子和隔壁店究竟是什么关系？","anchor":"袋子","required_routes":[]}
+  ]
+}

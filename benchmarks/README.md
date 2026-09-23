@@ -1278,3 +1278,37 @@ provider understands an application's language or domain. Evaluate each producti
 provider/version on held-out labeled queries before switching its profile. The dataset
 fingerprint and `vector-result.schema.json` make fixture and result-envelope changes
 visible in CI.
+
+## Experimental candidate-path generation
+
+The earlier live Neo4j candidate-path ablation supplied candidate topologies as
+fixtures. It proved what the graph can retrieve *given* a topology; it did not prove
+that a model can derive one from a new question. The independent
+[`candidate-path-generation-zh-v1.json`](datasets/candidate-path-generation-zh-v1.json)
+contains 18 new Chinese questions (6 dev, 6 heldout, 6 adversarial) and four no-path
+controls. It is frozen but deliberately not publication-ready. Its gold routes are
+used only by the scorer, never included in model requests.
+
+Dry-run (no API key access or network call):
+
+```powershell
+.venv\Scripts\python.exe -m benchmarks.candidate_path_generation_live --partition dev
+```
+
+For a first paid measurement, commit the implementation and dataset before running,
+set `DOPPEL_API_KEY` in the current PowerShell process without writing it to a file,
+then use a fresh ignored cache and output path:
+
+```powershell
+.venv\Scripts\python.exe -m benchmarks.candidate_path_generation_live --live --sealed-first-run --max-calls 18 --output data/doppel/candidate-path-generation-first-live.json
+```
+
+The runner defaults to DeepSeek `deepseek-v4-flash`, `json_object`, disabled thinking,
+1,024 maximum completion tokens and no provider retries. A call budget stops network
+requests before the limit; content-addressed raw-output cache hits cost no calls.
+It reports required-route coverage, excess routes/types, no-path false candidates,
+invalid observations, and token use. Neither this scorer nor the generator opens
+Neo4j. These metrics must not be described as real evidence recall, temporal safety,
+or answer quality. The next stage should feed model-generated routes into the
+existing live graph ablation and measure evidence gain, irrelevant candidate load,
+latency, scope isolation, temporal validity, and Store provenance together.
