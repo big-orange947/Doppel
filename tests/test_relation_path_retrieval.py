@@ -192,6 +192,37 @@ def test_candidate_compiler_rejects_more_than_eight_observations_up_front() -> N
         )
 
 
+def test_candidate_compiler_treats_relation_type_order_as_set_semantics() -> None:
+    plan = build_relation_path_retrieval_plan(
+        _draft(execute=False),
+        candidate_topologies=[
+            _topology(
+                [
+                    CandidateRelationAtom(
+                        relation_types=["LOCATED_AT", "STORED_IN"],
+                        source_ref="anchor",
+                        target_ref="answer",
+                    )
+                ]
+            ),
+            _topology(
+                [
+                    CandidateRelationAtom(
+                        relation_types=["STORED_IN", "LOCATED_AT"],
+                        source_ref="anchor",
+                        target_ref="answer",
+                    )
+                ]
+            ),
+        ],
+        allowed_relation_types=ALLOWED,
+    )
+
+    assert len(plan.routes) == 1
+    assert plan.compilation.compiled == 1
+    assert plan.compilation.duplicates == 1
+
+
 class _FakePathIndex:
     def __init__(self, results: list[list[RelationPathCandidate]]) -> None:
         self.results = results
@@ -318,6 +349,53 @@ async def test_route_search_does_not_double_count_duplicate_within_one_route() -
     assert hits[0].route_indexes == [0]
     assert hits[0].route_modes == ["exact"]
     assert hits[0].rrf_score == pytest.approx(0.9 / 61)
+
+
+@pytest.mark.asyncio
+async def test_route_search_caps_overlapping_candidate_support_to_best_route() -> None:
+    scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
+    shared = _candidate(
+        scope,
+        path_id="shared-candidate",
+        edge_id="edge-shared-candidate",
+        relation_type="LOCATED_AT",
+        memory_id="m-shared-candidate",
+        score=0.8,
+    )
+    index = _FakePathIndex([[shared], [shared]])
+    plan = build_relation_path_retrieval_plan(
+        _draft(execute=False),
+        candidate_topologies=[
+            _topology(
+                [
+                    CandidateRelationAtom(
+                        relation_types=["LOCATED_AT", "STORED_IN"],
+                        source_ref="anchor",
+                        target_ref="answer",
+                    )
+                ],
+                confidence=0.6,
+            ),
+            _topology(
+                [
+                    CandidateRelationAtom(
+                        relation_types=["LOCATED_AT", "HELD_BY"],
+                        source_ref="anchor",
+                        target_ref="answer",
+                    )
+                ],
+                confidence=0.4,
+            ),
+        ],
+        allowed_relation_types=ALLOWED,
+    )
+
+    hits = await search_relation_path_routes(index, plan, [scope])
+
+    assert len(hits) == 1
+    assert hits[0].route_indexes == [0, 1]
+    assert hits[0].route_modes == ["candidate"]
+    assert hits[0].rrf_score == pytest.approx(0.6 / 61)
 
 
 @pytest.mark.asyncio

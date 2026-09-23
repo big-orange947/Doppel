@@ -27,6 +27,12 @@
 - Deduplicate a path within each individual route before assigning RRF credit. A
   noisy or custom `RelationPathIndex` cannot inflate one graph path by returning it
   repeatedly; cross-route support is still retained and attributed.
+- Canonicalize each step's relation-type set when deduplicating routes. Alternative
+  lists that differ only in order no longer cause duplicate Neo4j calls or duplicate
+  cross-route RRF support.
+- Cap RRF support to the best contribution per route mode for each graph path. Exact
+  and candidate support can still reinforce one another, while overlapping candidate
+  supersets cannot manufacture confidence by matching the same stored edges.
 - Record two incomplete V7 Flash thinking diagnostics. A 4K generation ceiling
   truncated after six cases and an 8K ceiling truncated after 21; both returned HTTP
   200 with an incomplete generation, not a network timeout. The completed 8K prefix

@@ -246,9 +246,10 @@ async def search_relation_path_routes(
         tuple[str, tuple[str, ...], tuple[str, ...]],
         list[Literal["exact", "candidate"]],
     ] = defaultdict(list)
-    scores: defaultdict[tuple[str, tuple[str, ...], tuple[str, ...]], float] = (
-        defaultdict(float)
-    )
+    scores_by_mode: defaultdict[
+        tuple[str, tuple[str, ...], tuple[str, ...]],
+        dict[Literal["exact", "candidate"], float],
+    ] = defaultdict(dict)
 
     async def search_route(
         route: RelationPathRetrievalRoute,
@@ -286,7 +287,10 @@ async def search_relation_path_routes(
                 continue
             seen_in_route.add(key)
             candidates.setdefault(key, candidate)
-            scores[key] += route.confidence / (rrf_k + rank + 1)
+            contribution = route.confidence / (rrf_k + rank + 1)
+            scores_by_mode[key][route.mode] = max(
+                scores_by_mode[key].get(route.mode, 0.0), contribution
+            )
             route_indexes[key].append(route_index)
             if route.mode not in route_modes[key]:
                 route_modes[key].append(route.mode)
@@ -294,7 +298,7 @@ async def search_relation_path_routes(
     ordered = sorted(
         candidates,
         key=lambda key: (
-            -scores[key],
+            -sum(scores_by_mode[key].values()),
             -candidates[key].score,
             candidates[key].scope.scope_key,
             candidates[key].path_id,
@@ -305,7 +309,7 @@ async def search_relation_path_routes(
             candidate=candidates[key],
             route_indexes=route_indexes[key],
             route_modes=route_modes[key],
-            rrf_score=scores[key],
+            rrf_score=sum(scores_by_mode[key].values()),
         )
         for key in ordered
     ]
@@ -367,7 +371,7 @@ def _validate_route_ontology(
 def _route_signature(
     steps: Sequence[RelationPathStep],
 ) -> tuple[tuple[tuple[str, ...], str], ...]:
-    return tuple((tuple(step.relation_types), step.direction) for step in steps)
+    return tuple((tuple(sorted(step.relation_types)), step.direction) for step in steps)
 
 
 def _candidate_key(
