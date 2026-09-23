@@ -86,6 +86,24 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "compilation": {
+      "type": "object",
+      "required": [
+        "observations",
+        "compiled",
+        "ambiguous",
+        "over_bound",
+        "duplicates"
+      ],
+      "properties": {
+        "observations": { "type": "integer", "minimum": 0 },
+        "compiled": { "type": "integer", "minimum": 0 },
+        "ambiguous": { "type": "integer", "minimum": 0 },
+        "over_bound": { "type": "integer", "minimum": 0 },
+        "duplicates": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
     "hard_failure": { "type": "string", "minLength": 1 },
     "gate": {
       "type": "object",
@@ -102,7 +120,12 @@
   },
   "oneOf": [
     {
-      "required": ["profiles", "candidate_gain", "compilation_failures"],
+      "required": [
+        "profiles",
+        "candidate_gain",
+        "compilation",
+        "compilation_failures"
+      ],
       "not": { "required": ["hard_failure"] }
     },
     {
@@ -111,6 +134,7 @@
         "anyOf": [
           { "required": ["profiles"] },
           { "required": ["candidate_gain"] },
+          { "required": ["compilation"] },
           { "required": ["compilation_failures"] }
         ]
       }
@@ -131,8 +155,10 @@
         "recovery_cases",
         "recovered_cases",
         "recovery_rate",
+        "dual_attribution_cases",
         "dual_attribution_failures",
         "deduplication_failures",
+        "graph_route_queries",
         "average_candidates",
         "latency_ms",
         "details"
@@ -152,8 +178,10 @@
         "recovery_cases": { "type": "integer", "minimum": 0 },
         "recovered_cases": { "type": "integer", "minimum": 0 },
         "recovery_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "dual_attribution_cases": { "type": "integer", "minimum": 0 },
         "dual_attribution_failures": { "type": "integer", "minimum": 0 },
         "deduplication_failures": { "type": "integer", "minimum": 0 },
+        "graph_route_queries": { "type": "integer", "minimum": 0 },
         "average_candidates": { "type": "number", "minimum": 0 },
         "latency_ms": {
           "type": "object",

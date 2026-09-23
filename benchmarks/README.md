@@ -167,7 +167,9 @@ The runner compares `strict_path`, `candidate_path`, and `exact_candidate_union`
 the real `GraphitiRelationIndex`, `RelationPathIndex`, authoritative Store reload, and
 route-level RRF deduplication. Recovery recall, candidate noise, hard forbidden hits,
 scope leakage, dual-route attribution, compilation rejection, cleanup, and latency are
-reported separately. The hard gate requires complete union evidence, full recovery of
+reported separately. Per-profile graph route-query counts and aggregate compilation
+counts prove that disconnected/over-bound observations were rejected before I/O. The
+hard gate requires complete union evidence, full recovery of
 the predeclared drift cases, zero temporal/provenance forbidden hits, zero leakage,
 correct deduplication/attribution, and zero residue. Candidate noise is deliberately
 reported rather than mislabeled as either proof or a security failure. The run performs

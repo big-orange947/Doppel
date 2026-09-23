@@ -128,6 +128,7 @@ def test_candidate_metrics_keep_recovery_noise_and_security_separate() -> None:
             "dual_attribution_expected": True,
             "both_attributed": True,
             "dedupe_ok": True,
+            "graph_route_queries": 2,
             "latency_ms": 10.0,
         },
         {
@@ -142,6 +143,7 @@ def test_candidate_metrics_keep_recovery_noise_and_security_separate() -> None:
             "dual_attribution_expected": False,
             "both_attributed": False,
             "dedupe_ok": False,
+            "graph_route_queries": 0,
             "latency_ms": 20.0,
         },
     ]
@@ -152,8 +154,10 @@ def test_candidate_metrics_keep_recovery_noise_and_security_separate() -> None:
     assert metrics["candidate_noise_hits"] == 1
     assert metrics["forbidden_hits"] == 1
     assert metrics["scope_leakage"] == 1
+    assert metrics["dual_attribution_cases"] == 1
     assert metrics["dual_attribution_failures"] == 0
     assert metrics["deduplication_failures"] == 1
+    assert metrics["graph_route_queries"] == 2
 
 
 def test_candidate_result_schema_tracks_three_profiles() -> None:
@@ -174,6 +178,8 @@ def test_candidate_result_schema_tracks_three_profiles() -> None:
         "candidate_noise_hits",
         "forbidden_hits",
         "recovery_rate",
+        "dual_attribution_cases",
         "dual_attribution_failures",
         "deduplication_failures",
+        "graph_route_queries",
     }.issubset(profile_required)

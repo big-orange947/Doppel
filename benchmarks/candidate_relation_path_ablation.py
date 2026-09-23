@@ -237,6 +237,7 @@ async def run_ablation(
     fixture_write_attempted = False
     cleanup_errors: list[str] = []
     compilation_failures: list[str] = []
+    compilation_totals: Counter[str] = Counter()
     profile_rows: dict[str, list[dict[str, Any]]] = {
         "strict_path": [],
         "candidate_path": [],
@@ -332,6 +333,7 @@ async def run_ablation(
                 allowed_relation_types=dataset.relation_types,
             )
             actual_compilation = plan.compilation.model_dump()
+            compilation_totals.update(actual_compilation)
             for field, expected in case.expected_compilation.items():
                 if actual_compilation[field] != expected:
                     compilation_failures.append(
@@ -342,10 +344,11 @@ async def run_ablation(
                 ("candidate_path", "candidate"),
                 ("exact_candidate_union", "union"),
             ):
+                selected_plan = _profile_plan(plan, mode)  # type: ignore[arg-type]
                 started = time.perf_counter()
                 hits = await search_relation_path_routes(
                     relation,
-                    _profile_plan(plan, mode),  # type: ignore[arg-type]
+                    selected_plan,
                     [scope],
                     filters=MemoryFilter(tags={"personal-memory"}),
                     limit=20,
@@ -386,9 +389,13 @@ async def run_ablation(
                         ],
                         "expected_end_entity": case.expected_end_entity,
                         "recovery_expected": case.recovery_expected,
-                        "dual_attribution_expected": case.dual_attribution_expected,
+                        "dual_attribution_expected": (
+                            case.dual_attribution_expected
+                            and profile == "exact_candidate_union"
+                        ),
                         "both_attributed": both_attributed,
                         "dedupe_ok": len({_hit_key(hit) for hit in hits}) == len(hits),
+                        "graph_route_queries": len(selected_plan.routes),
                         "latency_ms": latency,
                     }
                 )
@@ -475,6 +482,16 @@ async def run_ablation(
             "candidate_noise_hits": union["candidate_noise_hits"]
             - strict["candidate_noise_hits"],
         },
+        "compilation": {
+            field: compilation_totals[field]
+            for field in (
+                "observations",
+                "compiled",
+                "ambiguous",
+                "over_bound",
+                "duplicates",
+            )
+        },
         "compilation_failures": compilation_failures,
         "gate": {"ok": not gate_failures, "failures": gate_failures},
     }
@@ -483,7 +500,8 @@ async def run_ablation(
 def _summarize_profile(rows: list[dict[str, Any]]) -> dict[str, Any]:
     required_total = required_found = answerable = complete = 0
     missing_required = forbidden_hits = candidate_noise_hits = scope_leakage = 0
-    recovery_cases = recovered_cases = dual_failures = dedupe_failures = 0
+    recovery_cases = recovered_cases = dual_cases = dual_failures = dedupe_failures = 0
+    graph_route_queries = 0
     latencies: list[float] = []
     details: list[dict[str, Any]] = []
     for row in rows:
@@ -507,7 +525,9 @@ def _summarize_profile(rows: list[dict[str, Any]]) -> dict[str, Any]:
             recovered_cases += int(expected.issubset(actual))
         if row["dual_attribution_expected"] and not row["both_attributed"]:
             dual_failures += 1
+        dual_cases += int(row["dual_attribution_expected"])
         dedupe_failures += int(not row["dedupe_ok"])
+        graph_route_queries += int(row["graph_route_queries"])
         latencies.append(float(row["latency_ms"]))
         details.append(
             {
@@ -532,8 +552,10 @@ def _summarize_profile(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "recovery_rate": round(recovered_cases / recovery_cases, 6)
         if recovery_cases
         else 1.0,
+        "dual_attribution_cases": dual_cases,
         "dual_attribution_failures": dual_failures,
         "deduplication_failures": dedupe_failures,
+        "graph_route_queries": graph_route_queries,
         "average_candidates": round(
             statistics.mean(len(row["memory_ids"]) for row in rows), 6
         ),
