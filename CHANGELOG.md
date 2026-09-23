@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record the first sealed 18-case candidate-path generator run. It passed one-hop
+  recall (9/11), no-path rejection (4/4), type-expansion, and zero-error gates, but
+  correctly failed overall/two-hop recall, extra-route, and invalid-topology gates.
+  The corpus is now opened regression data; no Neo4j or answer-quality claim is made.
 - Add an experimental ontology-bound candidate-path generator and an independent
   frozen 18-query topology-quality probe. It separates candidate route coverage
   from extra graph routes/types and no-path false candidates; the model receives
