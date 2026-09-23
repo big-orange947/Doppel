@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record the opened V3 reviewed candidate-path result. Reusing 12 cached first passes,
+  12 review calls improved required recall from 6/9 to 7/9, one-hop from 4/5 to 5/5,
+  removed the only no-path false candidate, and halved extra routes, but two-hop stayed
+  2/4. Stop prompt iteration on this corpus and compare the existing V7 Planner backbone.
 - Add an optional two-pass candidate-path generator. A second non-authoritative model
   review can repair missing predicates, endpoint-role reversals, split chains, and
   unjustified alternatives before unchanged host ontology validation and compilation.
