@@ -6,6 +6,9 @@ Status: pre-registered, not yet executed
 
 Repository commit at registration: `17737a1906ca9f3ddbf04b572c7cb95735d3181c`
 
+First-live implementation lock after the pre-live amendment below:
+`36fc84459a8592ec3c4529ecff90742273226eb4`
+
 This document fixes the first live Neo4j interpretation before any v2 result exists.
 It is not a quality report and contains no substituted mock result.
 
@@ -23,9 +26,30 @@ It is not a quality report and contains no substituted mock result.
   `build_relation_path_retrieval_plan()` and `search_relation_path_routes()`.
 - Profiles: `strict_path`, `candidate_path`, and `exact_candidate_union`.
 
-Changing the dataset, labels, alternative type groups, confidence values, compiler,
-fusion rule, route limit, RRF constant, or gates creates a later regression run. It
-must not be described as the pre-registered first run.
+After the first live result is opened, changing the dataset, labels, alternative type
+groups, confidence values, compiler, fusion rule, route limit, RRF constant, or gates
+creates a later regression run. It must not be described as the pre-registered first
+run. A change made while no live result exists is an amendment only when this document
+records its reason and exact implementation commit first.
+
+## Pre-live amendment: fusion and subject hardening
+
+No v2 output existed and Docker was still unavailable when this amendment was made.
+The dataset, both fingerprints, profiles, primary hypotheses, hard gates, confidence
+values, and first-live output path remain unchanged. The implementation lock advances
+to `36fc84459a8592ec3c4529ecff90742273226eb4` for these generic corrections:
+
+- relation-type list order now has set semantics for route deduplication;
+- one path receives at most the best candidate-mode RRF contribution, preventing
+  overlapping candidate supersets from manufacturing independent support;
+- duplicate rows do not consume rank, and the highest underlying graph score is kept;
+- Graphiti Store revalidation now enforces trusted `subject` and `subject_id` on both
+  one-hop and path candidates; unlabeled legacy records are owner-only.
+
+These changes were driven by code inspection and unit tests, not live v2 outcomes.
+The hard gates were not weakened. The first live command must use this implementation
+lock (or a descendant containing documentation-only changes) to retain the
+pre-registered label.
 
 ## Primary hypotheses
 
