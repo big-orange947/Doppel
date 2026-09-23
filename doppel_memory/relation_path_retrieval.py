@@ -9,6 +9,7 @@ the supplied :class:`~doppel_memory.relation.RelationPathIndex`.
 
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -234,13 +235,16 @@ async def search_relation_path_routes(
         tuple[str, tuple[str, ...], tuple[str, ...]], list[int]
     ] = defaultdict(list)
     route_modes: defaultdict[
-        tuple[str, tuple[str, ...], tuple[str, ...]], list[Literal["exact", "candidate"]]
+        tuple[str, tuple[str, ...], tuple[str, ...]],
+        list[Literal["exact", "candidate"]],
     ] = defaultdict(list)
-    scores: defaultdict[
-        tuple[str, tuple[str, ...], tuple[str, ...]], float
-    ] = defaultdict(float)
+    scores: defaultdict[tuple[str, tuple[str, ...], tuple[str, ...]], float] = (
+        defaultdict(float)
+    )
 
-    for route_index, route in enumerate(bound.routes):
+    async def search_route(
+        route: RelationPathRetrievalRoute,
+    ) -> Sequence[RelationPathCandidate]:
         query = RelationPathQuery(
             query_text=bound.query_text,
             entity_mentions=bound.entity_mentions,
@@ -251,9 +255,16 @@ async def search_relation_path_routes(
             time_from=bound.time_from,
             time_to=bound.time_to,
         )
-        found = await index.search_relation_paths(
+        return await index.search_relation_paths(
             query, scopes, filters=filters, limit=limit
         )
+
+    route_results = await asyncio.gather(
+        *(search_route(route) for route in bound.routes)
+    )
+    for route_index, (route, found) in enumerate(
+        zip(bound.routes, route_results, strict=True)
+    ):
         for rank, candidate in enumerate(found):
             key = _candidate_key(candidate)
             candidates.setdefault(key, candidate)

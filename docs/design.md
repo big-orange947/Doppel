@@ -848,6 +848,8 @@ scope 和有效期复核的权威 Store record。任意 hop 失败会丢弃完�
 检索上应扩大候选、但不能伪装成唯一精确事实的情况。宿主仍负责把固定 `anchor` 到 `answer` 的原子图
 编译成最多两跳、推导方向、拒绝断链/分叉/越界拓扑；任何未知类型立即失败。多个 route 独立查询后按
 路径 edge identity 去重并用 RRF 合并，同时保留命中来自 exact/candidate route 的归因。
+route 查询在固定最多九条的 plan 上并发执行，结果仍按 plan 顺序进入确定性 RRF；任一查询异常会使整个
+图分支失败并交给既有 source fallback 处理，不返回难以审计的半成功路径集合。
 
 这个图分支永远不是全局 relation gate：plan 固定声明 `semantic_fallback_required=true` 与
 `global_relation_gate=false`。即使 exact route 被 Planner 误标，pgvector/lexical/Graphiti semantic

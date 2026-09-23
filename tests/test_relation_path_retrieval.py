@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -151,7 +152,9 @@ def test_candidate_compiler_accounts_for_invalid_topology_without_guessing() -> 
 
 
 def test_candidate_compiler_rejects_types_outside_host_ontology() -> None:
-    with pytest.raises(RelationPathCandidateOntologyError, match="outside host ontology"):
+    with pytest.raises(
+        RelationPathCandidateOntologyError, match="outside host ontology"
+    ):
         build_relation_path_retrieval_plan(
             _draft(execute=False),
             candidate_topologies=[
@@ -284,3 +287,51 @@ async def test_route_search_never_queries_graph_for_empty_or_zero_limit_plan() -
     assert await search_relation_path_routes(index, plan, [scope]) == []
     assert await search_relation_path_routes(index, plan, [scope], limit=0) == []
     assert index.calls == []
+
+
+class _ConcurrentPathIndex:
+    def __init__(self) -> None:
+        self.active = 0
+        self.peak = 0
+        self.started = asyncio.Event()
+
+    async def search_relation_paths(
+        self,
+        request: RelationPathQuery,
+        scopes: list[MemoryScope],
+        *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> list[RelationPathCandidate]:
+        del request, scopes, filters, limit
+        self.active += 1
+        self.peak = max(self.peak, self.active)
+        if self.active >= 2:
+            self.started.set()
+        await asyncio.wait_for(self.started.wait(), timeout=1)
+        self.active -= 1
+        return []
+
+
+@pytest.mark.asyncio
+async def test_route_search_executes_independent_routes_concurrently() -> None:
+    scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
+    index = _ConcurrentPathIndex()
+    plan = build_relation_path_retrieval_plan(
+        _draft(),
+        candidate_topologies=[
+            _topology(
+                [
+                    CandidateRelationAtom(
+                        relation_types=["LOCATED_AT", "STORED_IN"],
+                        source_ref="anchor",
+                        target_ref="answer",
+                    )
+                ]
+            )
+        ],
+        allowed_relation_types=ALLOWED,
+    )
+
+    assert await search_relation_path_routes(index, plan, [scope]) == []
+    assert index.peak == 2
