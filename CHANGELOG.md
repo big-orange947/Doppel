@@ -33,6 +33,10 @@
 - Cap RRF support to the best contribution per route mode for each graph path. Exact
   and candidate support can still reinforce one another, while overlapping candidate
   supersets cannot manufacture confidence by matching the same stored edges.
+- Compute route ranks after within-route deduplication and retain the highest-scoring
+  underlying candidate object when multiple routes return the same edge path. Custom
+  indexes cannot push unique paths down by injecting duplicates or hide a better
+  backend score behind first-writer ordering.
 - Record two incomplete V7 Flash thinking diagnostics. A 4K generation ceiling
   truncated after six cases and an 8K ceiling truncated after 21; both returned HTTP
   200 with an incomplete generation, not a network timeout. The completed 8K prefix

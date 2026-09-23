@@ -352,6 +352,72 @@ async def test_route_search_does_not_double_count_duplicate_within_one_route() -
 
 
 @pytest.mark.asyncio
+async def test_route_search_ranks_after_deduplication_within_route() -> None:
+    scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
+    first = _candidate(
+        scope,
+        path_id="first",
+        edge_id="edge-first",
+        relation_type="LOCATED_AT",
+        memory_id="m-first",
+        score=0.8,
+    )
+    second = _candidate(
+        scope,
+        path_id="second",
+        edge_id="edge-second",
+        relation_type="LOCATED_AT",
+        memory_id="m-second",
+        score=0.7,
+    )
+    index = _FakePathIndex([[first, first, second]])
+    plan = build_relation_path_retrieval_plan(_draft(), allowed_relation_types=ALLOWED)
+
+    hits = await search_relation_path_routes(index, plan, [scope])
+
+    assert [hit.candidate.path_id for hit in hits] == ["first", "second"]
+    assert hits[0].rrf_score == pytest.approx(0.9 / 61)
+    assert hits[1].rrf_score == pytest.approx(0.9 / 62)
+
+
+@pytest.mark.asyncio
+async def test_route_search_retains_best_underlying_candidate_for_same_path() -> None:
+    scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
+    lower = _candidate(
+        scope,
+        path_id="shared-lower",
+        edge_id="edge-shared-best",
+        relation_type="LOCATED_AT",
+        memory_id="m-shared-best",
+        score=0.4,
+    )
+    higher = lower.model_copy(update={"path_id": "shared-higher", "score": 0.95})
+    index = _FakePathIndex([[lower], [higher]])
+    plan = build_relation_path_retrieval_plan(
+        _draft(),
+        candidate_topologies=[
+            _topology(
+                [
+                    CandidateRelationAtom(
+                        relation_types=["LOCATED_AT", "STORED_IN"],
+                        source_ref="anchor",
+                        target_ref="answer",
+                    )
+                ]
+            )
+        ],
+        allowed_relation_types=ALLOWED,
+    )
+
+    hits = await search_relation_path_routes(index, plan, [scope])
+
+    assert len(hits) == 1
+    assert hits[0].candidate.path_id == "shared-higher"
+    assert hits[0].candidate.score == 0.95
+    assert hits[0].route_modes == ["exact", "candidate"]
+
+
+@pytest.mark.asyncio
 async def test_route_search_caps_overlapping_candidate_support_to_best_route() -> None:
     scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
     shared = _candidate(

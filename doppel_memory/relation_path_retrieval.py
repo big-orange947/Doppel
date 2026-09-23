@@ -281,13 +281,17 @@ async def search_relation_path_routes(
         zip(bound.routes, route_results, strict=True)
     ):
         seen_in_route: set[tuple[str, tuple[str, ...], tuple[str, ...]]] = set()
-        for rank, candidate in enumerate(found):
+        unique_rank = 0
+        for candidate in found:
             key = _candidate_key(candidate)
             if key in seen_in_route:
                 continue
             seen_in_route.add(key)
-            candidates.setdefault(key, candidate)
-            contribution = route.confidence / (rrf_k + rank + 1)
+            existing = candidates.get(key)
+            if existing is None or candidate.score > existing.score:
+                candidates[key] = candidate
+            contribution = route.confidence / (rrf_k + unique_rank + 1)
+            unique_rank += 1
             scores_by_mode[key][route.mode] = max(
                 scores_by_mode[key].get(route.mode, 0.0), contribution
             )
