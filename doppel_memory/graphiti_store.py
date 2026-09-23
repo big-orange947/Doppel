@@ -2142,6 +2142,8 @@ def _core_record_valid_at(record: MemoryRecord, valid_at: datetime | None) -> bo
 def _core_record_valid_for_relation(
     record: MemoryRecord, query: RelationQuery | RelationPathQuery
 ) -> bool:
+    if not _core_record_matches_relation_subject(record, query):
+        return False
     if query.valid_at is not None:
         return _core_record_valid_at(record, query.valid_at)
     if query.time_from is None and query.time_to is None:
@@ -2156,6 +2158,36 @@ def _core_record_valid_for_relation(
         query.time_from is not None
         and interval_end is not None
         and interval_end < query.time_from
+    )
+
+
+def _core_record_matches_relation_subject(
+    record: MemoryRecord, query: RelationQuery | RelationPathQuery
+) -> bool:
+    """Bind relation provenance to the trusted subject inside an exact scope.
+
+    Older owner-scoped records may omit explicit subject metadata. They remain
+    eligible only when the request is for that exact scope owner. Non-owner records
+    must carry both fields, so an unlabeled legacy record cannot become contact or
+    agent evidence merely because its graph edge is adjacent.
+    """
+
+    requested_subject = Actor.normalize(query.subject)
+    requested_subject_id = str(query.subject_id or "").strip().casefold()
+    stored_subject_raw = str(record.metadata.get("subject") or "").strip()
+    stored_subject_id = str(record.metadata.get("subject_id") or "").strip().casefold()
+
+    if stored_subject_raw:
+        if Actor.normalize(stored_subject_raw) != requested_subject:
+            return False
+    elif requested_subject != Actor.OWNER:
+        return False
+
+    if stored_subject_id:
+        return stored_subject_id == requested_subject_id
+    return (
+        requested_subject == Actor.OWNER
+        and requested_subject_id == str(record.scope.user_id or "").strip().casefold()
     )
 
 

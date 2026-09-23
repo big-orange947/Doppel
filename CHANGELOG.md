@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Enforce trusted subject and subject-ID binding while Graphiti relation and path
+  candidates are reloaded from the authoritative Store. Explicit contact/agent facts
+  cannot enter an owner relation result inside the same scope. Legacy records without
+  subject metadata remain eligible only for the exact scope owner.
 - Pre-register the candidate relation-path v2 dataset fingerprints, primary
   hypotheses, hard gates, expected precision cost, zero-model contract, and first
   live output path before Docker produces any v2 result.

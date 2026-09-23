@@ -34,6 +34,7 @@ from doppel_memory.graphiti_store import (
     GraphitiMemoryStore,
     GraphitiRelationIndex,
     GraphitiSemanticIndex,
+    _core_record_matches_relation_subject,
     _ensure_graphiti_fallback_edge,
     _relation_match_terms,
 )
@@ -1360,6 +1361,87 @@ async def test_graphiti_relation_index_revalidates_store_time_and_filters() -> N
     assert range_params["time_to"] == datetime(2026, 1, 31, tzinfo=UTC)
 
 
+async def test_graphiti_relation_index_revalidates_store_subject_binding() -> None:
+    scope = MemoryScope(user_id="relation-subject-owner", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+    semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
+    record = MemoryRecord(
+        memory_id="contact-relation",
+        scope=scope,
+        content="小林把相机放在储物柜。",
+        tags=["personal-memory"],
+        metadata={
+            "subject": "contact",
+            "subject_id": "contact-xiao-lin",
+            "evidence": [{"evidence_id": "message-contact-relation"}],
+        },
+    )
+    assert (await store.put(record)).accepted
+    indexed = await semantic.index_record(record)
+    fake.driver = _RelationDriver(
+        [
+            {
+                "group_id": scope.scope_key,
+                "edge_id": "edge-contact-relation",
+                "relation_type": "LOCATED_AT",
+                "fact": record.content,
+                "episode_ids": [indexed.episode_id],
+                "valid_at": None,
+                "invalid_at": None,
+                "source_entity_id": "camera",
+                "source_entity_name": "相机",
+                "target_entity_id": "cabinet",
+                "target_entity_name": "储物柜",
+                "relation_hint_match": 0,
+            }
+        ]
+    )
+    relation = GraphitiRelationIndex(store, graphiti_client=fake)
+
+    owner_candidates = await relation.search_relations(
+        RelationQuery(
+            query_text="相机在哪里？",
+            entity_mentions=["相机"],
+            subject="owner",
+            subject_id=scope.user_id,
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+    )
+    contact_candidates = await relation.search_relations(
+        RelationQuery(
+            query_text="小林说相机在哪里？",
+            entity_mentions=["相机"],
+            subject="contact",
+            subject_id="contact-xiao-lin",
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+    )
+
+    assert owner_candidates == []
+    assert [item.memory_id for item in contact_candidates] == [record.memory_id]
+
+
+def test_legacy_unlabeled_relation_record_is_owner_only() -> None:
+    scope = MemoryScope(user_id="legacy-owner", agent_id="bot")
+    record = MemoryRecord(memory_id="legacy", scope=scope, content="legacy relation")
+    owner_query = RelationQuery(
+        query_text="legacy",
+        subject="owner",
+        subject_id=scope.user_id,
+    )
+    wrong_owner_query = owner_query.model_copy(update={"subject_id": "other-owner"})
+    contact_query = owner_query.model_copy(
+        update={"subject": "contact", "subject_id": "contact-x"}
+    )
+
+    assert _core_record_matches_relation_subject(record, owner_query) is True
+    assert _core_record_matches_relation_subject(record, wrong_owner_query) is False
+    assert _core_record_matches_relation_subject(record, contact_query) is False
+
+
 def test_relation_path_query_is_typed_and_bounded_to_two_hops() -> None:
     query = RelationPathQuery(
         query_text="相机现在在哪？",
@@ -1405,10 +1487,17 @@ async def test_graphiti_relation_path_requires_provenance_on_every_hop() -> None
     fake = FakeGraphiti()
     semantic = GraphitiSemanticIndex(store, graphiti_client=fake)
 
-    async def index_record(memory_id: str, content: str, *, valid_to: str = "") -> str:
+    async def index_record(
+        memory_id: str,
+        content: str,
+        *,
+        valid_to: str = "",
+        subject: str = "owner",
+        subject_id: str = "",
+    ) -> str:
         metadata: dict[str, object] = {
-            "subject": "owner",
-            "subject_id": scope.user_id,
+            "subject": subject,
+            "subject_id": subject_id or scope.user_id,
             "valid_from": "2026-01-01T00:00:00+00:00",
             "evidence": [{"evidence_id": f"evidence-{memory_id}"}],
         }
@@ -1430,6 +1519,12 @@ async def test_graphiti_relation_path_requires_provenance_on_every_hop() -> None
         "stale-location",
         "小王以前住在杭州。",
         valid_to="2026-02-01T00:00:00+00:00",
+    )
+    contact_episode = await index_record(
+        "contact-held",
+        "小林说相机由小王保管。",
+        subject="contact",
+        subject_id="contact-xiao-lin",
     )
     valid_at = datetime(2026, 8, 1, tzinfo=UTC)
     row = {
@@ -1502,6 +1597,9 @@ async def test_graphiti_relation_path_requires_provenance_on_every_hop() -> None
     stale_store_record = copy.deepcopy(row)
     stale_store_record["episode_ids_by_hop"][1] = [stale_episode]
     invalid_rows.append(stale_store_record)
+    wrong_subject = copy.deepcopy(row)
+    wrong_subject["episode_ids_by_hop"][0] = [contact_episode]
+    invalid_rows.append(wrong_subject)
 
     for invalid_row in invalid_rows:
         driver.rows = [invalid_row]

@@ -873,6 +873,12 @@ case 测量候选路线是否恢复严格类型漏召回，一个额外分支显
 归因和清理；相关但非所需候选单独计数，不伪装成答案证据，也不作为安全泄漏。该 runner 零模型调用、
 零外部 HTTP、零付费 token；其 live 数字必须在真实 Neo4j 可用后生成，环境失败不能产生替代指标。
 
+RelationIndex 自身的 Store 回源也必须绑定 trusted subject，而不能只依赖 QueryEngine 的最终结构门。
+显式 `subject/subject_id` 与 query 不一致的 record 在一跳和路径检索中都被丢弃。同一 exact owner scope
+里的旧记录若缺少这两个字段，只在 query 明确请求该 scope 的 owner 时兼容；缺少绑定的记录不能被解释
+成 contact、agent 或 custom subject。这样直接消费 RelationIndex 的宿主也不会因跳过 QueryEngine 而
+失去主体隔离。
+
 `candidate_fusion="anchored_union"` 是宽松 union 与旧式强 relation gate 之间的 opt-in
 候选准入策略。Planner 明确给出实体时，每条候选必须在权威 Store 正文/关系元数据中包含至少一个
 归一化后的实体原文，或有达到 relation threshold 的图边；没有显式实体时行为与 union 相同。
