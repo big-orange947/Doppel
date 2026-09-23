@@ -1,8 +1,10 @@
 # Hybrid path-candidate assembly: preregistered opened-corpus run
 
-Date: 2026-09-23  
-Runner: `doppel.hybrid-path-candidate-ablation.v1`  
-Dataset: `doppel-candidate-relation-path-ablation-zh-v2`  
+Date: 2026-09-23
+
+Runner: `doppel.hybrid-path-candidate-ablation.v1`
+
+Dataset: `doppel-candidate-relation-path-ablation-zh-v2`
 
 ## Question
 
