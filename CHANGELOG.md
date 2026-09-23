@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Pre-register the candidate relation-path v2 dataset fingerprints, primary
+  hypotheses, hard gates, expected precision cost, zero-model contract, and first
+  live output path before Docker produces any v2 result.
 - Make the Windows benchmark preflight recognize Docker Desktop's inaccessible stale
   inference-socket crash signature and fail early with a safe diagnostic. It remains
   read-only with respect to WSL, containers, volumes, and Docker data.

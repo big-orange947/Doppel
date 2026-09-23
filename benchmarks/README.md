@@ -180,6 +180,9 @@ correct deduplication/attribution, and zero residue. Candidate noise is delibera
 reported rather than mislabeled as either proof or a security failure. The run performs
 zero model calls, external HTTP requests, or paid tokens. Its envelope is versioned by
 [`candidate-relation-path-ablation-result.schema.json`](candidate-relation-path-ablation-result.schema.json).
+The immutable interpretation for its first live execution is recorded in
+[`reports/candidate-relation-path-preregistered-2026-09-23.md`](reports/candidate-relation-path-preregistered-2026-09-23.md);
+that document was committed before Docker produced any v2 result.
 
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
