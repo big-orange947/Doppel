@@ -7,6 +7,9 @@
   from extra graph routes/types and no-path false candidates; the model receives
   no scope, graph authority, or gold labels. Live provider calls remain opt-in and
   capped, and this probe does not claim end-to-end graph retrieval quality.
+- Pre-register development gates for the first candidate-generator run and report
+  overall plus dev/heldout/adversarial, one-hop, two-hop, no-path and excess-candidate
+  metrics separately. A sealed run must cover every frozen case with a fresh cache.
 - Record the first live Neo4j candidate-path ablation against the pre-registered v2
   dataset: 36 completed queries, 8/8 ontology-drift cases recovered, evidence recall
   0.600 to 1.000, zero forbidden hits and scope leakage, and five related-candidate

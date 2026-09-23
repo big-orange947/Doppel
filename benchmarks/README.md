@@ -1312,3 +1312,11 @@ Neo4j. These metrics must not be described as real evidence recall, temporal saf
 or answer quality. The next stage should feed model-generated routes into the
 existing live graph ablation and measure evidence gain, irrelevant candidate load,
 latency, scope isolation, temporal validity, and Store provenance together.
+
+The first sealed run uses thresholds committed before any provider output is opened:
+overall and one-hop required-route recall at least 0.80; two-hop recall at least 0.75;
+no-path false-candidate rate at most 0.25; extra routes at most 0.50 per case; extra
+types at most 1.00 per generated route; and zero provider/validation errors or invalid
+topology compilations. These are development gates for deciding whether an end-to-end
+Neo4j trial is worthwhile, not publication-grade quality claims. A sealed run must
+include all three partitions and reserve one provider call for every case.

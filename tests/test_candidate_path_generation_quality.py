@@ -9,7 +9,13 @@ from typing import Any
 
 import pytest
 
-from benchmarks.candidate_path_generation_live import main as candidate_live_main
+from benchmarks.candidate_path_generation_live import (
+    SEALED_THRESHOLDS,
+    quality_gate,
+)
+from benchmarks.candidate_path_generation_live import (
+    main as candidate_live_main,
+)
 from benchmarks.candidate_path_generation_quality import (
     CandidateGenerationCase,
     CandidateGenerationDataset,
@@ -168,6 +174,31 @@ def test_scorer_separates_coverage_from_extra_types_and_no_path() -> None:
     assert metrics["false_candidate_on_no_path"] == 1
     assert metrics["extra_routes"] == 1
     assert metrics["errors"] == 0
+    assert metrics["one_hop_route_recall"] == 1.0
+    assert metrics["no_path_false_candidate_rate"] == 1.0
+    assert report["partition_metrics"]["dev"]["required_route_recall"] == 1.0
+    assert (
+        report["partition_metrics"]["adversarial"]["no_path_false_candidate_rate"]
+        == 1.0
+    )
+
+
+def test_quality_gate_reports_recall_and_noise_failures_separately() -> None:
+    passing = {
+        "required_route_recall": 0.9,
+        "one_hop_route_recall": 0.9,
+        "two_hop_route_recall": 0.75,
+        "no_path_false_candidate_rate": 0.25,
+        "extra_routes_per_case": 0.5,
+        "extra_types_per_generated_route": 1.0,
+        "invalid_compilation_count": 0,
+        "errors": 0,
+    }
+    assert quality_gate(passing, SEALED_THRESHOLDS)["passed"]
+    failing = {**passing, "required_route_recall": 0.5, "extra_routes_per_case": 0.75}
+    result = quality_gate(failing, SEALED_THRESHOLDS)
+    assert not result["passed"]
+    assert result["failures"] == ["required_route_recall", "extra_routes_per_case"]
 
 
 def test_dry_run_never_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:

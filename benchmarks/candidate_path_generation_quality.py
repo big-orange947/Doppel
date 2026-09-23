@@ -66,6 +66,9 @@ async def score_candidate_generation(
 
     rows: list[dict[str, Any]] = []
     totals: Counter[str] = Counter()
+    partition_totals: dict[str, Counter[str]] = {
+        partition: Counter() for partition in ("dev", "heldout", "adversarial")
+    }
     for case in dataset.cases:
         error = ""
         routes: list[list[RelationPathStep]] = []
@@ -107,6 +110,14 @@ async def score_candidate_generation(
             for route in routes
             for hop, step in enumerate(route)
         )
+        required_one_hop = sum(len(route) == 1 for route in case.required_routes)
+        required_two_hop = sum(len(route) == 2 for route in case.required_routes)
+        covered_one_hop = sum(
+            len(case.required_routes[index]) == 1 for index in matched_indexes
+        )
+        covered_two_hop = sum(
+            len(case.required_routes[index]) == 2 for index in matched_indexes
+        )
         row = {
             "case_id": case.case_id,
             "partition": case.partition,
@@ -115,6 +126,10 @@ async def score_candidate_generation(
             "generated_route_count": len(routes),
             "extra_route_count": extra_routes,
             "extra_type_count": extra_types,
+            "required_one_hop_count": required_one_hop,
+            "covered_one_hop_count": covered_one_hop,
+            "required_two_hop_count": required_two_hop,
+            "covered_two_hop_count": covered_two_hop,
             "false_candidate_on_no_path": not case.required_routes and bool(routes),
             "compiled_routes": [
                 [step.model_dump(mode="json") for step in route] for route in routes
@@ -123,32 +138,32 @@ async def score_candidate_generation(
             "error": error,
         }
         rows.append(row)
-        totals["cases"] += 1
-        totals["required_routes"] += len(case.required_routes)
-        totals["covered_routes"] += len(matched_indexes)
-        totals["generated_routes"] += len(routes)
-        totals["extra_routes"] += extra_routes
-        totals["extra_types"] += extra_types
-        totals["false_candidate_on_no_path"] += int(row["false_candidate_on_no_path"])
-        totals["errors"] += bool(error)
-        totals["ambiguous"] += compilation.get("ambiguous", 0)
-        totals["over_bound"] += compilation.get("over_bound", 0)
+        for counter in (totals, partition_totals[case.partition]):
+            counter["cases"] += 1
+            counter["required_routes"] += len(case.required_routes)
+            counter["covered_routes"] += len(matched_indexes)
+            counter["required_one_hop"] += required_one_hop
+            counter["covered_one_hop"] += covered_one_hop
+            counter["required_two_hop"] += required_two_hop
+            counter["covered_two_hop"] += covered_two_hop
+            counter["generated_routes"] += len(routes)
+            counter["extra_routes"] += extra_routes
+            counter["extra_types"] += extra_types
+            counter["no_path_cases"] += not case.required_routes
+            counter["false_candidate_on_no_path"] += int(
+                row["false_candidate_on_no_path"]
+            )
+            counter["errors"] += bool(error)
+            counter["ambiguous"] += compilation.get("ambiguous", 0)
+            counter["over_bound"] += compilation.get("over_bound", 0)
     return {
         "runner": "doppel.candidate-path-generation-quality.v1",
         "dataset": {"suite": dataset.suite, "version": dataset.version},
-        "metrics": {
-            **dict(totals),
-            "required_route_recall": (
-                totals["covered_routes"] / totals["required_routes"]
-                if totals["required_routes"]
-                else 1.0
-            ),
-            "no_path_false_candidate_rate": (
-                totals["false_candidate_on_no_path"]
-                / sum(not case.required_routes for case in dataset.cases)
-                if any(not case.required_routes for case in dataset.cases)
-                else 0.0
-            ),
+        "metrics": _summarize(totals),
+        "partition_metrics": {
+            partition: _summarize(counter)
+            for partition, counter in partition_totals.items()
+            if counter["cases"]
         },
         "rows": rows,
         "limitations": [
@@ -156,6 +171,26 @@ async def score_candidate_generation(
             "No Neo4j, scope, time, provenance, latency, or answer quality is measured.",
             "Synthetic questions alone are not publication-grade evidence.",
         ],
+    }
+
+
+def _summarize(totals: Counter[str]) -> dict[str, int | float]:
+    def ratio(numerator: str, denominator: str, *, empty: float) -> float:
+        return totals[numerator] / totals[denominator] if totals[denominator] else empty
+
+    return {
+        **dict(totals),
+        "required_route_recall": ratio("covered_routes", "required_routes", empty=1.0),
+        "one_hop_route_recall": ratio("covered_one_hop", "required_one_hop", empty=1.0),
+        "two_hop_route_recall": ratio("covered_two_hop", "required_two_hop", empty=1.0),
+        "no_path_false_candidate_rate": ratio(
+            "false_candidate_on_no_path", "no_path_cases", empty=0.0
+        ),
+        "extra_routes_per_case": ratio("extra_routes", "cases", empty=0.0),
+        "extra_types_per_generated_route": ratio(
+            "extra_types", "generated_routes", empty=0.0
+        ),
+        "invalid_compilation_count": totals["ambiguous"] + totals["over_bound"],
     }
 
 
