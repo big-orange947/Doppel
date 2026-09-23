@@ -45,17 +45,52 @@ function Get-DockerServerName {
     }
 }
 
+function Get-DockerStartupFailureHint {
+    param([DateTime]$NotBeforeUtc)
+
+    $backendLog = Join-Path `
+        $env:LOCALAPPDATA `
+        "Docker\log\host\com.docker.backend.exe.log"
+    if (-not (Test-Path -LiteralPath $backendLog)) {
+        return ""
+    }
+    $logInfo = Get-Item -LiteralPath $backendLog -ErrorAction SilentlyContinue
+    if ($null -eq $logInfo -or $logInfo.LastWriteTimeUtc -lt $NotBeforeUtc) {
+        return ""
+    }
+    $tail = Get-Content `
+        -LiteralPath $backendLog `
+        -Tail 400 `
+        -ErrorAction SilentlyContinue
+    if (
+        $tail -match "initializing Inference manager" -and
+        $tail -match "dockerInference" -and
+        $tail -match "file cannot be accessed by the system"
+    ) {
+        return (
+            "The backend reported an inaccessible stale Docker inference socket " +
+            "under %LOCALAPPDATA%\Docker\run. No automatic repair was attempted."
+        )
+    }
+    return ""
+}
+
 function Wait-DockerServer {
     param(
         [int]$TimeoutSeconds,
         [System.Diagnostics.Process]$StartProcess = $null
     )
 
+    $startedAt = [DateTime]::UtcNow.AddSeconds(-2)
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     do {
         $name = Get-DockerServerName
         if ($name) {
             return $name
+        }
+        $failureHint = Get-DockerStartupFailureHint -NotBeforeUtc $startedAt
+        if ($failureHint) {
+            throw "Docker Desktop backend startup failed. $failureHint"
         }
         if (
             $null -ne $StartProcess -and

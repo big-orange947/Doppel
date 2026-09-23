@@ -95,6 +95,11 @@ container/volume, or rewrites Docker Desktop data. If Docker Desktop itself is n
 ready, `-Start` uses the Desktop CLI and waits for the server. Existing benchmark
 containers should use `restart=unless-stopped`; enable Docker Desktop's own
 “start when you sign in” setting separately if automatic boot is desired.
+If the current startup log contains Docker Desktop's inaccessible stale
+`dockerInference` socket signature, the preflight fails early with a content-free
+diagnostic instead of waiting for the generic timeout. It still does not delete or
+repair the socket automatically because that may require terminating Desktop, WSL,
+or a host-level filesystem repair outside benchmark authority.
 
 The bounded relation-path adapter has a separate opt-in live contract test. It uses
 unique exact-scope fixture groups, creates no Graphiti LLM/embedder, and removes the

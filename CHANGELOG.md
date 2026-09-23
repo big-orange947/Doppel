@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Make the Windows benchmark preflight recognize Docker Desktop's inaccessible stale
+  inference-socket crash signature and fail early with a safe diagnostic. It remains
+  read-only with respect to WSL, containers, volumes, and Docker data.
 - Add a deterministic 36-query candidate relation-path ablation over live Neo4j. It
   compares strict, candidate-only, and exact-plus-candidate routes; separates
   ontology-drift recovery from related candidate noise; and hard-gates scope,
