@@ -183,6 +183,11 @@ zero model calls, external HTTP requests, or paid tokens. Its envelope is versio
 The immutable interpretation for its first live execution is recorded in
 [`reports/candidate-relation-path-preregistered-2026-09-23.md`](reports/candidate-relation-path-preregistered-2026-09-23.md);
 that document was committed before Docker produced any v2 result.
+The [first live Neo4j report](reports/candidate-relation-path-first-live-2026-09-23.md)
+records 36 completed queries, eight of eight drift cases recovered, zero forbidden
+hits or scope leakage, and five occurrences of related but non-required candidates.
+This is generated-topology retrieval evidence; it does not measure whether a model
+can produce those candidate topologies from natural-language questions.
 
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).

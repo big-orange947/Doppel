@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record the first live Neo4j candidate-path ablation against the pre-registered v2
+  dataset: 36 completed queries, 8/8 ontology-drift cases recovered, evidence recall
+  0.600 to 1.000, zero forbidden hits and scope leakage, and five related-candidate
+  noise occurrences. The run used no paid model calls and cleaned its fixture.
 - Enforce trusted subject and subject-ID binding while Graphiti relation and path
   candidates are reloaded from the authoritative Store. Explicit contact/agent facts
   cannot enter an owner relation result inside the same scope. Legacy records without
