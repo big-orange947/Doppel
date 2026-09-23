@@ -67,6 +67,24 @@ unsupported authorship, and an unspecified relationship. This is useful evidence
 the protocol does not indiscriminately turn every personal-memory question into a graph
 walk. It does not offset the failed recall/noise gates.
 
+### Post-hoc width sensitivity
+
+After the sealed result was recorded, the raw provider cache was re-scored without a
+network call. This analysis was not pre-registered and must not replace the primary
+result. It shows that the model's confidence is useful for controlling width, but does
+not repair missing or wrongly directed paths:
+
+| Opened diagnostic policy | Required recall | Extra routes/case | Extra types/route | Invalid |
+| --- | ---: | ---: | ---: | ---: |
+| All candidates (primary) | 0.733 | 1.222 | 0.818 | 3 |
+| Top one by confidence | 0.667 | 0.111 | 0.250 | 2 |
+| Top two by confidence | 0.733 | 0.556 | 0.667 | 3 |
+| Confidence greater than 0.5 | 0.733 | 0.111 | 0.231 | 2 |
+
+The confidence filter preserved the already-limited recall while removing most noise.
+Because the threshold was observed post hoc, it is only a hypothesis for a future
+pre-registered corpus, not a product default or a passing reinterpretation of this run.
+
 ## Next experiment
 
 This corpus is now opened regression data. It may be used to diagnose and iterate on

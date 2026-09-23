@@ -25,6 +25,7 @@ from benchmarks.candidate_path_generation_quality import (
 from benchmarks.relation_path_planner_quality import load_relation_catalog
 from doppel_memory.intelligence import StructuredGenerationRequest
 from doppel_memory.query_path_candidate import (
+    REFERENCE_CANDIDATE_RELATION_PATH_INSTRUCTIONS,
     CandidateRelationGenerationRequest,
     ReferenceCandidateRelationPathGenerator,
 )
@@ -111,6 +112,8 @@ def test_generator_passes_only_question_anchor_and_definitions() -> None:
     assert model.request is not None
     assert set(model.request.input) == {"query", "anchor", "relation_type_definitions"}
     assert "scope" not in str(model.request.input).lower()
+    assert "折叠拐杖" not in REFERENCE_CANDIDATE_RELATION_PATH_INSTRUCTIONS
+    assert "星河救助站" not in REFERENCE_CANDIDATE_RELATION_PATH_INSTRUCTIONS
 
 
 def test_generator_rejects_unknown_type_and_provider_scope_field() -> None:
@@ -181,6 +184,9 @@ def test_scorer_separates_coverage_from_extra_types_and_no_path() -> None:
         report["partition_metrics"]["adversarial"]["no_path_false_candidate_rate"]
         == 1.0
     )
+    assert report["rows"][0]["observed_topologies"][0]["atoms"][0][
+        "relation_types"
+    ] == ["LOCATED_AT", "STORED_IN"]
 
 
 def test_quality_gate_reports_recall_and_noise_failures_separately() -> None:
@@ -204,3 +210,28 @@ def test_quality_gate_reports_recall_and_noise_failures_separately() -> None:
 def test_dry_run_never_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DOPPEL_API_KEY", raising=False)
     assert candidate_live_main(["--partition", "dev", "--max-calls", "0"]) == 0
+
+
+def test_cache_only_live_run_never_requires_key_or_network(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("DOPPEL_API_KEY", raising=False)
+    output = tmp_path / "cache-only.json"
+    assert (
+        candidate_live_main(
+            [
+                "--live",
+                "--max-calls",
+                "0",
+                "--cache-dir",
+                str(tmp_path / "empty-cache"),
+                "--output",
+                str(output),
+            ]
+        )
+        == 1
+    )
+    report = json.loads(output.read_text("utf-8"))
+    assert report["budget"]["provider_calls"] == 0
+    assert report["usage"]["calls_with_usage"] == 0
+    assert report["metrics"]["errors"] == 18

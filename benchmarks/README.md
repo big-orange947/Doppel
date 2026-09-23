@@ -1320,3 +1320,10 @@ types at most 1.00 per generated route; and zero provider/validation errors or i
 topology compilations. These are development gates for deciding whether an end-to-end
 Neo4j trial is worthwhile, not publication-grade quality claims. A sealed run must
 include all three partitions and reserve one provider call for every case.
+
+After a provider run, the same raw outputs may be re-scored with `--live --max-calls 0`
+and the existing cache. This mode does not require an API key and cannot make a network
+call: a missing cache entry is reported as a budget error. Such re-scoring is opened
+diagnostic evidence, never a new sealed result. Reports retain the model's raw bounded
+topologies so disconnected endpoints and split multi-hop chains can be distinguished
+from compiler or scoring defects.

@@ -72,6 +72,7 @@ async def score_candidate_generation(
     for case in dataset.cases:
         error = ""
         routes: list[list[RelationPathStep]] = []
+        observed_topologies: list[dict[str, Any]] = []
         compilation: dict[str, int] = {}
         try:
             observation = await generator.generate(
@@ -81,6 +82,9 @@ async def score_candidate_generation(
                     relation_type_definitions=definitions,
                 )
             )
+            observed_topologies = [
+                topology.model_dump(mode="json") for topology in observation.topologies
+            ]
             # A scope-free dummy draft only invokes the same production compiler.
             # No candidate is passed to a graph index by this scorer.
             plan = build_relation_path_retrieval_plan(
@@ -134,6 +138,7 @@ async def score_candidate_generation(
             "compiled_routes": [
                 [step.model_dump(mode="json") for step in route] for route in routes
             ],
+            "observed_topologies": observed_topologies,
             "compilation": compilation,
             "error": error,
         }

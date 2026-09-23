@@ -159,7 +159,7 @@ async def run(args: argparse.Namespace) -> int:
         "schema_mode": configuration.schema_mode,
         "max_completion_tokens": configuration.max_completion_tokens,
         "graph_execution_enabled": False,
-        "paid_calls_enabled": args.live,
+        "paid_calls_enabled": args.live and args.max_calls > 0,
         "implementation_commit": _git_commit_hash(),
     }
     if not args.live:
@@ -175,11 +175,13 @@ async def run(args: argparse.Namespace) -> int:
         if args.cache_dir.exists() and any(args.cache_dir.rglob("*.json")):
             raise ValueError("sealed run needs an empty provider-output cache")
     key = os.environ.get("DOPPEL_API_KEY", "").strip()
-    if not key:
+    if not key and args.max_calls > 0:
         raise RuntimeError("DOPPEL_API_KEY is required for --live")
     usage = UsageLedger()
     provider = OpenAICompatibleStructuredOutputModel(
-        configuration, api_key=key, usage_observer=usage.observe
+        configuration,
+        api_key=key or "cache-only-no-network",
+        usage_observer=usage.observe,
     )
     budget = StructuredOutputCallBudget(provider, max_calls=args.max_calls)
     cached = CachedStructuredOutputModel(budget, args.cache_dir)

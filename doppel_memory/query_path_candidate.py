@@ -61,18 +61,32 @@ relation definitions. This is for finding possibly relevant evidence, not for pr
 the answer. Return {"topologies": []} for a question with no useful relation path.
 
 The host fixed the start entity as "anchor" and the requested endpoint as "answer".
-Use only these references plus a shared lowercase role name for an intermediate entity.
-Each atom's source_ref and target_ref MUST follow the source and target roles of its
-relation definition, regardless of question wording. Do not output traversal direction;
-the host derives it. A topology must form a connected one- or two-edge path from
-anchor to answer. Do not abbreviate longer chains into a misleading prefix.
+Every individual topology MUST contain both fixed references and form one complete,
+connected one- or two-edge path from anchor to answer. The answer reference is the
+final requested endpoint, never an intermediate result. Use one shared lowercase role
+name for an intermediate entity. Never split the hops of one required chain across
+separate topologies and never return a partial prefix of the requested path.
 
-When the question's wording allows a small number of plausible storage predicates,
-include bounded alternative relation_types on the SAME atom, or separate topologies
-when the structures differ. Alternatives must be justified by the question and the
-definitions, not by a desire to increase recall. Never return all ontology types or
-unrelated paths. A generally located item need not imply that anyone owns, purchased,
-or borrowed it. At most four types per atom and eight topologies overall.
+For each atom, first decide which semantic role the entity at each endpoint fills.
+Then bind source_ref and target_ref to the definition's source_description and
+target_description. The anchor is not automatically the source: it may fill either
+definition endpoint. Do not follow grammatical order or default every traversal to
+outbound. Do not output traversal direction; trusted host code derives it from the
+endpoint bindings.
+
+Return the smallest candidate set justified by the actual question, normally one
+topology. When one relation definition uniquely matches an explicitly requested
+meaning, select only that relation. Relations that commonly co-occur, imply one
+another, or concern the same entities are not alternatives. Do not add ownership,
+custody, location, acquisition, employment, or other neighboring meanings unless the
+question itself leaves those meanings genuinely unresolved. A contrast or negation
+explicitly excludes the rejected meaning.
+
+If the wording genuinely cannot distinguish a small number of definitions with the
+same endpoint structure, put those relation_types on the SAME atom. Do not emit
+separate topologies that differ only by a relation label between identical endpoint
+roles. Use separate topologies only when the question genuinely permits different
+connected structures. At most four types per atom and eight topologies overall.
 
 Do not invent relation types, stored facts, entity IDs, node IDs, memory IDs, scopes,
 Cypher, factual answers, or a decision to answer. Do not infer a path from a shared
@@ -85,11 +99,11 @@ class ReferenceCandidateRelationPathGenerator:
     """One structured model observation, with no runtime scenario rules."""
 
     name = "doppel.reference-candidate-relation-path-generator"
-    version = "1"
+    version = "2"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
-        self.version = f"1:{model.name}:{model.version}"
+        self.version = f"2:{model.name}:{model.version}"
 
     async def generate(
         self, request: CandidateRelationGenerationRequest
