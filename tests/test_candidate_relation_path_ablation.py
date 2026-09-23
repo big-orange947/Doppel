@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
+import benchmarks.candidate_relation_path_ablation as candidate_ablation
 from benchmarks.build_candidate_relation_path_v2 import build_dataset
 from benchmarks.candidate_relation_path_ablation import (
     CandidatePathDataset,
@@ -183,3 +185,34 @@ def test_candidate_result_schema_tracks_three_profiles() -> None:
         "deduplication_failures",
         "graph_route_queries",
     }.issubset(profile_required)
+
+
+@pytest.mark.asyncio
+async def test_runtime_failure_report_is_structured_and_redacts_exception_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fail_run(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        del args, kwargs
+        raise RuntimeError("provider leaked sk-do-not-persist")
+
+    output = tmp_path / "failure.json"
+    monkeypatch.setenv("DOPPEL_TEST_NEO4J_PASSWORD", "local-secret")
+    monkeypatch.setattr(candidate_ablation, "run_ablation", fail_run)
+    args = argparse.Namespace(
+        dataset=DATASET,
+        output=output,
+        neo4j_uri="bolt://127.0.0.1:1",
+        neo4j_user="neo4j",
+        password_env="DOPPEL_TEST_NEO4J_PASSWORD",
+    )
+
+    assert await candidate_ablation._main_async(args) == 1
+    serialized = output.read_text(encoding="utf-8")
+    report = json.loads(serialized)
+    assert report["hard_failure"] == "RuntimeError"
+    assert report["gate"] == {
+        "ok": False,
+        "failures": ["runtime_unavailable"],
+    }
+    assert "sk-do-not-persist" not in serialized
+    assert "local-secret" not in serialized

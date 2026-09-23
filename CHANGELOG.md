@@ -18,6 +18,9 @@
   weight route-level RRF contributions by the already bounded route confidence.
   Low-confidence widening can improve recall without receiving the same ranking
   influence as a high-confidence exact route.
+- Deduplicate a path within each individual route before assigning RRF credit. A
+  noisy or custom `RelationPathIndex` cannot inflate one graph path by returning it
+  repeatedly; cross-route support is still retained and attributed.
 - Record two incomplete V7 Flash thinking diagnostics. A 4K generation ceiling
   truncated after six cases and an 8K ceiling truncated after 21; both returned HTTP
   200 with an incomplete generation, not a network timeout. The completed 8K prefix

@@ -279,8 +279,12 @@ async def search_relation_path_routes(
     for route_index, (route, found) in enumerate(
         zip(bound.routes, route_results, strict=True)
     ):
+        seen_in_route: set[tuple[str, tuple[str, ...], tuple[str, ...]]] = set()
         for rank, candidate in enumerate(found):
             key = _candidate_key(candidate)
+            if key in seen_in_route:
+                continue
+            seen_in_route.add(key)
             candidates.setdefault(key, candidate)
             scores[key] += route.confidence / (rrf_k + rank + 1)
             route_indexes[key].append(route_index)
