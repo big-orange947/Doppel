@@ -191,6 +191,9 @@ def test_scorer_separates_coverage_from_extra_types_and_no_path() -> None:
 
 def test_quality_gate_reports_recall_and_noise_failures_separately() -> None:
     passing = {
+        "required_one_hop": 1,
+        "required_two_hop": 1,
+        "no_path_cases": 1,
         "required_route_recall": 0.9,
         "one_hop_route_recall": 0.9,
         "two_hop_route_recall": 0.75,
@@ -205,6 +208,25 @@ def test_quality_gate_reports_recall_and_noise_failures_separately() -> None:
     result = quality_gate(failing, SEALED_THRESHOLDS)
     assert not result["passed"]
     assert result["failures"] == ["required_route_recall", "extra_routes_per_case"]
+
+
+def test_quality_gate_cannot_pass_an_incomplete_partition_matrix() -> None:
+    metrics = {
+        "required_one_hop": 6,
+        "required_two_hop": 0,
+        "no_path_cases": 0,
+        "required_route_recall": 1.0,
+        "one_hop_route_recall": 1.0,
+        "two_hop_route_recall": 1.0,
+        "no_path_false_candidate_rate": 0.0,
+        "extra_routes_per_case": 0.0,
+        "extra_types_per_generated_route": 0.0,
+        "invalid_compilation_count": 0,
+        "errors": 0,
+    }
+    result = quality_gate(metrics, SEALED_THRESHOLDS)
+    assert not result["passed"]
+    assert result["failures"] == ["coverage_matrix_complete"]
 
 
 def test_dry_run_never_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:

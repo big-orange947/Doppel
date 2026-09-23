@@ -66,6 +66,9 @@ def quality_gate(
     metrics: dict[str, Any], thresholds: dict[str, float | int]
 ) -> dict[str, Any]:
     checks = {
+        "coverage_matrix_complete": metrics["required_one_hop"] > 0
+        and metrics["required_two_hop"] > 0
+        and metrics["no_path_cases"] > 0,
         "required_route_recall": metrics["required_route_recall"]
         >= thresholds["min_required_route_recall"],
         "one_hop_route_recall": metrics["one_hop_route_recall"]
@@ -87,6 +90,11 @@ def quality_gate(
         "checks": checks,
         "failures": [name for name, passed in checks.items() if not passed],
         "thresholds": thresholds,
+        "coverage_requirements": {
+            "one_hop_cases": True,
+            "two_hop_cases": True,
+            "no_path_cases": True,
+        },
     }
 
 

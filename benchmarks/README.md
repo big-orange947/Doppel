@@ -1327,3 +1327,7 @@ call: a missing cache entry is reported as a budget error. Such re-scoring is op
 diagnostic evidence, never a new sealed result. Reports retain the model's raw bounded
 topologies so disconnected endpoints and split multi-hop chains can be distinguished
 from compiler or scoring defects.
+
+A partition-only diagnostic cannot pass the complete quality gate unless its selection
+contains at least one one-hop route, one two-hop route, and one no-path control. Its
+individual metrics remain valid, but an absent category is not positive evidence.

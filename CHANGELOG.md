@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record the opened V2 dev regression: required-route recall stayed 6/6 while
+  generated routes fell from 12 to 6, extra routes from six to zero, and extra types
+  from seven to zero. Mark partition-only runs as incomplete gates when one-hop,
+  two-hop, or no-path coverage is absent.
 - Record the first sealed 18-case candidate-path generator run. It passed one-hop
   recall (9/11), no-path rejection (4/4), type-expansion, and zero-error gates, but
   correctly failed overall/two-hop recall, extra-route, and invalid-topology gates.
