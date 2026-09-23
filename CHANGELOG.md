@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record the V7 Planner-backed candidate comparison. Its exact-path abstention policy
+  returned only 4/9 required routes versus V3's 7/9, while two-hop stayed 2/4. Do not
+  unify exact and candidate decision contracts; stop natural-language path tuning on
+  the opened corpus and evaluate candidate paths as one additive hybrid source.
 - Add an experimental V7 Planner-backed candidate profile. It reuses the established
   two-pass relation-atom Planner and trusted host path compiler, then deterministically
   converts compiled directions into retrieval-only candidate atoms. This isolates
