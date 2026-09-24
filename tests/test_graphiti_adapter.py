@@ -36,9 +36,12 @@ from doppel_memory.graphiti_store import (
     GraphitiSemanticIndex,
     _core_record_matches_relation_subject,
     _ensure_graphiti_fallback_edge,
+    _graphiti_episode_name,
     _relation_match_terms,
 )
 from doppel_memory.relation import (
+    RelationPathExploreIndex,
+    RelationPathExploreQuery,
     RelationPathIndex,
     RelationPathQuery,
     RelationPathStep,
@@ -851,6 +854,8 @@ async def test_graphiti_relation_index_reads_only_anchored_rich_edges() -> None:
     assert health["ok"] is True
     assert health["role"] == "relation_index"
     assert health["semantic_search"] is False
+    assert health["relation_paths"]["exploration"] is True
+    assert health["relation_paths"]["max_scanned_paths"] == 512
 
 
 def test_graphiti_relation_reranker_requires_explicit_threshold() -> None:
@@ -1470,6 +1475,40 @@ def test_relation_path_query_is_typed_and_bounded_to_two_hops() -> None:
             subject="owner",
             subject_id="owner-a",
         )
+
+
+def test_relation_path_exploration_is_ontology_and_resource_bounded() -> None:
+    query = RelationPathExploreQuery(
+        query_text="相机最后在哪里？",
+        entity_mentions=["相机"],
+        allowed_relation_types=["held_by", "located_at"],
+        preferred_terminal_relation_types=["located_at"],
+        preferred_hop_count=2,
+        subject="owner",
+        subject_id="owner-a",
+    )
+    assert query.allowed_relation_types == ["HELD_BY", "LOCATED_AT"]
+    assert query.max_hops == 2
+    assert query.max_scanned_paths == 256
+    with pytest.raises(ValueError, match="allowed ontology"):
+        RelationPathExploreQuery(
+            query_text="相机最后在哪里？",
+            entity_mentions=["相机"],
+            allowed_relation_types=["HELD_BY"],
+            preferred_terminal_relation_types=["LOCATED_AT"],
+            subject="owner",
+            subject_id="owner-a",
+        )
+    with pytest.raises(ValueError, match="max_hops"):
+        RelationPathExploreQuery(
+            query_text="相机最后在哪里？",
+            entity_mentions=["相机"],
+            allowed_relation_types=["HELD_BY", "LOCATED_AT"],
+            preferred_hop_count=2,
+            max_hops=1,
+            subject="owner",
+            subject_id="owner-a",
+        )
     with pytest.raises(ValueError, match="cannot mix valid_at"):
         RelationPathQuery(
             query_text="mixed time",
@@ -1612,6 +1651,108 @@ async def test_graphiti_relation_path_requires_provenance_on_every_hop() -> None
             )
             == []
         )
+
+
+async def test_graphiti_relation_path_exploration_discovers_hidden_second_hop() -> None:
+    scope = MemoryScope(user_id="explore-owner", agent_id="bot")
+    store = InMemoryStore()
+    fake = FakeGraphiti()
+
+    async def put(memory_id: str, content: str) -> str:
+        record = MemoryRecord(
+            memory_id=memory_id,
+            scope=scope,
+            content=content,
+            tags=["personal-memory"],
+            metadata={
+                "subject": "owner",
+                "subject_id": scope.user_id,
+                "evidence": [{"evidence_id": f"evidence-{memory_id}"}],
+            },
+        )
+        stored = await store.put(record)
+        assert stored.accepted and stored.record is not None
+        episode_id = f"episode-{memory_id}"
+        fake.episodes[episode_id] = SimpleNamespace(
+            uuid=episode_id,
+            name=_graphiti_episode_name(memory_id, "a" * 64, stored.record.version),
+            group_id=scope.scope_key,
+        )
+        return episode_id
+
+    held_episode = await put("explore-held", "相机由小王保管。")
+    location_episode = await put("explore-location", "小王目前住在上海。")
+    two_hop = {
+        "group_id": scope.scope_key,
+        "node_group_ids": [scope.scope_key, scope.scope_key, scope.scope_key],
+        "edge_group_ids": [scope.scope_key, scope.scope_key],
+        "node_ids": ["camera", "wang", "shanghai"],
+        "node_names": ["相机", "小王", "上海"],
+        "edge_ids": ["edge-held", "edge-location"],
+        "relation_types": ["HELD_BY", "LOCATED_AT"],
+        "facts": ["相机由小王保管。", "小王目前住在上海。"],
+        "episode_ids_by_hop": [[held_episode], [location_episode]],
+        "valid_ats": [None, None],
+        "invalid_ats": [None, None],
+        "directions": ["outbound", "outbound"],
+    }
+    one_hop = {
+        key: (value[:2] if isinstance(value, list) else value)
+        for key, value in two_hop.items()
+    }
+    one_hop.update(
+        {
+            "node_group_ids": [scope.scope_key, scope.scope_key],
+            "edge_group_ids": [scope.scope_key],
+            "node_ids": ["camera", "wang"],
+            "node_names": ["相机", "小王"],
+            "edge_ids": ["edge-held"],
+            "relation_types": ["HELD_BY"],
+            "facts": ["相机由小王保管。"],
+            "episode_ids_by_hop": [[held_episode]],
+            "valid_ats": [None],
+            "invalid_ats": [None],
+            "directions": ["outbound"],
+        }
+    )
+    disallowed = copy.deepcopy(two_hop)
+    disallowed["relation_types"][0] = "MADE_UP"
+    driver = _RelationDriver([one_hop, disallowed, two_hop])
+    fake.driver = driver
+    relation = GraphitiRelationIndex(store, graphiti_client=fake)
+    assert isinstance(relation, RelationPathExploreIndex)
+
+    candidates = await relation.explore_relation_paths(
+        RelationPathExploreQuery(
+            query_text="沿着相机的关系链，最终地点在哪里？",
+            entity_mentions=["相机"],
+            allowed_relation_types=["HELD_BY", "LOCATED_AT"],
+            preferred_terminal_relation_types=["LOCATED_AT"],
+            preferred_hop_count=2,
+            subject="owner",
+            subject_id=scope.user_id,
+        ),
+        [scope],
+        filters=MemoryFilter(tags={"personal-memory"}),
+        limit=2,
+    )
+
+    assert len(candidates) == 2
+    assert [hop.relation_type for hop in candidates[0].hops] == [
+        "HELD_BY",
+        "LOCATED_AT",
+    ]
+    assert candidates[0].supporting_memory_ids == [
+        "explore-held",
+        "explore-location",
+    ]
+    assert [hop.relation_type for hop in candidates[1].hops] == ["HELD_BY"]
+    cypher, params = driver.calls[0]
+    assert "[:RELATES_TO*1..2]" in cypher
+    assert "IN $allowed_relation_types" in cypher
+    assert params["group_ids"] == [scope.scope_key]
+    assert params["allowed_relation_types"] == ["HELD_BY", "LOCATED_AT"]
+    assert params["scan_limit"] == 256
 
 
 async def test_graphiti_relation_path_rechecks_type_and_direction_after_query() -> None:

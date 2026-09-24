@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Preserve the completed frozen V2 provider topology baseline (144/144 cases, 289
+  calls including one rejected malformed draft). The reviewed generator reached
+  91.7% one-hop recall, 58.3% explicit heldout two-hop recall, zero false candidates
+  on semantic no-path queries, and zero provider errors, but failed the preregistered
+  overall gate because hidden temporal paths are not inferable from query text alone
+  and three outputs could not compile. The aggregate two-hop score was 29.2%.
+- Let the second-pass candidate reviewer receive a bounded projection of malformed
+  first-pass JSON, so it can repair self-loops and disconnected drafts without
+  receiving scope, memory IDs, or arbitrary provider fields. Strict ontology and
+  topology validation still applies to the reviewed result.
+- Add an experimental ontology-governed Graphiti path-exploration contract for
+  questions whose hidden first hop is absent from the text. Exploration is bounded
+  to two hops and 512 scanned paths, exact-scope and temporal filtered, and every hop
+  still requires Episode provenance plus authoritative Store revalidation. Hop-count
+  and terminal-type preferences affect ranking only; results remain unassessed
+  candidates and do not replace independent vector retrieval.
 - Add the frozen, deterministic `doppel-combined-retrieval-zh-v1` corpus: 144 queries,
   36 exact owner scopes, and 3,600 memories with one-hop/two-hop relations, independent
   semantic questions, temporal incomplete paths, repeated cross-owner entity names,

@@ -202,6 +202,97 @@ class RelationPathQuery(BaseModel):
         return self
 
 
+class RelationPathExploreQuery(BaseModel):
+    """Scope-free request for bounded discovery of unknown one/two-hop paths.
+
+    Unlike :class:`RelationPathQuery`, this request does not pretend that a planner
+    already knows every hidden edge type.  The host still supplies the complete
+    allowed ontology and exact scopes separately.  Preferred hop count and terminal
+    types affect ranking only; they never authorize an edge or bypass provenance,
+    time, lifecycle, or Store validation.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    query_text: str
+    entity_mentions: list[str] = Field(min_length=1)
+    allowed_relation_types: list[str] = Field(min_length=1, max_length=128)
+    preferred_terminal_relation_types: list[str] = Field(
+        default_factory=list, max_length=16
+    )
+    preferred_hop_count: Literal[1, 2] | None = None
+    max_hops: Literal[1, 2] = 2
+    max_scanned_paths: int = Field(default=256, ge=1, le=512)
+    subject: str
+    subject_id: str
+    valid_at: datetime | None = None
+    time_from: datetime | None = None
+    time_to: datetime | None = None
+
+    @field_validator("query_text", "subject", "subject_id", mode="before")
+    @classmethod
+    def _normalize_text(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @field_validator("entity_mentions", mode="before")
+    @classmethod
+    def _normalize_terms(cls, value: object) -> list[str]:
+        terms = [str(item or "").strip() for item in _list_items(value)]
+        return list(dict.fromkeys(item for item in terms if item))
+
+    @field_validator(
+        "allowed_relation_types", "preferred_terminal_relation_types", mode="before"
+    )
+    @classmethod
+    def _normalize_relation_types(cls, value: object) -> list[str]:
+        relation_types = [
+            str(item or "").strip().upper() for item in _list_items(value)
+        ]
+        normalized = list(dict.fromkeys(item for item in relation_types if item))
+        invalid = [
+            item
+            for item in normalized
+            if re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", item) is None
+        ]
+        if invalid:
+            raise ValueError(
+                f"relation types must be canonical uppercase identifiers: {invalid}"
+            )
+        return normalized
+
+    @field_validator("valid_at", "time_from", "time_to")
+    @classmethod
+    def _normalize_time(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("relation path exploration times must include a timezone")
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def _validate_request(self) -> RelationPathExploreQuery:
+        allowed = set(self.allowed_relation_types)
+        unknown_preferences = sorted(
+            set(self.preferred_terminal_relation_types) - allowed
+        )
+        if unknown_preferences:
+            raise ValueError(
+                "preferred terminal relation types must belong to the allowed "
+                f"ontology: {unknown_preferences}"
+            )
+        if self.preferred_hop_count is not None and self.preferred_hop_count > self.max_hops:
+            raise ValueError("preferred hop count cannot exceed max_hops")
+        if self.time_from and self.time_to and self.time_to < self.time_from:
+            raise ValueError("relation path exploration time_to precedes time_from")
+        if self.valid_at is not None and (
+            self.time_from is not None or self.time_to is not None
+        ):
+            raise ValueError(
+                "relation path exploration cannot mix valid_at with a time range"
+            )
+        return self
+
+
 class RelationRerankItem(BaseModel):
     """One opaque graph edge offered for textual relation scoring.
 
@@ -523,6 +614,20 @@ class RelationPathIndex(Protocol):
     async def search_relation_paths(
         self,
         request: RelationPathQuery,
+        scopes: Sequence[MemoryScope],
+        *,
+        filters: MemoryFilter | None = None,
+        limit: int = 10,
+    ) -> Sequence[RelationPathCandidate]: ...
+
+
+@runtime_checkable
+class RelationPathExploreIndex(Protocol):
+    """Experimental exact-scope source for bounded ontology-governed path discovery."""
+
+    async def explore_relation_paths(
+        self,
+        request: RelationPathExploreQuery,
         scopes: Sequence[MemoryScope],
         *,
         filters: MemoryFilter | None = None,
