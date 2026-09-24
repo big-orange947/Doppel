@@ -10,6 +10,7 @@ from typing import Any, cast
 import pytest
 
 from benchmarks.build_combined_retrieval_v1 import build_dataset
+from benchmarks.build_combined_retrieval_v2 import build_dataset as build_dataset_v2
 from benchmarks.combined_retrieval_quality import (
     CombinedRetrievalDataset,
     load_dataset,
@@ -18,6 +19,8 @@ from benchmarks.combined_retrieval_quality import (
 ROOT = Path(__file__).resolve().parents[1]
 DATASET = ROOT / "benchmarks/datasets/combined-retrieval-zh-v1.json"
 EXPECTED_FINGERPRINT = "e16bb570cd3da5924a22a4b1556774d42e556992eaa93d5060c59fc5f2beaf51"
+DATASET_V2 = ROOT / "benchmarks/datasets/combined-retrieval-zh-v2.json"
+EXPECTED_V2_FINGERPRINT = "f35257ad354f5132c49f152b0b705fbba2cc7ce04dec4635237c91c505a84f6b"
 
 
 def test_combined_dataset_is_deterministic_frozen_and_dense() -> None:
@@ -59,6 +62,19 @@ def test_combined_dataset_has_cross_owner_name_collisions_by_design() -> None:
     assert "许澄" in repeated
     assert "临江公寓" in repeated
     assert all(len(scopes) == 3 for scopes in repeated.values())
+
+
+def test_combined_v2_preserves_density_but_makes_provider_prompts_unique() -> None:
+    committed = json.loads(DATASET_V2.read_text("utf-8"))
+    assert committed == build_dataset_v2()
+    dataset = load_dataset(DATASET_V2)
+
+    assert dataset.fingerprint == EXPECTED_V2_FINGERPRINT
+    assert len(dataset.scopes) == 36
+    assert len(dataset.fixtures) == 3_600
+    assert len(dataset.queries) == 144
+    assert len({item.query for item in dataset.queries}) == 144
+    assert len({(item.query, item.anchor) for item in dataset.queries}) == 144
 
 
 def test_combined_dataset_separates_required_related_and_hard_forbidden() -> None:

@@ -1,5 +1,10 @@
 # Combined retrieval V1: frozen-corpus preregistration
 
+> Superseded before execution: offline acquisition validation found only 48 distinct
+> relation/semantic prompt structures repeated across owners, including 18 duplicate
+> full query strings. No provider call or retrieval metric was produced. V2 preserves
+> the isolation topology and density while making all 144 provider inputs unique.
+
 Date: 2026-09-24
 
 Dataset: `doppel-combined-retrieval-zh-v1`

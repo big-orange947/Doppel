@@ -8,6 +8,11 @@
   and lifecycle/authority distractors. Pre-register provider-resume integrity plus
   topology, retrieval, isolation, time, provenance, and non-regression gates before
   any provider or live-backend result is opened.
+- Supersede combined V1 before any provider call after offline validation found
+  repeated full prompts across intentional cross-owner collisions. Add V2 with the
+  same 36 scopes, 3,600 memories, topology, labels, and time boundaries but 144 unique
+  provider inputs, plus a resumable acquisition harness bound to dataset/catalog,
+  generator, provider configuration, and implementation commit.
 
 - Add an experimental Store-revalidated assembly for independent memory hits and
   typed relation paths. It reserves independent recall, retains paths atomically,

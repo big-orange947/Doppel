@@ -224,16 +224,20 @@ candidate-versus-proof label projection changed. The corpus is still opened and 
 dataset-supplied topology, so this is architectural evidence rather than a publication
 or natural-language generation claim.
 
-The next frozen combined corpus is
-[`combined-retrieval-zh-v1.json`](datasets/combined-retrieval-zh-v1.json). It contains
+The first combined V1 corpus was superseded before execution when offline validation
+found repeated full provider prompts across its deliberate cross-owner collisions; it
+has no model or retrieval result. The corrected frozen corpus is
+[`combined-retrieval-zh-v2.json`](datasets/combined-retrieval-zh-v2.json). It contains
 144 queries across 36 exact owner scopes and 3,600 memories—100 per scope—with repeated
 cross-owner entity names, same-scope semantic distractors, one-hop and two-hop graph
 questions, semantic questions, and temporal incomplete-path adversaries. The file is
-generated deterministically by `build_combined_retrieval_v1.py` and validated by
-`combined_retrieval_quality.py`. Its fingerprint, resumable provider-acquisition
+generated deterministically by `build_combined_retrieval_v2.py` (which preserves the
+auditable V1 topology generator and adds unique wording) and validated by
+`combined_retrieval_quality.py`. V2 preserves the same density and topology while all
+144 provider inputs are unique. Its fingerprint, resumable provider-acquisition
 rules, V3 candidate-path profile, and topology/retrieval gates were fixed before any
 provider or live retrieval run in
-[`reports/combined-retrieval-v1-preregistered-2026-09-24.md`](reports/combined-retrieval-v1-preregistered-2026-09-24.md).
+[`reports/combined-retrieval-v2-preregistered-2026-09-24.md`](reports/combined-retrieval-v2-preregistered-2026-09-24.md).
 This suite is provider-unseen and frozen, but not author-hidden; it is a stronger
 development generalization check, not yet publication-grade independent evidence.
 
