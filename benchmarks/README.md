@@ -258,14 +258,23 @@ containers:
 ```powershell
 $env:DOPPEL_ABLATION_PG_PASSWORD = "<local-only password>"
 $env:DOPPEL_NEO4J_PASSWORD = "<local-only password>"
-.\.venv\Scripts\python.exe -m benchmarks.combined_retrieval_live
+.\.venv\Scripts\python.exe -m benchmarks.combined_retrieval_live `
+  --gate exploration
 ```
 
 The live runner refuses partial or fingerprint-mismatched topology reports and compares
-independent lexical + pgvector, generated typed paths, and their bounded hybrid. It
-keeps topology quality, evidence recall@5, complete evidence@10, two-hop gain, semantic
-recall, hard-forbidden evidence, lifecycle/authority, scope, provenance, cleanup,
-context size, source attribution, and p50/p95/p99 latency separately observable.
+independent lexical + pgvector, generated typed paths, bounded Graphiti exploration,
+the typed-only hybrid, and the exploration-enhanced hybrid. It keeps topology quality,
+evidence recall@5, complete evidence@10, two-hop gain, semantic recall, hard-forbidden
+evidence, lifecycle/authority, scope, provenance, cleanup, context size, source
+attribution, and p50/p95/p99 latency separately observable. `--gate legacy` remains the
+default for compatibility with the original typed-only experiment; use
+`--gate exploration` when the additive preregistered exploration gate should control
+the process exit status. Both gate results are always written to the report.
+
+Rejected candidates are reported by cause. Expected authority/lifecycle filtering is
+kept separate from actual Store revalidation failures such as stale index references
+or a scope mismatch after authoritative Store reload.
 
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).

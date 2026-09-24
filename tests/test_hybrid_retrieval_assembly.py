@@ -209,6 +209,7 @@ async def test_assembly_rejects_whole_path_when_one_support_is_ineligible() -> N
     assert result.candidates == []
     assert result.relation_paths == []
     assert result.rejected_path_hits == 1
+    assert result.rejected_path_reasons == {"filter_mismatch": 1}
     assert result.truncated is True
 
 
@@ -232,6 +233,29 @@ async def test_assembly_revalidates_base_authority_and_exact_scope() -> None:
     assert result.candidates == []
     assert result.rejected_base_hits == 2
     assert result.rejected_path_hits == 1
+    assert result.rejected_base_reasons == {
+        "filter_mismatch": 1,
+        "unauthorized_scope": 1,
+    }
+    assert result.rejected_path_reasons == {"unauthorized_scope": 1}
+
+
+@pytest.mark.asyncio
+async def test_assembly_reports_stale_store_candidate_separately() -> None:
+    store = InMemoryStore()
+    stale = _record("m-stale")
+
+    result = await assemble_hybrid_retrieval_candidates(
+        store,
+        [_base_hit(stale)],
+        [],
+        [SCOPE],
+        filters=FILTERS,
+    )
+
+    assert result.candidates == []
+    assert result.rejected_base_hits == 1
+    assert result.rejected_base_reasons == {"store_missing": 1}
 
 
 @pytest.mark.asyncio

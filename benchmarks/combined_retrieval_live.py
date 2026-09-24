@@ -62,6 +62,7 @@ from doppel_memory.query_path import PersonalMemoryRelationPathDraftV4
 from doppel_memory.relation import RelationPathCandidate, RelationPathExploreQuery
 from doppel_memory.relation_path_retrieval import (
     CandidateRelationTopology,
+    HybridRetrievalAssembly,
     assemble_hybrid_retrieval_candidates,
     build_relation_path_retrieval_plan,
     merge_relation_path_hits,
@@ -156,6 +157,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--embedding-dimensions", type=int, default=512)
     result.add_argument("--embedding-cache-dir", type=Path, default=None)
     result.add_argument("--embedding-batch-size", type=int, default=32)
+    result.add_argument(
+        "--gate",
+        choices=("legacy", "exploration"),
+        default="legacy",
+        help="quality gate that controls the process exit status",
+    )
     return result
 
 
@@ -361,6 +368,7 @@ async def run_live(
                     "retained_paths": len(assembly.relation_paths),
                 }
             )
+            _record_rejection_reasons(assembly_totals, assembly)
 
             exploration_assembly_started = time.perf_counter()
             exploration_assembly = await assemble_hybrid_retrieval_candidates(
@@ -383,6 +391,9 @@ async def run_live(
                     "truncated_queries": int(exploration_assembly.truncated),
                     "retained_paths": len(exploration_assembly.relation_paths),
                 }
+            )
+            _record_rejection_reasons(
+                exploration_assembly_totals, exploration_assembly
             )
 
             base_ids = [hit.record.memory_id for hit in base_result.hits]
@@ -931,9 +942,7 @@ def retrieval_quality_gate(
             "temporal_complete_path_failures"
         ]
         == 0,
-        "store_revalidation_failures": (
-            assembly["rejected_base_hits"] + assembly["rejected_path_hits"]
-        )
+        "store_revalidation_failures": _store_revalidation_failures(assembly)
         == 0,
         "path_budget_omissions": assembly["omitted_path_hits"] == 0,
         "candidate_bound": hybrid["max_candidates"]
@@ -989,9 +998,7 @@ def exploration_quality_gate(
             "temporal_complete_path_failures"
         ]
         == 0,
-        "store_revalidation_failures": (
-            assembly["rejected_base_hits"] + assembly["rejected_path_hits"]
-        )
+        "store_revalidation_failures": _store_revalidation_failures(assembly)
         == 0,
         "path_budget_omissions": assembly["omitted_path_hits"] == 0,
         "candidate_bound": explored["max_candidates"]
@@ -1007,6 +1014,25 @@ def exploration_quality_gate(
         "two_hop_complete_gain": round(two_hop_gain, 6),
         "legacy_topology_gate_required": False,
     }
+
+
+def _record_rejection_reasons(
+    totals: Counter[str], assembly: HybridRetrievalAssembly
+) -> None:
+    for reason, count in assembly.rejected_base_reasons.items():
+        totals[f"rejected_base_{reason}"] += count
+    for reason, count in assembly.rejected_path_reasons.items():
+        totals[f"rejected_path_{reason}"] += count
+
+
+def _store_revalidation_failures(assembly: Counter[str]) -> int:
+    """Count stale/orphan Store reads, not successful policy enforcement."""
+
+    return sum(
+        assembly[f"rejected_{source}_{reason}"]
+        for source in ("base", "path")
+        for reason in ("store_missing", "scope_mismatch")
+    )
 
 
 async def _main_async(args: argparse.Namespace) -> int:
@@ -1054,7 +1080,13 @@ async def _main_async(args: argparse.Namespace) -> int:
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", "utf-8"
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 0 if report["gate"]["ok"] else 1
+    return 0 if _selected_gate_passed(report, args.gate) else 1
+
+
+def _selected_gate_passed(report: dict[str, Any], gate: str) -> bool:
+    key = "exploration_gate" if gate == "exploration" else "gate"
+    selected = report.get(key)
+    return isinstance(selected, dict) and selected.get("ok") is True
 
 
 def _ratio(numerator: int, denominator: int) -> float:

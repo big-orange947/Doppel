@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Make hybrid candidate rejection auditable by separating expected filter and scope
+  enforcement from stale Store references and post-read scope mismatches. The first
+  frozen combined V2 live exploration run now passes its independent preregistered
+  gate: 0.854 evidence recall@5, 0.806 complete evidence@10, perfect complete evidence
+  on the 36 two-hop cases, and zero forbidden, scope, authority, provenance, or time
+  violations. Add `--gate exploration` so this additive gate can control CLI status
+  without changing the legacy typed-only default.
 - Preserve the completed frozen V2 provider topology baseline (144/144 cases, 289
   calls including one rejected malformed draft). The reviewed generator reached
   91.7% one-hop recall, 58.3% explicit heldout two-hop recall, zero false candidates

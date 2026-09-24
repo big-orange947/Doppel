@@ -10,7 +10,7 @@ the supplied :class:`~doppel_memory.relation.RelationPathIndex`.
 from __future__ import annotations
 
 import asyncio
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal
@@ -194,6 +194,15 @@ class HybridRelationPathEvidence(BaseModel):
     store_revalidated: Literal[True] = True
 
 
+HybridRejectionReason = Literal[
+    "unauthorized_scope",
+    "store_missing",
+    "scope_mismatch",
+    "filter_mismatch",
+    "path_support_limit",
+]
+
+
 class HybridRetrievalAssembly(BaseModel):
     """Bounded, auditable union of independent and typed-path candidates."""
 
@@ -205,8 +214,22 @@ class HybridRetrievalAssembly(BaseModel):
     input_path_hits: int = Field(ge=0)
     rejected_base_hits: int = Field(ge=0)
     rejected_path_hits: int = Field(ge=0)
+    rejected_base_reasons: dict[HybridRejectionReason, int] = Field(
+        default_factory=dict
+    )
+    rejected_path_reasons: dict[HybridRejectionReason, int] = Field(
+        default_factory=dict
+    )
     omitted_path_hits: int = Field(ge=0)
     truncated: bool = False
+
+    @model_validator(mode="after")
+    def _validate_rejection_accounting(self) -> HybridRetrievalAssembly:
+        if sum(self.rejected_base_reasons.values()) != self.rejected_base_hits:
+            raise ValueError("base rejection reasons must account for every rejected hit")
+        if sum(self.rejected_path_reasons.values()) != self.rejected_path_hits:
+            raise ValueError("path rejection reasons must account for every rejected hit")
+        return self
 
 
 async def assemble_hybrid_retrieval_candidates(
@@ -263,22 +286,28 @@ async def assemble_hybrid_retrieval_candidates(
     path_ranks: defaultdict[tuple[str, str], list[int]] = defaultdict(list)
     path_ids: defaultdict[tuple[str, str], list[str]] = defaultdict(list)
     discovery_sources: defaultdict[tuple[str, str], list[str]] = defaultdict(list)
-    rejected_base_hits = 0
+    rejected_base_reasons: Counter[HybridRejectionReason] = Counter()
 
-    async def reload(scope: MemoryScope, memory_id: str) -> MemoryRecord | None:
+    async def reload(
+        scope: MemoryScope, memory_id: str
+    ) -> tuple[MemoryRecord | None, HybridRejectionReason | None]:
         if scope.scope_key not in allowed_scopes:
-            return None
+            return None, "unauthorized_scope"
         record = await store.get(allowed_scopes[scope.scope_key], memory_id)
-        if record is None or record.scope.scope_key != scope.scope_key:
-            return None
+        if record is None:
+            return None, "store_missing"
+        if record.scope.scope_key != scope.scope_key:
+            return None, "scope_mismatch"
         if not _record_matches_filter(record, filters):
-            return None
-        return record
+            return None, "filter_mismatch"
+        return record, None
 
     for rank, hit in enumerate(base_hits, start=1):
-        record = await reload(hit.record.scope, hit.record.memory_id)
+        record, rejection = await reload(hit.record.scope, hit.record.memory_id)
         if record is None:
-            rejected_base_hits += 1
+            if rejection is None:  # pragma: no cover - defensive type narrowing
+                raise RuntimeError("rejected base hit has no rejection reason")
+            rejected_base_reasons[rejection] += 1
             continue
         key = (record.scope.scope_key, record.memory_id)
         records[key] = record
@@ -291,25 +320,29 @@ async def assemble_hybrid_retrieval_candidates(
     valid_paths: list[
         tuple[int, RelationPathRetrievalHit, list[tuple[str, str]]]
     ] = []
-    rejected_path_hits = 0
+    rejected_path_reasons: Counter[HybridRejectionReason] = Counter()
     for rank, hit in enumerate(path_hits, start=1):
         candidate = hit.candidate
         support_ids = candidate.supporting_memory_ids
-        if (
-            candidate.scope.scope_key not in allowed_scopes
-            or len(support_ids) > max_path_support
-        ):
-            rejected_path_hits += 1
+        if candidate.scope.scope_key not in allowed_scopes:
+            rejected_path_reasons["unauthorized_scope"] += 1
+            continue
+        if len(support_ids) > max_path_support:
+            rejected_path_reasons["path_support_limit"] += 1
             continue
         loaded: list[MemoryRecord] = []
+        path_rejection: HybridRejectionReason | None = None
         for memory_id in support_ids:
-            record = await reload(candidate.scope, memory_id)
+            record, rejection = await reload(candidate.scope, memory_id)
             if record is None:
                 loaded = []
+                path_rejection = rejection
                 break
             loaded.append(record)
         if len(loaded) != len(support_ids):
-            rejected_path_hits += 1
+            if path_rejection is None:  # pragma: no cover - defensive invariant
+                raise RuntimeError("rejected path hit has no rejection reason")
+            rejected_path_reasons[path_rejection] += 1
             continue
 
         keys: list[tuple[str, str]] = []
@@ -378,14 +411,16 @@ async def assemble_hybrid_retrieval_candidates(
         relation_paths=retained_paths,
         input_base_hits=len(base_hits),
         input_path_hits=len(path_hits),
-        rejected_base_hits=rejected_base_hits,
-        rejected_path_hits=rejected_path_hits,
+        rejected_base_hits=sum(rejected_base_reasons.values()),
+        rejected_path_hits=sum(rejected_path_reasons.values()),
+        rejected_base_reasons=dict(sorted(rejected_base_reasons.items())),
+        rejected_path_reasons=dict(sorted(rejected_path_reasons.items())),
         omitted_path_hits=omitted_path_hits,
         truncated=(
             len(selected) < len(records)
             or omitted_path_hits > 0
-            or rejected_base_hits > 0
-            or rejected_path_hits > 0
+            or bool(rejected_base_reasons)
+            or bool(rejected_path_reasons)
         ),
     )
 

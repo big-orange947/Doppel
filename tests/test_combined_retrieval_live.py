@@ -10,6 +10,7 @@ import pytest
 
 from benchmarks.combined_retrieval_live import (
     _complete_required_path_returned,
+    _selected_gate_passed,
     _summarize,
     exploration_quality_gate,
     load_topologies,
@@ -253,3 +254,43 @@ def test_exploration_gate_is_separate_from_failed_legacy_topology_gate() -> None
 
     assert gate["ok"] is True
     assert gate["legacy_topology_gate_required"] is False
+
+
+def test_exploration_gate_distinguishes_policy_rejection_from_store_failure() -> None:
+    rows = [
+        _row("one", "one_hop_relation", ["a"], ["a"]),
+        _row("two", "two_hop_relation", ["b", "c"], ["b", "c"]),
+        _row("semantic", "semantic_nonrelation", ["d"], ["d"]),
+        _row("temporal", "temporal_incomplete_path", [], [], answerable=False),
+    ]
+    profiles = {
+        "assembled_hybrid": _summarize(rows),
+        "assembled_hybrid_with_exploration": _summarize(rows),
+    }
+
+    policy_gate = exploration_quality_gate(
+        profiles,
+        Counter({"rejected_base_filter_mismatch": 4}),
+        graph_cleaned=True,
+        postgres_reset=True,
+    )
+    stale_gate = exploration_quality_gate(
+        profiles,
+        Counter({"rejected_base_store_missing": 1}),
+        graph_cleaned=True,
+        postgres_reset=True,
+    )
+
+    assert policy_gate["checks"]["store_revalidation_failures"] is True
+    assert stale_gate["checks"]["store_revalidation_failures"] is False
+
+
+def test_selected_gate_controls_exit_without_hiding_the_other_result() -> None:
+    report = {
+        "gate": {"ok": False},
+        "exploration_gate": {"ok": True},
+    }
+
+    assert _selected_gate_passed(report, "legacy") is False
+    assert _selected_gate_passed(report, "exploration") is True
+    assert _selected_gate_passed({"gate": {"ok": False}}, "exploration") is False
