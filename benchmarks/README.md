@@ -241,6 +241,32 @@ provider or live retrieval run in
 This suite is provider-unseen and frozen, but not author-hidden; it is a stronger
 development generalization check, not yet publication-grade independent evidence.
 
+Topology acquisition is deliberately resumable and exposes no partial quality score:
+
+```powershell
+$env:DOPPEL_API_KEY = "<provider key>"
+.\.venv\Scripts\python.exe -m benchmarks.combined_retrieval_acquire `
+  --live --max-new-calls 20
+```
+
+Repeat the same command until `status` becomes `complete`. The cache manifest rejects
+changes to the dataset/catalog fingerprints, V3 generator, model configuration, or
+implementation commit. Only then is the first topology report written. The live
+retrieval stage additionally requires the dedicated PostgreSQL/pgvector and Neo4j
+containers:
+
+```powershell
+$env:DOPPEL_ABLATION_PG_PASSWORD = "<local-only password>"
+$env:DOPPEL_NEO4J_PASSWORD = "<local-only password>"
+.\.venv\Scripts\python.exe -m benchmarks.combined_retrieval_live
+```
+
+The live runner refuses partial or fingerprint-mismatched topology reports and compares
+independent lexical + pgvector, generated typed paths, and their bounded hybrid. It
+keeps topology quality, evidence recall@5, complete evidence@10, two-hop gain, semantic
+recall, hard-forbidden evidence, lifecycle/authority, scope, provenance, cleanup,
+context size, source attribution, and p50/p95/p99 latency separately observable.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

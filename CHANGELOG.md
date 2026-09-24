@@ -13,6 +13,12 @@
   same 36 scopes, 3,600 memories, topology, labels, and time boundaries but 144 unique
   provider inputs, plus a resumable acquisition harness bound to dataset/catalog,
   generator, provider configuration, and implementation commit.
+- Add the corresponding live combined-retrieval runner. It refuses incomplete or
+  fingerprint-mismatched topology reports, runs PostgreSQL/pgvector and live
+  Neo4j/Graphiti against the same exact scopes, and independently gates topology
+  quality, Recall@5, complete evidence@10, two-hop gain, semantic recall, hard
+  forbidden evidence, lifecycle/authority, scope, provenance, context bounds, and
+  backend cleanup while reporting tail latency and source attribution.
 
 - Add an experimental Store-revalidated assembly for independent memory hits and
   typed relation paths. It reserves independent recall, retains paths atomically,
