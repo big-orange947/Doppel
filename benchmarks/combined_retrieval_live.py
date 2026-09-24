@@ -59,10 +59,13 @@ from doppel_memory.query import (
     PersonalMemoryQueryRequest,
 )
 from doppel_memory.query_path import PersonalMemoryRelationPathDraftV4
+from doppel_memory.relation import RelationPathCandidate, RelationPathExploreQuery
 from doppel_memory.relation_path_retrieval import (
     CandidateRelationTopology,
     assemble_hybrid_retrieval_candidates,
     build_relation_path_retrieval_plan,
+    merge_relation_path_hits,
+    rank_explored_relation_paths,
     search_relation_path_routes,
 )
 
@@ -71,7 +74,13 @@ DEFAULT_DATASET = ROOT / "benchmarks/datasets/combined-retrieval-zh-v2.json"
 DEFAULT_TOPOLOGY = ROOT / "data/doppel/combined-retrieval-v2-topology.json"
 DEFAULT_OUTPUT = ROOT / "data/doppel/combined-retrieval-v2-live.json"
 RUNNER = "doppel.combined-retrieval-live.v1"
-PROFILES = ("independent_lexical_vector", "typed_path", "assembled_hybrid")
+PROFILES = (
+    "independent_lexical_vector",
+    "typed_path",
+    "explored_path",
+    "assembled_hybrid",
+    "assembled_hybrid_with_exploration",
+)
 FILTERS = MemoryFilter(
     tags={"personal-memory"},
     states={MemoryState.CONFIRMED},
@@ -84,6 +93,17 @@ RETRIEVAL_THRESHOLDS = {
     "min_two_hop_complete_evidence_rate_at_10": 0.65,
     "min_semantic_recall_at_5": 0.75,
     "min_two_hop_complete_gain": 0.05,
+    "max_hard_forbidden_hits": 0,
+    "max_scope_leakage": 0,
+    "max_ineligible_hits": 0,
+    "max_orphan_provenance": 0,
+    "max_temporal_complete_path_failures": 0,
+    "max_store_revalidation_failures": 0,
+    "max_path_budget_omissions": 0,
+    "max_candidates_per_query": 20,
+}
+EXPLORATION_THRESHOLDS = {
+    "min_two_hop_complete_gain": 0.15,
     "max_hard_forbidden_hits": 0,
     "max_scope_leakage": 0,
     "max_ineligible_hits": 0,
@@ -229,6 +249,7 @@ async def run_live(
         name: [] for name in PROFILES
     }
     assembly_totals: Counter[str] = Counter()
+    exploration_assembly_totals: Counter[str] = Counter()
     graph_cleaned = False
     postgres_reset = False
     graph_write_attempted = False
@@ -292,6 +313,34 @@ async def run_live(
             )
             path_latency = (time.perf_counter() - path_started) * 1000
 
+            exploration_started = time.perf_counter()
+            explored_candidates = (
+                await graph_index.explore_relation_paths(
+                    RelationPathExploreQuery(
+                        query_text=case.query,
+                        entity_mentions=case.entity_mentions,
+                        allowed_relation_types=dataset.relation_types,
+                        subject=Actor.OWNER,
+                        subject_id=scope.user_id,
+                        valid_at=valid_at,
+                    ),
+                    [scope],
+                    filters=FILTERS,
+                    limit=20,
+                )
+                if case.entity_mentions
+                else []
+            )
+            explored_hits = rank_explored_relation_paths(
+                explored_candidates, limit=20
+            )
+            exploration_latency = (
+                time.perf_counter() - exploration_started
+            ) * 1000
+            combined_path_hits = merge_relation_path_hits(
+                path_hits, explored_hits, limit=20
+            )
+
             assembly_started = time.perf_counter()
             assembly = await assemble_hybrid_retrieval_candidates(
                 store,
@@ -313,6 +362,29 @@ async def run_live(
                 }
             )
 
+            exploration_assembly_started = time.perf_counter()
+            exploration_assembly = await assemble_hybrid_retrieval_candidates(
+                store,
+                base_result.hits,
+                combined_path_hits,
+                [scope],
+                filters=FILTERS,
+                limit=20,
+                base_reserve=5,
+            )
+            exploration_assembly_latency = (
+                time.perf_counter() - exploration_assembly_started
+            ) * 1000
+            exploration_assembly_totals.update(
+                {
+                    "rejected_base_hits": exploration_assembly.rejected_base_hits,
+                    "rejected_path_hits": exploration_assembly.rejected_path_hits,
+                    "omitted_path_hits": exploration_assembly.omitted_path_hits,
+                    "truncated_queries": int(exploration_assembly.truncated),
+                    "retained_paths": len(exploration_assembly.relation_paths),
+                }
+            )
+
             base_ids = [hit.record.memory_id for hit in base_result.hits]
             path_ids = list(
                 dict.fromkeys(
@@ -321,7 +393,17 @@ async def run_live(
                     for memory_id in hit.candidate.supporting_memory_ids
                 )
             )
+            explored_ids = list(
+                dict.fromkeys(
+                    memory_id
+                    for candidate in explored_candidates
+                    for memory_id in candidate.supporting_memory_ids
+                )
+            )
             hybrid_ids = [item.record.memory_id for item in assembly.candidates]
+            exploration_hybrid_ids = [
+                item.record.memory_id for item in exploration_assembly.candidates
+            ]
             for profile, ids, result_scopes, latency, sources, path_returned in (
                 (
                     "independent_lexical_vector",
@@ -340,12 +422,40 @@ async def run_live(
                     bool(path_hits),
                 ),
                 (
+                    "explored_path",
+                    explored_ids,
+                    [candidate.scope.scope_key for candidate in explored_candidates],
+                    exploration_latency,
+                    [["relation_path:exploration"] for _ in explored_ids],
+                    _complete_required_path_returned(case, explored_candidates),
+                ),
+                (
                     "assembled_hybrid",
                     hybrid_ids,
                     [item.record.scope.scope_key for item in assembly.candidates],
                     base_latency + path_latency + assembly_latency,
                     [item.discovery_sources for item in assembly.candidates],
                     bool(path_hits),
+                ),
+                (
+                    "assembled_hybrid_with_exploration",
+                    exploration_hybrid_ids,
+                    [
+                        item.record.scope.scope_key
+                        for item in exploration_assembly.candidates
+                    ],
+                    base_latency
+                    + path_latency
+                    + exploration_latency
+                    + exploration_assembly_latency,
+                    [
+                        item.discovery_sources
+                        for item in exploration_assembly.candidates
+                    ],
+                    _complete_required_path_returned(
+                        case,
+                        [hit.candidate for hit in combined_path_hits],
+                    ),
                 ),
             ):
                 rows_by_profile[profile].append(
@@ -412,6 +522,12 @@ async def run_live(
         graph_cleaned=graph_cleaned,
         postgres_reset=postgres_reset,
     )
+    exploration_gate = exploration_quality_gate(
+        profiles,
+        exploration_assembly_totals,
+        graph_cleaned=graph_cleaned,
+        postgres_reset=postgres_reset,
+    )
     return {
         "result_schema_version": 1,
         "runner": RUNNER,
@@ -445,6 +561,7 @@ async def run_live(
         },
         "profiles": profiles,
         "assembly": dict(assembly_totals),
+        "exploration_assembly": dict(exploration_assembly_totals),
         "gain": {
             "evidence_recall_at_5": round(
                 profiles["assembled_hybrid"]["evidence_recall_at_5"]
@@ -468,8 +585,55 @@ async def run_live(
                 6,
             ),
         },
+        "exploration_gain": {
+            "evidence_recall_at_5_vs_typed_hybrid": round(
+                profiles["assembled_hybrid_with_exploration"][
+                    "evidence_recall_at_5"
+                ]
+                - profiles["assembled_hybrid"]["evidence_recall_at_5"],
+                6,
+            ),
+            "complete_evidence_rate_at_10_vs_typed_hybrid": round(
+                profiles["assembled_hybrid_with_exploration"][
+                    "complete_evidence_rate_at_10"
+                ]
+                - profiles["assembled_hybrid"]["complete_evidence_rate_at_10"],
+                6,
+            ),
+            "two_hop_complete_rate_at_10_vs_typed_hybrid": round(
+                profiles["assembled_hybrid_with_exploration"]["by_category"][
+                    "two_hop_relation"
+                ]["complete_evidence_rate_at_10"]
+                - profiles["assembled_hybrid"]["by_category"][
+                    "two_hop_relation"
+                ]["complete_evidence_rate_at_10"],
+                6,
+            ),
+        },
+        "exploration_gate": exploration_gate,
         "gate": gate,
     }
+
+
+def _complete_required_path_returned(
+    case: CombinedQuery, candidates: Sequence[RelationPathCandidate]
+) -> bool:
+    """Evaluate complete structural coverage without treating partial paths as proof."""
+
+    required = {
+        tuple(
+            (tuple(step.relation_types), step.direction)
+            for step in route
+        )
+        for route in case.required_routes
+    }
+    if not required:
+        return False
+    observed = {
+        tuple(((hop.relation_type,), hop.direction) for hop in candidate.hops)
+        for candidate in candidates
+    }
+    return bool(required.intersection(observed))
 
 
 def _record(item: CombinedMemory, scope: MemoryScope) -> MemoryRecord:
@@ -782,6 +946,66 @@ def retrieval_quality_gate(
         "checks": checks,
         "failures": [name for name, passed in checks.items() if not passed],
         "thresholds": RETRIEVAL_THRESHOLDS,
+    }
+
+
+def exploration_quality_gate(
+    profiles: dict[str, dict[str, Any]],
+    assembly: Counter[str],
+    *,
+    graph_cleaned: bool,
+    postgres_reset: bool,
+) -> dict[str, Any]:
+    """Gate additive exploration against the already-opened typed-only baseline."""
+
+    typed = profiles["assembled_hybrid"]
+    explored = profiles["assembled_hybrid_with_exploration"]
+    two_hop_gain = (
+        explored["by_category"]["two_hop_relation"][
+            "complete_evidence_rate_at_10"
+        ]
+        - typed["by_category"]["two_hop_relation"][
+            "complete_evidence_rate_at_10"
+        ]
+    )
+    checks = {
+        "recall_non_regression": explored["evidence_recall_at_5"]
+        >= typed["evidence_recall_at_5"],
+        "complete_evidence_non_regression": explored[
+            "complete_evidence_rate_at_10"
+        ]
+        >= typed["complete_evidence_rate_at_10"],
+        "semantic_non_regression": explored["by_category"][
+            "semantic_nonrelation"
+        ]["evidence_recall_at_5"]
+        >= typed["by_category"]["semantic_nonrelation"]["evidence_recall_at_5"],
+        "two_hop_complete_gain": two_hop_gain
+        >= EXPLORATION_THRESHOLDS["min_two_hop_complete_gain"],
+        "hard_forbidden_hits": explored["hard_forbidden_hits"] == 0,
+        "scope_leakage": explored["scope_leakage"] == 0,
+        "ineligible_hits": explored["ineligible_hits"] == 0,
+        "orphan_provenance": explored["orphan_provenance"] == 0,
+        "temporal_complete_path_failures": explored[
+            "temporal_complete_path_failures"
+        ]
+        == 0,
+        "store_revalidation_failures": (
+            assembly["rejected_base_hits"] + assembly["rejected_path_hits"]
+        )
+        == 0,
+        "path_budget_omissions": assembly["omitted_path_hits"] == 0,
+        "candidate_bound": explored["max_candidates"]
+        <= EXPLORATION_THRESHOLDS["max_candidates_per_query"],
+        "neo4j_cleanup": graph_cleaned,
+        "postgres_cleanup": postgres_reset,
+    }
+    return {
+        "ok": all(checks.values()),
+        "checks": checks,
+        "failures": [name for name, passed in checks.items() if not passed],
+        "thresholds": EXPLORATION_THRESHOLDS,
+        "two_hop_complete_gain": round(two_hop_gain, 6),
+        "legacy_topology_gate_required": False,
     }
 
 

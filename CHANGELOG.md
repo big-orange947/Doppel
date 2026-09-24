@@ -22,6 +22,11 @@
   explored graph paths are deduplicated by scope, edge IDs, and directions; repeated
   results from one source cannot stack score, while cross-source attribution remains
   visible to hybrid assembly as `relation_path:exploration`.
+- Extend the frozen combined live runner with additive explored-path and
+  exploration-enhanced hybrid profiles while leaving the legacy typed-only profiles
+  and gate unchanged. Pre-register a separate exploration gate requiring at least
+  +0.15 two-hop complete-evidence gain, semantic/overall non-regression, a 20-item
+  context bound, zero authority/scope/time/provenance violations, and backend cleanup.
 - Add the frozen, deterministic `doppel-combined-retrieval-zh-v1` corpus: 144 queries,
   36 exact owner scopes, and 3,600 memories with one-hop/two-hop relations, independent
   semantic questions, temporal incomplete paths, repeated cross-owner entity names,
