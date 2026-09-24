@@ -144,7 +144,9 @@ class RelationPathRetrievalHit(BaseModel):
 
     candidate: RelationPathCandidate
     route_indexes: list[int] = Field(min_length=1)
-    route_modes: list[Literal["exact", "candidate"]] = Field(min_length=1)
+    route_modes: list[Literal["exact", "candidate", "exploration"]] = Field(
+        min_length=1
+    )
     rrf_score: float = Field(gt=0.0)
 
 
@@ -320,6 +322,8 @@ async def assemble_hybrid_retrieval_candidates(
             path_ranks[key].append(rank)
             path_ids[key].append(candidate.path_id)
             _extend_unique(discovery_sources[key], ["relation_path"])
+            if "exploration" in hit.route_modes:
+                _extend_unique(discovery_sources[key], ["relation_path:exploration"])
         valid_paths.append((rank, hit, keys))
 
     def combined_score(key: tuple[str, str]) -> float:
@@ -490,7 +494,7 @@ async def search_relation_path_routes(
     ] = defaultdict(list)
     route_modes: defaultdict[
         tuple[str, tuple[str, ...], tuple[str, ...]],
-        list[Literal["exact", "candidate"]],
+        list[Literal["exact", "candidate", "exploration"]],
     ] = defaultdict(list)
     scores_by_mode: defaultdict[
         tuple[str, tuple[str, ...], tuple[str, ...]],
@@ -560,6 +564,96 @@ async def search_relation_path_routes(
             route_indexes=route_indexes[key],
             route_modes=route_modes[key],
             rrf_score=sum(scores_by_mode[key].values()),
+        )
+        for key in ordered
+    ]
+
+
+def rank_explored_relation_paths(
+    candidates: Sequence[RelationPathCandidate],
+    *,
+    limit: int = 10,
+    rrf_k: int = 60,
+) -> list[RelationPathRetrievalHit]:
+    """Wrap Store-revalidated exploration results for bounded hybrid assembly."""
+
+    if limit <= 0:
+        return []
+    if rrf_k < 1:
+        raise ValueError("rrf_k must be positive")
+    unique: dict[
+        tuple[str, tuple[str, ...], tuple[str, ...]], RelationPathCandidate
+    ] = {}
+    for candidate in candidates:
+        key = _candidate_key(candidate)
+        existing = unique.get(key)
+        if existing is None or candidate.score > existing.score:
+            unique[key] = candidate
+    ordered = sorted(
+        unique.values(),
+        key=lambda item: (-item.score, item.scope.scope_key, item.path_id),
+    )[:limit]
+    return [
+        RelationPathRetrievalHit(
+            candidate=candidate,
+            route_indexes=[0],
+            route_modes=["exploration"],
+            rrf_score=1.0 / (rrf_k + rank),
+        )
+        for rank, candidate in enumerate(ordered, start=1)
+    ]
+
+
+def merge_relation_path_hits(
+    *groups: Sequence[RelationPathRetrievalHit],
+    limit: int = 10,
+) -> list[RelationPathRetrievalHit]:
+    """Merge typed and explored paths without duplicate-source score inflation."""
+
+    if limit <= 0:
+        return []
+    candidates: dict[
+        tuple[str, tuple[str, ...], tuple[str, ...]], RelationPathCandidate
+    ] = {}
+    scores: defaultdict[
+        tuple[str, tuple[str, ...], tuple[str, ...]],
+        dict[Literal["exact", "candidate", "exploration"], float],
+    ] = defaultdict(dict)
+    indexes: defaultdict[
+        tuple[str, tuple[str, ...], tuple[str, ...]], list[int]
+    ] = defaultdict(list)
+    modes: defaultdict[
+        tuple[str, tuple[str, ...], tuple[str, ...]],
+        list[Literal["exact", "candidate", "exploration"]],
+    ] = defaultdict(list)
+    for group in groups:
+        for hit in group:
+            key = _candidate_key(hit.candidate)
+            existing = candidates.get(key)
+            if existing is None or hit.candidate.score > existing.score:
+                candidates[key] = hit.candidate
+            for route_index in hit.route_indexes:
+                if route_index not in indexes[key]:
+                    indexes[key].append(route_index)
+            for mode in hit.route_modes:
+                scores[key][mode] = max(scores[key].get(mode, 0.0), hit.rrf_score)
+                if mode not in modes[key]:
+                    modes[key].append(mode)
+    ordered = sorted(
+        candidates,
+        key=lambda key: (
+            -sum(scores[key].values()),
+            -candidates[key].score,
+            candidates[key].scope.scope_key,
+            candidates[key].path_id,
+        ),
+    )[:limit]
+    return [
+        RelationPathRetrievalHit(
+            candidate=candidates[key],
+            route_indexes=indexes[key] or [0],
+            route_modes=modes[key],
+            rrf_score=sum(scores[key].values()),
         )
         for key in ordered
     ]

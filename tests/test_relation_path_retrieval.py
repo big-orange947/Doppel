@@ -21,7 +21,10 @@ from doppel_memory.relation_path_retrieval import (
     CandidateRelationTopology,
     RelationPathCandidateLimitError,
     RelationPathCandidateOntologyError,
+    RelationPathRetrievalHit,
     build_relation_path_retrieval_plan,
+    merge_relation_path_hits,
+    rank_explored_relation_paths,
     search_relation_path_routes,
 )
 
@@ -270,6 +273,57 @@ def _candidate(
         ],
         supporting_memory_ids=[memory_id],
     )
+
+
+def test_explored_path_ranking_deduplicates_and_marks_source() -> None:
+    scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
+    lower = _candidate(
+        scope,
+        path_id="lower",
+        edge_id="edge-shared",
+        relation_type="LOCATED_AT",
+        memory_id="m-shared",
+        score=0.4,
+    )
+    higher = lower.model_copy(update={"path_id": "higher", "score": 0.9})
+
+    hits = rank_explored_relation_paths([lower, higher])
+
+    assert len(hits) == 1
+    assert hits[0].candidate.path_id == "higher"
+    assert hits[0].route_modes == ["exploration"]
+    assert hits[0].rrf_score == pytest.approx(1 / 61)
+
+
+def test_path_hit_merge_preserves_sources_without_duplicate_mode_inflation() -> None:
+    scope = MemoryScope(user_id="owner-1", agent_id="agent-1")
+    candidate = _candidate(
+        scope,
+        path_id="shared",
+        edge_id="edge-shared",
+        relation_type="LOCATED_AT",
+        memory_id="m-shared",
+        score=0.8,
+    )
+    typed = RelationPathRetrievalHit(
+        candidate=candidate,
+        route_indexes=[0],
+        route_modes=["candidate"],
+        rrf_score=0.02,
+    )
+    duplicate_typed = typed.model_copy(update={"rrf_score": 0.01})
+    explored = RelationPathRetrievalHit(
+        candidate=candidate,
+        route_indexes=[0],
+        route_modes=["exploration"],
+        rrf_score=0.03,
+    )
+
+    hits = merge_relation_path_hits([typed, duplicate_typed], [explored])
+
+    assert len(hits) == 1
+    assert hits[0].route_modes == ["candidate", "exploration"]
+    assert hits[0].rrf_score == pytest.approx(0.05)
 
 
 @pytest.mark.asyncio

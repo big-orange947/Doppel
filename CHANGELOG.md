@@ -18,6 +18,10 @@
   still requires Episode provenance plus authoritative Store revalidation. Hop-count
   and terminal-type preferences affect ranking only; results remain unassessed
   candidates and do not replace independent vector retrieval.
+- Add source-aware ranking and fusion for explored paths. Identical typed and
+  explored graph paths are deduplicated by scope, edge IDs, and directions; repeated
+  results from one source cannot stack score, while cross-source attribution remains
+  visible to hybrid assembly as `relation_path:exploration`.
 - Add the frozen, deterministic `doppel-combined-retrieval-zh-v1` corpus: 144 queries,
   36 exact owner scopes, and 3,600 memories with one-hop/two-hop relations, independent
   semantic questions, temporal incomplete paths, repeated cross-owner entity names,

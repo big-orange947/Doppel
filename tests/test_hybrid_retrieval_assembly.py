@@ -167,6 +167,31 @@ async def test_assembly_caps_overlapping_path_rank_instead_of_stacking_it() -> N
 
 
 @pytest.mark.asyncio
+async def test_assembly_attributes_exploration_without_granting_answer_support() -> None:
+    store = InMemoryStore()
+    record = _record("m-explored")
+    await _put(store, record)
+    explored = _path_hit(["m-explored"], path_id="p-explored").model_copy(
+        update={"route_modes": ["exploration"]}
+    )
+
+    result = await assemble_hybrid_retrieval_candidates(
+        store,
+        [],
+        [explored],
+        [SCOPE],
+        filters=FILTERS,
+    )
+
+    assert len(result.candidates) == 1
+    assert result.candidates[0].discovery_sources == [
+        "relation_path",
+        "relation_path:exploration",
+    ]
+    assert result.candidates[0].answer_support == "unassessed"
+
+
+@pytest.mark.asyncio
 async def test_assembly_rejects_whole_path_when_one_support_is_ineligible() -> None:
     store = InMemoryStore()
     confirmed = _record("m-confirmed")
