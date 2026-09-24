@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add the frozen, deterministic `doppel-combined-retrieval-zh-v1` corpus: 144 queries,
+  36 exact owner scopes, and 3,600 memories with one-hop/two-hop relations, independent
+  semantic questions, temporal incomplete paths, repeated cross-owner entity names,
+  and lifecycle/authority distractors. Pre-register provider-resume integrity plus
+  topology, retrieval, isolation, time, provenance, and non-regression gates before
+  any provider or live-backend result is opened.
+
 - Add an experimental Store-revalidated assembly for independent memory hits and
   typed relation paths. It reserves independent recall, retains paths atomically,
   caps duplicate path rank, preserves path provenance, and leaves answer support
