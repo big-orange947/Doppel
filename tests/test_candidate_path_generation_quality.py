@@ -195,6 +195,98 @@ def test_review_generator_repairs_a_missing_intermediate_hop() -> None:
     assert "memory_id" not in str(review_input)
 
 
+def test_review_generator_can_repair_invalid_self_loop_from_first_pass() -> None:
+    initial = {
+        "topologies": [
+            {
+                "atoms": [
+                    {
+                        "relation_types": ["ADOPTED_FROM"],
+                        "source_ref": "answer",
+                        "target_ref": "anchor",
+                    },
+                    {
+                        "relation_types": ["OWNED_BY"],
+                        "source_ref": "answer",
+                        "target_ref": "answer",
+                    },
+                ],
+                "confidence": 0.3,
+            }
+        ],
+        "scope": "all-users",
+        "memory_id": "must-not-reach-review",
+    }
+    reviewed = {
+        "topologies": [
+            {
+                "atoms": [
+                    {
+                        "relation_types": ["ADOPTED_FROM"],
+                        "source_ref": "pet",
+                        "target_ref": "anchor",
+                    },
+                    {
+                        "relation_types": ["OWNED_BY"],
+                        "source_ref": "pet",
+                        "target_ref": "answer",
+                    },
+                ],
+                "confidence": 0.8,
+            }
+        ]
+    }
+    model = SequenceModel([initial, reviewed])
+
+    observation = asyncio.run(
+        ReferenceCandidateRelationPathGeneratorV3(model).generate(
+            CandidateRelationGenerationRequest(
+                query="从救助站领养的宠物归谁所有？",
+                anchor="救助站",
+                relation_type_definitions=load_relation_catalog(CATALOG),
+            )
+        )
+    )
+
+    assert observation.model_dump(mode="json") == reviewed
+    review_draft = model.requests[1].input["candidate_observation"]
+    assert review_draft["topologies"][0]["atoms"][1] == {
+        "relation_types": ["OWNED_BY"],
+        "source_ref": "answer",
+        "target_ref": "answer",
+    }
+    assert "scope" not in str(model.requests[1].input)
+    assert "memory_id" not in str(model.requests[1].input)
+
+
+def test_review_generator_still_rejects_invalid_reviewed_result() -> None:
+    invalid = {
+        "topologies": [
+            {
+                "atoms": [
+                    {
+                        "relation_types": ["MADE_UP"],
+                        "source_ref": "anchor",
+                        "target_ref": "answer",
+                    }
+                ]
+            }
+        ]
+    }
+    model = SequenceModel([_observation("LOCATED_AT"), invalid])
+
+    with pytest.raises(ValueError, match="unknown relation types"):
+        asyncio.run(
+            ReferenceCandidateRelationPathGeneratorV3(model).generate(
+                CandidateRelationGenerationRequest(
+                    query="收音机在哪里？",
+                    anchor="收音机",
+                    relation_type_definitions=load_relation_catalog(CATALOG),
+                )
+            )
+        )
+
+
 def test_planner_backbone_converts_compiled_directions_to_atoms() -> None:
     topologies = _candidate_topologies_from_steps(
         [

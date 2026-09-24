@@ -6,7 +6,8 @@ candidate supports an answer. The host compiles and executes paths separately.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Mapping
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -138,20 +139,19 @@ class ReferenceCandidateRelationPathGeneratorV3:
     """Generate once, review once, and leave compilation to trusted host code."""
 
     name = "doppel.reference-candidate-relation-path-generator-v3"
-    version = "1"
+    version = "2"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
-        self.version = f"1:{model.name}:{model.version}"
+        self.version = f"2:{model.name}:{model.version}"
 
     async def generate(
         self, request: CandidateRelationGenerationRequest
     ) -> CandidateRelationObservation:
         bound = CandidateRelationGenerationRequest.model_validate(request)
         initial_raw = await self.model.generate(_candidate_generation_request(bound))
-        initial = _validate_candidate_observation(initial_raw, bound)
         review_input = bound.model_dump(mode="json")
-        review_input["candidate_observation"] = initial.model_dump(mode="json")
+        review_input["candidate_observation"] = _candidate_review_payload(initial_raw)
         reviewed_raw = await self.model.generate(
             StructuredGenerationRequest(
                 instructions=(
@@ -163,6 +163,50 @@ class ReferenceCandidateRelationPathGeneratorV3:
             )
         )
         return _validate_candidate_observation(reviewed_raw, bound)
+
+
+def _candidate_review_payload(raw: object) -> dict[str, Any]:
+    """Project an untrusted first pass into a bounded, content-only review draft.
+
+    The purpose of the second pass is to repair malformed candidate structure.  A
+    strict first-pass validation would prevent that repair.  At the same time, raw
+    model output must not be allowed to smuggle scope, memory IDs, execution fields,
+    or arbitrary instructions into the review request.  Keep only the candidate
+    observation vocabulary and enforce the same outer resource bounds here; the
+    reviewed result is still validated strictly afterwards.
+    """
+
+    if isinstance(raw, BaseModel):
+        raw = raw.model_dump(mode="json", warnings=False)
+    if not isinstance(raw, Mapping):
+        return {"topologies": []}
+    raw_topologies = raw.get("topologies")
+    if not isinstance(raw_topologies, list):
+        return {"topologies": []}
+
+    topologies: list[dict[str, Any]] = []
+    for raw_topology in raw_topologies[:8]:
+        if not isinstance(raw_topology, Mapping):
+            continue
+        projected: dict[str, Any] = {}
+        raw_atoms = raw_topology.get("atoms")
+        if isinstance(raw_atoms, list):
+            atoms: list[dict[str, Any]] = []
+            for raw_atom in raw_atoms[:8]:
+                if not isinstance(raw_atom, Mapping):
+                    continue
+                atoms.append(
+                    {
+                        name: raw_atom[name]
+                        for name in ("relation_types", "source_ref", "target_ref")
+                        if name in raw_atom
+                    }
+                )
+            projected["atoms"] = atoms
+        if "confidence" in raw_topology:
+            projected["confidence"] = raw_topology["confidence"]
+        topologies.append(projected)
+    return {"topologies": topologies}
 
 
 def _candidate_generation_request(
