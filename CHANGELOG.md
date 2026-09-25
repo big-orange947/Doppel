@@ -24,7 +24,12 @@
   evidence and safety gates but shows that literal binding alone cannot distinguish
   several same-entity facts. Extend the frozen runner—not the dataset—with a separately
   reported bounded Graphiti exploration branch so unsupported requested predicates can
-  still surface typed adjacent context without being treated as answer proof.
+  still surface typed adjacent context without being treated as answer proof. Preserve
+  the final pre-sealed dev run: the highest-quality profile reached 1.000 evidence
+  recall@5, complete evidence@10, related-context recall@10, and exact episode-count
+  accuracy with MRR 0.958 and zero safety violations. Its only failed gate is the
+  deliberate dev-only selection check; the runner and thresholds remain frozen before
+  the all-partition first run.
 - Add a separately gated full-corpus profile that reranks only the independent
   lexical/vector branch before atomic fusion with typed and explored Graphiti paths.
   It freezes non-regression requirements for one-hop, two-hop, temporal, overall, and

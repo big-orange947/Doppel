@@ -390,6 +390,15 @@ may discover related context but never claims answer support. The committed
 [`heterogeneous-retrieval-result.schema.json`](heterogeneous-retrieval-result.schema.json)
 binds the result envelope and safety accounting.
 
+The final pre-sealed dev result is preserved in
+[`reports/heterogeneous-retrieval-v3-exploration-dev-result-2026-09-25.md`](reports/heterogeneous-retrieval-v3-exploration-dev-result-2026-09-25.md).
+On 120 open queries, the highest-quality profile reached 1.000 evidence recall@5,
+complete evidence@10, related-context recall@10, and exact episode-count accuracy,
+with MRR 0.958 and zero isolation, eligibility, temporal, provenance, or membership
+violations. Bounded exploration raised related-context recall from 0.250 to 1.000
+without treating explored context as answer proof. This remains a development result;
+the all-partition first run is the independently meaningful generalization check.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate
