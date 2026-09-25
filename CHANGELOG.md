@@ -6,7 +6,10 @@
   lexical/vector branch before atomic fusion with typed and explored Graphiti paths.
   It freezes non-regression requirements for one-hop, two-hop, temporal, overall, and
   MRR quality plus strict reorder-only, eligibility, isolation, provenance, candidate
-  bound, and backend-cleanup checks before opening the 144-query GPU result.
+  bound, and backend-cleanup checks before opening the 144-query GPU result. The first
+  frozen run passed every gate and reached 1.000 evidence recall@5 plus complete
+  evidence@10 overall and in all four categories; MRR rose from 0.616 to 0.796, while
+  p50/p95 increased from 150.8/192.9 ms to 419.6/542.7 ms.
 - Add a frozen semantic-only overfetch and whole-memory reranking ablation for the
   combined V2 corpus. It distinguishes index/score-gate misses from ranking errors,
   verifies the existing personal-memory reranker is strictly reorder-only, and keeps

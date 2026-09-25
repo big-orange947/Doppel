@@ -320,6 +320,15 @@ D:\project\.doppel-eval-cu128\Scripts\python.exe `
   --gate reranking
 ```
 
+The first frozen full result is recorded in
+[`reports/combined-retrieval-memory-rerank-first-live-2026-09-25.md`](reports/combined-retrieval-memory-rerank-first-live-2026-09-25.md).
+The highest-quality profile reached 1.000 evidence recall@5 and complete evidence@10
+overall and in each of the one-hop, two-hop, temporal, and semantic categories. MRR
+rose from 0.616 to 0.796, with zero membership, isolation, eligibility, provenance,
+time, or path-atomicity violations. The quality premium raised p50 from 150.8 ms to
+419.6 ms and p95 from 192.9 ms to 542.7 ms, so reranking remains an opt-in quality
+profile rather than the unconditional default.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate
