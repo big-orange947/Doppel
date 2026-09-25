@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Serialize database-global pgvector extension discovery and creation with a
+  PostgreSQL transaction advisory lock. `CREATE EXTENSION IF NOT EXISTS` alone still
+  races on `pg_extension_name_index` when independent processes initialize the first
+  vector profile simultaneously; the new lock composes with the existing
+  profile-specific migration lock and preserves lazy optional setup.
 - Add a preregistered multi-instance reliability gate for the highest-configuration
   backend stack. Its deterministic live workload covers concurrent PostgreSQL schema
   initialization and scope-local idempotency, optimistic lifecycle races, shared

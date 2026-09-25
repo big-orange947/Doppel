@@ -404,10 +404,22 @@ class PostgreSQLVectorIndex:
                 return
             pool = await self._store._ensure_pool()
             async with pool.acquire() as connection:
-                extension = await self._find_extension(connection)
-                if extension is None and self._config.create_extension:
-                    await connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                # ``CREATE EXTENSION IF NOT EXISTS`` is not concurrency-safe across
+                # independent PostgreSQL sessions: simultaneous first-use attempts
+                # can still race on ``pg_extension_name_index``.  Serialize only the
+                # database-global discovery/create step, then let the profile-specific
+                # migration lock below coordinate its own tables and indexes.
+                async with connection.transaction():
+                    await connection.execute(
+                        "SELECT pg_advisory_xact_lock(hashtext($1))",
+                        "doppel-vector-extension:vector",
+                    )
                     extension = await self._find_extension(connection)
+                    if extension is None and self._config.create_extension:
+                        await connection.execute(
+                            "CREATE EXTENSION IF NOT EXISTS vector"
+                        )
+                        extension = await self._find_extension(connection)
                 if extension is None:
                     raise VectorIndexUnavailableError(
                         "pgvector is not enabled in this database; provision the server "

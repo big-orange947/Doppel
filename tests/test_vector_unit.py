@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import AbstractAsyncContextManager
+from types import MethodType
+from typing import Any
 
 import pytest
 
@@ -86,6 +89,63 @@ class FakeTemporalSemanticIndex(FakeSemanticIndex):
         return await super().search(
             query, scopes, filters=filters, limit=limit
         )
+
+
+class _FakeTransaction(AbstractAsyncContextManager):
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    async def __aenter__(self):
+        self.events.append("transaction:enter")
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        del exc_type, exc, traceback
+        self.events.append("transaction:exit")
+
+
+class _FakeAcquire(AbstractAsyncContextManager):
+    def __init__(self, connection: Any) -> None:
+        self.connection = connection
+
+    async def __aenter__(self):
+        return self.connection
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        del exc_type, exc, traceback
+
+
+class _VectorInitConnection:
+    def __init__(self) -> None:
+        self.events: list[str] = []
+        self.extension_exists = False
+
+    def transaction(self) -> _FakeTransaction:
+        return _FakeTransaction(self.events)
+
+    async def execute(self, sql: str, *params: object) -> None:
+        if "pg_advisory_xact_lock" in sql:
+            self.events.append(f"lock:{params[0]}")
+        elif "CREATE EXTENSION" in sql:
+            self.events.append("create-extension")
+            self.extension_exists = True
+        else:
+            raise AssertionError(sql)
+
+    async def fetchrow(self, sql: str):
+        assert "pg_extension" in sql
+        self.events.append("find-extension")
+        if not self.extension_exists:
+            return None
+        return {"extversion": "0.8.6", "nspname": "public"}
+
+
+class _VectorInitPool:
+    def __init__(self, connection: _VectorInitConnection) -> None:
+        self.connection = connection
+
+    def acquire(self) -> _FakeAcquire:
+        return _FakeAcquire(self.connection)
 
 
 def _recall(memory_id: str, fact: str, scope: MemoryScope = SCOPE) -> RecallResult:
@@ -191,6 +251,48 @@ async def test_asymmetric_query_embeddings_are_explicit_and_namespaced() -> None
     assert query_vectors == [[0.0, 1.0, 0.0]]
     assert provider.document_calls == [["document"]]
     assert provider.query_calls == [["question"]]
+
+
+async def test_vector_initialization_locks_database_global_extension_creation(
+    monkeypatch,
+) -> None:
+    from doppel_memory import PostgreSQLStore
+
+    store = PostgreSQLStore("postgresql://unused")
+    connection = _VectorInitConnection()
+    pool = _VectorInitPool(connection)
+
+    async def ensure_pool(_self):
+        return pool
+
+    monkeypatch.setattr(store, "_ensure_pool", MethodType(ensure_pool, store))
+    index = PostgreSQLVectorIndex(
+        store,
+        TinyProvider(),
+        VectorIndexConfig(create_extension=True, create_hnsw_index=False),
+    )
+
+    async def migrate(_self, bound_connection, vector_type, opclass) -> None:
+        assert bound_connection is connection
+        assert vector_type == '"public"."vector"'
+        assert opclass == '"public"."vector_cosine_ops"'
+        connection.events.append("migrate-profile")
+
+    monkeypatch.setattr(index, "_migrate", MethodType(migrate, index))
+
+    await index.initialize()
+
+    assert connection.events == [
+        "transaction:enter",
+        "lock:doppel-vector-extension:vector",
+        "find-extension",
+        "create-extension",
+        "find-extension",
+        "transaction:exit",
+        "migrate-profile",
+    ]
+    assert index._extension_version == "0.8.6"
+    assert index._initialized
 
 
 def test_vector_report_rejects_inconsistent_counts() -> None:
