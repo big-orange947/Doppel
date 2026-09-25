@@ -68,8 +68,8 @@ from doppel_memory.relation_path_retrieval import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v1.json"
-DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v1-live.json"
+DEFAULT_DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v2.json"
+DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v2-live.json"
 RUNNER = "doppel.heterogeneous-retrieval-live.v1"
 PROFILES = (
     "independent_lexical_vector",
@@ -385,6 +385,9 @@ async def run_live(
             )
 
             base_ids = [hit.record.memory_id for hit in base_result.hits[:20]]
+            independent_window_ids = [
+                hit.record.memory_id for hit in base_window
+            ]
             path_ids = list(
                 dict.fromkeys(
                     memory_id
@@ -406,6 +409,7 @@ async def run_live(
                     [hit.record.scope.scope_key for hit in base_result.hits[:20]],
                     base_latency,
                     [hit.candidate_evidence.sources for hit in base_result.hits[:20]],
+                    base_ids,
                 ),
                 (
                     "oracle_graph_path",
@@ -413,6 +417,7 @@ async def run_live(
                     [hit.candidate.scope.scope_key for hit in path_hits],
                     path_latency,
                     [["relation_path:oracle"] for _ in path_ids],
+                    path_ids,
                 ),
                 (
                     "assembled_oracle_hybrid",
@@ -423,6 +428,7 @@ async def run_live(
                     ],
                     base_latency + path_latency + assembly_latency,
                     [candidate.discovery_sources for candidate in assembly.candidates],
+                    assembled_ids,
                 ),
                 (
                     "assembled_oracle_hybrid_memory_reranking",
@@ -436,9 +442,17 @@ async def run_live(
                         candidate.discovery_sources
                         for candidate in reranking_assembly.candidates
                     ],
+                    independent_window_ids,
                 ),
             )
-            for profile, ids, result_scopes, latency, sources in profile_rows:
+            for (
+                profile,
+                ids,
+                result_scopes,
+                latency,
+                sources,
+                candidate_window_ids,
+            ) in profile_rows:
                 rows_by_profile[profile].append(
                     _row(
                         case,
@@ -450,6 +464,7 @@ async def run_live(
                         records=records_by_id,
                         memories=memories_by_id,
                         sources=sources,
+                        candidate_window_ids=candidate_window_ids,
                     )
                 )
     finally:
@@ -645,6 +660,7 @@ def _row(
     records: dict[str, MemoryRecord],
     memories: dict[str, HeterogeneousMemory],
     sources: list[list[str]],
+    candidate_window_ids: list[str],
 ) -> dict[str, Any]:
     valid_at = cast(datetime, _timestamp(case.valid_at))
     subject_violations = ineligible = temporal_violations = orphan = 0
@@ -710,6 +726,7 @@ def _row(
         "latency_ms": latency_ms,
         "estimated_context_characters": estimated_characters,
         "sources": sources,
+        "candidate_window_ids": candidate_window_ids,
     }
 
 
@@ -756,6 +773,15 @@ def _summarize_slice(
         for row in rows
         if not row["answerable"]
     )
+    candidate_required = sum(
+        len(set(row["required"]) & set(row.get("candidate_window_ids", [])))
+        for row in rows
+    )
+    candidate_related = sum(
+        len(set(row["related"]) & set(row.get("candidate_window_ids", [])))
+        for row in rows
+        if not row["answerable"]
+    )
     reciprocal_ranks = []
     for row in rows:
         required = set(row["required"])
@@ -792,6 +818,12 @@ def _summarize_slice(
             for cutoff in cutoffs
         },
         "related_evidence_recall_at_10": _ratio(related_at_10, related_total),
+        "candidate_window_evidence_recall": _ratio(
+            candidate_required, required_total
+        ),
+        "candidate_window_related_recall": _ratio(
+            candidate_related, related_total
+        ),
         "mrr": round(statistics.mean(reciprocal_ranks), 6)
         if reciprocal_ranks
         else 1.0,
@@ -898,8 +930,9 @@ def quality_gate(
         == 0,
         "path_budget_omissions": assembly["omitted_path_hits"] == 0,
         "reorder_membership": reorder_membership_violations == 0,
-        "reranker_completed": rerank_statuses
-        == Counter({"completed": expected_rerank_calls}),
+        "reranker_statuses_accounted": sum(rerank_statuses.values())
+        == expected_rerank_calls
+        and set(rerank_statuses).issubset({"completed", "not_run"}),
         "candidate_bound": final["max_candidates"]
         <= THRESHOLDS["max_candidates_per_query"],
         "neo4j_cleanup": graph_cleaned,
@@ -1027,11 +1060,18 @@ def _git_metadata(dataset_fingerprint: str) -> dict[str, Any]:
         )
         return completed.stdout.strip()
 
-    status = run("status", "--short")
+    completed = subprocess.run(
+        ["git", "status", "--porcelain=v1", "-z"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    status_entries = [item for item in completed.stdout.split("\0") if item]
     return {
         "implementation_commit": run("rev-parse", "HEAD"),
         "tracked_dirty_paths": [
-            line[3:] for line in status.splitlines() if line and not line.startswith("??")
+            item[3:] for item in status_entries if not item.startswith("??")
         ],
         "dataset_fingerprint": dataset_fingerprint,
         "profile_contract": list(PROFILES),

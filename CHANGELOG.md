@@ -11,7 +11,11 @@
   first-run gates before opening any retrieval result. The runner keeps oracle-route
   graph execution separate from natural-language planning and compares real pgvector,
   Graphiti, Store-revalidated assembly, and reorder-only local reranking. The corpus is
-  synthetic and author-known, so it remains non-publication evidence.
+  synthetic and author-known, so it remains non-publication evidence. Preserve the
+  first dev-only V1 result, then supersede V1 before opening sealed/adversarial results:
+  V2 changes only peer-conflict evidence from hard-forbidden to related context. Also
+  distinguish a legitimate reranker `not_run` on an empty candidate set and report
+  pre-rerank candidate-window coverage so recall and ranking failures cannot be mixed.
 - Add a separately gated full-corpus profile that reranks only the independent
   lexical/vector branch before atomic fusion with typed and explored Graphiti paths.
   It freezes non-regression requirements for one-hop, two-hop, temporal, overall, and

@@ -334,7 +334,7 @@ profile rather than the unconditional default.
 The perfect recall above is a result on a narrow, previously opened 144-query
 development corpus. It is not treated as a general Doppel quality score. The next
 evaluation uses the independently generated and frozen
-[`heterogeneous-retrieval-zh-v1.json`](datasets/heterogeneous-retrieval-zh-v1.json):
+[`heterogeneous-retrieval-zh-v2.json`](datasets/heterogeneous-retrieval-zh-v2.json):
 480 unique Chinese queries, 48 exact owner scopes, and 9,216 memories. Owner scopes
 are disjoint across 120 dev, 280 sealed, and 80 adversarial queries. The corpus covers
 current and historical residence, corrected facts, event-key-aware episode counts,
@@ -344,12 +344,17 @@ subject corrections, and related-but-insufficient evidence.
 The generator is deterministic, the dataset is synthetic and contains no real personal
 data, and the contract rejects cross-scope labels, repeated full queries, invalid time
 intervals, unprovenanced edges, and malformed relation gold. The corpus is author-known
-and therefore remains `publication_ready=false`. Its fingerprint and the unopened
-evaluation protocol were frozen in
+and therefore remains `publication_ready=false`. V1's dev-only run exposed one label
+error before any sealed/adversarial result was opened: a superseded peer claim was
+hard-forbidden even though it is useful conflict context. V1 remains immutable; V2
+changes only those 48 evidence roles from hard-forbidden to related and leaves every
+memory, edge, entity, query text, split, threshold, and retrieval rule unchanged. The
+original protocol and the V2 correction are recorded in
 [`reports/heterogeneous-retrieval-v1-preregistered-2026-09-25.md`](reports/heterogeneous-retrieval-v1-preregistered-2026-09-25.md)
-before any retrieval result was produced. In particular, related context such as “the
-book is held by someone” is not mislabeled as proof of who bought it: retrieval coverage
-and answer sufficiency are scored separately.
+and [`reports/heterogeneous-retrieval-v2-label-correction-2026-09-25.md`](reports/heterogeneous-retrieval-v2-label-correction-2026-09-25.md).
+In particular, related context such as “the book is held by someone” is not mislabeled
+as proof of who bought it: retrieval coverage and answer sufficiency are scored
+separately.
 
 The live runner defaults to the open dev partition. It requires real local pgvector and
 Neo4j services plus the local reranker, but makes no external HTTP or paid LLM call:

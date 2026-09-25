@@ -11,6 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from benchmarks.build_heterogeneous_retrieval_v1 import build_dataset
+from benchmarks.build_heterogeneous_retrieval_v2 import build_dataset as build_v2
 from benchmarks.heterogeneous_retrieval_live import (
     ANSWERABLE_CATEGORIES,
     _DatasetPlanner,
@@ -36,6 +37,12 @@ RESULT_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1]
     / "benchmarks"
     / "heterogeneous-retrieval-result.schema.json"
+)
+V2_DATASET_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "benchmarks"
+    / "datasets"
+    / "heterogeneous-retrieval-zh-v2.json"
 )
 
 
@@ -84,6 +91,35 @@ def test_result_schema_is_bound_to_the_new_runner() -> None:
         "minimum": 0,
         "maximum": 1,
     }
+
+
+def test_v2_only_relabels_peer_conflict_context() -> None:
+    v1 = _dataset().model_dump(mode="json")
+    v2 = load_dataset(V2_DATASET_PATH)
+    rebuilt = HeterogeneousRetrievalDataset.model_validate(build_v2())
+
+    assert rebuilt.fingerprint == v2.fingerprint
+    assert v2.fingerprint == (
+        "78e647233d025926529efab6e4f855f6240537c071f3b4cbbcb5e155ffe96649"
+    )
+    payload = v2.model_dump(mode="json")
+    assert payload["memories"] == v1["memories"]
+    assert payload["entities"] == v1["entities"]
+    assert payload["edges"] == v1["edges"]
+    assert [item["query"] for item in payload["queries"]] == [
+        item["query"] for item in v1["queries"]
+    ]
+    changed = 0
+    for before, after in zip(v1["queries"], payload["queries"], strict=True):
+        if before == after:
+            continue
+        changed += 1
+        assert before["category"] == after["category"] == "subject_correction"
+        peer_id = f"m-{before['case_id'].split('-')[1]}-peer-allergy"
+        assert peer_id in before["hard_forbidden_memory_ids"]
+        assert peer_id in after["related_memory_ids"]
+        assert peer_id not in after["hard_forbidden_memory_ids"]
+    assert changed == 48
 
 
 def test_partitions_are_owner_disjoint_and_queries_are_unique() -> None:
@@ -323,7 +359,7 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         Counter(),
         selection_complete=True,
         expected_rerank_calls=480,
-        rerank_statuses=Counter({"completed": 480}),
+        rerank_statuses=Counter({"completed": 468, "not_run": 12}),
         reorder_membership_violations=0,
         graph_cleaned=True,
         postgres_reset=True,

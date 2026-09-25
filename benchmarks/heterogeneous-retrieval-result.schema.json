@@ -17,7 +17,7 @@
           "type": "object",
           "required": ["suite", "fingerprint", "selected_queries"],
           "properties": {
-            "suite": {"const": "doppel-heterogeneous-retrieval-zh-v1"},
+            "suite": {"enum": ["doppel-heterogeneous-retrieval-zh-v1", "doppel-heterogeneous-retrieval-zh-v2"]},
             "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
             "selected_queries": {"type": "integer", "minimum": 1}
           }
@@ -80,7 +80,7 @@
     },
     "profile": {
       "type": "object",
-      "required": ["queries", "evidence_recall_at_1", "evidence_recall_at_5", "evidence_recall_at_10", "evidence_recall_at_20", "complete_evidence_rate_at_5", "complete_evidence_rate_at_10", "complete_evidence_rate_at_20", "related_evidence_recall_at_10", "mrr", "exact_episode_count_rate_at_10", "hard_forbidden_hits", "scope_leakage", "subject_violations", "ineligible_hits", "temporal_violations", "orphan_provenance", "max_candidates", "latency_ms", "by_category", "by_partition"],
+      "required": ["queries", "evidence_recall_at_1", "evidence_recall_at_5", "evidence_recall_at_10", "evidence_recall_at_20", "complete_evidence_rate_at_5", "complete_evidence_rate_at_10", "complete_evidence_rate_at_20", "related_evidence_recall_at_10", "candidate_window_evidence_recall", "candidate_window_related_recall", "mrr", "exact_episode_count_rate_at_10", "hard_forbidden_hits", "scope_leakage", "subject_violations", "ineligible_hits", "temporal_violations", "orphan_provenance", "max_candidates", "latency_ms", "by_category", "by_partition"],
       "properties": {
         "queries": {"type": "integer", "minimum": 1},
         "evidence_recall_at_1": {"$ref": "#/$defs/rate"},
@@ -91,6 +91,8 @@
         "complete_evidence_rate_at_10": {"$ref": "#/$defs/rate"},
         "complete_evidence_rate_at_20": {"$ref": "#/$defs/rate"},
         "related_evidence_recall_at_10": {"$ref": "#/$defs/rate"},
+        "candidate_window_evidence_recall": {"$ref": "#/$defs/rate"},
+        "candidate_window_related_recall": {"$ref": "#/$defs/rate"},
         "mrr": {"$ref": "#/$defs/rate"},
         "exact_episode_count_rate_at_10": {"$ref": "#/$defs/rate"},
         "hard_forbidden_hits": {"type": "integer", "minimum": 0},
