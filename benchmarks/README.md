@@ -399,6 +399,16 @@ violations. Bounded exploration raised related-context recall from 0.250 to 1.00
 without treating explored context as answer proof. This remains a development result;
 the all-partition first run is the independently meaningful generalization check.
 
+That first all-partition run is preserved unchanged in
+[`reports/heterogeneous-retrieval-v3-first-live-2026-09-25.md`](reports/heterogeneous-retrieval-v3-first-live-2026-09-25.md).
+It passed the complete frozen gate across 480 queries and 9,216 memories: final
+evidence recall@5 was 0.998, complete evidence@10 and related-context recall@10 were
+1.000, and MRR was 0.933. Sealed recall@5 was 1.000; adversarial recall@5 was 0.989
+with every required item present by rank 10. All isolation, eligibility, temporal,
+provenance, Store-revalidation, membership, boundedness, and cleanup checks passed.
+The corpus remains synthetic, author-known, oracle-routed for graph execution, and
+non-publication evidence.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

@@ -29,7 +29,12 @@
   recall@5, complete evidence@10, related-context recall@10, and exact episode-count
   accuracy with MRR 0.958 and zero safety violations. Its only failed gate is the
   deliberate dev-only selection check; the runner and thresholds remain frozen before
-  the all-partition first run.
+  the all-partition first run. Record that immutable 480-query first run: every gate
+  passed, with 0.998 evidence recall@5, 1.000 complete evidence@10, 1.000 related
+  context@10, MRR 0.933, and zero safety violations. The 280-query sealed partition
+  reached 1.000 recall@5; the 80-query adversarial partition reached 0.989 and retained
+  every required item by rank 10. The synthetic, author-known, oracle-routed corpus
+  remains explicitly non-publication evidence.
 - Add a separately gated full-corpus profile that reranks only the independent
   lexical/vector branch before atomic fusion with typed and explored Graphiti paths.
   It freezes non-regression requirements for one-hop, two-hop, temporal, overall, and

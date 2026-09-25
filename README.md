@@ -370,6 +370,7 @@ verifier 或上层回答模型。详细说明见 [Retrieval evaluation boundary]
 | pgvector / Graphiti | 每个候选都进行权威 Store 回源复核 |
 | 类型化关系检索 | typed oracle 结构上限与自然语言 Planner 质量分轨测量 |
 | 两跳关系路径 | 26 条 live Neo4j 结构消融，完整证据率 0.500 → 1.000 |
+| 异构最高配置盲测 | 9,216 条记忆、480 条查询：Recall@5 0.998、完整证据@10 1.000、MRR 0.933，安全违规为 0 |
 | 回归检查 | Python 3.11/3.12、pytest、Ruff、Pyright、版本化结果 schema |
 
 评测入口与完整限制见 [benchmarks/README.md](benchmarks/README.md)。数据集在冻结前都明确标记
@@ -442,7 +443,7 @@ Doppel 当前版本为 **v0.8.3 Alpha**。核心 Store、scope、provenance、�
 
 1. 扩大并冻结个人记忆抽取、时间、关系和多跳 Planner 的 held-out / adversarial 数据集；
 2. 基于 Planner v3 密封评测暴露的超界拒绝问题，验证带显式 `execute/abstain` 决策的 V4，并建设全新的 V2 dev / sealed 语料；
-3. 继续验证 PostgreSQL + pgvector + Graphiti 最高配置下的召回、延迟与多实例可靠性；
+3. 在 PostgreSQL + pgvector + Graphiti 已通过冻结异构检索门禁后，继续验证多实例可靠性、长时间索引一致性与竞争状态延迟；
 4. 增加上下文选择与装配协议，让上层 Agent 按任务需要获取最小充分记忆；
 5. 在核心质量稳定后，再建设可视化记忆管理、用户增删改查和文档补充界面；
 6. PyPI 发布放在协议与质量门进一步收敛之后。
