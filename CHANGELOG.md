@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a separately gated full-corpus profile that reranks only the independent
+  lexical/vector branch before atomic fusion with typed and explored Graphiti paths.
+  It freezes non-regression requirements for one-hop, two-hop, temporal, overall, and
+  MRR quality plus strict reorder-only, eligibility, isolation, provenance, candidate
+  bound, and backend-cleanup checks before opening the 144-query GPU result.
 - Add a frozen semantic-only overfetch and whole-memory reranking ablation for the
   combined V2 corpus. It distinguishes index/score-gate misses from ranking errors,
   verifies the existing personal-memory reranker is strictly reorder-only, and keeps

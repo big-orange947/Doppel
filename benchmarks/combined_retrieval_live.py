@@ -36,8 +36,10 @@ from benchmarks.personal_retrieval_ablation import (
     _build_vector_index,
     _embedding_runtime_metadata,
     _LocalEmbeddingProvider,
+    _PersonalMemoryRerankerAdapter,
     _probe_postgres,
     _reset_ablation_postgres,
+    _SentenceTransformersRelationReranker,
 )
 from doppel_memory.graphiti_store import (
     GraphitiRelationIndex,
@@ -52,6 +54,7 @@ from doppel_memory.models import (
     MemoryScope,
     MemoryState,
 )
+from doppel_memory.personal_rerank import PersonalMemoryRerankConfig
 from doppel_memory.query import (
     PersonalMemoryQueryConfig,
     PersonalMemoryQueryDraftV2,
@@ -81,6 +84,7 @@ PROFILES = (
     "explored_path",
     "assembled_hybrid",
     "assembled_hybrid_with_exploration",
+    "assembled_hybrid_with_exploration_and_memory_reranking",
 )
 FILTERS = MemoryFilter(
     tags={"personal-memory"},
@@ -105,6 +109,18 @@ RETRIEVAL_THRESHOLDS = {
 }
 EXPLORATION_THRESHOLDS = {
     "min_two_hop_complete_gain": 0.15,
+    "max_hard_forbidden_hits": 0,
+    "max_scope_leakage": 0,
+    "max_ineligible_hits": 0,
+    "max_orphan_provenance": 0,
+    "max_temporal_complete_path_failures": 0,
+    "max_store_revalidation_failures": 0,
+    "max_path_budget_omissions": 0,
+    "max_candidates_per_query": 20,
+}
+RERANKING_THRESHOLDS = {
+    "min_semantic_recall_at_5": 0.85,
+    "max_reorder_membership_violations": 0,
     "max_hard_forbidden_hits": 0,
     "max_scope_leakage": 0,
     "max_ineligible_hits": 0,
@@ -157,9 +173,19 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--embedding-dimensions", type=int, default=512)
     result.add_argument("--embedding-cache-dir", type=Path, default=None)
     result.add_argument("--embedding-batch-size", type=int, default=32)
+    result.add_argument("--reranker-model", default="")
+    result.add_argument(
+        "--reranker-score-normalization",
+        choices=("identity", "sigmoid"),
+        default="sigmoid",
+    )
+    result.add_argument("--reranker-cache-dir", type=Path, default=None)
+    result.add_argument("--reranker-batch-size", type=int, default=16)
+    result.add_argument("--reranker-device", default="cuda")
+    result.add_argument("--rerank-window", type=int, default=64)
     result.add_argument(
         "--gate",
-        choices=("legacy", "exploration"),
+        choices=("legacy", "exploration", "reranking"),
         default="legacy",
         help="quality gate that controls the process exit status",
     )
@@ -209,6 +235,8 @@ async def run_live(
     neo4j_password: str,
     postgres_password: str,
     embedding_provider: Any,
+    memory_reranker: Any | None = None,
+    rerank_window: int = 64,
 ) -> dict[str, Any]:
     from neo4j import AsyncGraphDatabase  # pyright: ignore[reportMissingImports]
 
@@ -252,11 +280,17 @@ async def run_live(
     groups = [scope.scope_key for scope in scopes.values()]
     records = [_record(item, scopes[item.scope]) for item in dataset.fixtures]
     records_by_id = {item.memory_id: item for item in records}
+    if not 1 <= rerank_window <= 100:
+        raise ValueError("rerank window must be between 1 and 100")
+    active_profiles = PROFILES if memory_reranker is not None else PROFILES[:-1]
     rows_by_profile: dict[str, list[dict[str, Any]]] = {
-        name: [] for name in PROFILES
+        name: [] for name in active_profiles
     }
     assembly_totals: Counter[str] = Counter()
     exploration_assembly_totals: Counter[str] = Counter()
+    reranking_assembly_totals: Counter[str] = Counter()
+    rerank_statuses: Counter[str] = Counter()
+    reorder_membership_violations = 0
     graph_cleaned = False
     postgres_reset = False
     graph_write_attempted = False
@@ -272,8 +306,23 @@ async def run_live(
         )
         engine = PersonalMemoryQueryEngine(
             store,
-            PersonalMemoryQueryConfig(limit=20, semantic_candidate_limit=100),
+            PersonalMemoryQueryConfig(limit=100, semantic_candidate_limit=100),
             semantic_index=vector_index,
+        )
+        reranked_engine = (
+            PersonalMemoryQueryEngine(
+                store,
+                PersonalMemoryQueryConfig(limit=100, semantic_candidate_limit=100),
+                semantic_index=vector_index,
+                memory_reranker=memory_reranker,
+                rerank_config=PersonalMemoryRerankConfig(
+                    max_candidates=rerank_window,
+                    max_input_chars=100_000,
+                    timeout_seconds=120,
+                ),
+            )
+            if memory_reranker is not None
+            else None
         )
         graph_index = GraphitiRelationIndex(
             store, graphiti_client=_LiveGraphClient(driver)
@@ -294,6 +343,34 @@ async def run_live(
                 default_subject_id=scope.user_id,
             )
             base_latency = (time.perf_counter() - base_started) * 1000
+            base_hits = base_result.hits[:20]
+            reranked_result = None
+            rerank_latency = 0.0
+            if reranked_engine is not None:
+                rerank_started = time.perf_counter()
+                reranked_result = await reranked_engine.query(
+                    _DatasetPlanner(case, scope),
+                    case.query,
+                    [scope],
+                    now=max(valid_at, datetime(2026, 9, 24, tzinfo=UTC)),
+                    default_subject=Actor.OWNER,
+                    default_subject_id=scope.user_id,
+                )
+                rerank_latency = (time.perf_counter() - rerank_started) * 1000
+                if {
+                    item.record.memory_id
+                    for item in base_result.hits[:rerank_window]
+                } != {
+                    item.record.memory_id
+                    for item in reranked_result.hits[:rerank_window]
+                }:
+                    reorder_membership_violations += 1
+                status = (
+                    reranked_result.memory_reranking.status
+                    if reranked_result.memory_reranking is not None
+                    else "not_run"
+                )
+                rerank_statuses[status] += 1
 
             path_plan = build_relation_path_retrieval_plan(
                 PersonalMemoryRelationPathDraftV4(
@@ -351,7 +428,7 @@ async def run_live(
             assembly_started = time.perf_counter()
             assembly = await assemble_hybrid_retrieval_candidates(
                 store,
-                base_result.hits,
+                base_hits,
                 path_hits,
                 [scope],
                 filters=FILTERS,
@@ -373,7 +450,7 @@ async def run_live(
             exploration_assembly_started = time.perf_counter()
             exploration_assembly = await assemble_hybrid_retrieval_candidates(
                 store,
-                base_result.hits,
+                base_hits,
                 combined_path_hits,
                 [scope],
                 filters=FILTERS,
@@ -396,7 +473,36 @@ async def run_live(
                 exploration_assembly_totals, exploration_assembly
             )
 
-            base_ids = [hit.record.memory_id for hit in base_result.hits]
+            reranking_assembly = None
+            reranking_assembly_latency = 0.0
+            if reranked_result is not None:
+                reranking_assembly_started = time.perf_counter()
+                reranking_assembly = await assemble_hybrid_retrieval_candidates(
+                    store,
+                    reranked_result.hits[:rerank_window],
+                    combined_path_hits,
+                    [scope],
+                    filters=FILTERS,
+                    limit=20,
+                    base_reserve=5,
+                )
+                reranking_assembly_latency = (
+                    time.perf_counter() - reranking_assembly_started
+                ) * 1000
+                reranking_assembly_totals.update(
+                    {
+                        "rejected_base_hits": reranking_assembly.rejected_base_hits,
+                        "rejected_path_hits": reranking_assembly.rejected_path_hits,
+                        "omitted_path_hits": reranking_assembly.omitted_path_hits,
+                        "truncated_queries": int(reranking_assembly.truncated),
+                        "retained_paths": len(reranking_assembly.relation_paths),
+                    }
+                )
+                _record_rejection_reasons(
+                    reranking_assembly_totals, reranking_assembly
+                )
+
+            base_ids = [hit.record.memory_id for hit in base_hits]
             path_ids = list(
                 dict.fromkeys(
                     memory_id
@@ -415,13 +521,13 @@ async def run_live(
             exploration_hybrid_ids = [
                 item.record.memory_id for item in exploration_assembly.candidates
             ]
-            for profile, ids, result_scopes, latency, sources, path_returned in (
+            profile_rows = [
                 (
                     "independent_lexical_vector",
                     base_ids,
-                    [hit.record.scope.scope_key for hit in base_result.hits],
+                    [hit.record.scope.scope_key for hit in base_hits],
                     base_latency,
-                    [hit.candidate_evidence.sources for hit in base_result.hits],
+                    [hit.candidate_evidence.sources for hit in base_hits],
                     False,
                 ),
                 (
@@ -468,7 +574,34 @@ async def run_live(
                         [hit.candidate for hit in combined_path_hits],
                     ),
                 ),
-            ):
+            ]
+            if reranking_assembly is not None:
+                profile_rows.append(
+                    (
+                        "assembled_hybrid_with_exploration_and_memory_reranking",
+                        [
+                            item.record.memory_id
+                            for item in reranking_assembly.candidates
+                        ],
+                        [
+                            item.record.scope.scope_key
+                            for item in reranking_assembly.candidates
+                        ],
+                        rerank_latency
+                        + path_latency
+                        + exploration_latency
+                        + reranking_assembly_latency,
+                        [
+                            item.discovery_sources
+                            for item in reranking_assembly.candidates
+                        ],
+                        _complete_required_path_returned(
+                            case,
+                            [hit.candidate for hit in combined_path_hits],
+                        ),
+                    )
+                )
+            for profile, ids, result_scopes, latency, sources, path_returned in profile_rows:
                 rows_by_profile[profile].append(
                     _row(
                         case,
@@ -539,6 +672,18 @@ async def run_live(
         graph_cleaned=graph_cleaned,
         postgres_reset=postgres_reset,
     )
+    reranking_gate = (
+        reranking_quality_gate(
+            profiles,
+            reranking_assembly_totals,
+            reorder_membership_violations=reorder_membership_violations,
+            rerank_statuses=rerank_statuses,
+            graph_cleaned=graph_cleaned,
+            postgres_reset=postgres_reset,
+        )
+        if memory_reranker is not None
+        else {"ok": False, "status": "unavailable", "failures": ["not_configured"]}
+    )
     return {
         "result_schema_version": 1,
         "runner": RUNNER,
@@ -562,6 +707,15 @@ async def run_live(
             "vector": "pgvector",
             "graph": "neo4j_graphiti_relation_path",
             "embedding": _embedding_runtime_metadata(embedding_provider),
+            "memory_reranker": (
+                {
+                    "name": memory_reranker.name,
+                    "version": memory_reranker.version,
+                    "window": rerank_window,
+                }
+                if memory_reranker is not None
+                else None
+            ),
             "llm_calls": 0,
             "external_http_calls": 0,
             "provider_tokens": 0,
@@ -573,6 +727,9 @@ async def run_live(
         "profiles": profiles,
         "assembly": dict(assembly_totals),
         "exploration_assembly": dict(exploration_assembly_totals),
+        "reranking_assembly": dict(reranking_assembly_totals),
+        "rerank_statuses": dict(rerank_statuses),
+        "reorder_membership_violations": reorder_membership_violations,
         "gain": {
             "evidence_recall_at_5": round(
                 profiles["assembled_hybrid"]["evidence_recall_at_5"]
@@ -622,6 +779,7 @@ async def run_live(
             ),
         },
         "exploration_gate": exploration_gate,
+        "reranking_gate": reranking_gate,
         "gate": gate,
     }
 
@@ -1016,6 +1174,71 @@ def exploration_quality_gate(
     }
 
 
+def reranking_quality_gate(
+    profiles: dict[str, dict[str, Any]],
+    assembly: Counter[str],
+    *,
+    reorder_membership_violations: int,
+    rerank_statuses: Counter[str],
+    graph_cleaned: bool,
+    postgres_reset: bool,
+) -> dict[str, Any]:
+    """Gate the additive memory-reranked hybrid against explored hybrid."""
+
+    baseline = profiles["assembled_hybrid_with_exploration"]
+    reranked = profiles[
+        "assembled_hybrid_with_exploration_and_memory_reranking"
+    ]
+    categories = (
+        "one_hop_relation",
+        "two_hop_relation",
+        "temporal_incomplete_path",
+    )
+    checks = {
+        "recall_non_regression": reranked["evidence_recall_at_5"]
+        >= baseline["evidence_recall_at_5"],
+        "complete_evidence_non_regression": reranked[
+            "complete_evidence_rate_at_10"
+        ]
+        >= baseline["complete_evidence_rate_at_10"],
+        "mrr_non_regression": reranked["mrr"] >= baseline["mrr"],
+        "semantic_recall_at_5": reranked["by_category"][
+            "semantic_nonrelation"
+        ]["evidence_recall_at_5"]
+        >= RERANKING_THRESHOLDS["min_semantic_recall_at_5"],
+        "path_category_non_regression": all(
+            reranked["by_category"][category]["complete_evidence_rate_at_10"]
+            >= baseline["by_category"][category]["complete_evidence_rate_at_10"]
+            for category in categories
+        ),
+        "reorder_membership": reorder_membership_violations
+        <= RERANKING_THRESHOLDS["max_reorder_membership_violations"],
+        "reranker_completed": rerank_statuses == Counter({"completed": 144}),
+        "hard_forbidden_hits": reranked["hard_forbidden_hits"] == 0,
+        "scope_leakage": reranked["scope_leakage"] == 0,
+        "ineligible_hits": reranked["ineligible_hits"] == 0,
+        "orphan_provenance": reranked["orphan_provenance"] == 0,
+        "temporal_complete_path_failures": reranked[
+            "temporal_complete_path_failures"
+        ]
+        == 0,
+        "store_revalidation_failures": _store_revalidation_failures(assembly)
+        == 0,
+        "path_budget_omissions": assembly["omitted_path_hits"] == 0,
+        "candidate_bound": reranked["max_candidates"]
+        <= RERANKING_THRESHOLDS["max_candidates_per_query"],
+        "neo4j_cleanup": graph_cleaned,
+        "postgres_cleanup": postgres_reset,
+    }
+    return {
+        "ok": all(checks.values()),
+        "checks": checks,
+        "failures": [name for name, passed in checks.items() if not passed],
+        "thresholds": RERANKING_THRESHOLDS,
+        "baseline_profile": "assembled_hybrid_with_exploration",
+    }
+
+
 def _record_rejection_reasons(
     totals: Counter[str], assembly: HybridRetrievalAssembly
 ) -> None:
@@ -1048,8 +1271,28 @@ async def _main_async(args: argparse.Namespace) -> int:
         cache_dir=args.embedding_cache_dir,
         batch_size=args.embedding_batch_size,
     )
+    if args.gate == "reranking" and not str(args.reranker_model or "").strip():
+        raise RuntimeError("reranking gate requires --reranker-model")
+    relation_reranker = (
+        _SentenceTransformersRelationReranker(
+            args.reranker_model,
+            score_normalization=args.reranker_score_normalization,
+            cache_dir=args.reranker_cache_dir,
+            batch_size=args.reranker_batch_size,
+            device=args.reranker_device,
+        )
+        if str(args.reranker_model or "").strip()
+        else None
+    )
+    memory_reranker = (
+        _PersonalMemoryRerankerAdapter(relation_reranker)
+        if relation_reranker is not None
+        else None
+    )
     try:
         await provider.warmup()
+        if relation_reranker is not None:
+            await relation_reranker.warmup()
         report = await run_live(
             dataset,
             topologies,
@@ -1059,6 +1302,8 @@ async def _main_async(args: argparse.Namespace) -> int:
             neo4j_password=neo4j_password,
             postgres_password=postgres_password,
             embedding_provider=provider,
+            memory_reranker=memory_reranker,
+            rerank_window=args.rerank_window,
         )
     except Exception as exc:  # noqa: BLE001
         report = {
@@ -1084,7 +1329,11 @@ async def _main_async(args: argparse.Namespace) -> int:
 
 
 def _selected_gate_passed(report: dict[str, Any], gate: str) -> bool:
-    key = "exploration_gate" if gate == "exploration" else "gate"
+    key = {
+        "legacy": "gate",
+        "exploration": "exploration_gate",
+        "reranking": "reranking_gate",
+    }[gate]
     selected = report.get(key)
     return isinstance(selected, dict) and selected.get("ok") is True
 

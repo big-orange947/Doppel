@@ -305,6 +305,21 @@ violations. Median latency increased from 65.6 ms to 257.2 ms. This is component
 evidence for an opt-in highest-quality profile; the narrow synthetic semantic slice is
 not a general perfect-score claim.
 
+The complete 144-query composition test is separately preregistered in
+[`reports/combined-retrieval-memory-rerank-preregistered-2026-09-25.md`](reports/combined-retrieval-memory-rerank-preregistered-2026-09-25.md).
+It leaves graph paths outside the reranker and requires their one-hop, two-hop, and
+temporal complete-evidence rates to remain unchanged:
+
+```powershell
+$env:DOPPEL_ABLATION_PG_PASSWORD = "<local-only password>"
+$env:DOPPEL_NEO4J_PASSWORD = "<local-only password>"
+D:\project\.doppel-eval-cu128\Scripts\python.exe `
+  -m benchmarks.combined_retrieval_live `
+  --reranker-model D:\project\.doppel-eval-models\bge-reranker-v2-m3 `
+  --reranker-device cuda `
+  --gate reranking
+```
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

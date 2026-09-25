@@ -14,6 +14,7 @@ from benchmarks.combined_retrieval_live import (
     _summarize,
     exploration_quality_gate,
     load_topologies,
+    reranking_quality_gate,
     retrieval_quality_gate,
 )
 from benchmarks.combined_retrieval_quality import load_dataset
@@ -289,8 +290,43 @@ def test_selected_gate_controls_exit_without_hiding_the_other_result() -> None:
     report = {
         "gate": {"ok": False},
         "exploration_gate": {"ok": True},
+        "reranking_gate": {"ok": True},
     }
 
     assert _selected_gate_passed(report, "legacy") is False
     assert _selected_gate_passed(report, "exploration") is True
+    assert _selected_gate_passed(report, "reranking") is True
     assert _selected_gate_passed({"gate": {"ok": False}}, "exploration") is False
+
+
+def test_reranking_gate_preserves_paths_and_improves_semantic_slice() -> None:
+    baseline_rows = [
+        _row("one", "one_hop_relation", ["a"], ["a"]),
+        _row("two", "two_hop_relation", ["b", "c"], ["b", "c"]),
+        _row("semantic", "semantic_nonrelation", [], ["d"]),
+        _row("temporal", "temporal_incomplete_path", [], [], answerable=False),
+    ]
+    reranked_rows = [
+        baseline_rows[0],
+        baseline_rows[1],
+        _row("semantic", "semantic_nonrelation", ["d"], ["d"]),
+        baseline_rows[3],
+    ]
+    profiles = {
+        "assembled_hybrid_with_exploration": _summarize(baseline_rows),
+        "assembled_hybrid_with_exploration_and_memory_reranking": _summarize(
+            reranked_rows
+        ),
+    }
+
+    gate = reranking_quality_gate(
+        profiles,
+        Counter(),
+        reorder_membership_violations=0,
+        rerank_statuses=Counter({"completed": 144}),
+        graph_cleaned=True,
+        postgres_reset=True,
+    )
+
+    assert gate["ok"] is True
+    assert gate["checks"]["path_category_non_regression"] is True
