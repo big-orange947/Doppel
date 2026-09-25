@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/big-orange947/Doppel/benchmarks/multi-instance-reliability-result.schema.json",
+  "title": "Doppel multi-instance reliability live result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result_schema_version",
+    "runner",
+    "contract",
+    "runtime",
+    "metrics",
+    "cleanup",
+    "hard_failure",
+    "gate",
+    "report_sha256"
+  ],
+  "properties": {
+    "result_schema_version": {"const": 1},
+    "runner": {"const": "doppel.multi-instance-reliability-live.v1"},
+    "contract": {
+      "type": "object",
+      "required": [
+        "contract_version",
+        "fingerprint",
+        "instances",
+        "scopes",
+        "logical_records",
+        "write_attempts",
+        "thresholds"
+      ],
+      "properties": {
+        "contract_version": {"const": 1},
+        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "instances": {"type": "integer", "minimum": 2},
+        "scopes": {"type": "integer", "minimum": 2},
+        "logical_records": {"type": "integer", "minimum": 1},
+        "write_attempts": {"type": "integer", "minimum": 1},
+        "thresholds": {"type": "object"}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "postgres",
+        "instances",
+        "vector",
+        "graph",
+        "llm_calls",
+        "external_http_calls",
+        "provider_tokens",
+        "credentials_persisted"
+      ],
+      "properties": {
+        "postgres": {"type": "string"},
+        "instances": {"type": "integer", "minimum": 2},
+        "vector": {"type": "object"},
+        "graph": {"type": "string"},
+        "llm_calls": {"const": 0},
+        "external_http_calls": {"const": 0},
+        "provider_tokens": {"const": 0},
+        "credentials_persisted": {"const": false}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "migration_errors",
+        "write_errors",
+        "created",
+        "duplicates",
+        "idempotency_violations",
+        "physical_duplicates",
+        "scope_leakage",
+        "transition_race_violations",
+        "vector_failures",
+        "vector_replay_mutations",
+        "vector_search_misses",
+        "graph_path_misses",
+        "stale_graph_hits",
+        "reconciliation_failures",
+        "restart_failures",
+        "latency_ms"
+      ],
+      "properties": {
+        "migration_errors": {"type": "integer", "minimum": 0},
+        "write_errors": {"type": "integer", "minimum": 0},
+        "created": {"type": "integer", "minimum": 0},
+        "duplicates": {"type": "integer", "minimum": 0},
+        "idempotency_violations": {"type": "integer", "minimum": 0},
+        "physical_duplicates": {"type": "integer", "minimum": 0},
+        "scope_leakage": {"type": "integer", "minimum": 0},
+        "transition_race_violations": {"type": "integer", "minimum": 0},
+        "vector_failures": {"type": "integer", "minimum": 0},
+        "vector_replay_mutations": {"type": "integer", "minimum": 0},
+        "vector_search_misses": {"type": "integer", "minimum": 0},
+        "graph_path_misses": {"type": "integer", "minimum": 0},
+        "stale_graph_hits": {"type": "integer", "minimum": 0},
+        "reconciliation_failures": {"type": "integer", "minimum": 0},
+        "restart_failures": {"type": "integer", "minimum": 0},
+        "vector_health_before_cleanup": {"type": "object"},
+        "latency_ms": {
+          "type": "object",
+          "required": ["write", "vector_search", "graph_search"],
+          "properties": {
+            "write": {"$ref": "#/$defs/latency"},
+            "vector_search": {"$ref": "#/$defs/latency"},
+            "graph_search": {"$ref": "#/$defs/latency"}
+          }
+        }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "required": [
+        "neo4j_cleanup_performed",
+        "postgres_cleanup_performed",
+        "errors"
+      ],
+      "properties": {
+        "neo4j_cleanup_performed": {"type": "boolean"},
+        "postgres_cleanup_performed": {"type": "boolean"},
+        "errors": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "hard_failure": {"type": ["string", "null"]},
+    "gate": {
+      "type": "object",
+      "required": ["ok", "status", "checks", "failures", "thresholds"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "status": {"enum": ["complete", "failed", "hard_failure"]},
+        "checks": {"type": "object"},
+        "failures": {"type": "array", "items": {"type": "string"}},
+        "thresholds": {"type": "object"}
+      }
+    },
+    "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "latency": {
+      "type": "object",
+      "required": ["p50", "p95", "p99", "mean"],
+      "properties": {
+        "p50": {"type": "number", "minimum": 0},
+        "p95": {"type": "number", "minimum": 0},
+        "p99": {"type": "number", "minimum": 0},
+        "mean": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

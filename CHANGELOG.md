@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a preregistered multi-instance reliability gate for the highest-configuration
+  backend stack. Its deterministic live workload covers concurrent PostgreSQL schema
+  initialization and scope-local idempotency, optimistic lifecycle races, shared
+  pgvector initialization/replay/reconciliation, independent Neo4j/Graphiti typed-path
+  readers, stale graph-edge Store revalidation, process-style pool restart recovery,
+  latency limits, and exact fixture cleanup. The dry run reads no credentials; the
+  live run uses only local embeddings with zero HTTP, LLM, or provider-token usage.
+  LLM-driven Graphiti ingestion remains explicitly outside this first infrastructure
+  gate so provider behavior cannot hide backend consistency failures.
 - Add a deterministic, frozen heterogeneous personal-memory generalization corpus with
   9,216 memories, 480 unique Chinese queries, 48 owner-disjoint scopes, and explicit
   dev/sealed/adversarial partitions. It broadens evaluation to temporal residence,

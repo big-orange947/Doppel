@@ -409,6 +409,36 @@ provenance, Store-revalidation, membership, boundedness, and cleanup checks pass
 The corpus remains synthetic, author-known, oracle-routed for graph execution, and
 non-publication evidence.
 
+### Multi-instance reliability gate
+
+Retrieval quality does not prove that shared backends remain correct when several
+Agent workers run at once. `multi_instance_reliability_live.py` therefore exercises a
+separate, deterministic live contract across four PostgreSQL pools, four pgvector
+adapters, four Neo4j drivers, eight exact owner scopes, 128 logical records, and 512
+concurrent write attempts. It verifies scope-local database idempotency, optimistic
+state races, vector replay and reconciliation, typed Graphiti relation reads, stale
+graph-edge suppression through authoritative Store reloads, restart recovery, latency,
+and fixture cleanup. It uses local embeddings and makes no external HTTP or LLM call.
+
+The frozen first-run protocol and limitations are recorded in
+[`reports/multi-instance-reliability-v1-preregistered-2026-09-25.md`](reports/multi-instance-reliability-v1-preregistered-2026-09-25.md).
+The result envelope is bound by
+[`multi-instance-reliability-result.schema.json`](multi-instance-reliability-result.schema.json).
+Without `--live`, the command prints the complete workload contract without reading
+credentials or touching either backend:
+
+```powershell
+python -m benchmarks.multi_instance_reliability_live
+
+# Live mode resets only the dedicated doppel_ablation database and uses run-scoped
+# Neo4j groups. Set both local-only passwords in this PowerShell process first.
+python -m benchmarks.multi_instance_reliability_live --live
+```
+
+This V1 gate intentionally excludes Graphiti's LLM-driven concurrent episode
+extraction. It tests multi-driver typed relation retrieval and stale-edge revalidation;
+provider-dependent graph ingestion belongs in a separate budgeted benchmark.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate
