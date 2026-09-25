@@ -11,6 +11,7 @@ from benchmarks.multi_instance_reliability_live import (
     DEFAULT_DUPLICATE_ATTEMPTS,
     DEFAULT_GRAPH_ROUNDS,
     DEFAULT_INSTANCES,
+    DEFAULT_POOL_SIZE_PER_INSTANCE,
     DEFAULT_RECORDS_PER_SCOPE,
     DEFAULT_SCOPES,
     _attempt_record,
@@ -31,6 +32,7 @@ def _passing_metrics() -> dict:
         "scope_leakage": 0,
         "transition_race_violations": 0,
         "vector_failures": 0,
+        "unclassified_vector_failures": 0,
         "vector_replay_mutations": 0,
         "vector_search_misses": 0,
         "graph_path_misses": 0,
@@ -48,6 +50,8 @@ def _passing_metrics() -> dict:
 def test_default_contract_is_frozen_and_internally_consistent() -> None:
     contract = workload_contract()
     assert contract["instances"] == DEFAULT_INSTANCES
+    assert contract["pool_size_per_instance"] == DEFAULT_POOL_SIZE_PER_INSTANCE
+    assert contract["total_pool_connection_budget"] == 8
     assert contract["scopes"] == DEFAULT_SCOPES
     assert contract["records_per_scope"] == DEFAULT_RECORDS_PER_SCOPE
     assert contract["duplicate_attempts_per_record"] == DEFAULT_DUPLICATE_ATTEMPTS
@@ -96,6 +100,7 @@ def test_gate_requires_every_correctness_latency_and_cleanup_check() -> None:
         "scope_leakage",
         "transition_race_violations",
         "vector_failures",
+        "unclassified_vector_failures",
         "vector_replay_mutations",
         "vector_search_misses",
         "graph_path_misses",
@@ -131,5 +136,5 @@ def test_result_schema_is_valid_draft_2020_12() -> None:
         )
     )
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
-    assert schema["properties"]["runner"]["const"].endswith(".v1")
+    assert schema["properties"]["runner"]["const"].endswith(".v2")
     assert set(schema["required"]) == set(schema["properties"])

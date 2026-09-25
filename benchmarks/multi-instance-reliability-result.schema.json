@@ -17,22 +17,26 @@
   ],
   "properties": {
     "result_schema_version": {"const": 1},
-    "runner": {"const": "doppel.multi-instance-reliability-live.v1"},
+    "runner": {"const": "doppel.multi-instance-reliability-live.v2"},
     "contract": {
       "type": "object",
       "required": [
         "contract_version",
         "fingerprint",
         "instances",
+        "pool_size_per_instance",
+        "total_pool_connection_budget",
         "scopes",
         "logical_records",
         "write_attempts",
         "thresholds"
       ],
       "properties": {
-        "contract_version": {"const": 1},
+        "contract_version": {"const": 2},
         "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "instances": {"type": "integer", "minimum": 2},
+        "pool_size_per_instance": {"type": "integer", "minimum": 1},
+        "total_pool_connection_budget": {"type": "integer", "minimum": 2},
         "scopes": {"type": "integer", "minimum": 2},
         "logical_records": {"type": "integer", "minimum": 1},
         "write_attempts": {"type": "integer", "minimum": 1},
@@ -74,6 +78,8 @@
         "scope_leakage",
         "transition_race_violations",
         "vector_failures",
+        "vector_failure_observations",
+        "unclassified_vector_failures",
         "vector_replay_mutations",
         "vector_search_misses",
         "graph_path_misses",
@@ -92,6 +98,19 @@
         "scope_leakage": {"type": "integer", "minimum": 0},
         "transition_race_violations": {"type": "integer", "minimum": 0},
         "vector_failures": {"type": "integer", "minimum": 0},
+        "vector_failure_observations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["stage", "error_type", "message"],
+            "properties": {
+              "stage": {"type": "string"},
+              "error_type": {"type": "string"},
+              "message": {"type": "string"}
+            }
+          }
+        },
+        "unclassified_vector_failures": {"type": "integer", "minimum": 0},
         "vector_replay_mutations": {"type": "integer", "minimum": 0},
         "vector_search_misses": {"type": "integer", "minimum": 0},
         "graph_path_misses": {"type": "integer", "minimum": 0},

@@ -7,6 +7,12 @@
   races on `pg_extension_name_index` when independent processes initialize the first
   vector profile simultaneously; the new lock composes with the existing
   profile-specific migration lock and preserves lazy optional setup.
+- Add a versioned V2 multi-instance repair gate without weakening V1's workload or
+  thresholds. It records stage-specific vector failures and unclassified failures,
+  reports write wall time and throughput, and freezes a two-connection per-instance
+  budget after controlled trials showed that larger pools amplify hot-key contention.
+  The original 512 calls remain simultaneous and their end-to-end latency still
+  includes pool waiting.
 - Add a preregistered multi-instance reliability gate for the highest-configuration
   backend stack. Its deterministic live workload covers concurrent PostgreSQL schema
   initialization and scope-local idempotency, optimistic lifecycle races, shared

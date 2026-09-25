@@ -448,6 +448,14 @@ operations raised exceptions that V1 did not classify, and a 512-request burst r
 typed graph path p95 was 424 ms. V2 must improve diagnostics and resolve the generic
 initialization/connection-pool behavior without rewriting the V1 observation.
 
+The versioned V2 repair protocol is frozen in
+[`reports/multi-instance-reliability-v2-preregistered-2026-09-26.md`](reports/multi-instance-reliability-v2-preregistered-2026-09-26.md).
+It retains all 512 simultaneous calls and the original 500 ms write-p95 gate, adds
+stage-specific vector failure accounting, uses the database-global extension lock,
+and limits each of four pools to two connections after diagnostics showed that larger
+pools amplify unique-key contention. V1 remains the immutable first observation; V2
+is a distinct repair measurement.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

@@ -54,10 +54,11 @@ from doppel_memory.relation import RelationPathQuery, RelationPathStep
 from doppel_memory.vector import PostgreSQLVectorIndex, VectorIndexConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT = ROOT / "data/doppel/multi-instance-reliability-live.json"
-RUNNER = "doppel.multi-instance-reliability-live.v1"
-CONTRACT_VERSION = 1
+DEFAULT_OUTPUT = ROOT / "data/doppel/multi-instance-reliability-v2-live.json"
+RUNNER = "doppel.multi-instance-reliability-live.v2"
+CONTRACT_VERSION = 2
 DEFAULT_INSTANCES = 4
+DEFAULT_POOL_SIZE_PER_INSTANCE = 2
 DEFAULT_SCOPES = 8
 DEFAULT_RECORDS_PER_SCOPE = 16
 DEFAULT_DUPLICATE_ATTEMPTS = 4
@@ -77,6 +78,7 @@ THRESHOLDS = {
     "max_scope_leakage": 0,
     "max_transition_race_violations": 0,
     "max_vector_failures": 0,
+    "max_unclassified_vector_failures": 0,
     "max_vector_replay_mutations": 0,
     "max_vector_search_misses": 0,
     "max_graph_path_misses": 0,
@@ -160,6 +162,8 @@ def workload_contract(
         "contract_version": CONTRACT_VERSION,
         "seed": seed,
         "instances": instances,
+        "pool_size_per_instance": DEFAULT_POOL_SIZE_PER_INSTANCE,
+        "total_pool_connection_budget": instances * DEFAULT_POOL_SIZE_PER_INSTANCE,
         "scopes": scopes,
         "records_per_scope": records_per_scope,
         "logical_records": logical_records,
@@ -425,6 +429,8 @@ def quality_gate(metrics: dict[str, Any], cleanup_errors: Sequence[str]) -> dict
         <= THRESHOLDS["max_transition_race_violations"],
         "vector_failures": metrics["vector_failures"]
         <= THRESHOLDS["max_vector_failures"],
+        "vector_failure_accounting": metrics["unclassified_vector_failures"]
+        <= THRESHOLDS["max_unclassified_vector_failures"],
         "vector_replay": metrics["vector_replay_mutations"]
         <= THRESHOLDS["max_vector_replay_mutations"],
         "vector_search": metrics["vector_search_misses"]
@@ -498,6 +504,7 @@ async def run_live(
     scope_leakage = 0
     transition_race_violations = 0
     vector_failures = 0
+    vector_failure_observations: list[dict[str, str]] = []
     vector_replay_mutations = 0
     vector_search_misses = 0
     graph_path_misses = 0
@@ -508,6 +515,22 @@ async def run_live(
     duplicate_count = 0
     vector_health: dict[str, Any] = {}
     records_by_slot: dict[tuple[int, int], MemoryRecord] = {}
+    write_wall_ms = 0.0
+
+    def observe_vector_failure(stage: str, exc: BaseException | str) -> None:
+        if isinstance(exc, BaseException):
+            error_type = type(exc).__name__
+            message = str(exc)
+        else:
+            error_type = "InvariantViolation"
+            message = str(exc)
+        vector_failure_observations.append(
+            {
+                "stage": stage,
+                "error_type": error_type,
+                "message": message[:500],
+            }
+        )
     try:
         await _reset_ablation_postgres(
             host=PG_HOST,
@@ -517,7 +540,11 @@ async def run_live(
             password=postgres_password,
         )
         stores = [
-            PostgreSQLStore(dsn, min_pool_size=1, max_pool_size=8)
+            PostgreSQLStore(
+                dsn,
+                min_pool_size=1,
+                max_pool_size=int(contract["pool_size_per_instance"]),
+            )
             for _ in range(int(contract["instances"]))
         ]
         migration_results = await asyncio.gather(
@@ -553,7 +580,9 @@ async def run_live(
             except Exception as exc:  # noqa: BLE001 - benchmark report boundary
                 return item[:3], exc, (time.perf_counter() - started) * 1_000
 
+        write_started = time.perf_counter()
         write_results = await asyncio.gather(*(write_one(item) for item in attempts))
+        write_wall_ms = (time.perf_counter() - write_started) * 1_000
         by_logical: dict[tuple[int, int], Counter[str]] = {}
         for (scope_index, slot, _), result, latency in write_results:
             write_latencies.append(latency)
@@ -597,9 +626,17 @@ async def run_live(
         init_results = await asyncio.gather(
             *(index.initialize() for index in vector_indexes), return_exceptions=True
         )
-        vector_failures += sum(isinstance(item, BaseException) for item in init_results)
+        for result in init_results:
+            if isinstance(result, BaseException):
+                vector_failures += 1
+                observe_vector_failure("initialize", result)
         initial_report = await vector_indexes[0].index_records(stored_records)
         vector_failures += initial_report.failed
+        for failure in initial_report.failures:
+            observe_vector_failure(
+                f"initial_index:{failure.stage}",
+                f"{failure.error_type}: {failure.message}",
+            )
         replay_results = await asyncio.gather(
             *(
                 vector_indexes[index % len(vector_indexes)].upsert(record)
@@ -610,6 +647,7 @@ async def run_live(
         for result in replay_results:
             if isinstance(result, BaseException):
                 vector_failures += 1
+                observe_vector_failure("replay_upsert", result)
             elif result.status.value != "skipped":
                 vector_replay_mutations += 1
 
@@ -752,11 +790,20 @@ async def run_live(
             - int(contract["hard_deletes"])
         )
         vector_failures += int(vector_health["indexed_records"] != expected_indexed)
+        if vector_health["indexed_records"] != expected_indexed:
+            observe_vector_failure(
+                "post_reconcile_count",
+                f"expected {expected_indexed}, found {vector_health['indexed_records']}",
+            )
 
         await asyncio.gather(*(store.close() for store in stores))
         stores = []
         restarted_stores = [
-            PostgreSQLStore(dsn, min_pool_size=1, max_pool_size=8)
+            PostgreSQLStore(
+                dsn,
+                min_pool_size=1,
+                max_pool_size=int(contract["pool_size_per_instance"]),
+            )
             for _ in range(int(contract["instances"]))
         ]
         restarted_indexes = [
@@ -852,6 +899,10 @@ async def run_live(
         "scope_leakage": scope_leakage,
         "transition_race_violations": transition_race_violations,
         "vector_failures": vector_failures,
+        "vector_failure_observations": vector_failure_observations,
+        "unclassified_vector_failures": max(
+            vector_failures - len(vector_failure_observations), 0
+        ),
         "vector_replay_mutations": vector_replay_mutations,
         "vector_search_misses": vector_search_misses,
         "graph_path_misses": graph_path_misses,
@@ -864,6 +915,13 @@ async def run_live(
             "vector_search": _latency_summary(vector_search_latencies),
             "graph_search": _latency_summary(graph_search_latencies),
         },
+        "write_wall_ms": round(write_wall_ms, 3),
+        "write_throughput_ops_per_second": round(
+            int(contract["write_attempts"]) / (write_wall_ms / 1_000)
+            if write_wall_ms > 0
+            else 0.0,
+            3,
+        ),
     }
     gate = quality_gate(metrics, cleanup_errors)
     if hard_failure:
