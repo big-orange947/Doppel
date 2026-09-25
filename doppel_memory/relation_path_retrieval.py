@@ -241,6 +241,7 @@ async def assemble_hybrid_retrieval_candidates(
     filters: MemoryFilter,
     limit: int = 10,
     base_reserve: int = 5,
+    literal_entity_reserve: int = 0,
     rrf_k: int = 60,
     base_weight: float = 1.0,
     path_weight: float = 0.8,
@@ -257,8 +258,10 @@ async def assemble_hybrid_retrieval_candidates(
 
     if not scopes:
         raise MemoryIsolationError("hybrid retrieval assembly requires exact scopes")
-    if limit < 0 or base_reserve < 0:
+    if limit < 0 or base_reserve < 0 or literal_entity_reserve < 0:
         raise ValueError("hybrid retrieval limits must not be negative")
+    if literal_entity_reserve > base_reserve:
+        raise ValueError("literal entity reserve cannot exceed base reserve")
     if rrf_k < 1:
         raise ValueError("rrf_k must be positive")
     if base_weight <= 0 or path_weight <= 0:
@@ -281,6 +284,7 @@ async def assemble_hybrid_retrieval_candidates(
 
     records: dict[tuple[str, str], MemoryRecord] = {}
     base_ranks: dict[tuple[str, str], int] = {}
+    literal_entity_keys: set[tuple[str, str]] = set()
     base_scores: dict[tuple[str, str], float] = {}
     path_scores: dict[tuple[str, str], float] = {}
     path_ranks: defaultdict[tuple[str, str], list[int]] = defaultdict(list)
@@ -314,6 +318,8 @@ async def assemble_hybrid_retrieval_candidates(
         if key not in base_ranks or rank < base_ranks[key]:
             base_ranks[key] = rank
             base_scores[key] = base_weight / (rrf_k + rank)
+        if hit.candidate_evidence.entity_binding == "literal":
+            literal_entity_keys.add(key)
         _extend_unique(discovery_sources[key], ["independent"])
         _extend_unique(discovery_sources[key], hit.candidate_evidence.sources)
 
@@ -362,11 +368,23 @@ async def assemble_hybrid_retrieval_candidates(
     def combined_score(key: tuple[str, str]) -> float:
         return base_scores.get(key, 0.0) + path_scores.get(key, 0.0)
 
-    selected: set[tuple[str, str]] = set()
+    selected_literal_keys = set(
+        sorted(literal_entity_keys, key=lambda key: (base_ranks[key], key))[
+            : min(literal_entity_reserve, base_reserve, limit)
+        ]
+    )
+    selected: set[tuple[str, str]] = set(selected_literal_keys)
     reserved_base_keys = sorted(
-        base_ranks, key=lambda key: (base_ranks[key], key)
-    )[: min(base_reserve, limit)]
+        (
+            key
+            for key in base_ranks
+            if key not in selected_literal_keys
+        ),
+        key=lambda key: (base_ranks[key], key),
+    )[: min(max(base_reserve - len(selected), 0), max(limit - len(selected), 0))]
     selected.update(reserved_base_keys)
+    for key in selected_literal_keys:
+        _extend_unique(discovery_sources[key], ["entity_anchor_reserve"])
 
     retained_paths: list[HybridRelationPathEvidence] = []
     retained_path_keys: set[tuple[str, str]] = set()
@@ -394,7 +412,14 @@ async def assemble_hybrid_retrieval_candidates(
         key=lambda key: (-combined_score(key), key),
     )
     selected.update(remaining[: max(limit - len(selected), 0)])
-    ordered = sorted(selected, key=lambda key: (-combined_score(key), key))
+    ordered = sorted(
+        selected,
+        key=lambda key: (
+            key not in selected_literal_keys,
+            -combined_score(key),
+            key,
+        ),
+    )
     candidates = [
         HybridRetrievalCandidate(
             record=records[key],

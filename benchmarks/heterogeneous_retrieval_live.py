@@ -68,8 +68,8 @@ from doppel_memory.relation_path_retrieval import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v2.json"
-DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v2-live.json"
+DEFAULT_DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v3.json"
+DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v3-live.json"
 RUNNER = "doppel.heterogeneous-retrieval-live.v1"
 PROFILES = (
     "independent_lexical_vector",
@@ -134,7 +134,13 @@ class _DatasetPlanner:
         return PersonalMemoryQueryDraftV2(
             operation=self.case.intent,
             temporal_view=temporal_view,
-            search_text=self.case.query,
+            search_text=(
+                self.case.query
+                if self.case.oracle_search_text is None
+                else self.case.oracle_search_text
+            ),
+            memory_types=self.case.oracle_memory_types,
+            topic_keys=self.case.oracle_topic_keys,
             entity_mentions=self.case.entity_mentions,
             subject=request.default_subject,
             subject_id=self.scope.user_id,
@@ -363,6 +369,7 @@ async def run_live(
                 filters=FILTERS,
                 limit=20,
                 base_reserve=5,
+                literal_entity_reserve=1,
             )
             assembly_latency = (time.perf_counter() - assembly_started) * 1000
             _update_assembly_totals(assembly_totals, assembly)
@@ -376,6 +383,7 @@ async def run_live(
                 filters=FILTERS,
                 limit=20,
                 base_reserve=5,
+                literal_entity_reserve=1,
             )
             reranking_assembly_latency = (
                 time.perf_counter() - reranking_assembly_started

@@ -16,6 +16,11 @@
   V2 changes only peer-conflict evidence from hard-forbidden to related context. Also
   distinguish a legitimate reranker `not_run` on an empty candidate set and report
   pre-rerank candidate-window coverage so recall and ranking failures cannot be mixed.
+  Preserve the second dev-only result and add V3 oracle count-plan fields without
+  changing corpus text or answer evidence, keeping natural Planner quality explicitly
+  separate. Add an opt-in, one-record literal-entity reservation to hybrid assembly;
+  it only reorders Store-revalidated candidates, remains answer-support agnostic, and
+  is disabled by default.
 - Add a separately gated full-corpus profile that reranks only the independent
   lexical/vector branch before atomic fusion with typed and explored Graphiti paths.
   It freezes non-regression requirements for one-hop, two-hop, temporal, overall, and

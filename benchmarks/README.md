@@ -334,7 +334,7 @@ profile rather than the unconditional default.
 The perfect recall above is a result on a narrow, previously opened 144-query
 development corpus. It is not treated as a general Doppel quality score. The next
 evaluation uses the independently generated and frozen
-[`heterogeneous-retrieval-zh-v2.json`](datasets/heterogeneous-retrieval-zh-v2.json):
+[`heterogeneous-retrieval-zh-v3.json`](datasets/heterogeneous-retrieval-zh-v3.json):
 480 unique Chinese queries, 48 exact owner scopes, and 9,216 memories. Owner scopes
 are disjoint across 120 dev, 280 sealed, and 80 adversarial queries. The corpus covers
 current and historical residence, corrected facts, event-key-aware episode counts,
@@ -355,6 +355,17 @@ and [`reports/heterogeneous-retrieval-v2-label-correction-2026-09-25.md`](report
 In particular, related context such as “the book is held by someone” is not mislabeled
 as proof of who bought it: retrieval coverage and answer sufficiency are scored
 separately.
+
+The V2 dev-only diagnostic then showed that exact episode counting cannot be evaluated
+as retrieval execution unless the oracle plan supplies the same generic memory type and
+topic fields that a production Planner would need to derive. V3 adds only those
+structured count-plan labels; all corpus text, graph data, evidence roles, splits, and
+thresholds stay unchanged. It also enables a single generic literal-entity reservation
+in hybrid assembly so a named object's related context cannot be erased by an
+answer-relevance reranker. The frozen V3 delta is documented in
+[`reports/heterogeneous-retrieval-v3-oracle-plan-2026-09-25.md`](reports/heterogeneous-retrieval-v3-oracle-plan-2026-09-25.md).
+Natural Planner quality remains a separate future track and receives none of these gold
+fields.
 
 The live runner defaults to the open dev partition. It requires real local pgvector and
 Neo4j services plus the local reranker, but makes no external HTTP or paid LLM call:

@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from benchmarks.build_heterogeneous_retrieval_v1 import build_dataset
 from benchmarks.build_heterogeneous_retrieval_v2 import build_dataset as build_v2
+from benchmarks.build_heterogeneous_retrieval_v3 import build_dataset as build_v3
 from benchmarks.heterogeneous_retrieval_live import (
     ANSWERABLE_CATEGORIES,
     _DatasetPlanner,
@@ -43,6 +44,12 @@ V2_DATASET_PATH = (
     / "benchmarks"
     / "datasets"
     / "heterogeneous-retrieval-zh-v2.json"
+)
+V3_DATASET_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "benchmarks"
+    / "datasets"
+    / "heterogeneous-retrieval-zh-v3.json"
 )
 
 
@@ -120,6 +127,41 @@ def test_v2_only_relabels_peer_conflict_context() -> None:
         assert peer_id in after["related_memory_ids"]
         assert peer_id not in after["hard_forbidden_memory_ids"]
     assert changed == 48
+
+
+def test_v3_only_adds_generic_oracle_count_plan_fields() -> None:
+    v2 = load_dataset(V2_DATASET_PATH).model_dump(mode="json")
+    v3 = load_dataset(V3_DATASET_PATH)
+    rebuilt = HeterogeneousRetrievalDataset.model_validate(build_v3())
+
+    assert rebuilt.fingerprint == v3.fingerprint
+    assert v3.fingerprint == (
+        "ead91761f9da403c31c8b759d427c4551709daf7d29f35d26d786f94ec167f88"
+    )
+    payload = v3.model_dump(mode="json")
+    assert payload["memories"] == v2["memories"]
+    assert payload["entities"] == v2["entities"]
+    assert payload["edges"] == v2["edges"]
+    assert [item["query"] for item in payload["queries"]] == [
+        item["query"] for item in v2["queries"]
+    ]
+    count_plans = [
+        query for query in payload["queries"] if query["intent"] == "count"
+    ]
+    assert len(count_plans) == 48
+    assert all(query["oracle_search_text"] == "" for query in count_plans)
+    assert all(query["oracle_memory_types"] == ["episode"] for query in count_plans)
+    assert all(
+        query["oracle_topic_keys"] == ["travel:completed"]
+        for query in count_plans
+    )
+    assert all(
+        query["oracle_search_text"] is None
+        and not query["oracle_memory_types"]
+        and not query["oracle_topic_keys"]
+        for query in payload["queries"]
+        if query["intent"] != "count"
+    )
 
 
 def test_partitions_are_owner_disjoint_and_queries_are_unique() -> None:
@@ -232,7 +274,7 @@ def test_live_runner_keeps_sealed_partitions_closed_without_switch() -> None:
 
 @pytest.mark.asyncio
 async def test_oracle_planner_supplies_labels_but_no_scope_authority() -> None:
-    dataset = _dataset()
+    dataset = load_dataset(V3_DATASET_PATH)
     queries = {query.case_id: query for query in dataset.queries}
     scope = MemoryScope(user_id="owner-01:run", agent_id="agent")
     request = PersonalMemoryQueryRequest.model_validate(
@@ -253,6 +295,9 @@ async def test_oracle_planner_supplies_labels_but_no_scope_authority() -> None:
 
     assert count.operation == "count"
     assert count.temporal_view == "prior"
+    assert count.search_text == ""
+    assert count.memory_types == ["episode"]
+    assert count.topic_keys == ["travel:completed"]
     assert historical.temporal_view == "as_of"
     assert historical.as_of is not None
     assert not hasattr(count, "scopes")

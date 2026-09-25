@@ -116,6 +116,9 @@ class HeterogeneousQuery(BaseModel):
     hard_forbidden_memory_ids: list[str] = Field(default_factory=list)
     expected_count: int | None = Field(default=None, ge=0)
     answerable: bool
+    oracle_search_text: str | None = None
+    oracle_memory_types: list[str] = Field(default_factory=list)
+    oracle_topic_keys: list[str] = Field(default_factory=list)
 
 
 class HeterogeneousRetrievalDataset(BaseModel):
@@ -236,8 +239,20 @@ class HeterogeneousRetrievalDataset(BaseModel):
             if query.intent == "count":
                 if query.expected_count != len(query.required_memory_ids):
                     raise ValueError(f"{query.case_id}: count evidence mismatch")
+                if self.requirements.get("requires_oracle_count_plan") is True and (
+                    query.oracle_search_text != ""
+                    or query.oracle_memory_types != ["episode"]
+                    or not query.oracle_topic_keys
+                ):
+                    raise ValueError(f"{query.case_id}: incomplete oracle count plan")
             elif query.expected_count is not None:
                 raise ValueError(f"{query.case_id}: lookup cannot declare count")
+            elif (
+                query.oracle_search_text is not None
+                or query.oracle_memory_types
+                or query.oracle_topic_keys
+            ):
+                raise ValueError(f"{query.case_id}: lookup has oracle count fields")
             if query.category in {"one_hop_relation", "two_hop_relation"}:
                 expected_hops = 1 if query.category == "one_hop_relation" else 2
                 if not query.required_routes or any(
@@ -302,8 +317,17 @@ class HeterogeneousRetrievalDataset(BaseModel):
 
     @property
     def fingerprint(self) -> str:
+        dumped = self.model_dump(mode="json")
+        if self.suite in {
+            "doppel-heterogeneous-retrieval-zh-v1",
+            "doppel-heterogeneous-retrieval-zh-v2",
+        }:
+            for query in dumped["queries"]:
+                query.pop("oracle_search_text", None)
+                query.pop("oracle_memory_types", None)
+                query.pop("oracle_topic_keys", None)
         payload = json.dumps(
-            self.model_dump(mode="json"), ensure_ascii=False, sort_keys=True
+            dumped, ensure_ascii=False, sort_keys=True
         ).encode("utf-8")
         return hashlib.sha256(payload).hexdigest()
 

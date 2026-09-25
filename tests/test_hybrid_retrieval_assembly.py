@@ -53,7 +53,12 @@ def _record(
     )
 
 
-def _base_hit(record: MemoryRecord, *, sources: list[str] | None = None) -> PersonalMemoryQueryHit:
+def _base_hit(
+    record: MemoryRecord,
+    *,
+    sources: list[str] | None = None,
+    entity_binding: str = "not_requested",
+) -> PersonalMemoryQueryHit:
     return PersonalMemoryQueryHit(
         record=record,
         score=0.8,
@@ -62,6 +67,7 @@ def _base_hit(record: MemoryRecord, *, sources: list[str] | None = None) -> Pers
         effective_at=NOW,
         candidate_evidence=PersonalMemoryCandidateEvidence(
             sources=sources or ["semantic"],
+            entity_binding=entity_binding,
             store_revalidated=True,
         ),
     )
@@ -139,6 +145,53 @@ async def test_assembly_reserves_independent_candidate_and_keeps_path_atomic() -
     assert by_id["m-path"].answer_support == "unassessed"
     assert by_id["m-path"].store_revalidated is True
     assert [path.hit.candidate.path_id for path in result.relation_paths] == ["p1"]
+
+
+@pytest.mark.asyncio
+async def test_assembly_can_reserve_literal_entity_context_without_judging_support() -> None:
+    store = InMemoryStore()
+    higher_ranked = _record("m-higher-ranked")
+    literal_anchor = _record("m-literal-anchor")
+    await _put(store, higher_ranked, literal_anchor)
+
+    result = await assemble_hybrid_retrieval_candidates(
+        store,
+        [
+            _base_hit(higher_ranked),
+            _base_hit(literal_anchor, entity_binding="literal"),
+        ],
+        [],
+        [SCOPE],
+        filters=FILTERS,
+        limit=2,
+        base_reserve=1,
+        literal_entity_reserve=1,
+    )
+
+    assert [item.record.memory_id for item in result.candidates] == [
+        "m-literal-anchor",
+        "m-higher-ranked",
+    ]
+    assert result.candidates[0].discovery_sources == [
+        "independent",
+        "semantic",
+        "entity_anchor_reserve",
+    ]
+    assert result.candidates[0].answer_support == "unassessed"
+
+
+@pytest.mark.asyncio
+async def test_literal_entity_reserve_is_bounded_by_base_reserve() -> None:
+    with pytest.raises(ValueError, match="cannot exceed"):
+        await assemble_hybrid_retrieval_candidates(
+            InMemoryStore(),
+            [],
+            [],
+            [SCOPE],
+            filters=FILTERS,
+            base_reserve=0,
+            literal_entity_reserve=1,
+        )
 
 
 @pytest.mark.asyncio
