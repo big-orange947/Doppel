@@ -351,6 +351,27 @@ before any retrieval result was produced. In particular, related context such as
 book is held by someone” is not mislabeled as proof of who bought it: retrieval coverage
 and answer sufficiency are scored separately.
 
+The live runner defaults to the open dev partition. It requires real local pgvector and
+Neo4j services plus the local reranker, but makes no external HTTP or paid LLM call:
+
+```powershell
+$env:DOPPEL_ABLATION_PG_PASSWORD = "<local-only password>"
+$env:DOPPEL_NEO4J_PASSWORD = "<local-only password>"
+D:\project\.doppel-eval-cu128\Scripts\python.exe `
+  -m benchmarks.heterogeneous_retrieval_live `
+  --partition dev `
+  --reranker-model D:\project\.doppel-eval-models\bge-reranker-v2-m3 `
+  --reranker-device cuda
+```
+
+Opening all partitions additionally requires the explicit `--partition all
+--sealed-first-run` pair. The runner compares independent lexical/pgvector retrieval,
+oracle-route Graphiti execution, Store-revalidated assembly, and the same assembly with
+reorder-only memory reranking. Oracle routes isolate graph execution quality; they are
+not presented as natural-language Planner performance. The committed
+[`heterogeneous-retrieval-result.schema.json`](heterogeneous-retrieval-result.schema.json)
+binds the result envelope and safety accounting.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

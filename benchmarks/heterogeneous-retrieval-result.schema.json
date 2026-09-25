@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/big-orange947/Doppel/benchmarks/heterogeneous-retrieval-result.schema.json",
+  "title": "Doppel heterogeneous personal-memory retrieval result",
+  "oneOf": [
+    {"$ref": "#/$defs/success"},
+    {"$ref": "#/$defs/failure"}
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["result_schema_version", "runner", "dataset", "runtime", "gate", "report_sha256", "reproducibility"],
+      "properties": {
+        "result_schema_version": {"const": 1},
+        "runner": {"const": "doppel.heterogeneous-retrieval-live.v1"},
+        "dataset": {
+          "type": "object",
+          "required": ["suite", "fingerprint", "selected_queries"],
+          "properties": {
+            "suite": {"const": "doppel-heterogeneous-retrieval-zh-v1"},
+            "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "selected_queries": {"type": "integer", "minimum": 1}
+          }
+        },
+        "runtime": {
+          "type": "object",
+          "required": ["llm_calls", "external_http_calls", "provider_tokens", "credentials_persisted"],
+          "properties": {
+            "llm_calls": {"const": 0},
+            "external_http_calls": {"const": 0},
+            "provider_tokens": {"const": 0},
+            "credentials_persisted": {"const": false}
+          }
+        },
+        "gate": {"$ref": "#/$defs/gate"},
+        "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reproducibility": {
+          "type": "object",
+          "required": ["implementation_commit", "tracked_dirty_paths", "dataset_fingerprint", "profile_contract", "oracle_graph_routes", "answer_support"],
+          "properties": {
+            "implementation_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+            "tracked_dirty_paths": {"type": "array", "items": {"type": "string"}},
+            "dataset_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "profile_contract": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "string"}},
+            "oracle_graph_routes": {"const": true},
+            "answer_support": {"const": "unassessed"}
+          }
+        }
+      }
+    },
+    "success": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["profiles", "assembly", "reranking_assembly", "rerank_statuses", "reorder_membership_violations"],
+          "properties": {
+            "profiles": {
+              "type": "object",
+              "required": ["independent_lexical_vector", "oracle_graph_path", "assembled_oracle_hybrid", "assembled_oracle_hybrid_memory_reranking"],
+              "additionalProperties": {"$ref": "#/$defs/profile"}
+            },
+            "assembly": {"type": "object"},
+            "reranking_assembly": {"type": "object"},
+            "rerank_statuses": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+            "reorder_membership_violations": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "failure": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["hard_failure"],
+          "properties": {"hard_failure": {"type": "string", "minLength": 1}}
+        }
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "required": ["queries", "evidence_recall_at_1", "evidence_recall_at_5", "evidence_recall_at_10", "evidence_recall_at_20", "complete_evidence_rate_at_5", "complete_evidence_rate_at_10", "complete_evidence_rate_at_20", "related_evidence_recall_at_10", "mrr", "exact_episode_count_rate_at_10", "hard_forbidden_hits", "scope_leakage", "subject_violations", "ineligible_hits", "temporal_violations", "orphan_provenance", "max_candidates", "latency_ms", "by_category", "by_partition"],
+      "properties": {
+        "queries": {"type": "integer", "minimum": 1},
+        "evidence_recall_at_1": {"$ref": "#/$defs/rate"},
+        "evidence_recall_at_5": {"$ref": "#/$defs/rate"},
+        "evidence_recall_at_10": {"$ref": "#/$defs/rate"},
+        "evidence_recall_at_20": {"$ref": "#/$defs/rate"},
+        "complete_evidence_rate_at_5": {"$ref": "#/$defs/rate"},
+        "complete_evidence_rate_at_10": {"$ref": "#/$defs/rate"},
+        "complete_evidence_rate_at_20": {"$ref": "#/$defs/rate"},
+        "related_evidence_recall_at_10": {"$ref": "#/$defs/rate"},
+        "mrr": {"$ref": "#/$defs/rate"},
+        "exact_episode_count_rate_at_10": {"$ref": "#/$defs/rate"},
+        "hard_forbidden_hits": {"type": "integer", "minimum": 0},
+        "scope_leakage": {"type": "integer", "minimum": 0},
+        "subject_violations": {"type": "integer", "minimum": 0},
+        "ineligible_hits": {"type": "integer", "minimum": 0},
+        "temporal_violations": {"type": "integer", "minimum": 0},
+        "orphan_provenance": {"type": "integer", "minimum": 0},
+        "max_candidates": {"type": "integer", "minimum": 0, "maximum": 20},
+        "latency_ms": {"type": "object", "required": ["p50", "p95", "p99"]},
+        "by_category": {"type": "object"},
+        "by_partition": {"type": "object"}
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["ok", "failures"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "status": {"enum": ["complete", "dev_diagnostic"]},
+        "checks": {"type": "object", "additionalProperties": {"type": "boolean"}},
+        "failures": {"type": "array", "items": {"type": "string"}},
+        "thresholds": {"type": "object"}
+      }
+    },
+    "rate": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}
