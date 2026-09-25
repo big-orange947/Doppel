@@ -439,6 +439,15 @@ This V1 gate intentionally excludes Graphiti's LLM-driven concurrent episode
 extraction. It tests multi-driver typed relation retrieval and stale-edge revalidation;
 provider-dependent graph ingestion belongs in a separate budgeted benchmark.
 
+The immutable first V1 result is recorded in
+[`reports/multi-instance-reliability-v1-first-live-2026-09-25.md`](reports/multi-instance-reliability-v1-first-live-2026-09-25.md).
+All idempotency, isolation, lifecycle-race, search, stale-edge, reconciliation,
+restart, and cleanup checks passed. The overall gate still failed: three pgvector
+operations raised exceptions that V1 did not classify, and a 512-request burst reached
+781 ms write p95 against the frozen 500 ms ceiling. Vector search p95 was 37 ms and
+typed graph path p95 was 424 ms. V2 must improve diagnostics and resolve the generic
+initialization/connection-pool behavior without rewriting the V1 observation.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate
