@@ -461,6 +461,12 @@ PostgreSQL 原生机制兑现相同语义：
 - schema 名只接受普通 identifier 并始终引用；默认只在已有 schema 内建表，`create_schema=True`
   才请求 schema DDL 权限。
 
+连接池容量必须按整个服务的实例数共同预算，而不是让每个 worker 都使用同一个大上限。冻结的
+4 实例、512 请求突发测试中，每实例 2 个连接（总计 8）达到约 1,508 ops/s 和 303 ms p95；
+每实例 8/12/16 个连接反而因幂等唯一键热点竞争降到约 606/425/306 ops/s。这个数字不是所有
+部署的固定答案，但验证了配置原则：从数据库允许的总连接预算出发，除以实例数并保留管理余量，
+再用本机工作负载测量；不要把单进程的默认池大小直接乘以 Agent worker 数量。
+
 驱动是 `postgres` extra，模块顶层不会导入 asyncpg。因此默认安装和根包导入仍不依赖数据库驱动。
 当前 capability 明确限于 substring、temporal、transactions、pagination、hard delete。PostgreSQL
 全文检索和 pgvector 都不是核心 Store 自动获得的能力；v0.6.1 因此把 pgvector 放在显式

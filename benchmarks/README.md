@@ -456,6 +456,15 @@ and limits each of four pools to two connections after diagnostics showed that l
 pools amplify unique-key contention. V1 remains the immutable first observation; V2
 is a distinct repair measurement.
 
+The first V2 live result is preserved in
+[`reports/multi-instance-reliability-v2-first-live-2026-09-26.md`](reports/multi-instance-reliability-v2-first-live-2026-09-26.md).
+Every gate passed: 128 logical events under 512 simultaneous calls produced exactly
+128 creates and 384 database-level duplicates, with zero isolation, lifecycle, vector,
+graph, reconciliation, restart, or cleanup failures. Write throughput was about 1,508
+ops/s with p95 303 ms; pgvector search p95 was 37 ms and typed Graphiti path p95 was
+278 ms. The result validates the bounded local burst contract, not a long soak,
+network partition, or LLM-driven Graphiti ingestion.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

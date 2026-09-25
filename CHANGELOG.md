@@ -12,7 +12,10 @@
   reports write wall time and throughput, and freezes a two-connection per-instance
   budget after controlled trials showed that larger pools amplify hot-key contention.
   The original 512 calls remain simultaneous and their end-to-end latency still
-  includes pool waiting.
+  includes pool waiting. Preserve the first V2 pass: all correctness, recovery,
+  cleanup, and latency gates passed; the burst sustained about 1,508 ops/s at 303 ms
+  p95, vector search p95 was 37 ms, and typed Graphiti path p95 was 278 ms, with zero
+  vector initialization failures after the advisory-lock fix.
 - Add a preregistered multi-instance reliability gate for the highest-configuration
   backend stack. Its deterministic live workload covers concurrent PostgreSQL schema
   initialization and scope-local idempotency, optimistic lifecycle races, shared

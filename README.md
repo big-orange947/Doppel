@@ -371,6 +371,7 @@ verifier 或上层回答模型。详细说明见 [Retrieval evaluation boundary]
 | 类型化关系检索 | typed oracle 结构上限与自然语言 Planner 质量分轨测量 |
 | 两跳关系路径 | 26 条 live Neo4j 结构消融，完整证据率 0.500 → 1.000 |
 | 异构最高配置盲测 | 9,216 条记忆、480 条查询：Recall@5 0.998、完整证据@10 1.000、MRR 0.933，安全违规为 0 |
+| 多实例可靠性 | 4 实例、512 次同时写：1,508 ops/s、写 p95 303 ms；幂等、隔离、索引修复与重启失败均为 0 |
 | 回归检查 | Python 3.11/3.12、pytest、Ruff、Pyright、版本化结果 schema |
 
 评测入口与完整限制见 [benchmarks/README.md](benchmarks/README.md)。数据集在冻结前都明确标记
