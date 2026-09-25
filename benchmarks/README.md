@@ -276,6 +276,26 @@ Rejected candidates are reported by cause. Expected authority/lifecycle filterin
 kept separate from actual Store revalidation failures such as stale index references
 or a scope mismatch after authoritative Store reload.
 
+### Semantic overfetch and whole-memory reranking
+
+The first bounded-exploration run isolated a weaker semantic-only slice. The follow-up
+protocol in
+[`reports/combined-semantic-rerank-preregistered-2026-09-25.md`](reports/combined-semantic-rerank-preregistered-2026-09-25.md)
+separates candidate coverage, overfetch/backfill, and reorder-only local cross-encoder
+quality without changing the 20-item final context bound:
+
+```powershell
+$env:DOPPEL_ABLATION_PG_PASSWORD = "<local-only password>"
+D:\project\.doppel-eval-cu128\Scripts\python.exe `
+  -m benchmarks.combined_semantic_rerank_live `
+  --reranker-model D:\project\.doppel-eval-models\bge-reranker-v2-m3 `
+  --reranker-device cuda
+```
+
+The runner makes no network or provider call. It fails if the baseline drifts, the
+cross-encoder silently degrades, candidate membership changes, final Store filtering
+leaks an ineligible record, or the preregistered quality thresholds are missed.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

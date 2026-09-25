@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a frozen semantic-only overfetch and whole-memory reranking ablation for the
+  combined V2 corpus. It distinguishes index/score-gate misses from ranking errors,
+  verifies the existing personal-memory reranker is strictly reorder-only, and keeps
+  Store eligibility, exact scope, a 20-item context bound, and backend cleanup as hard
+  gates before any local GPU result is opened.
 - Make hybrid candidate rejection auditable by separating expected filter and scope
   enforcement from stale Store references and post-read scope mismatches. The first
   frozen combined V2 live exploration run now passes its independent preregistered
