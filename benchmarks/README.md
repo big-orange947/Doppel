@@ -329,6 +329,28 @@ time, or path-atomicity violations. The quality premium raised p50 from 150.8 ms
 419.6 ms and p95 from 192.9 ms to 542.7 ms, so reranking remains an opt-in quality
 profile rather than the unconditional default.
 
+### Heterogeneous personal-memory generalization corpus
+
+The perfect recall above is a result on a narrow, previously opened 144-query
+development corpus. It is not treated as a general Doppel quality score. The next
+evaluation uses the independently generated and frozen
+[`heterogeneous-retrieval-zh-v1.json`](datasets/heterogeneous-retrieval-zh-v1.json):
+480 unique Chinese queries, 48 exact owner scopes, and 9,216 memories. Owner scopes
+are disjoint across 120 dev, 280 sealed, and 80 adversarial queries. The corpus covers
+current and historical residence, corrected facts, event-key-aware episode counts,
+one- and two-hop possession relations, document facts, cross-conversation preferences,
+subject corrections, and related-but-insufficient evidence.
+
+The generator is deterministic, the dataset is synthetic and contains no real personal
+data, and the contract rejects cross-scope labels, repeated full queries, invalid time
+intervals, unprovenanced edges, and malformed relation gold. The corpus is author-known
+and therefore remains `publication_ready=false`. Its fingerprint and the unopened
+evaluation protocol were frozen in
+[`reports/heterogeneous-retrieval-v1-preregistered-2026-09-25.md`](reports/heterogeneous-retrieval-v1-preregistered-2026-09-25.md)
+before any retrieval result was produced. In particular, related context such as “the
+book is held by someone” is not mislabeled as proof of who bought it: retrieval coverage
+and answer sufficiency are scored separately.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

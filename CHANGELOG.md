@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a deterministic, frozen heterogeneous personal-memory generalization corpus with
+  9,216 memories, 480 unique Chinese queries, 48 owner-disjoint scopes, and explicit
+  dev/sealed/adversarial partitions. It broadens evaluation to temporal residence,
+  corrections, deduplicated episode counts, document facts, cross-conversation recall,
+  subject attribution, one- and two-hop relations, and related-but-insufficient
+  evidence. Freeze its validation contract and first-run gates before opening any
+  retrieval result; it is synthetic and author-known, so it remains non-publication
+  evidence.
 - Add a separately gated full-corpus profile that reranks only the independent
   lexical/vector branch before atomic fusion with typed and explored Graphiti paths.
   It freezes non-regression requirements for one-hop, two-hop, temporal, overall, and
