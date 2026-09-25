@@ -395,8 +395,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         "by_category": by_category,
     }
     profiles = {
-        "assembled_oracle_hybrid": profile,
-        "assembled_oracle_hybrid_memory_reranking": profile,
+        "assembled_oracle_exploration_hybrid": profile,
+        "assembled_oracle_exploration_hybrid_memory_reranking": profile,
     }
 
     passed = quality_gate(

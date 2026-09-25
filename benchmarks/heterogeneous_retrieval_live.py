@@ -60,10 +60,13 @@ from doppel_memory.query import (
     PersonalMemoryQueryRequest,
 )
 from doppel_memory.query_path import PersonalMemoryRelationPathDraftV4
+from doppel_memory.relation import RelationPathExploreQuery
 from doppel_memory.relation_path_retrieval import (
     HybridRetrievalAssembly,
     assemble_hybrid_retrieval_candidates,
     build_relation_path_retrieval_plan,
+    merge_relation_path_hits,
+    rank_explored_relation_paths,
     search_relation_path_routes,
 )
 
@@ -74,8 +77,10 @@ RUNNER = "doppel.heterogeneous-retrieval-live.v1"
 PROFILES = (
     "independent_lexical_vector",
     "oracle_graph_path",
+    "bounded_graph_exploration",
     "assembled_oracle_hybrid",
-    "assembled_oracle_hybrid_memory_reranking",
+    "assembled_oracle_exploration_hybrid",
+    "assembled_oracle_exploration_hybrid_memory_reranking",
 )
 ANSWERABLE_CATEGORIES = (
     "current_residence",
@@ -265,6 +270,7 @@ async def run_live(
         profile: [] for profile in PROFILES
     }
     assembly_totals: Counter[str] = Counter()
+    exploration_assembly_totals: Counter[str] = Counter()
     reranking_assembly_totals: Counter[str] = Counter()
     rerank_statuses: Counter[str] = Counter()
     reorder_membership_violations = 0
@@ -360,6 +366,34 @@ async def run_live(
             )
             path_latency = (time.perf_counter() - path_started) * 1000
 
+            exploration_started = time.perf_counter()
+            explored_candidates = (
+                await graph_index.explore_relation_paths(
+                    RelationPathExploreQuery(
+                        query_text=case.query,
+                        entity_mentions=case.entity_mentions,
+                        allowed_relation_types=dataset.relation_types,
+                        subject=Actor.OWNER,
+                        subject_id=scope.user_id,
+                        valid_at=valid_at,
+                    ),
+                    [scope],
+                    filters=FILTERS,
+                    limit=20,
+                )
+                if case.entity_mentions
+                else []
+            )
+            explored_hits = rank_explored_relation_paths(
+                explored_candidates, limit=20
+            )
+            combined_path_hits = merge_relation_path_hits(
+                path_hits, explored_hits, limit=20
+            )
+            exploration_latency = (
+                time.perf_counter() - exploration_started
+            ) * 1000
+
             assembly_started = time.perf_counter()
             assembly = await assemble_hybrid_retrieval_candidates(
                 store,
@@ -374,11 +408,29 @@ async def run_live(
             assembly_latency = (time.perf_counter() - assembly_started) * 1000
             _update_assembly_totals(assembly_totals, assembly)
 
+            exploration_assembly_started = time.perf_counter()
+            exploration_assembly = await assemble_hybrid_retrieval_candidates(
+                store,
+                base_window,
+                combined_path_hits,
+                [scope],
+                filters=FILTERS,
+                limit=20,
+                base_reserve=5,
+                literal_entity_reserve=1,
+            )
+            exploration_assembly_latency = (
+                time.perf_counter() - exploration_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                exploration_assembly_totals, exploration_assembly
+            )
+
             reranking_assembly_started = time.perf_counter()
             reranking_assembly = await assemble_hybrid_retrieval_candidates(
                 store,
                 reranked_window,
-                path_hits,
+                combined_path_hits,
                 [scope],
                 filters=FILTERS,
                 limit=20,
@@ -406,6 +458,17 @@ async def run_live(
             assembled_ids = [
                 candidate.record.memory_id for candidate in assembly.candidates
             ]
+            explored_ids = list(
+                dict.fromkeys(
+                    memory_id
+                    for candidate in explored_candidates
+                    for memory_id in candidate.supporting_memory_ids
+                )
+            )
+            exploration_assembled_ids = [
+                candidate.record.memory_id
+                for candidate in exploration_assembly.candidates
+            ]
             reranked_ids = [
                 candidate.record.memory_id
                 for candidate in reranking_assembly.candidates
@@ -428,6 +491,17 @@ async def run_live(
                     path_ids,
                 ),
                 (
+                    "bounded_graph_exploration",
+                    explored_ids,
+                    [
+                        candidate.scope.scope_key
+                        for candidate in explored_candidates
+                    ],
+                    exploration_latency,
+                    [["relation_path:exploration"] for _ in explored_ids],
+                    explored_ids,
+                ),
+                (
                     "assembled_oracle_hybrid",
                     assembled_ids,
                     [
@@ -439,13 +513,33 @@ async def run_live(
                     assembled_ids,
                 ),
                 (
-                    "assembled_oracle_hybrid_memory_reranking",
+                    "assembled_oracle_exploration_hybrid",
+                    exploration_assembled_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in exploration_assembly.candidates
+                    ],
+                    base_latency
+                    + path_latency
+                    + exploration_latency
+                    + exploration_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in exploration_assembly.candidates
+                    ],
+                    exploration_assembled_ids,
+                ),
+                (
+                    "assembled_oracle_exploration_hybrid_memory_reranking",
                     reranked_ids,
                     [
                         candidate.record.scope.scope_key
                         for candidate in reranking_assembly.candidates
                     ],
-                    rerank_latency + path_latency + reranking_assembly_latency,
+                    rerank_latency
+                    + path_latency
+                    + exploration_latency
+                    + reranking_assembly_latency,
                     [
                         candidate.discovery_sources
                         for candidate in reranking_assembly.candidates
@@ -566,6 +660,7 @@ async def run_live(
         },
         "profiles": profiles,
         "assembly": dict(assembly_totals),
+        "exploration_assembly": dict(exploration_assembly_totals),
         "reranking_assembly": dict(reranking_assembly_totals),
         "rerank_statuses": dict(rerank_statuses),
         "reorder_membership_violations": reorder_membership_violations,
@@ -906,8 +1001,10 @@ def quality_gate(
     graph_cleaned: bool,
     postgres_reset: bool,
 ) -> dict[str, Any]:
-    baseline = profiles["assembled_oracle_hybrid"]
-    final = profiles["assembled_oracle_hybrid_memory_reranking"]
+    baseline = profiles["assembled_oracle_exploration_hybrid"]
+    final = profiles[
+        "assembled_oracle_exploration_hybrid_memory_reranking"
+    ]
     checks = {
         "selection_complete": selection_complete,
         "evidence_recall_at_5": final["evidence_recall_at_5"]
@@ -952,8 +1049,8 @@ def quality_gate(
         "checks": checks,
         "failures": [name for name, passed in checks.items() if not passed],
         "thresholds": THRESHOLDS,
-        "baseline_profile": "assembled_oracle_hybrid",
-        "profile": "assembled_oracle_hybrid_memory_reranking",
+        "baseline_profile": "assembled_oracle_exploration_hybrid",
+        "profile": "assembled_oracle_exploration_hybrid_memory_reranking",
     }
 
 

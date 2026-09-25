@@ -381,10 +381,12 @@ D:\project\.doppel-eval-cu128\Scripts\python.exe `
 ```
 
 Opening all partitions additionally requires the explicit `--partition all
---sealed-first-run` pair. The runner compares independent lexical/pgvector retrieval,
-oracle-route Graphiti execution, Store-revalidated assembly, and the same assembly with
-reorder-only memory reranking. Oracle routes isolate graph execution quality; they are
-not presented as natural-language Planner performance. The committed
+--sealed-first-run` pair. The runner separately reports independent lexical/pgvector
+retrieval, oracle-route Graphiti execution, bounded Graphiti exploration,
+Store-revalidated assembly with and without exploration, and exploration-enhanced
+assembly with reorder-only memory reranking. Oracle routes isolate graph execution
+quality; they are not presented as natural-language Planner performance. Exploration
+may discover related context but never claims answer support. The committed
 [`heterogeneous-retrieval-result.schema.json`](heterogeneous-retrieval-result.schema.json)
 binds the result envelope and safety accounting.
 

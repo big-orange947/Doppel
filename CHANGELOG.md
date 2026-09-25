@@ -20,7 +20,11 @@
   changing corpus text or answer evidence, keeping natural Planner quality explicitly
   separate. Add an opt-in, one-record literal-entity reservation to hybrid assembly;
   it only reorders Store-revalidated candidates, remains answer-support agnostic, and
-  is disabled by default.
+  is disabled by default. Preserve the third dev diagnostic, which passes all required
+  evidence and safety gates but shows that literal binding alone cannot distinguish
+  several same-entity facts. Extend the frozen runner—not the dataset—with a separately
+  reported bounded Graphiti exploration branch so unsupported requested predicates can
+  still surface typed adjacent context without being treated as answer proof.
 - Add a separately gated full-corpus profile that reranks only the independent
   lexical/vector branch before atomic fusion with typed and explored Graphiti paths.
   It freezes non-regression requirements for one-hop, two-hop, temporal, overall, and

@@ -41,7 +41,7 @@
             "implementation_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
             "tracked_dirty_paths": {"type": "array", "items": {"type": "string"}},
             "dataset_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-            "profile_contract": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "string"}},
+            "profile_contract": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "string"}},
             "oracle_graph_routes": {"const": true},
             "answer_support": {"const": "unassessed"}
           }
@@ -53,14 +53,15 @@
         {"$ref": "#/$defs/base"},
         {
           "type": "object",
-          "required": ["profiles", "assembly", "reranking_assembly", "rerank_statuses", "reorder_membership_violations"],
+          "required": ["profiles", "assembly", "exploration_assembly", "reranking_assembly", "rerank_statuses", "reorder_membership_violations"],
           "properties": {
             "profiles": {
               "type": "object",
-              "required": ["independent_lexical_vector", "oracle_graph_path", "assembled_oracle_hybrid", "assembled_oracle_hybrid_memory_reranking"],
+              "required": ["independent_lexical_vector", "oracle_graph_path", "bounded_graph_exploration", "assembled_oracle_hybrid", "assembled_oracle_exploration_hybrid", "assembled_oracle_exploration_hybrid_memory_reranking"],
               "additionalProperties": {"$ref": "#/$defs/profile"}
             },
             "assembly": {"type": "object"},
+            "exploration_assembly": {"type": "object"},
             "reranking_assembly": {"type": "object"},
             "rerank_statuses": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
             "reorder_membership_violations": {"type": "integer", "minimum": 0}
