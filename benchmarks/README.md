@@ -296,6 +296,15 @@ The runner makes no network or provider call. It fails if the baseline drifts, t
 cross-encoder silently degrades, candidate membership changes, final Store filtering
 leaks an ineligible record, or the preregistered quality thresholds are missed.
 
+The first frozen live result is recorded in
+[`reports/combined-semantic-rerank-first-live-2026-09-25.md`](reports/combined-semantic-rerank-first-live-2026-09-25.md).
+All 36 required memories were already present inside the unchanged 64-candidate window.
+Overfetch alone left recall unchanged, while local whole-memory reranking reached 1.000
+Recall@1/5/10/20 and MRR with zero candidate-membership, scope, or eligibility
+violations. Median latency increased from 65.6 ms to 257.2 ms. This is component-level
+evidence for an opt-in highest-quality profile; the narrow synthetic semantic slice is
+not a general perfect-score claim.
+
 Natural-language path planning is evaluated on a separate draft,
 [`datasets/relation-path-planner-quality-zh-v1.json`](datasets/relation-path-planner-quality-zh-v1.json).
 The structural retrieval fixture above intentionally contains graph-known intermediate

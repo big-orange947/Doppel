@@ -6,7 +6,10 @@
   combined V2 corpus. It distinguishes index/score-gate misses from ranking errors,
   verifies the existing personal-memory reranker is strictly reorder-only, and keeps
   Store eligibility, exact scope, a 20-item context bound, and backend cleanup as hard
-  gates before any local GPU result is opened.
+  gates before any local GPU result is opened. The first frozen run found 1.000
+  candidate recall inside the 64-item window and improved Recall@1/5/10/20 plus MRR
+  from 0.417/0.417/0.417/0.750/0.445 to 1.000 across all metrics, with zero safety or
+  reorder-membership violations; p50 increased from 65.6 ms to 257.2 ms.
 - Make hybrid candidate rejection auditable by separating expected filter and scope
   enforcement from stale Store references and post-read scope mismatches. The first
   frozen combined V2 live exploration run now passes its independent preregistered
