@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a versioned, opened heterogeneous-retrieval ablation for candidate assembly
+  without oracle exact relation paths. The immutable 480-query V3 result showed that
+  bounded Graphiti exploration contained every exact-path memory ID and added 144
+  related-context IDs, but containment does not prove equal ranking. V4 therefore
+  keeps the oracle profile as an in-run control and freezes strict non-regression on
+  recall@5, complete evidence@10, related-context recall@10, and MRR, together with all
+  existing safety, Store-revalidation, boundedness, reranker, and cleanup gates. The
+  evaluated profile uses no oracle graph route; Planner time/intent/count/entity
+  responsibilities remain explicitly out of scope for this ablation.
 - Serialize database-global pgvector extension discovery and creation with a
   PostgreSQL transaction advisory lock. `CREATE EXTENSION IF NOT EXISTS` alone still
   races on `pg_extension_name_index` when independent processes initialize the first

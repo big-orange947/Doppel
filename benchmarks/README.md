@@ -409,6 +409,17 @@ provenance, Store-revalidation, membership, boundedness, and cleanup checks pass
 The corpus remains synthetic, author-known, oracle-routed for graph execution, and
 non-publication evidence.
 
+The immutable result also showed that every memory ID returned by its oracle exact
+relation paths was already present in bounded Graphiti exploration. V4 therefore adds
+an opened, versioned ablation that removes exact-path candidates from the evaluated
+assembly while retaining the old oracle profile as a direct comparison. Its gate
+requires the exploration-only reranked profile to match or exceed oracle recall@5,
+complete evidence@10, related-context recall@10, and MRR while preserving every safety,
+Store-revalidation, boundedness, accounting, and cleanup invariant. This is not a new
+sealed claim and does not remove the Planner's time, intent, count, or entity duties.
+The frozen protocol is documented in
+[`reports/heterogeneous-retrieval-v4-exploration-only-plan-2026-09-26.md`](reports/heterogeneous-retrieval-v4-exploration-only-plan-2026-09-26.md).
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

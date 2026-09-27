@@ -89,10 +89,13 @@ def test_result_schema_is_bound_to_the_new_runner() -> None:
     schema = json.loads(RESULT_SCHEMA_PATH.read_text("utf-8"))
 
     assert schema["$schema"].endswith("2020-12/schema")
-    assert (
-        schema["$defs"]["base"]["properties"]["runner"]["const"]
-        == "doppel.heterogeneous-retrieval-live.v1"
-    )
+    assert schema["$defs"]["base"]["properties"]["runner"]["enum"] == [
+        "doppel.heterogeneous-retrieval-live.v1",
+        "doppel.heterogeneous-retrieval-live.v2",
+    ]
+    assert schema["$defs"]["base"]["properties"][
+        "result_schema_version"
+    ]["enum"] == [1, 2]
     assert schema["$defs"]["rate"] == {
         "type": "number",
         "minimum": 0,
@@ -384,6 +387,7 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     profile = {
         "evidence_recall_at_5": 1.0,
         "complete_evidence_rate_at_10": 1.0,
+        "related_evidence_recall_at_10": 1.0,
         "mrr": 1.0,
         "hard_forbidden_hits": 0,
         "scope_leakage": 0,
@@ -395,8 +399,9 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         "by_category": by_category,
     }
     profiles = {
-        "assembled_oracle_exploration_hybrid": profile,
         "assembled_oracle_exploration_hybrid_memory_reranking": profile,
+        "assembled_exploration_only_hybrid": profile,
+        "assembled_exploration_only_hybrid_memory_reranking": profile,
     }
 
     passed = quality_gate(
@@ -419,8 +424,25 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         graph_cleaned=True,
         postgres_reset=True,
     )
+    lower_mrr = {**profile, "mrr": 0.9}
+    oracle_regression = quality_gate(
+        {
+            "assembled_oracle_exploration_hybrid_memory_reranking": profile,
+            "assembled_exploration_only_hybrid": lower_mrr,
+            "assembled_exploration_only_hybrid_memory_reranking": lower_mrr,
+        },
+        Counter(),
+        selection_complete=True,
+        expected_rerank_calls=480,
+        rerank_statuses=Counter({"completed": 480}),
+        reorder_membership_violations=0,
+        graph_cleaned=True,
+        postgres_reset=True,
+    )
 
     assert passed["ok"] is True
     assert diagnostic["ok"] is False
     assert diagnostic["status"] == "dev_diagnostic"
     assert diagnostic["failures"] == ["selection_complete"]
+    assert oracle_regression["ok"] is False
+    assert oracle_regression["failures"] == ["oracle_mrr_non_regression"]

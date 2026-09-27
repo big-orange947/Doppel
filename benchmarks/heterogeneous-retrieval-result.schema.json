@@ -11,8 +11,8 @@
       "type": "object",
       "required": ["result_schema_version", "runner", "dataset", "runtime", "gate", "report_sha256", "reproducibility"],
       "properties": {
-        "result_schema_version": {"const": 1},
-        "runner": {"const": "doppel.heterogeneous-retrieval-live.v1"},
+        "result_schema_version": {"enum": [1, 2]},
+        "runner": {"enum": ["doppel.heterogeneous-retrieval-live.v1", "doppel.heterogeneous-retrieval-live.v2"]},
         "dataset": {
           "type": "object",
           "required": ["suite", "fingerprint", "selected_queries"],
@@ -41,8 +41,9 @@
             "implementation_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
             "tracked_dirty_paths": {"type": "array", "items": {"type": "string"}},
             "dataset_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-            "profile_contract": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "string"}},
+            "profile_contract": {"type": "array", "minItems": 6, "maxItems": 8, "items": {"type": "string"}},
             "oracle_graph_routes": {"const": true},
+            "evaluated_profile_uses_oracle_graph_routes": {"type": "boolean"},
             "answer_support": {"const": "unassessed"}
           }
         }
@@ -54,6 +55,22 @@
         {
           "type": "object",
           "required": ["profiles", "assembly", "exploration_assembly", "reranking_assembly", "rerank_statuses", "reorder_membership_violations"],
+          "allOf": [
+            {
+              "if": {
+                "properties": {"runner": {"const": "doppel.heterogeneous-retrieval-live.v2"}},
+                "required": ["runner"]
+              },
+              "then": {
+                "required": ["exploration_only_assembly", "exploration_only_reranking_assembly"],
+                "properties": {
+                  "profiles": {
+                    "required": ["assembled_exploration_only_hybrid", "assembled_exploration_only_hybrid_memory_reranking"]
+                  }
+                }
+              }
+            }
+          ],
           "properties": {
             "profiles": {
               "type": "object",
@@ -63,6 +80,8 @@
             "assembly": {"type": "object"},
             "exploration_assembly": {"type": "object"},
             "reranking_assembly": {"type": "object"},
+            "exploration_only_assembly": {"type": "object"},
+            "exploration_only_reranking_assembly": {"type": "object"},
             "rerank_statuses": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
             "reorder_membership_violations": {"type": "integer", "minimum": 0}
           }

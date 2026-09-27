@@ -72,8 +72,8 @@ from doppel_memory.relation_path_retrieval import (
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v3.json"
-DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v3-live.json"
-RUNNER = "doppel.heterogeneous-retrieval-live.v1"
+DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v4-exploration-only-live.json"
+RUNNER = "doppel.heterogeneous-retrieval-live.v2"
 PROFILES = (
     "independent_lexical_vector",
     "oracle_graph_path",
@@ -81,6 +81,8 @@ PROFILES = (
     "assembled_oracle_hybrid",
     "assembled_oracle_exploration_hybrid",
     "assembled_oracle_exploration_hybrid_memory_reranking",
+    "assembled_exploration_only_hybrid",
+    "assembled_exploration_only_hybrid_memory_reranking",
 )
 ANSWERABLE_CATEGORIES = (
     "current_residence",
@@ -272,6 +274,8 @@ async def run_live(
     assembly_totals: Counter[str] = Counter()
     exploration_assembly_totals: Counter[str] = Counter()
     reranking_assembly_totals: Counter[str] = Counter()
+    exploration_only_assembly_totals: Counter[str] = Counter()
+    exploration_only_reranking_assembly_totals: Counter[str] = Counter()
     rerank_statuses: Counter[str] = Counter()
     reorder_membership_violations = 0
     graph_cleaned = False
@@ -444,6 +448,46 @@ async def run_live(
                 reranking_assembly_totals, reranking_assembly
             )
 
+            exploration_only_assembly_started = time.perf_counter()
+            exploration_only_assembly = await assemble_hybrid_retrieval_candidates(
+                store,
+                base_window,
+                explored_hits,
+                [scope],
+                filters=FILTERS,
+                limit=20,
+                base_reserve=5,
+                literal_entity_reserve=1,
+            )
+            exploration_only_assembly_latency = (
+                time.perf_counter() - exploration_only_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                exploration_only_assembly_totals, exploration_only_assembly
+            )
+
+            exploration_only_reranking_assembly_started = time.perf_counter()
+            exploration_only_reranking_assembly = (
+                await assemble_hybrid_retrieval_candidates(
+                    store,
+                    reranked_window,
+                    explored_hits,
+                    [scope],
+                    filters=FILTERS,
+                    limit=20,
+                    base_reserve=5,
+                    literal_entity_reserve=1,
+                )
+            )
+            exploration_only_reranking_assembly_latency = (
+                time.perf_counter()
+                - exploration_only_reranking_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                exploration_only_reranking_assembly_totals,
+                exploration_only_reranking_assembly,
+            )
+
             base_ids = [hit.record.memory_id for hit in base_result.hits[:20]]
             independent_window_ids = [
                 hit.record.memory_id for hit in base_window
@@ -472,6 +516,14 @@ async def run_live(
             reranked_ids = [
                 candidate.record.memory_id
                 for candidate in reranking_assembly.candidates
+            ]
+            exploration_only_assembled_ids = [
+                candidate.record.memory_id
+                for candidate in exploration_only_assembly.candidates
+            ]
+            exploration_only_reranked_ids = [
+                candidate.record.memory_id
+                for candidate in exploration_only_reranking_assembly.candidates
             ]
             profile_rows = (
                 (
@@ -546,6 +598,42 @@ async def run_live(
                     ],
                     independent_window_ids,
                 ),
+                (
+                    "assembled_exploration_only_hybrid",
+                    exploration_only_assembled_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in exploration_only_assembly.candidates
+                    ],
+                    base_latency
+                    + exploration_latency
+                    + exploration_only_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in exploration_only_assembly.candidates
+                    ],
+                    exploration_only_assembled_ids,
+                ),
+                (
+                    "assembled_exploration_only_hybrid_memory_reranking",
+                    exploration_only_reranked_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in (
+                            exploration_only_reranking_assembly.candidates
+                        )
+                    ],
+                    rerank_latency
+                    + exploration_latency
+                    + exploration_only_reranking_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in (
+                            exploration_only_reranking_assembly.candidates
+                        )
+                    ],
+                    independent_window_ids,
+                ),
             )
             for (
                 profile,
@@ -617,7 +705,7 @@ async def run_live(
     complete_selection = len(queries) == len(dataset.queries)
     gate = quality_gate(
         profiles,
-        reranking_assembly_totals,
+        exploration_only_reranking_assembly_totals,
         selection_complete=complete_selection,
         expected_rerank_calls=len(queries),
         rerank_statuses=rerank_statuses,
@@ -626,7 +714,7 @@ async def run_live(
         postgres_reset=postgres_reset,
     )
     return {
-        "result_schema_version": 1,
+        "result_schema_version": 2,
         "runner": RUNNER,
         "dataset": {
             "suite": dataset.suite,
@@ -643,7 +731,7 @@ async def run_live(
         "runtime": {
             "store": "postgresql",
             "vector": "pgvector",
-            "graph": "neo4j_graphiti_oracle_relation_path",
+            "graph": "neo4j_graphiti_oracle_path_and_bounded_exploration",
             "embedding": _embedding_runtime_metadata(embedding_provider),
             "memory_reranker": {
                 "name": memory_reranker.name,
@@ -662,6 +750,10 @@ async def run_live(
         "assembly": dict(assembly_totals),
         "exploration_assembly": dict(exploration_assembly_totals),
         "reranking_assembly": dict(reranking_assembly_totals),
+        "exploration_only_assembly": dict(exploration_only_assembly_totals),
+        "exploration_only_reranking_assembly": dict(
+            exploration_only_reranking_assembly_totals
+        ),
         "rerank_statuses": dict(rerank_statuses),
         "reorder_membership_violations": reorder_membership_violations,
         "gate": gate,
@@ -1001,9 +1093,12 @@ def quality_gate(
     graph_cleaned: bool,
     postgres_reset: bool,
 ) -> dict[str, Any]:
-    baseline = profiles["assembled_oracle_exploration_hybrid"]
-    final = profiles[
+    baseline = profiles["assembled_exploration_only_hybrid"]
+    oracle_final = profiles[
         "assembled_oracle_exploration_hybrid_memory_reranking"
+    ]
+    final = profiles[
+        "assembled_exploration_only_hybrid_memory_reranking"
     ]
     checks = {
         "selection_complete": selection_complete,
@@ -1021,6 +1116,19 @@ def quality_gate(
         ]["related_evidence_recall_at_10"]
         >= THRESHOLDS["min_related_evidence_recall_at_10"],
         "mrr_non_regression": final["mrr"] >= baseline["mrr"],
+        "oracle_evidence_recall_at_5_non_regression": final[
+            "evidence_recall_at_5"
+        ]
+        >= oracle_final["evidence_recall_at_5"],
+        "oracle_complete_evidence_rate_at_10_non_regression": final[
+            "complete_evidence_rate_at_10"
+        ]
+        >= oracle_final["complete_evidence_rate_at_10"],
+        "oracle_related_evidence_recall_at_10_non_regression": final[
+            "related_evidence_recall_at_10"
+        ]
+        >= oracle_final["related_evidence_recall_at_10"],
+        "oracle_mrr_non_regression": final["mrr"] >= oracle_final["mrr"],
         "exact_episode_count_rate_at_10": final["by_category"]["episode_count"][
             "exact_episode_count_rate_at_10"
         ]
@@ -1049,8 +1157,11 @@ def quality_gate(
         "checks": checks,
         "failures": [name for name, passed in checks.items() if not passed],
         "thresholds": THRESHOLDS,
-        "baseline_profile": "assembled_oracle_exploration_hybrid",
-        "profile": "assembled_oracle_exploration_hybrid_memory_reranking",
+        "baseline_profile": "assembled_exploration_only_hybrid",
+        "oracle_comparison_profile": (
+            "assembled_oracle_exploration_hybrid_memory_reranking"
+        ),
+        "profile": "assembled_exploration_only_hybrid_memory_reranking",
     }
 
 
@@ -1095,7 +1206,7 @@ async def _main_async(args: argparse.Namespace) -> int:
         )
     except Exception as exc:  # noqa: BLE001
         report = {
-            "result_schema_version": 1,
+            "result_schema_version": 2,
             "runner": RUNNER,
             "dataset": {
                 "suite": dataset.suite,
@@ -1181,6 +1292,7 @@ def _git_metadata(dataset_fingerprint: str) -> dict[str, Any]:
         "dataset_fingerprint": dataset_fingerprint,
         "profile_contract": list(PROFILES),
         "oracle_graph_routes": True,
+        "evaluated_profile_uses_oracle_graph_routes": False,
         "answer_support": "unassessed",
     }
 
