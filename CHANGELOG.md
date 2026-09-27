@@ -17,6 +17,14 @@
   two-hop object-holder-location chain, proving that memory-ID containment does not
   replace atomic path-aware ranking. Keep exact relation paths in the highest-quality
   profile pending a generic topology-aware exploration experiment.
+- Add default-off complete-path preference and path-evidence reservation to the
+  bounded relation assembly contract. Complete-path preference only demotes a path
+  when it is a strict edge-and-direction prefix of another revalidated bounded path;
+  unrelated one-hop paths keep their normal score order. Path reservation can keep
+  the first retained path's authoritative memories together in flattened output while
+  preserving the independent base reserve. Freeze a V5 opened ablation that gives the
+  topology-aware, oracle-free profile the same absolute and oracle-parity gates as V4;
+  no domain relation labels, answer gold, or query-category branches are introduced.
 - Serialize database-global pgvector extension discovery and creation with a
   PostgreSQL transaction advisory lock. `CREATE EXTENSION IF NOT EXISTS` alone still
   races on `pg_extension_name_index` when independent processes initialize the first

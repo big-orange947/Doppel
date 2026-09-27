@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 import pytest
 
@@ -20,6 +21,7 @@ from doppel_memory.relation import RelationPathCandidate, RelationPathHop
 from doppel_memory.relation_path_retrieval import (
     RelationPathRetrievalHit,
     assemble_hybrid_retrieval_candidates,
+    rank_explored_relation_paths,
 )
 
 NOW = datetime(2026, 9, 23, tzinfo=UTC)
@@ -57,7 +59,9 @@ def _base_hit(
     record: MemoryRecord,
     *,
     sources: list[str] | None = None,
-    entity_binding: str = "not_requested",
+    entity_binding: Literal[
+        "not_requested", "literal", "relation", "unverified"
+    ] = "not_requested",
 ) -> PersonalMemoryQueryHit:
     return PersonalMemoryQueryHit(
         record=record,
@@ -105,6 +109,46 @@ def _path_hit(
         route_indexes=[0],
         route_modes=["candidate"],
         rrf_score=rrf_score,
+    )
+
+
+def _two_hop_path_hit(first_memory_id: str, second_memory_id: str) -> RelationPathRetrievalHit:
+    candidate = RelationPathCandidate(
+        scope=SCOPE,
+        source="tests.graph",
+        score=0.8,
+        path_id="p-two-hop",
+        start_entity_id="entity-start",
+        end_entity_id="entity-end",
+        hops=[
+            RelationPathHop(
+                position=0,
+                relation_type="FIRST_HOP",
+                direction="outbound",
+                source_entity_id="entity-start",
+                target_entity_id="entity-middle",
+                edge_id="edge-first",
+                episode_ids=["episode-first"],
+                memory_ids=[first_memory_id],
+            ),
+            RelationPathHop(
+                position=1,
+                relation_type="SECOND_HOP",
+                direction="outbound",
+                source_entity_id="entity-middle",
+                target_entity_id="entity-end",
+                edge_id="edge-second",
+                episode_ids=["episode-second"],
+                memory_ids=[second_memory_id],
+            ),
+        ],
+        supporting_memory_ids=[first_memory_id, second_memory_id],
+    )
+    return RelationPathRetrievalHit(
+        candidate=candidate,
+        route_indexes=[0],
+        route_modes=["exploration"],
+        rrf_score=0.02,
     )
 
 
@@ -242,6 +286,56 @@ async def test_assembly_attributes_exploration_without_granting_answer_support()
         "relation_path:exploration",
     ]
     assert result.candidates[0].answer_support == "unassessed"
+
+
+def test_exploration_can_prefer_a_bounded_complete_path_over_its_prefix() -> None:
+    complete = _two_hop_path_hit("m-first", "m-second").candidate
+    prefix = RelationPathCandidate(
+        scope=SCOPE,
+        source="tests.graph",
+        score=complete.score,
+        path_id="p-one-hop",
+        start_entity_id=complete.start_entity_id,
+        end_entity_id="entity-middle",
+        hops=[complete.hops[0]],
+        supporting_memory_ids=["m-first"],
+    )
+
+    default = rank_explored_relation_paths([prefix, complete])
+    recall_oriented = rank_explored_relation_paths(
+        [prefix, complete], prefer_complete_paths=True
+    )
+
+    assert [len(hit.candidate.hops) for hit in default] == [1, 2]
+    assert [len(hit.candidate.hops) for hit in recall_oriented] == [2, 1]
+
+
+@pytest.mark.asyncio
+async def test_assembly_can_prioritize_one_complete_path_without_hiding_base() -> None:
+    store = InMemoryStore()
+    base_records = [_record(f"m-base-{index}") for index in range(5)]
+    first = _record("m-first")
+    second = _record("m-second")
+    await _put(store, *base_records, first, second)
+
+    result = await assemble_hybrid_retrieval_candidates(
+        store,
+        [_base_hit(record) for record in base_records],
+        [_two_hop_path_hit(first.memory_id, second.memory_id)],
+        [SCOPE],
+        filters=FILTERS,
+        limit=7,
+        base_reserve=5,
+        path_evidence_reserve=1,
+    )
+
+    ids = [candidate.record.memory_id for candidate in result.candidates]
+    assert ids[:2] == ["m-first", "m-second"]
+    assert set(ids[2:]) == {record.memory_id for record in base_records}
+    assert all(
+        "path_evidence_reserve" in candidate.discovery_sources
+        for candidate in result.candidates[:2]
+    )
 
 
 @pytest.mark.asyncio

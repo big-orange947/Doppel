@@ -72,8 +72,8 @@ from doppel_memory.relation_path_retrieval import (
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v3.json"
-DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v4-exploration-only-live.json"
-RUNNER = "doppel.heterogeneous-retrieval-live.v2"
+DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v5-topology-aware-live.json"
+RUNNER = "doppel.heterogeneous-retrieval-live.v3"
 PROFILES = (
     "independent_lexical_vector",
     "oracle_graph_path",
@@ -83,6 +83,8 @@ PROFILES = (
     "assembled_oracle_exploration_hybrid_memory_reranking",
     "assembled_exploration_only_hybrid",
     "assembled_exploration_only_hybrid_memory_reranking",
+    "assembled_topology_aware_exploration_hybrid",
+    "assembled_topology_aware_exploration_hybrid_memory_reranking",
 )
 ANSWERABLE_CATEGORIES = (
     "current_residence",
@@ -276,6 +278,8 @@ async def run_live(
     reranking_assembly_totals: Counter[str] = Counter()
     exploration_only_assembly_totals: Counter[str] = Counter()
     exploration_only_reranking_assembly_totals: Counter[str] = Counter()
+    topology_aware_assembly_totals: Counter[str] = Counter()
+    topology_aware_reranking_assembly_totals: Counter[str] = Counter()
     rerank_statuses: Counter[str] = Counter()
     reorder_membership_violations = 0
     graph_cleaned = False
@@ -391,6 +395,11 @@ async def run_live(
             explored_hits = rank_explored_relation_paths(
                 explored_candidates, limit=20
             )
+            topology_aware_explored_hits = rank_explored_relation_paths(
+                explored_candidates,
+                limit=20,
+                prefer_complete_paths=True,
+            )
             combined_path_hits = merge_relation_path_hits(
                 path_hits, explored_hits, limit=20
             )
@@ -488,6 +497,48 @@ async def run_live(
                 exploration_only_reranking_assembly,
             )
 
+            topology_aware_assembly_started = time.perf_counter()
+            topology_aware_assembly = await assemble_hybrid_retrieval_candidates(
+                store,
+                base_window,
+                topology_aware_explored_hits,
+                [scope],
+                filters=FILTERS,
+                limit=20,
+                base_reserve=5,
+                literal_entity_reserve=1,
+                path_evidence_reserve=1,
+            )
+            topology_aware_assembly_latency = (
+                time.perf_counter() - topology_aware_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                topology_aware_assembly_totals, topology_aware_assembly
+            )
+
+            topology_aware_reranking_assembly_started = time.perf_counter()
+            topology_aware_reranking_assembly = (
+                await assemble_hybrid_retrieval_candidates(
+                    store,
+                    reranked_window,
+                    topology_aware_explored_hits,
+                    [scope],
+                    filters=FILTERS,
+                    limit=20,
+                    base_reserve=5,
+                    literal_entity_reserve=1,
+                    path_evidence_reserve=1,
+                )
+            )
+            topology_aware_reranking_assembly_latency = (
+                time.perf_counter()
+                - topology_aware_reranking_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                topology_aware_reranking_assembly_totals,
+                topology_aware_reranking_assembly,
+            )
+
             base_ids = [hit.record.memory_id for hit in base_result.hits[:20]]
             independent_window_ids = [
                 hit.record.memory_id for hit in base_window
@@ -524,6 +575,14 @@ async def run_live(
             exploration_only_reranked_ids = [
                 candidate.record.memory_id
                 for candidate in exploration_only_reranking_assembly.candidates
+            ]
+            topology_aware_assembled_ids = [
+                candidate.record.memory_id
+                for candidate in topology_aware_assembly.candidates
+            ]
+            topology_aware_reranked_ids = [
+                candidate.record.memory_id
+                for candidate in topology_aware_reranking_assembly.candidates
             ]
             profile_rows = (
                 (
@@ -634,6 +693,38 @@ async def run_live(
                     ],
                     independent_window_ids,
                 ),
+                (
+                    "assembled_topology_aware_exploration_hybrid",
+                    topology_aware_assembled_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in topology_aware_assembly.candidates
+                    ],
+                    base_latency
+                    + exploration_latency
+                    + topology_aware_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in topology_aware_assembly.candidates
+                    ],
+                    topology_aware_assembled_ids,
+                ),
+                (
+                    "assembled_topology_aware_exploration_hybrid_memory_reranking",
+                    topology_aware_reranked_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in topology_aware_reranking_assembly.candidates
+                    ],
+                    rerank_latency
+                    + exploration_latency
+                    + topology_aware_reranking_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in topology_aware_reranking_assembly.candidates
+                    ],
+                    independent_window_ids,
+                ),
             )
             for (
                 profile,
@@ -705,7 +796,7 @@ async def run_live(
     complete_selection = len(queries) == len(dataset.queries)
     gate = quality_gate(
         profiles,
-        exploration_only_reranking_assembly_totals,
+        topology_aware_reranking_assembly_totals,
         selection_complete=complete_selection,
         expected_rerank_calls=len(queries),
         rerank_statuses=rerank_statuses,
@@ -714,7 +805,7 @@ async def run_live(
         postgres_reset=postgres_reset,
     )
     return {
-        "result_schema_version": 2,
+        "result_schema_version": 3,
         "runner": RUNNER,
         "dataset": {
             "suite": dataset.suite,
@@ -753,6 +844,10 @@ async def run_live(
         "exploration_only_assembly": dict(exploration_only_assembly_totals),
         "exploration_only_reranking_assembly": dict(
             exploration_only_reranking_assembly_totals
+        ),
+        "topology_aware_assembly": dict(topology_aware_assembly_totals),
+        "topology_aware_reranking_assembly": dict(
+            topology_aware_reranking_assembly_totals
         ),
         "rerank_statuses": dict(rerank_statuses),
         "reorder_membership_violations": reorder_membership_violations,
@@ -1093,12 +1188,12 @@ def quality_gate(
     graph_cleaned: bool,
     postgres_reset: bool,
 ) -> dict[str, Any]:
-    baseline = profiles["assembled_exploration_only_hybrid"]
+    baseline = profiles["assembled_topology_aware_exploration_hybrid"]
     oracle_final = profiles[
         "assembled_oracle_exploration_hybrid_memory_reranking"
     ]
     final = profiles[
-        "assembled_exploration_only_hybrid_memory_reranking"
+        "assembled_topology_aware_exploration_hybrid_memory_reranking"
     ]
     checks = {
         "selection_complete": selection_complete,
@@ -1157,11 +1252,13 @@ def quality_gate(
         "checks": checks,
         "failures": [name for name, passed in checks.items() if not passed],
         "thresholds": THRESHOLDS,
-        "baseline_profile": "assembled_exploration_only_hybrid",
+        "baseline_profile": "assembled_topology_aware_exploration_hybrid",
         "oracle_comparison_profile": (
             "assembled_oracle_exploration_hybrid_memory_reranking"
         ),
-        "profile": "assembled_exploration_only_hybrid_memory_reranking",
+        "profile": (
+            "assembled_topology_aware_exploration_hybrid_memory_reranking"
+        ),
     }
 
 
@@ -1206,7 +1303,7 @@ async def _main_async(args: argparse.Namespace) -> int:
         )
     except Exception as exc:  # noqa: BLE001
         report = {
-            "result_schema_version": 2,
+            "result_schema_version": 3,
             "runner": RUNNER,
             "dataset": {
                 "suite": dataset.suite,

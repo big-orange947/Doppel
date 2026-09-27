@@ -431,6 +431,16 @@ contains the same individual memory IDs. They remain part of the highest-quality
 profile until a generic topology-aware exploration alternative passes a separately
 frozen opened ablation.
 
+V5 freezes that next experiment without adding a domain ontology shortcut. Its
+default-off complete-path preference only moves a revalidated path ahead of its own
+strict edge/direction prefix; its default-off path-evidence reserve keeps the first
+retained path's Store-backed memories together in flattened candidate order. Unrelated
+one-hop paths, the independent base reserve, the 20-memory bound, and all security and
+time checks remain intact. The topology-aware profile receives no oracle exact-path
+candidates and must match the oracle control on recall@5, complete evidence@10,
+related-context recall@10, and MRR. The frozen opened protocol is
+[`reports/heterogeneous-retrieval-v5-topology-aware-plan-2026-09-27.md`](reports/heterogeneous-retrieval-v5-topology-aware-plan-2026-09-27.md).
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

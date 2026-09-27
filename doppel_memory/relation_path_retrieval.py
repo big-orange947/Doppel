@@ -242,6 +242,7 @@ async def assemble_hybrid_retrieval_candidates(
     limit: int = 10,
     base_reserve: int = 5,
     literal_entity_reserve: int = 0,
+    path_evidence_reserve: int = 0,
     rrf_k: int = 60,
     base_weight: float = 1.0,
     path_weight: float = 0.8,
@@ -258,7 +259,12 @@ async def assemble_hybrid_retrieval_candidates(
 
     if not scopes:
         raise MemoryIsolationError("hybrid retrieval assembly requires exact scopes")
-    if limit < 0 or base_reserve < 0 or literal_entity_reserve < 0:
+    if (
+        limit < 0
+        or base_reserve < 0
+        or literal_entity_reserve < 0
+        or path_evidence_reserve < 0
+    ):
         raise ValueError("hybrid retrieval limits must not be negative")
     if literal_entity_reserve > base_reserve:
         raise ValueError("literal entity reserve cannot exceed base reserve")
@@ -388,6 +394,8 @@ async def assemble_hybrid_retrieval_candidates(
 
     retained_paths: list[HybridRelationPathEvidence] = []
     retained_path_keys: set[tuple[str, str]] = set()
+    reserved_path_keys: set[tuple[str, str]] = set()
+    reserved_path_count = 0
     omitted_path_hits = 0
     for _, hit, keys in valid_paths:
         missing = [key for key in keys if key not in selected]
@@ -396,12 +404,17 @@ async def assemble_hybrid_retrieval_candidates(
             continue
         selected.update(missing)
         retained_path_keys.update(keys)
+        if reserved_path_count < path_evidence_reserve:
+            reserved_path_keys.update(keys)
+            reserved_path_count += 1
         retained_paths.append(
             HybridRelationPathEvidence(
                 hit=hit,
                 supporting_memory_ids=list(hit.candidate.supporting_memory_ids),
             )
         )
+    for key in reserved_path_keys:
+        _extend_unique(discovery_sources[key], ["path_evidence_reserve"])
 
     remaining = sorted(
         (
@@ -416,6 +429,7 @@ async def assemble_hybrid_retrieval_candidates(
         selected,
         key=lambda key: (
             key not in selected_literal_keys,
+            key not in reserved_path_keys,
             -combined_score(key),
             key,
         ),
@@ -634,8 +648,16 @@ def rank_explored_relation_paths(
     *,
     limit: int = 10,
     rrf_k: int = 60,
+    prefer_complete_paths: bool = False,
 ) -> list[RelationPathRetrievalHit]:
-    """Wrap Store-revalidated exploration results for bounded hybrid assembly."""
+    """Wrap Store-revalidated exploration results for bounded hybrid assembly.
+
+    ``prefer_complete_paths`` is an opt-in recall policy for callers that want a
+    complete bounded evidence chain ahead of one of its redundant strict prefixes.
+    An unrelated one-hop path is not demoted merely because a different two-hop path
+    exists. The policy never creates a path, changes its authority, or expands the
+    two-hop exploration bound.
+    """
 
     if limit <= 0:
         return []
@@ -649,9 +671,26 @@ def rank_explored_relation_paths(
         existing = unique.get(key)
         if existing is None or candidate.score > existing.score:
             unique[key] = candidate
+    signatures = {
+        key: tuple((hop.edge_id, hop.direction) for hop in candidate.hops)
+        for key, candidate in unique.items()
+    }
+    strict_prefixes = {
+        key
+        for key, signature in signatures.items()
+        if any(
+            len(other) > len(signature) and other[: len(signature)] == signature
+            for other in signatures.values()
+        )
+    }
     ordered = sorted(
-        unique.values(),
-        key=lambda item: (-item.score, item.scope.scope_key, item.path_id),
+        unique.items(),
+        key=lambda pair: (
+            pair[0] in strict_prefixes if prefer_complete_paths else False,
+            -pair[1].score,
+            pair[1].scope.scope_key,
+            pair[1].path_id,
+        ),
     )[:limit]
     return [
         RelationPathRetrievalHit(
@@ -660,7 +699,7 @@ def rank_explored_relation_paths(
             route_modes=["exploration"],
             rrf_score=1.0 / (rrf_k + rank),
         )
-        for rank, candidate in enumerate(ordered, start=1)
+        for rank, (_, candidate) in enumerate(ordered, start=1)
     ]
 
 

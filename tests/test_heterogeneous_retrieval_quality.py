@@ -92,10 +92,11 @@ def test_result_schema_is_bound_to_the_new_runner() -> None:
     assert schema["$defs"]["base"]["properties"]["runner"]["enum"] == [
         "doppel.heterogeneous-retrieval-live.v1",
         "doppel.heterogeneous-retrieval-live.v2",
+        "doppel.heterogeneous-retrieval-live.v3",
     ]
     assert schema["$defs"]["base"]["properties"][
         "result_schema_version"
-    ]["enum"] == [1, 2]
+    ]["enum"] == [1, 2, 3]
     assert schema["$defs"]["rate"] == {
         "type": "number",
         "minimum": 0,
@@ -400,8 +401,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     }
     profiles = {
         "assembled_oracle_exploration_hybrid_memory_reranking": profile,
-        "assembled_exploration_only_hybrid": profile,
-        "assembled_exploration_only_hybrid_memory_reranking": profile,
+        "assembled_topology_aware_exploration_hybrid": profile,
+        "assembled_topology_aware_exploration_hybrid_memory_reranking": profile,
     }
 
     passed = quality_gate(
@@ -428,8 +429,10 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     oracle_regression = quality_gate(
         {
             "assembled_oracle_exploration_hybrid_memory_reranking": profile,
-            "assembled_exploration_only_hybrid": lower_mrr,
-            "assembled_exploration_only_hybrid_memory_reranking": lower_mrr,
+            "assembled_topology_aware_exploration_hybrid": lower_mrr,
+            "assembled_topology_aware_exploration_hybrid_memory_reranking": (
+                lower_mrr
+            ),
         },
         Counter(),
         selection_complete=True,
