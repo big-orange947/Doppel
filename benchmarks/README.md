@@ -460,6 +460,17 @@ maximal paths compete, and is expected to justify path-level semantic ranking if
 fails. See
 [`reports/heterogeneous-retrieval-v6-topology-adversarial-plan-2026-09-27.md`](reports/heterogeneous-retrieval-v6-topology-adversarial-plan-2026-09-27.md).
 
+The first V6 result is preserved in
+[`reports/heterogeneous-retrieval-v6-topology-adversarial-result-2026-09-27.md`](reports/heterogeneous-retrieval-v6-topology-adversarial-result-2026-09-27.md).
+It fails only the frozen oracle-parity checks: topology-aware recall@5/complete@10/MRR
+are 0.913/0.947/0.918 versus oracle 0.960/1.000/0.921. All absolute and hard-safety
+gates pass. Raw graph exploration already has 1.000 two-hop recall and completeness at
+10, every missing final item returns by rank 20, and no path is omitted. The gap is
+therefore branch ranking, not discovery, scope/time filtering, or candidate budget.
+The next experiment must rerank whole revalidated path text before atomic reservation;
+increasing independent vector overfetch or adding relation-name special cases is not
+the indicated repair.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

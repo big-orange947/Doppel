@@ -37,6 +37,12 @@
   edge in every one of 48 exact scopes. Freeze the existing V5 policy and oracle-
   parity gate unchanged before running it; a failure must motivate generic path-level
   ranking rather than benchmark relation labels or query-specific Planner rules.
+  Preserve the first V6 failure: the topology-aware final profile reaches
+  0.913 recall@5, 0.947 complete evidence@10, and 0.918 MRR versus the oracle control's
+  0.960/1.000/0.921. Raw graph exploration already has complete two-hop evidence at
+  rank 10, every missing final item remains present by rank 20, path omissions are
+  zero, and all hard-safety checks pass. This isolates selection among valid branches
+  and motivates a text-only whole-path reranker before atomic reservation.
 - Serialize database-global pgvector extension discovery and creation with a
   PostgreSQL transaction advisory lock. `CREATE EXTENSION IF NOT EXISTS` alone still
   races on `pg_extension_name_index` when independent processes initialize the first
