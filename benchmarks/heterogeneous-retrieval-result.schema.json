@@ -11,8 +11,8 @@
       "type": "object",
       "required": ["result_schema_version", "runner", "dataset", "runtime", "gate", "report_sha256", "reproducibility"],
       "properties": {
-        "result_schema_version": {"enum": [1, 2, 3, 4, 5]},
-        "runner": {"enum": ["doppel.heterogeneous-retrieval-live.v1", "doppel.heterogeneous-retrieval-live.v2", "doppel.heterogeneous-retrieval-live.v3", "doppel.heterogeneous-retrieval-live.v4", "doppel.heterogeneous-retrieval-live.v5"]},
+        "result_schema_version": {"enum": [1, 2, 3, 4, 5, 6]},
+        "runner": {"enum": ["doppel.heterogeneous-retrieval-live.v1", "doppel.heterogeneous-retrieval-live.v2", "doppel.heterogeneous-retrieval-live.v3", "doppel.heterogeneous-retrieval-live.v4", "doppel.heterogeneous-retrieval-live.v5", "doppel.heterogeneous-retrieval-live.v6"]},
         "dataset": {
           "type": "object",
           "required": ["suite", "fingerprint", "selected_queries"],
@@ -41,7 +41,7 @@
             "implementation_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
             "tracked_dirty_paths": {"type": "array", "items": {"type": "string"}},
             "dataset_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-            "profile_contract": {"type": "array", "minItems": 6, "maxItems": 14, "items": {"type": "string"}},
+            "profile_contract": {"type": "array", "minItems": 6, "maxItems": 16, "items": {"type": "string"}},
             "oracle_graph_routes": {"const": true},
             "evaluated_profile_uses_oracle_graph_routes": {"type": "boolean"},
             "answer_support": {"const": "unassessed"}
@@ -111,6 +111,20 @@
                   }
                 }
               }
+            },
+            {
+              "if": {
+                "properties": {"runner": {"const": "doppel.heterogeneous-retrieval-live.v6"}},
+                "required": ["runner"]
+              },
+              "then": {
+                "required": ["exploration_only_assembly", "exploration_only_reranking_assembly", "topology_aware_assembly", "topology_aware_reranking_assembly", "semantic_path_assembly", "semantic_path_reranking_assembly", "semantic_path_family_assembly", "semantic_path_family_reranking_assembly", "base_guarded_path_family_assembly", "base_guarded_path_family_reranking_assembly", "path_rerank_statuses", "path_rerank_membership_violations", "path_family_membership_violations"],
+                "properties": {
+                  "profiles": {
+                    "required": ["assembled_exploration_only_hybrid", "assembled_exploration_only_hybrid_memory_reranking", "assembled_topology_aware_exploration_hybrid", "assembled_topology_aware_exploration_hybrid_memory_reranking", "assembled_semantic_path_exploration_hybrid", "assembled_semantic_path_exploration_hybrid_memory_reranking", "assembled_semantic_path_family_exploration_hybrid", "assembled_semantic_path_family_exploration_hybrid_memory_reranking", "assembled_base_guarded_path_family_exploration_hybrid", "assembled_base_guarded_path_family_exploration_hybrid_memory_reranking"]
+                  }
+                }
+              }
             }
           ],
           "properties": {
@@ -130,6 +144,8 @@
             "semantic_path_reranking_assembly": {"type": "object"},
             "semantic_path_family_assembly": {"type": "object"},
             "semantic_path_family_reranking_assembly": {"type": "object"},
+            "base_guarded_path_family_assembly": {"type": "object"},
+            "base_guarded_path_family_reranking_assembly": {"type": "object"},
             "rerank_statuses": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
             "path_rerank_statuses": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
             "reorder_membership_violations": {"type": "integer", "minimum": 0},

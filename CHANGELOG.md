@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a default-off assembly order that keeps the already-selected independent base
+  reserve ahead of atomically reserved graph-path evidence. It changes neither
+  membership nor the five-item independent and one-path evidence budgets; graph paths
+  remain inside the bounded output but cannot displace stronger base candidates from
+  their reserved positions. Freeze heterogeneous V9 on the unchanged topology corpus
+  and unchanged oracle-parity gate before opening its result.
 - Add a default-off topology completion pass after whole-path semantic ranking. The
   semantic scorer still selects the relevant branch; when a scored path is a strict
   edge-and-direction prefix of an already-retrieved path, the best-ranked complete

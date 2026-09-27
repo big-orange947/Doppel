@@ -98,6 +98,7 @@ def test_result_schema_is_bound_to_the_new_runner() -> None:
         "doppel.heterogeneous-retrieval-live.v3",
         "doppel.heterogeneous-retrieval-live.v4",
         "doppel.heterogeneous-retrieval-live.v5",
+        "doppel.heterogeneous-retrieval-live.v6",
     ]
     assert schema["$defs"]["base"]["properties"]["result_schema_version"]["enum"] == [
         1,
@@ -105,6 +106,7 @@ def test_result_schema_is_bound_to_the_new_runner() -> None:
         3,
         4,
         5,
+        6,
     ]
     assert schema["$defs"]["rate"] == {
         "type": "number",
@@ -441,8 +443,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     }
     profiles = {
         "assembled_oracle_exploration_hybrid_memory_reranking": profile,
-        "assembled_semantic_path_family_exploration_hybrid": profile,
-        "assembled_semantic_path_family_exploration_hybrid_memory_reranking": profile,
+        "assembled_base_guarded_path_family_exploration_hybrid": profile,
+        "assembled_base_guarded_path_family_exploration_hybrid_memory_reranking": profile,
     }
 
     passed = quality_gate(
@@ -475,8 +477,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     oracle_regression = quality_gate(
         {
             "assembled_oracle_exploration_hybrid_memory_reranking": profile,
-            "assembled_semantic_path_family_exploration_hybrid": lower_mrr,
-            "assembled_semantic_path_family_exploration_hybrid_memory_reranking": (
+            "assembled_base_guarded_path_family_exploration_hybrid": lower_mrr,
+            "assembled_base_guarded_path_family_exploration_hybrid_memory_reranking": (
                 lower_mrr
             ),
         },

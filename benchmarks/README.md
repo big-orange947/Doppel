@@ -511,6 +511,14 @@ experiment must preserve the existing five-item independent base order, then pla
 complete path evidence inside the remaining rank-10 budget; it must not infer answer
 sufficiency from a relation name or benchmark category.
 
+V9 freezes that base-guarded composition as another separate profile. It preserves
+the existing literal-plus-independent five-item reservation in its original order,
+then places the atomically complete graph path before all unreserved candidates. This
+does not suppress graph discovery: the complete path still fits at ranks 6–7 inside
+the frozen top-10 quality window. Corpus, scorer, topology completion, budgets,
+thresholds, safety gates, and oracle comparison remain unchanged. See
+[`reports/heterogeneous-retrieval-v9-base-guard-plan-2026-09-28.md`](reports/heterogeneous-retrieval-v9-base-guard-plan-2026-09-28.md).
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

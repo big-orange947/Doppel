@@ -274,6 +274,7 @@ async def assemble_hybrid_retrieval_candidates(
     base_reserve: int = 5,
     literal_entity_reserve: int = 0,
     path_evidence_reserve: int = 0,
+    preserve_base_reserve_order: bool = False,
     rrf_k: int = 60,
     base_weight: float = 1.0,
     path_weight: float = 0.8,
@@ -450,15 +451,42 @@ async def assemble_hybrid_retrieval_candidates(
         key=lambda key: (-combined_score(key), key),
     )
     selected.update(remaining[: max(limit - len(selected), 0)])
-    ordered = sorted(
-        selected,
-        key=lambda key: (
-            key not in selected_literal_keys,
-            key not in reserved_path_keys,
-            -combined_score(key),
-            key,
-        ),
-    )
+    if preserve_base_reserve_order:
+        reserved_base_order = {
+            key: rank
+            for rank, key in enumerate(
+                [
+                    *sorted(
+                        selected_literal_keys,
+                        key=lambda item: (base_ranks[item], item),
+                    ),
+                    *reserved_base_keys,
+                ]
+            )
+        }
+        ordered = sorted(
+            selected,
+            key=lambda key: (
+                0
+                if key in reserved_base_order
+                else 1
+                if key in reserved_path_keys
+                else 2,
+                reserved_base_order.get(key, 0),
+                -combined_score(key),
+                key,
+            ),
+        )
+    else:
+        ordered = sorted(
+            selected,
+            key=lambda key: (
+                key not in selected_literal_keys,
+                key not in reserved_path_keys,
+                -combined_score(key),
+                key,
+            ),
+        )
     candidates = [
         HybridRetrievalCandidate(
             record=records[key],

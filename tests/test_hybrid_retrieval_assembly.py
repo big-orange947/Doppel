@@ -530,6 +530,35 @@ async def test_assembly_can_prioritize_one_complete_path_without_hiding_base() -
 
 
 @pytest.mark.asyncio
+async def test_assembly_can_keep_base_reserve_ahead_of_complete_path() -> None:
+    store = InMemoryStore()
+    base_records = [_record(f"m-base-{index}") for index in range(5)]
+    terminal = _record("m-terminal")
+    await _put(store, *base_records, terminal)
+    path = _two_hop_path_hit(base_records[0].memory_id, terminal.memory_id)
+
+    result = await assemble_hybrid_retrieval_candidates(
+        store,
+        [_base_hit(record) for record in base_records],
+        [path],
+        [SCOPE],
+        filters=FILTERS,
+        limit=6,
+        base_reserve=5,
+        path_evidence_reserve=1,
+        preserve_base_reserve_order=True,
+    )
+
+    assert [candidate.record.memory_id for candidate in result.candidates] == [
+        *(record.memory_id for record in base_records),
+        terminal.memory_id,
+    ]
+    by_id = {candidate.record.memory_id: candidate for candidate in result.candidates}
+    assert "path_evidence_reserve" in by_id[base_records[0].memory_id].discovery_sources
+    assert "path_evidence_reserve" in by_id[terminal.memory_id].discovery_sources
+
+
+@pytest.mark.asyncio
 async def test_assembly_rejects_whole_path_when_one_support_is_ineligible() -> None:
     store = InMemoryStore()
     confirmed = _record("m-confirmed")
