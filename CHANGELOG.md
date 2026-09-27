@@ -10,7 +10,14 @@
   Store still revalidates every flattened memory. Freeze heterogeneous V7 on the
   already-opened topology-adversarial V4 corpus before measuring whether this generic
   ranking stage recovers V6's competing-branch failures without relation-name or
-  query-category special cases.
+  query-category special cases. Preserve the first V7 failure: semantic path ranking
+  raises recall@5 from 0.913 to 0.975 and MRR from 0.918 to the oracle control's 0.921,
+  but complete evidence@10 reaches 0.988 rather than the oracle's 1.000. All five
+  misses are the second hop of an otherwise correctly selected holder branch. A live
+  probe confirms that the scorer ranks the correct one-hop prefix above its correct
+  two-hop extension, so the one-path reserve keeps only the prefix. Keep the gate
+  unchanged and test generic semantic-family ranking plus complete-before-prefix
+  ordering next.
 - Add a versioned, opened heterogeneous-retrieval ablation for candidate assembly
   without oracle exact relation paths. The immutable 480-query V3 result showed that
   bounded Graphiti exploration contained every exact-path memory ID and added 144

@@ -482,6 +482,17 @@ non-finite, or failed scores trigger deterministic topology fallback; V7's quali
 gate rejects any fallback so provider failure cannot masquerade as quality. See
 [`reports/heterogeneous-retrieval-v7-path-semantic-rerank-plan-2026-09-27.md`](reports/heterogeneous-retrieval-v7-path-semantic-rerank-plan-2026-09-27.md).
 
+The first V7 result is preserved in
+[`reports/heterogeneous-retrieval-v7-path-semantic-rerank-result-2026-09-27.md`](reports/heterogeneous-retrieval-v7-path-semantic-rerank-result-2026-09-27.md).
+It fails only oracle complete-evidence parity. The semantic-path final profile improves
+recall@5 from V6's 0.913 to 0.975 and matches oracle MRR at 0.921, but complete
+evidence@10 is 0.988 versus oracle 1.000. Its five misses are all the location edge of
+an object-holder-location path at ranks 17–19. A focused live probe shows why: the
+correct holder prefix can score above its correct city extension even while both
+outrank the competing branch. The next generic experiment must rank first-hop path
+families semantically, then put a complete descendant before only its own prefix; it
+must not add relation-name rules or relax the frozen parity gate.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several
