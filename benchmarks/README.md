@@ -501,6 +501,16 @@ oracle control, thresholds, security gates, Store revalidation, local models, an
 zero-network requirement remain fixed. See
 [`reports/heterogeneous-retrieval-v8-path-family-plan-2026-09-28.md`](reports/heterogeneous-retrieval-v8-path-family-plan-2026-09-28.md).
 
+The first V8 result is preserved in
+[`reports/heterogeneous-retrieval-v8-path-family-result-2026-09-28.md`](reports/heterogeneous-retrieval-v8-path-family-result-2026-09-28.md).
+It restores complete evidence@10 to 1.000 and raises recall@5 to 0.998, but fails only
+MRR parity: 0.919985 versus oracle 0.921142. Three one-hop questions move their first
+required memory from rank 2 to rank 3 because an incorrect but higher-scored branch
+has its second hop atomically reserved ahead of independent evidence. The next generic
+experiment must preserve the existing five-item independent base order, then place
+complete path evidence inside the remaining rank-10 budget; it must not infer answer
+sufficiency from a relation name or benchmark category.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

@@ -9,7 +9,12 @@
   names, facts, query categories, gold labels, or memory IDs, preserves exact
   membership, and leaves Store validation unchanged. Freeze heterogeneous V8 on the
   unchanged V4 topology-adversarial corpus and unchanged oracle-parity gate before
-  opening its result.
+  opening its result. Preserve the first V8 failure: recall@5 rises to 0.998 and
+  complete evidence@10 reaches 1.000, recovering every V7 two-hop miss, but MRR falls
+  from the oracle's 0.921142 to 0.919985. Exactly three one-hop queries move their
+  first required memory from rank 2 to rank 3 because completion of a higher-scored
+  competing branch reserves its second hop ahead of independent evidence. Keep the
+  gate unchanged and test base-reserve order preservation before path evidence.
 - Add a default-off whole-path semantic reranker for bounded graph exploration. The
   scorer receives only opaque item IDs, the query, ordered relation types, and edge
   facts; it cannot see scope, subject, memory IDs, authority, lifecycle, or
