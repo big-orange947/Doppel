@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a default-off topology completion pass after whole-path semantic ranking. The
+  semantic scorer still selects the relevant branch; when a scored path is a strict
+  edge-and-direction prefix of an already-retrieved path, the best-ranked complete
+  extension moves immediately before only that prefix. This pass uses no relation
+  names, facts, query categories, gold labels, or memory IDs, preserves exact
+  membership, and leaves Store validation unchanged. Freeze heterogeneous V8 on the
+  unchanged V4 topology-adversarial corpus and unchanged oracle-parity gate before
+  opening its result.
 - Add a default-off whole-path semantic reranker for bounded graph exploration. The
   scorer receives only opaque item IDs, the query, ordered relation types, and edge
   facts; it cannot see scope, subject, memory IDs, authority, lifecycle, or

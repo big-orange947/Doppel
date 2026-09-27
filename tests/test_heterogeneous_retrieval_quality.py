@@ -97,12 +97,14 @@ def test_result_schema_is_bound_to_the_new_runner() -> None:
         "doppel.heterogeneous-retrieval-live.v2",
         "doppel.heterogeneous-retrieval-live.v3",
         "doppel.heterogeneous-retrieval-live.v4",
+        "doppel.heterogeneous-retrieval-live.v5",
     ]
     assert schema["$defs"]["base"]["properties"]["result_schema_version"]["enum"] == [
         1,
         2,
         3,
         4,
+        5,
     ]
     assert schema["$defs"]["rate"] == {
         "type": "number",
@@ -439,8 +441,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     }
     profiles = {
         "assembled_oracle_exploration_hybrid_memory_reranking": profile,
-        "assembled_semantic_path_exploration_hybrid": profile,
-        "assembled_semantic_path_exploration_hybrid_memory_reranking": profile,
+        "assembled_semantic_path_family_exploration_hybrid": profile,
+        "assembled_semantic_path_family_exploration_hybrid_memory_reranking": profile,
     }
 
     passed = quality_gate(
@@ -452,6 +454,7 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         reorder_membership_violations=0,
         path_rerank_statuses=Counter({"completed": 144, "not_run": 336}),
         path_rerank_membership_violations=0,
+        path_family_membership_violations=0,
         graph_cleaned=True,
         postgres_reset=True,
     )
@@ -464,6 +467,7 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         reorder_membership_violations=0,
         path_rerank_statuses=Counter({"completed": 36, "not_run": 84}),
         path_rerank_membership_violations=0,
+        path_family_membership_violations=0,
         graph_cleaned=True,
         postgres_reset=True,
     )
@@ -471,8 +475,10 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     oracle_regression = quality_gate(
         {
             "assembled_oracle_exploration_hybrid_memory_reranking": profile,
-            "assembled_semantic_path_exploration_hybrid": lower_mrr,
-            "assembled_semantic_path_exploration_hybrid_memory_reranking": (lower_mrr),
+            "assembled_semantic_path_family_exploration_hybrid": lower_mrr,
+            "assembled_semantic_path_family_exploration_hybrid_memory_reranking": (
+                lower_mrr
+            ),
         },
         Counter(),
         selection_complete=True,
@@ -481,6 +487,7 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         reorder_membership_violations=0,
         path_rerank_statuses=Counter({"completed": 144, "not_run": 336}),
         path_rerank_membership_violations=0,
+        path_family_membership_violations=0,
         graph_cleaned=True,
         postgres_reset=True,
     )
@@ -493,6 +500,7 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         reorder_membership_violations=0,
         path_rerank_statuses=Counter({"completed": 143, "not_run": 336, "fallback": 1}),
         path_rerank_membership_violations=1,
+        path_family_membership_violations=1,
         graph_cleaned=True,
         postgres_reset=True,
     )
@@ -506,5 +514,6 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     assert path_rerank_failure["ok"] is False
     assert path_rerank_failure["failures"] == [
         "path_rerank_membership",
+        "path_family_membership",
         "path_reranker_statuses_accounted",
     ]

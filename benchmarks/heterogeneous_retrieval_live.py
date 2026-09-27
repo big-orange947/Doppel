@@ -66,6 +66,7 @@ from doppel_memory.relation_path_retrieval import (
     assemble_hybrid_retrieval_candidates,
     build_relation_path_retrieval_plan,
     merge_relation_path_hits,
+    promote_semantic_path_completions,
     rank_explored_relation_paths,
     rerank_explored_relation_paths,
     search_relation_path_routes,
@@ -73,8 +74,8 @@ from doppel_memory.relation_path_retrieval import (
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v3.json"
-DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v7-path-rerank-live.json"
-RUNNER = "doppel.heterogeneous-retrieval-live.v4"
+DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v8-path-family-live.json"
+RUNNER = "doppel.heterogeneous-retrieval-live.v5"
 PROFILES = (
     "independent_lexical_vector",
     "oracle_graph_path",
@@ -88,6 +89,8 @@ PROFILES = (
     "assembled_topology_aware_exploration_hybrid_memory_reranking",
     "assembled_semantic_path_exploration_hybrid",
     "assembled_semantic_path_exploration_hybrid_memory_reranking",
+    "assembled_semantic_path_family_exploration_hybrid",
+    "assembled_semantic_path_family_exploration_hybrid_memory_reranking",
 )
 ANSWERABLE_CATEGORIES = (
     "current_residence",
@@ -285,10 +288,13 @@ async def run_live(
     topology_aware_reranking_assembly_totals: Counter[str] = Counter()
     semantic_path_assembly_totals: Counter[str] = Counter()
     semantic_path_reranking_assembly_totals: Counter[str] = Counter()
+    semantic_path_family_assembly_totals: Counter[str] = Counter()
+    semantic_path_family_reranking_assembly_totals: Counter[str] = Counter()
     rerank_statuses: Counter[str] = Counter()
     path_rerank_statuses: Counter[str] = Counter()
     reorder_membership_violations = 0
     path_rerank_membership_violations = 0
+    path_family_membership_violations = 0
     graph_cleaned = False
     postgres_reset = False
     graph_write_attempted = False
@@ -431,6 +437,25 @@ async def run_live(
                 for hit in semantic_path_rerank.hits
             }:
                 path_rerank_membership_violations += 1
+            semantic_path_family_hits = promote_semantic_path_completions(
+                semantic_path_rerank.hits,
+            )
+            if {
+                (
+                    hit.candidate.scope.scope_key,
+                    hit.candidate.path_id,
+                    tuple(hit.candidate.supporting_memory_ids),
+                )
+                for hit in semantic_path_rerank.hits
+            } != {
+                (
+                    hit.candidate.scope.scope_key,
+                    hit.candidate.path_id,
+                    tuple(hit.candidate.supporting_memory_ids),
+                )
+                for hit in semantic_path_family_hits
+            }:
+                path_family_membership_violations += 1
             combined_path_hits = merge_relation_path_hits(
                 path_hits, explored_hits, limit=20
             )
@@ -603,6 +628,48 @@ async def run_live(
                 semantic_path_reranking_assembly,
             )
 
+            semantic_path_family_assembly_started = time.perf_counter()
+            semantic_path_family_assembly = await assemble_hybrid_retrieval_candidates(
+                store,
+                base_window,
+                semantic_path_family_hits,
+                [scope],
+                filters=FILTERS,
+                limit=20,
+                base_reserve=5,
+                literal_entity_reserve=1,
+                path_evidence_reserve=1,
+            )
+            semantic_path_family_assembly_latency = (
+                time.perf_counter() - semantic_path_family_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                semantic_path_family_assembly_totals,
+                semantic_path_family_assembly,
+            )
+
+            semantic_path_family_reranking_assembly_started = time.perf_counter()
+            semantic_path_family_reranking_assembly = (
+                await assemble_hybrid_retrieval_candidates(
+                    store,
+                    reranked_window,
+                    semantic_path_family_hits,
+                    [scope],
+                    filters=FILTERS,
+                    limit=20,
+                    base_reserve=5,
+                    literal_entity_reserve=1,
+                    path_evidence_reserve=1,
+                )
+            )
+            semantic_path_family_reranking_assembly_latency = (
+                time.perf_counter() - semantic_path_family_reranking_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                semantic_path_family_reranking_assembly_totals,
+                semantic_path_family_reranking_assembly,
+            )
+
             base_ids = [hit.record.memory_id for hit in base_result.hits[:20]]
             independent_window_ids = [hit.record.memory_id for hit in base_window]
             path_ids = list(
@@ -653,6 +720,14 @@ async def run_live(
             semantic_path_reranked_ids = [
                 candidate.record.memory_id
                 for candidate in semantic_path_reranking_assembly.candidates
+            ]
+            semantic_path_family_assembled_ids = [
+                candidate.record.memory_id
+                for candidate in semantic_path_family_assembly.candidates
+            ]
+            semantic_path_family_reranked_ids = [
+                candidate.record.memory_id
+                for candidate in semantic_path_family_reranking_assembly.candidates
             ]
             profile_rows = (
                 (
@@ -826,6 +901,44 @@ async def run_live(
                     ],
                     independent_window_ids,
                 ),
+                (
+                    "assembled_semantic_path_family_exploration_hybrid",
+                    semantic_path_family_assembled_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in semantic_path_family_assembly.candidates
+                    ],
+                    base_latency
+                    + exploration_latency
+                    + path_rerank_latency
+                    + semantic_path_family_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in semantic_path_family_assembly.candidates
+                    ],
+                    semantic_path_family_assembled_ids,
+                ),
+                (
+                    "assembled_semantic_path_family_exploration_hybrid_memory_reranking",
+                    semantic_path_family_reranked_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in (
+                            semantic_path_family_reranking_assembly.candidates
+                        )
+                    ],
+                    rerank_latency
+                    + exploration_latency
+                    + path_rerank_latency
+                    + semantic_path_family_reranking_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in (
+                            semantic_path_family_reranking_assembly.candidates
+                        )
+                    ],
+                    independent_window_ids,
+                ),
             )
             for (
                 profile,
@@ -895,18 +1008,19 @@ async def run_live(
     complete_selection = len(queries) == len(dataset.queries)
     gate = quality_gate(
         profiles,
-        semantic_path_reranking_assembly_totals,
+        semantic_path_family_reranking_assembly_totals,
         selection_complete=complete_selection,
         expected_rerank_calls=len(queries),
         rerank_statuses=rerank_statuses,
         reorder_membership_violations=reorder_membership_violations,
         path_rerank_statuses=path_rerank_statuses,
         path_rerank_membership_violations=path_rerank_membership_violations,
+        path_family_membership_violations=path_family_membership_violations,
         graph_cleaned=graph_cleaned,
         postgres_reset=postgres_reset,
     )
     return {
-        "result_schema_version": 4,
+        "result_schema_version": 5,
         "runner": RUNNER,
         "dataset": {
             "suite": dataset.suite,
@@ -958,10 +1072,15 @@ async def run_live(
         "semantic_path_reranking_assembly": dict(
             semantic_path_reranking_assembly_totals
         ),
+        "semantic_path_family_assembly": dict(semantic_path_family_assembly_totals),
+        "semantic_path_family_reranking_assembly": dict(
+            semantic_path_family_reranking_assembly_totals
+        ),
         "rerank_statuses": dict(rerank_statuses),
         "path_rerank_statuses": dict(path_rerank_statuses),
         "reorder_membership_violations": reorder_membership_violations,
         "path_rerank_membership_violations": (path_rerank_membership_violations),
+        "path_family_membership_violations": path_family_membership_violations,
         "gate": gate,
     }
 
@@ -1280,12 +1399,15 @@ def quality_gate(
     reorder_membership_violations: int,
     path_rerank_statuses: Counter[str],
     path_rerank_membership_violations: int,
+    path_family_membership_violations: int,
     graph_cleaned: bool,
     postgres_reset: bool,
 ) -> dict[str, Any]:
-    baseline = profiles["assembled_semantic_path_exploration_hybrid"]
+    baseline = profiles["assembled_semantic_path_family_exploration_hybrid"]
     oracle_final = profiles["assembled_oracle_exploration_hybrid_memory_reranking"]
-    final = profiles["assembled_semantic_path_exploration_hybrid_memory_reranking"]
+    final = profiles[
+        "assembled_semantic_path_family_exploration_hybrid_memory_reranking"
+    ]
     checks = {
         "selection_complete": selection_complete,
         "evidence_recall_at_5": final["evidence_recall_at_5"]
@@ -1330,6 +1452,7 @@ def quality_gate(
         == expected_rerank_calls
         and set(rerank_statuses).issubset({"completed", "not_run"}),
         "path_rerank_membership": path_rerank_membership_violations == 0,
+        "path_family_membership": path_family_membership_violations == 0,
         "path_reranker_statuses_accounted": sum(path_rerank_statuses.values())
         == expected_rerank_calls
         and set(path_rerank_statuses).issubset({"completed", "not_run"}),
@@ -1344,11 +1467,13 @@ def quality_gate(
         "checks": checks,
         "failures": [name for name, passed in checks.items() if not passed],
         "thresholds": THRESHOLDS,
-        "baseline_profile": "assembled_semantic_path_exploration_hybrid",
+        "baseline_profile": "assembled_semantic_path_family_exploration_hybrid",
         "oracle_comparison_profile": (
             "assembled_oracle_exploration_hybrid_memory_reranking"
         ),
-        "profile": ("assembled_semantic_path_exploration_hybrid_memory_reranking"),
+        "profile": (
+            "assembled_semantic_path_family_exploration_hybrid_memory_reranking"
+        ),
     }
 
 
@@ -1394,7 +1519,7 @@ async def _main_async(args: argparse.Namespace) -> int:
         )
     except Exception as exc:  # noqa: BLE001
         report = {
-            "result_schema_version": 4,
+            "result_schema_version": 5,
             "runner": RUNNER,
             "dataset": {
                 "suite": dataset.suite,

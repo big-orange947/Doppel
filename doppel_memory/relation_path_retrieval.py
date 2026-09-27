@@ -835,6 +835,62 @@ async def rerank_explored_relation_paths(
         )
 
 
+def promote_semantic_path_completions(
+    hits: Sequence[RelationPathRetrievalHit],
+    *,
+    rrf_k: int = 60,
+) -> list[RelationPathRetrievalHit]:
+    """Move the best semantic extension immediately before its strict prefix.
+
+    Semantic ranking still chooses the relevant first-hop family.  This topology-only
+    pass prevents that family's one-hop prefix from consuming an atomic path reserve
+    while its already-retrieved two-hop evidence is flattened later.  It never compares
+    relation names or facts and cannot add, remove, or authorize a candidate.
+    """
+
+    if not hits:
+        return []
+    if rrf_k < 1:
+        raise ValueError("rrf_k must be positive")
+
+    ordered = list(hits)
+    scope_keys = [hit.candidate.scope.scope_key for hit in ordered]
+    signatures = [
+        tuple((hop.edge_id, hop.direction) for hop in hit.candidate.hops)
+        for hit in ordered
+    ]
+    promotions: dict[int, int] = {}
+    claimed_extensions: set[int] = set()
+    for prefix_index, prefix in enumerate(signatures):
+        extensions = [
+            index
+            for index, signature in enumerate(signatures)
+            if index not in claimed_extensions
+            and scope_keys[index] == scope_keys[prefix_index]
+            and len(signature) > len(prefix)
+            and signature[: len(prefix)] == prefix
+        ]
+        if not extensions:
+            continue
+        best_extension = min(extensions)
+        if best_extension > prefix_index:
+            promotions[best_extension] = prefix_index
+            claimed_extensions.add(best_extension)
+
+    ranked = sorted(
+        enumerate(ordered),
+        key=lambda item: (
+            promotions.get(item[0], item[0]),
+            item[0] not in promotions,
+            item[0],
+        ),
+    )
+    return [
+        hit.model_copy(update={"rrf_score": 1.0 / (rrf_k + rank)})
+        for rank, (_, hit) in enumerate(ranked, start=1)
+    ]
+
+
 def merge_relation_path_hits(
     *groups: Sequence[RelationPathRetrievalHit],
     limit: int = 10,

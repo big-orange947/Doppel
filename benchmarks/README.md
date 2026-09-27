@@ -493,6 +493,14 @@ outrank the competing branch. The next generic experiment must rank first-hop pa
 families semantically, then put a complete descendant before only its own prefix; it
 must not add relation-name rules or relax the frozen parity gate.
 
+V8 freezes that composition as a separate profile rather than rewriting V7. Semantic
+scores first establish global path order. A topology-only completion pass then moves
+the best-ranked complete extension immediately before its own strict edge/direction
+prefix, without grouping unrelated paths or changing membership. The same V4 corpus,
+oracle control, thresholds, security gates, Store revalidation, local models, and
+zero-network requirement remain fixed. See
+[`reports/heterogeneous-retrieval-v8-path-family-plan-2026-09-28.md`](reports/heterogeneous-retrieval-v8-path-family-plan-2026-09-28.md).
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

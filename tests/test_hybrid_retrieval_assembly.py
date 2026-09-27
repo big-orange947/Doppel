@@ -26,6 +26,7 @@ from doppel_memory.relation import (
 from doppel_memory.relation_path_retrieval import (
     RelationPathRetrievalHit,
     assemble_hybrid_retrieval_candidates,
+    promote_semantic_path_completions,
     rank_explored_relation_paths,
     rerank_explored_relation_paths,
 )
@@ -420,6 +421,84 @@ async def test_path_reranker_does_not_call_provider_without_paths() -> None:
     assert result.status == "not_run"
     assert result.hits == []
     assert reranker.requests == []
+
+
+def test_semantic_path_completion_moves_only_its_best_extension() -> None:
+    complete = _two_hop_path_hit("m-first", "m-second")
+    prefix = RelationPathRetrievalHit(
+        candidate=RelationPathCandidate(
+            scope=SCOPE,
+            source="tests.graph",
+            score=complete.candidate.score,
+            path_id="p-one-hop",
+            start_entity_id=complete.candidate.start_entity_id,
+            end_entity_id="entity-middle",
+            hops=[complete.candidate.hops[0]],
+            supporting_memory_ids=["m-first"],
+        ),
+        route_indexes=[0],
+        route_modes=["exploration"],
+        rrf_score=1 / 61,
+    )
+    unrelated = _path_hit(["m-unrelated"], path_id="p-unrelated")
+    lower_extension = complete.model_copy(
+        update={
+            "candidate": complete.candidate.model_copy(
+                update={"path_id": "p-lower-extension"}
+            )
+        }
+    )
+
+    result = promote_semantic_path_completions(
+        [prefix, unrelated, complete, lower_extension]
+    )
+
+    assert [hit.candidate.path_id for hit in result] == [
+        "p-two-hop",
+        "p-one-hop",
+        "p-unrelated",
+        "p-lower-extension",
+    ]
+    assert {hit.candidate.path_id for hit in result} == {
+        "p-one-hop",
+        "p-unrelated",
+        "p-two-hop",
+        "p-lower-extension",
+    }
+
+
+def test_semantic_path_completion_never_links_prefixes_across_scopes() -> None:
+    complete = _two_hop_path_hit("m-first", "m-second")
+    prefix = RelationPathRetrievalHit(
+        candidate=RelationPathCandidate(
+            scope=SCOPE,
+            source="tests.graph",
+            score=complete.candidate.score,
+            path_id="p-prefix",
+            start_entity_id=complete.candidate.start_entity_id,
+            end_entity_id="entity-middle",
+            hops=[complete.candidate.hops[0]],
+            supporting_memory_ids=["m-first"],
+        ),
+        route_indexes=[0],
+        route_modes=["exploration"],
+        rrf_score=1 / 61,
+    )
+    other_scope = MemoryScope(user_id="owner-2", agent_id="agent-1")
+    cross_scope_complete = complete.model_copy(
+        update={
+            "candidate": complete.candidate.model_copy(
+                update={"scope": other_scope, "path_id": "p-other-scope"}
+            )
+        }
+    )
+
+    result = promote_semantic_path_completions([prefix, cross_scope_complete])
+
+    assert [hit.candidate.path_id for hit in result] == [
+        "p-prefix",
+        "p-other-scope",
+    ]
 
 
 @pytest.mark.asyncio
