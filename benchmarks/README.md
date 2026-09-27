@@ -441,6 +441,16 @@ candidates and must match the oracle control on recall@5, complete evidence@10,
 related-context recall@10, and MRR. The frozen opened protocol is
 [`reports/heterogeneous-retrieval-v5-topology-aware-plan-2026-09-27.md`](reports/heterogeneous-retrieval-v5-topology-aware-plan-2026-09-27.md).
 
+The first V5 result is preserved in
+[`reports/heterogeneous-retrieval-v5-topology-aware-result-2026-09-27.md`](reports/heterogeneous-retrieval-v5-topology-aware-result-2026-09-27.md).
+It passed every frozen gate without oracle exact-path candidates: evidence recall@5
+was 0.998, complete evidence@10 and related-context recall@10 were 1.000, and MRR was
+0.933, exactly matching the oracle aggregate. All 22 V4 two-hop rank-10 failures were
+recovered, all hard-safety counts remained zero, and the old V4 failure reproduced in
+the same run. Candidate order still differed on 76/480 queries, so this is metric
+parity rather than oracle-list replay. The policy remains default-off until a separate
+branching/cycle/competing-path topology corpus tests graph-breadth risks.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

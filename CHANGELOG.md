@@ -25,6 +25,12 @@
   preserving the independent base reserve. Freeze a V5 opened ablation that gives the
   topology-aware, oracle-free profile the same absolute and oracle-parity gates as V4;
   no domain relation labels, answer gold, or query-category branches are introduced.
+  Preserve the first V5 pass: the oracle-free profile restored all 22 V4 two-hop
+  rank-10 failures and matched the oracle control at 0.998 evidence recall@5, 1.000
+  complete evidence@10, 1.000 related-context recall@10, and 0.933 MRR, with every
+  hard-safety count at zero. Its full candidate order still differed on 76/480
+  queries, while the old V4 failure reproduced in the same process. Keep both controls
+  default-off pending a dedicated branching/cycle/competing-path topology corpus.
 - Serialize database-global pgvector extension discovery and creation with a
   PostgreSQL transaction advisory lock. `CREATE EXTENSION IF NOT EXISTS` alone still
   races on `pg_extension_name_index` when independent processes initialize the first
