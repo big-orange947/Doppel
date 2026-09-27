@@ -17,7 +17,7 @@
           "type": "object",
           "required": ["suite", "fingerprint", "selected_queries"],
           "properties": {
-            "suite": {"enum": ["doppel-heterogeneous-retrieval-zh-v1", "doppel-heterogeneous-retrieval-zh-v2", "doppel-heterogeneous-retrieval-zh-v3"]},
+            "suite": {"enum": ["doppel-heterogeneous-retrieval-zh-v1", "doppel-heterogeneous-retrieval-zh-v2", "doppel-heterogeneous-retrieval-zh-v3", "doppel-heterogeneous-retrieval-zh-v4"]},
             "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
             "selected_queries": {"type": "integer", "minimum": 1}
           }

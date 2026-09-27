@@ -31,6 +31,12 @@
   hard-safety count at zero. Its full candidate order still differed on 76/480
   queries, while the old V4 failure reproduced in the same process. Keep both controls
   default-off pending a dedicated branching/cycle/competing-path topology corpus.
+- Add a deterministic opened topology-adversarial extension of the 480-query corpus.
+  It leaves every V3 query and answer label unchanged while adding an unrelated
+  one-hop edge, a competing two-hop branch, a repeated-node cycle, and an expired
+  edge in every one of 48 exact scopes. Freeze the existing V5 policy and oracle-
+  parity gate unchanged before running it; a failure must motivate generic path-level
+  ranking rather than benchmark relation labels or query-specific Planner rules.
 - Serialize database-global pgvector extension discovery and creation with a
   PostgreSQL transaction advisory lock. `CREATE EXTENSION IF NOT EXISTS` alone still
   races on `pg_extension_name_index` when independent processes initialize the first

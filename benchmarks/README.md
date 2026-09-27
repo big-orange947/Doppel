@@ -451,6 +451,15 @@ the same run. Candidate order still differed on 76/480 queries, so this is metri
 parity rather than oracle-list replay. The policy remains default-off until a separate
 branching/cycle/competing-path topology corpus tests graph-breadth risks.
 
+That next stress extension is frozen as heterogeneous V6. It keeps every V3 query and
+answer label unchanged while adding, per scope, an unrelated one-hop branch, a
+competing two-hop branch, a repeated-node cycle, and an expired edge. The V5 policy
+and gate run unchanged: there is no post-pass relation label, threshold, or path
+scorer. This directly tests whether “complete over prefix” is sufficient when several
+maximal paths compete, and is expected to justify path-level semantic ranking if it
+fails. See
+[`reports/heterogeneous-retrieval-v6-topology-adversarial-plan-2026-09-27.md`](reports/heterogeneous-retrieval-v6-topology-adversarial-plan-2026-09-27.md).
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

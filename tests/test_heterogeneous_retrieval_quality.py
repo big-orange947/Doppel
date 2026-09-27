@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from benchmarks.build_heterogeneous_retrieval_v1 import build_dataset
 from benchmarks.build_heterogeneous_retrieval_v2 import build_dataset as build_v2
 from benchmarks.build_heterogeneous_retrieval_v3 import build_dataset as build_v3
+from benchmarks.build_heterogeneous_retrieval_v4 import build_dataset as build_v4
 from benchmarks.heterogeneous_retrieval_live import (
     ANSWERABLE_CATEGORIES,
     _DatasetPlanner,
@@ -50,6 +51,12 @@ V3_DATASET_PATH = (
     / "benchmarks"
     / "datasets"
     / "heterogeneous-retrieval-zh-v3.json"
+)
+V4_DATASET_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "benchmarks"
+    / "datasets"
+    / "heterogeneous-retrieval-zh-v4.json"
 )
 
 
@@ -166,6 +173,48 @@ def test_v3_only_adds_generic_oracle_count_plan_fields() -> None:
         for query in payload["queries"]
         if query["intent"] != "count"
     )
+
+
+def test_v4_only_adds_validated_topology_adversaries() -> None:
+    v3 = load_dataset(V3_DATASET_PATH).model_dump(mode="json")
+    v4 = load_dataset(V4_DATASET_PATH)
+    rebuilt = HeterogeneousRetrievalDataset.model_validate(build_v4())
+
+    assert rebuilt.fingerprint == v4.fingerprint
+    assert v4.fingerprint == (
+        "0b0d0c8ab8aaf35350e465325540acc3b8c81f00496ed0d02901bc9f10e6a771"
+    )
+    payload = v4.model_dump(mode="json")
+    assert payload["memories"][: len(v3["memories"])] == v3["memories"]
+    assert payload["entities"][: len(v3["entities"])] == v3["entities"]
+    assert payload["edges"][: len(v3["edges"])] == v3["edges"]
+    assert len(payload["memories"]) == 9_504
+    assert len(payload["entities"]) == 384
+    assert len(payload["edges"]) == 384
+    assert len(payload["queries"]) == 480
+    assert set(payload["relation_types"]) - set(v3["relation_types"]) == {
+        "LOANED_TO",
+        "WORKS_IN",
+        "MADE_BY",
+        "RELATED_TO",
+    }
+    two_hop = next(
+        query
+        for query in payload["queries"]
+        if query["case_id"] == "q-u01-object-city"
+    )
+    no_answer = next(
+        query
+        for query in payload["queries"]
+        if query["case_id"] == "q-u01-buyer-unknown"
+    )
+    assert "m-u01-stale-holder" in two_hop["hard_forbidden_memory_ids"]
+    assert {
+        "m-u01-maker",
+        "m-u01-cycle-out",
+        "m-u01-loaned-branch",
+        "m-u01-alternate-location",
+    }.issubset(no_answer["related_memory_ids"])
 
 
 def test_partitions_are_owner_disjoint_and_queries_are_unique() -> None:
