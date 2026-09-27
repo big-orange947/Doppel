@@ -17,11 +17,17 @@ from doppel_memory.models import (
     WriteStatus,
 )
 from doppel_memory.query import PersonalMemoryCandidateEvidence, PersonalMemoryQueryHit
-from doppel_memory.relation import RelationPathCandidate, RelationPathHop
+from doppel_memory.relation import (
+    RelationPathCandidate,
+    RelationPathHop,
+    RelationRerankRequest,
+    RelationRerankScore,
+)
 from doppel_memory.relation_path_retrieval import (
     RelationPathRetrievalHit,
     assemble_hybrid_retrieval_candidates,
     rank_explored_relation_paths,
+    rerank_explored_relation_paths,
 )
 
 NOW = datetime(2026, 9, 23, tzinfo=UTC)
@@ -112,7 +118,9 @@ def _path_hit(
     )
 
 
-def _two_hop_path_hit(first_memory_id: str, second_memory_id: str) -> RelationPathRetrievalHit:
+def _two_hop_path_hit(
+    first_memory_id: str, second_memory_id: str
+) -> RelationPathRetrievalHit:
     candidate = RelationPathCandidate(
         scope=SCOPE,
         source="tests.graph",
@@ -128,6 +136,7 @@ def _two_hop_path_hit(first_memory_id: str, second_memory_id: str) -> RelationPa
                 source_entity_id="entity-start",
                 target_entity_id="entity-middle",
                 edge_id="edge-first",
+                fact="first fact",
                 episode_ids=["episode-first"],
                 memory_ids=[first_memory_id],
             ),
@@ -138,6 +147,7 @@ def _two_hop_path_hit(first_memory_id: str, second_memory_id: str) -> RelationPa
                 source_entity_id="entity-middle",
                 target_entity_id="entity-end",
                 edge_id="edge-second",
+                fact="second fact",
                 episode_ids=["episode-second"],
                 memory_ids=[second_memory_id],
             ),
@@ -150,6 +160,19 @@ def _two_hop_path_hit(first_memory_id: str, second_memory_id: str) -> RelationPa
         route_modes=["exploration"],
         rrf_score=0.02,
     )
+
+
+class _PathReranker:
+    name = "tests.path-reranker"
+    version = "1"
+
+    def __init__(self, scores: list[RelationRerankScore]) -> None:
+        self.scores = scores
+        self.requests: list[RelationRerankRequest] = []
+
+    async def rerank(self, request: RelationRerankRequest) -> list[RelationRerankScore]:
+        self.requests.append(request)
+        return self.scores
 
 
 async def _put(store: InMemoryStore, *records: MemoryRecord) -> None:
@@ -192,7 +215,9 @@ async def test_assembly_reserves_independent_candidate_and_keeps_path_atomic() -
 
 
 @pytest.mark.asyncio
-async def test_assembly_can_reserve_literal_entity_context_without_judging_support() -> None:
+async def test_assembly_can_reserve_literal_entity_context_without_judging_support() -> (
+    None
+):
     store = InMemoryStore()
     higher_ranked = _record("m-higher-ranked")
     literal_anchor = _record("m-literal-anchor")
@@ -264,7 +289,9 @@ async def test_assembly_caps_overlapping_path_rank_instead_of_stacking_it() -> N
 
 
 @pytest.mark.asyncio
-async def test_assembly_attributes_exploration_without_granting_answer_support() -> None:
+async def test_assembly_attributes_exploration_without_granting_answer_support() -> (
+    None
+):
     store = InMemoryStore()
     record = _record("m-explored")
     await _put(store, record)
@@ -308,6 +335,91 @@ def test_exploration_can_prefer_a_bounded_complete_path_over_its_prefix() -> Non
 
     assert [len(hit.candidate.hops) for hit in default] == [1, 2]
     assert [len(hit.candidate.hops) for hit in recall_oriented] == [2, 1]
+
+
+@pytest.mark.asyncio
+async def test_path_reranker_sees_only_text_and_preserves_membership() -> None:
+    complete = _two_hop_path_hit("m-first", "m-second").candidate
+    prefix = RelationPathCandidate(
+        scope=SCOPE,
+        source="tests.graph",
+        score=complete.score,
+        path_id="p-one-hop",
+        start_entity_id=complete.start_entity_id,
+        end_entity_id="entity-middle",
+        hops=[complete.hops[0]],
+        supporting_memory_ids=["m-first"],
+    )
+    reranker = _PathReranker(
+        [
+            RelationRerankScore(item_id="path-000", score=0.1),
+            RelationRerankScore(item_id="path-001", score=0.9),
+        ]
+    )
+
+    result = await rerank_explored_relation_paths(
+        [prefix, complete],
+        query_text="Where is the item?",
+        reranker=reranker,
+    )
+
+    assert result.status == "completed"
+    assert result.error_type == ""
+    assert [hit.candidate.path_id for hit in result.hits] == [
+        "p-two-hop",
+        "p-one-hop",
+    ]
+    assert {hit.candidate.path_id for hit in result.hits} == {
+        prefix.path_id,
+        complete.path_id,
+    }
+    request = reranker.requests[0].model_dump(mode="json")
+    assert set(request) == {"query_text", "relation_hints", "items"}
+    assert set(request["items"][0]) == {"item_id", "relation_type", "fact"}
+    assert request["items"][1]["relation_type"] == "FIRST_HOP -> SECOND_HOP"
+    assert request["items"][1]["fact"] == "first fact\nsecond fact"
+    serialized = str(request)
+    assert "owner-1" not in serialized
+    assert "m-first" not in serialized
+    assert "p-two-hop" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_path_reranker_malformed_output_falls_back_deterministically() -> None:
+    prefix = _path_hit(["m-first"], path_id="p-one-hop").candidate
+    complete = _two_hop_path_hit("m-first", "m-second").candidate
+    reranker = _PathReranker([RelationRerankScore(item_id="path-999", score=1.0)])
+
+    result = await rerank_explored_relation_paths(
+        [prefix, complete],
+        query_text="Where is the item?",
+        reranker=reranker,
+        prefer_complete_paths=False,
+    )
+
+    expected = rank_explored_relation_paths(
+        [prefix, complete], prefer_complete_paths=False
+    )
+    assert result.status == "fallback"
+    assert result.error_type == "ValueError"
+    assert [hit.candidate.path_id for hit in result.hits] == [
+        hit.candidate.path_id for hit in expected
+    ]
+
+
+@pytest.mark.asyncio
+async def test_path_reranker_does_not_call_provider_without_paths() -> None:
+    reranker = _PathReranker([])
+
+    result = await rerank_explored_relation_paths(
+        [],
+        query_text="Where is the item?",
+        reranker=reranker,
+    )
+
+    assert result.status == "not_run"
+    assert result.hits == []
+    assert reranker.requests == []
 
 
 @pytest.mark.asyncio
@@ -363,9 +475,7 @@ async def test_assembly_rejects_whole_path_when_one_support_is_ineligible() -> N
 @pytest.mark.asyncio
 async def test_assembly_revalidates_base_authority_and_exact_scope() -> None:
     store = InMemoryStore()
-    agent_output = _record(
-        "m-agent", authority=FactAuthority.AGENT_OUTPUT
-    )
+    agent_output = _record("m-agent", authority=FactAuthority.AGENT_OUTPUT)
     foreign = _record("m-foreign", scope=OTHER_SCOPE)
     await _put(store, agent_output, foreign)
 

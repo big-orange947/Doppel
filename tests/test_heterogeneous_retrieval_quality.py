@@ -83,13 +83,9 @@ def test_committed_corpus_is_deterministic_and_complete() -> None:
         "sealed": 280,
         "adversarial": 80,
     }
-    assert set(Counter(query.category for query in committed.queries).values()) == {
-        48
-    }
+    assert set(Counter(query.category for query in committed.queries).values()) == {48}
     assert set(Counter(query.scope for query in committed.queries).values()) == {10}
-    assert set(Counter(memory.scope for memory in committed.memories).values()) == {
-        192
-    }
+    assert set(Counter(memory.scope for memory in committed.memories).values()) == {192}
 
 
 def test_result_schema_is_bound_to_the_new_runner() -> None:
@@ -100,10 +96,14 @@ def test_result_schema_is_bound_to_the_new_runner() -> None:
         "doppel.heterogeneous-retrieval-live.v1",
         "doppel.heterogeneous-retrieval-live.v2",
         "doppel.heterogeneous-retrieval-live.v3",
+        "doppel.heterogeneous-retrieval-live.v4",
     ]
-    assert schema["$defs"]["base"]["properties"][
-        "result_schema_version"
-    ]["enum"] == [1, 2, 3]
+    assert schema["$defs"]["base"]["properties"]["result_schema_version"]["enum"] == [
+        1,
+        2,
+        3,
+        4,
+    ]
     assert schema["$defs"]["rate"] == {
         "type": "number",
         "minimum": 0,
@@ -156,15 +156,12 @@ def test_v3_only_adds_generic_oracle_count_plan_fields() -> None:
     assert [item["query"] for item in payload["queries"]] == [
         item["query"] for item in v2["queries"]
     ]
-    count_plans = [
-        query for query in payload["queries"] if query["intent"] == "count"
-    ]
+    count_plans = [query for query in payload["queries"] if query["intent"] == "count"]
     assert len(count_plans) == 48
     assert all(query["oracle_search_text"] == "" for query in count_plans)
     assert all(query["oracle_memory_types"] == ["episode"] for query in count_plans)
     assert all(
-        query["oracle_topic_keys"] == ["travel:completed"]
-        for query in count_plans
+        query["oracle_topic_keys"] == ["travel:completed"] for query in count_plans
     )
     assert all(
         query["oracle_search_text"] is None
@@ -199,9 +196,7 @@ def test_v4_only_adds_validated_topology_adversaries() -> None:
         "RELATED_TO",
     }
     two_hop = next(
-        query
-        for query in payload["queries"]
-        if query["case_id"] == "q-u01-object-city"
+        query for query in payload["queries"] if query["case_id"] == "q-u01-object-city"
     )
     no_answer = next(
         query
@@ -229,12 +224,8 @@ def test_partitions_are_owner_disjoint_and_queries_are_unique() -> None:
     }
 
     assert owners_by_partition["dev"].isdisjoint(owners_by_partition["sealed"])
-    assert owners_by_partition["dev"].isdisjoint(
-        owners_by_partition["adversarial"]
-    )
-    assert owners_by_partition["sealed"].isdisjoint(
-        owners_by_partition["adversarial"]
-    )
+    assert owners_by_partition["dev"].isdisjoint(owners_by_partition["adversarial"])
+    assert owners_by_partition["sealed"].isdisjoint(owners_by_partition["adversarial"])
     assert len({query.query for query in dataset.queries}) == len(dataset.queries)
 
 
@@ -253,9 +244,9 @@ def test_temporal_count_and_relation_gold_are_explicit() -> None:
     assert memories[temporary.required_memory_ids[0]].valid_to.startswith("2026-04")
     assert count.expected_count == 2
     assert len({memories[item].event_key for item in count.required_memory_ids}) == 2
-    assert {
-        memories[item].event_key for item in count.related_memory_ids
-    } & {memories[item].event_key for item in count.required_memory_ids}
+    assert {memories[item].event_key for item in count.related_memory_ids} & {
+        memories[item].event_key for item in count.required_memory_ids
+    }
     assert all(
         memories[item].temporal_status == "cancelled"
         for item in count.hard_forbidden_memory_ids
@@ -339,12 +330,10 @@ async def test_oracle_planner_supplies_labels_but_no_scope_authority() -> None:
         }
     )
 
-    count = await _DatasetPlanner(
-        queries["q-u01-travel-count"], scope
-    ).plan(request)
-    historical = await _DatasetPlanner(
-        queries["q-u01-temporary-asof"], scope
-    ).plan(request)
+    count = await _DatasetPlanner(queries["q-u01-travel-count"], scope).plan(request)
+    historical = await _DatasetPlanner(queries["q-u01-temporary-asof"], scope).plan(
+        request
+    )
 
     assert count.operation == "count"
     assert count.temporal_view == "prior"
@@ -450,8 +439,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     }
     profiles = {
         "assembled_oracle_exploration_hybrid_memory_reranking": profile,
-        "assembled_topology_aware_exploration_hybrid": profile,
-        "assembled_topology_aware_exploration_hybrid_memory_reranking": profile,
+        "assembled_semantic_path_exploration_hybrid": profile,
+        "assembled_semantic_path_exploration_hybrid_memory_reranking": profile,
     }
 
     passed = quality_gate(
@@ -461,6 +450,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         expected_rerank_calls=480,
         rerank_statuses=Counter({"completed": 468, "not_run": 12}),
         reorder_membership_violations=0,
+        path_rerank_statuses=Counter({"completed": 144, "not_run": 336}),
+        path_rerank_membership_violations=0,
         graph_cleaned=True,
         postgres_reset=True,
     )
@@ -471,6 +462,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
         expected_rerank_calls=120,
         rerank_statuses=Counter({"completed": 120}),
         reorder_membership_violations=0,
+        path_rerank_statuses=Counter({"completed": 36, "not_run": 84}),
+        path_rerank_membership_violations=0,
         graph_cleaned=True,
         postgres_reset=True,
     )
@@ -478,16 +471,28 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     oracle_regression = quality_gate(
         {
             "assembled_oracle_exploration_hybrid_memory_reranking": profile,
-            "assembled_topology_aware_exploration_hybrid": lower_mrr,
-            "assembled_topology_aware_exploration_hybrid_memory_reranking": (
-                lower_mrr
-            ),
+            "assembled_semantic_path_exploration_hybrid": lower_mrr,
+            "assembled_semantic_path_exploration_hybrid_memory_reranking": (lower_mrr),
         },
         Counter(),
         selection_complete=True,
         expected_rerank_calls=480,
         rerank_statuses=Counter({"completed": 480}),
         reorder_membership_violations=0,
+        path_rerank_statuses=Counter({"completed": 144, "not_run": 336}),
+        path_rerank_membership_violations=0,
+        graph_cleaned=True,
+        postgres_reset=True,
+    )
+    path_rerank_failure = quality_gate(
+        profiles,
+        Counter(),
+        selection_complete=True,
+        expected_rerank_calls=480,
+        rerank_statuses=Counter({"completed": 480}),
+        reorder_membership_violations=0,
+        path_rerank_statuses=Counter({"completed": 143, "not_run": 336, "fallback": 1}),
+        path_rerank_membership_violations=1,
         graph_cleaned=True,
         postgres_reset=True,
     )
@@ -498,3 +503,8 @@ def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> N
     assert diagnostic["failures"] == ["selection_complete"]
     assert oracle_regression["ok"] is False
     assert oracle_regression["failures"] == ["oracle_mrr_non_regression"]
+    assert path_rerank_failure["ok"] is False
+    assert path_rerank_failure["failures"] == [
+        "path_rerank_membership",
+        "path_reranker_statuses_accounted",
+    ]

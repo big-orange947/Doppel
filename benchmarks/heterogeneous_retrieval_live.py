@@ -67,13 +67,14 @@ from doppel_memory.relation_path_retrieval import (
     build_relation_path_retrieval_plan,
     merge_relation_path_hits,
     rank_explored_relation_paths,
+    rerank_explored_relation_paths,
     search_relation_path_routes,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v3.json"
-DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v5-topology-aware-live.json"
-RUNNER = "doppel.heterogeneous-retrieval-live.v3"
+DEFAULT_OUTPUT = ROOT / "data/doppel/heterogeneous-retrieval-v7-path-rerank-live.json"
+RUNNER = "doppel.heterogeneous-retrieval-live.v4"
 PROFILES = (
     "independent_lexical_vector",
     "oracle_graph_path",
@@ -85,6 +86,8 @@ PROFILES = (
     "assembled_exploration_only_hybrid_memory_reranking",
     "assembled_topology_aware_exploration_hybrid",
     "assembled_topology_aware_exploration_hybrid_memory_reranking",
+    "assembled_semantic_path_exploration_hybrid",
+    "assembled_semantic_path_exploration_hybrid_memory_reranking",
 )
 ANSWERABLE_CATEGORIES = (
     "current_residence",
@@ -174,7 +177,8 @@ def parser() -> argparse.ArgumentParser:
         help="required to open the frozen sealed and adversarial partitions",
     )
     result.add_argument(
-        "--neo4j-uri", default=os.environ.get("DOPPEL_NEO4J_URI", "bolt://127.0.0.1:7687")
+        "--neo4j-uri",
+        default=os.environ.get("DOPPEL_NEO4J_URI", "bolt://127.0.0.1:7687"),
     )
     result.add_argument("--neo4j-user", default="neo4j")
     result.add_argument("--neo4j-password-env", default="DOPPEL_NEO4J_PASSWORD")
@@ -223,6 +227,7 @@ async def run_live(
     postgres_password: str,
     embedding_provider: Any,
     memory_reranker: Any,
+    relation_path_reranker: Any,
     rerank_window: int = 64,
 ) -> dict[str, Any]:
     from neo4j import AsyncGraphDatabase  # pyright: ignore[reportMissingImports]
@@ -261,9 +266,7 @@ async def run_live(
     )
     run_id = f"doppel-heterogeneous-v1-{uuid4().hex}"
     scopes = {
-        name: MemoryScope(
-            user_id=f"{scope.user_id}:{run_id}", agent_id=scope.agent_id
-        )
+        name: MemoryScope(user_id=f"{scope.user_id}:{run_id}", agent_id=scope.agent_id)
         for name, scope in dataset.scopes.items()
     }
     groups = [scope.scope_key for scope in scopes.values()]
@@ -280,8 +283,12 @@ async def run_live(
     exploration_only_reranking_assembly_totals: Counter[str] = Counter()
     topology_aware_assembly_totals: Counter[str] = Counter()
     topology_aware_reranking_assembly_totals: Counter[str] = Counter()
+    semantic_path_assembly_totals: Counter[str] = Counter()
+    semantic_path_reranking_assembly_totals: Counter[str] = Counter()
     rerank_statuses: Counter[str] = Counter()
+    path_rerank_statuses: Counter[str] = Counter()
     reorder_membership_violations = 0
+    path_rerank_membership_violations = 0
     graph_cleaned = False
     postgres_reset = False
     graph_write_attempted = False
@@ -392,20 +399,42 @@ async def run_live(
                 if case.entity_mentions
                 else []
             )
-            explored_hits = rank_explored_relation_paths(
-                explored_candidates, limit=20
-            )
+            explored_hits = rank_explored_relation_paths(explored_candidates, limit=20)
             topology_aware_explored_hits = rank_explored_relation_paths(
                 explored_candidates,
                 limit=20,
                 prefer_complete_paths=True,
             )
+            path_rerank_started = time.perf_counter()
+            semantic_path_rerank = await rerank_explored_relation_paths(
+                explored_candidates,
+                query_text=case.query,
+                reranker=relation_path_reranker,
+                limit=20,
+                prefer_complete_paths=True,
+            )
+            path_rerank_latency = (time.perf_counter() - path_rerank_started) * 1000
+            path_rerank_statuses[semantic_path_rerank.status] += 1
+            if {
+                (
+                    candidate.scope.scope_key,
+                    candidate.path_id,
+                    tuple(candidate.supporting_memory_ids),
+                )
+                for candidate in explored_candidates
+            } != {
+                (
+                    hit.candidate.scope.scope_key,
+                    hit.candidate.path_id,
+                    tuple(hit.candidate.supporting_memory_ids),
+                )
+                for hit in semantic_path_rerank.hits
+            }:
+                path_rerank_membership_violations += 1
             combined_path_hits = merge_relation_path_hits(
                 path_hits, explored_hits, limit=20
             )
-            exploration_latency = (
-                time.perf_counter() - exploration_started
-            ) * 1000
+            exploration_latency = (time.perf_counter() - exploration_started) * 1000
 
             assembly_started = time.perf_counter()
             assembly = await assemble_hybrid_retrieval_candidates(
@@ -435,9 +464,7 @@ async def run_live(
             exploration_assembly_latency = (
                 time.perf_counter() - exploration_assembly_started
             ) * 1000
-            _update_assembly_totals(
-                exploration_assembly_totals, exploration_assembly
-            )
+            _update_assembly_totals(exploration_assembly_totals, exploration_assembly)
 
             reranking_assembly_started = time.perf_counter()
             reranking_assembly = await assemble_hybrid_retrieval_candidates(
@@ -453,9 +480,7 @@ async def run_live(
             reranking_assembly_latency = (
                 time.perf_counter() - reranking_assembly_started
             ) * 1000
-            _update_assembly_totals(
-                reranking_assembly_totals, reranking_assembly
-            )
+            _update_assembly_totals(reranking_assembly_totals, reranking_assembly)
 
             exploration_only_assembly_started = time.perf_counter()
             exploration_only_assembly = await assemble_hybrid_retrieval_candidates(
@@ -489,8 +514,7 @@ async def run_live(
                 )
             )
             exploration_only_reranking_assembly_latency = (
-                time.perf_counter()
-                - exploration_only_reranking_assembly_started
+                time.perf_counter() - exploration_only_reranking_assembly_started
             ) * 1000
             _update_assembly_totals(
                 exploration_only_reranking_assembly_totals,
@@ -531,18 +555,56 @@ async def run_live(
                 )
             )
             topology_aware_reranking_assembly_latency = (
-                time.perf_counter()
-                - topology_aware_reranking_assembly_started
+                time.perf_counter() - topology_aware_reranking_assembly_started
             ) * 1000
             _update_assembly_totals(
                 topology_aware_reranking_assembly_totals,
                 topology_aware_reranking_assembly,
             )
 
+            semantic_path_assembly_started = time.perf_counter()
+            semantic_path_assembly = await assemble_hybrid_retrieval_candidates(
+                store,
+                base_window,
+                semantic_path_rerank.hits,
+                [scope],
+                filters=FILTERS,
+                limit=20,
+                base_reserve=5,
+                literal_entity_reserve=1,
+                path_evidence_reserve=1,
+            )
+            semantic_path_assembly_latency = (
+                time.perf_counter() - semantic_path_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                semantic_path_assembly_totals, semantic_path_assembly
+            )
+
+            semantic_path_reranking_assembly_started = time.perf_counter()
+            semantic_path_reranking_assembly = (
+                await assemble_hybrid_retrieval_candidates(
+                    store,
+                    reranked_window,
+                    semantic_path_rerank.hits,
+                    [scope],
+                    filters=FILTERS,
+                    limit=20,
+                    base_reserve=5,
+                    literal_entity_reserve=1,
+                    path_evidence_reserve=1,
+                )
+            )
+            semantic_path_reranking_assembly_latency = (
+                time.perf_counter() - semantic_path_reranking_assembly_started
+            ) * 1000
+            _update_assembly_totals(
+                semantic_path_reranking_assembly_totals,
+                semantic_path_reranking_assembly,
+            )
+
             base_ids = [hit.record.memory_id for hit in base_result.hits[:20]]
-            independent_window_ids = [
-                hit.record.memory_id for hit in base_window
-            ]
+            independent_window_ids = [hit.record.memory_id for hit in base_window]
             path_ids = list(
                 dict.fromkeys(
                     memory_id
@@ -584,6 +646,14 @@ async def run_live(
                 candidate.record.memory_id
                 for candidate in topology_aware_reranking_assembly.candidates
             ]
+            semantic_path_assembled_ids = [
+                candidate.record.memory_id
+                for candidate in semantic_path_assembly.candidates
+            ]
+            semantic_path_reranked_ids = [
+                candidate.record.memory_id
+                for candidate in semantic_path_reranking_assembly.candidates
+            ]
             profile_rows = (
                 (
                     "independent_lexical_vector",
@@ -604,10 +674,7 @@ async def run_live(
                 (
                     "bounded_graph_exploration",
                     explored_ids,
-                    [
-                        candidate.scope.scope_key
-                        for candidate in explored_candidates
-                    ],
+                    [candidate.scope.scope_key for candidate in explored_candidates],
                     exploration_latency,
                     [["relation_path:exploration"] for _ in explored_ids],
                     explored_ids,
@@ -725,6 +792,40 @@ async def run_live(
                     ],
                     independent_window_ids,
                 ),
+                (
+                    "assembled_semantic_path_exploration_hybrid",
+                    semantic_path_assembled_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in semantic_path_assembly.candidates
+                    ],
+                    base_latency
+                    + exploration_latency
+                    + path_rerank_latency
+                    + semantic_path_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in semantic_path_assembly.candidates
+                    ],
+                    semantic_path_assembled_ids,
+                ),
+                (
+                    "assembled_semantic_path_exploration_hybrid_memory_reranking",
+                    semantic_path_reranked_ids,
+                    [
+                        candidate.record.scope.scope_key
+                        for candidate in semantic_path_reranking_assembly.candidates
+                    ],
+                    rerank_latency
+                    + exploration_latency
+                    + path_rerank_latency
+                    + semantic_path_reranking_assembly_latency,
+                    [
+                        candidate.discovery_sources
+                        for candidate in semantic_path_reranking_assembly.candidates
+                    ],
+                    independent_window_ids,
+                ),
             )
             for (
                 profile,
@@ -790,22 +891,22 @@ async def run_live(
             except Exception as exc:  # noqa: BLE001
                 cleanup_errors.append(f"postgres-reset:{type(exc).__name__}")
 
-    profiles = {
-        profile: _summarize(rows) for profile, rows in rows_by_profile.items()
-    }
+    profiles = {profile: _summarize(rows) for profile, rows in rows_by_profile.items()}
     complete_selection = len(queries) == len(dataset.queries)
     gate = quality_gate(
         profiles,
-        topology_aware_reranking_assembly_totals,
+        semantic_path_reranking_assembly_totals,
         selection_complete=complete_selection,
         expected_rerank_calls=len(queries),
         rerank_statuses=rerank_statuses,
         reorder_membership_violations=reorder_membership_violations,
+        path_rerank_statuses=path_rerank_statuses,
+        path_rerank_membership_violations=path_rerank_membership_violations,
         graph_cleaned=graph_cleaned,
         postgres_reset=postgres_reset,
     )
     return {
-        "result_schema_version": 3,
+        "result_schema_version": 4,
         "runner": RUNNER,
         "dataset": {
             "suite": dataset.suite,
@@ -829,6 +930,10 @@ async def run_live(
                 "version": memory_reranker.version,
                 "window": rerank_window,
             },
+            "relation_path_reranker": {
+                "name": relation_path_reranker.name,
+                "version": relation_path_reranker.version,
+            },
             "llm_calls": 0,
             "external_http_calls": 0,
             "provider_tokens": 0,
@@ -849,8 +954,14 @@ async def run_live(
         "topology_aware_reranking_assembly": dict(
             topology_aware_reranking_assembly_totals
         ),
+        "semantic_path_assembly": dict(semantic_path_assembly_totals),
+        "semantic_path_reranking_assembly": dict(
+            semantic_path_reranking_assembly_totals
+        ),
         "rerank_statuses": dict(rerank_statuses),
+        "path_rerank_statuses": dict(path_rerank_statuses),
         "reorder_membership_violations": reorder_membership_violations,
+        "path_rerank_membership_violations": (path_rerank_membership_violations),
         "gate": gate,
     }
 
@@ -893,9 +1004,7 @@ def _record(item: HeterogeneousMemory, scope: MemoryScope) -> MemoryRecord:
         "peer_statement": Actor.CONTACT,
         "agent_output": Actor.AGENT,
     }[item.authority]
-    subject_id = (
-        scope.user_id if subject == Actor.OWNER else item.subject_id.lower()
-    )
+    subject_id = scope.user_id if subject == Actor.OWNER else item.subject_id.lower()
     return MemoryRecord(
         memory_id=item.memory_id,
         scope=scope,
@@ -972,9 +1081,7 @@ def _row(
         start = cast(datetime, _timestamp(memory.valid_from))
         end = cast(datetime | None, _timestamp(memory.valid_to))
         ended_before_query = (
-            case.temporal_view != "history"
-            and end is not None
-            and end <= valid_at
+            case.temporal_view != "history" and end is not None and end <= valid_at
         )
         if start > valid_at or ended_before_query:
             temporal_violations += 1
@@ -1108,15 +1215,9 @@ def _summarize_slice(
             for cutoff in cutoffs
         },
         "related_evidence_recall_at_10": _ratio(related_at_10, related_total),
-        "candidate_window_evidence_recall": _ratio(
-            candidate_required, required_total
-        ),
-        "candidate_window_related_recall": _ratio(
-            candidate_related, related_total
-        ),
-        "mrr": round(statistics.mean(reciprocal_ranks), 6)
-        if reciprocal_ranks
-        else 1.0,
+        "candidate_window_evidence_recall": _ratio(candidate_required, required_total),
+        "candidate_window_related_recall": _ratio(candidate_related, related_total),
+        "mrr": round(statistics.mean(reciprocal_ranks), 6) if reciprocal_ranks else 1.0,
         "exact_episode_count_rate_at_10": _ratio(exact_counts, len(count_rows)),
         "hard_forbidden_hits": sum(
             len(set(row["ids"]) & set(row["hard_forbidden"])) for row in rows
@@ -1133,9 +1234,7 @@ def _summarize_slice(
         if rows
         else 0.0,
         "average_context_characters": round(
-            statistics.mean(
-                [int(row["estimated_context_characters"]) for row in rows]
-            ),
+            statistics.mean([int(row["estimated_context_characters"]) for row in rows]),
             6,
         )
         if rows
@@ -1152,15 +1251,9 @@ def _summarize_slice(
             {
                 "case_id": row["case_id"],
                 "ids": row["ids"],
-                "missing_at_5": sorted(
-                    set(row["required"]) - set(row["ids"][:5])
-                ),
-                "missing_at_10": sorted(
-                    set(row["required"]) - set(row["ids"][:10])
-                ),
-                "related_at_10": sorted(
-                    set(row["related"]) & set(row["ids"][:10])
-                ),
+                "missing_at_5": sorted(set(row["required"]) - set(row["ids"][:5])),
+                "missing_at_10": sorted(set(row["required"]) - set(row["ids"][:10])),
+                "related_at_10": sorted(set(row["related"]) & set(row["ids"][:10])),
                 "hard_forbidden_hits": sorted(
                     set(row["ids"]) & set(row["hard_forbidden"])
                 ),
@@ -1185,16 +1278,14 @@ def quality_gate(
     expected_rerank_calls: int,
     rerank_statuses: Counter[str],
     reorder_membership_violations: int,
+    path_rerank_statuses: Counter[str],
+    path_rerank_membership_violations: int,
     graph_cleaned: bool,
     postgres_reset: bool,
 ) -> dict[str, Any]:
-    baseline = profiles["assembled_topology_aware_exploration_hybrid"]
-    oracle_final = profiles[
-        "assembled_oracle_exploration_hybrid_memory_reranking"
-    ]
-    final = profiles[
-        "assembled_topology_aware_exploration_hybrid_memory_reranking"
-    ]
+    baseline = profiles["assembled_semantic_path_exploration_hybrid"]
+    oracle_final = profiles["assembled_oracle_exploration_hybrid_memory_reranking"]
+    final = profiles["assembled_semantic_path_exploration_hybrid_memory_reranking"]
     checks = {
         "selection_complete": selection_complete,
         "evidence_recall_at_5": final["evidence_recall_at_5"]
@@ -1206,14 +1297,12 @@ def quality_gate(
             >= THRESHOLDS["min_category_evidence_recall_at_10"]
             for category in ANSWERABLE_CATEGORIES
         ),
-        "related_evidence_recall_at_10": final["by_category"][
-            "no_answer_related"
-        ]["related_evidence_recall_at_10"]
+        "related_evidence_recall_at_10": final["by_category"]["no_answer_related"][
+            "related_evidence_recall_at_10"
+        ]
         >= THRESHOLDS["min_related_evidence_recall_at_10"],
         "mrr_non_regression": final["mrr"] >= baseline["mrr"],
-        "oracle_evidence_recall_at_5_non_regression": final[
-            "evidence_recall_at_5"
-        ]
+        "oracle_evidence_recall_at_5_non_regression": final["evidence_recall_at_5"]
         >= oracle_final["evidence_recall_at_5"],
         "oracle_complete_evidence_rate_at_10_non_regression": final[
             "complete_evidence_rate_at_10"
@@ -1234,13 +1323,16 @@ def quality_gate(
         "ineligible_hits": final["ineligible_hits"] == 0,
         "temporal_violations": final["temporal_violations"] == 0,
         "orphan_provenance": final["orphan_provenance"] == 0,
-        "store_revalidation_failures": _store_revalidation_failures(assembly)
-        == 0,
+        "store_revalidation_failures": _store_revalidation_failures(assembly) == 0,
         "path_budget_omissions": assembly["omitted_path_hits"] == 0,
         "reorder_membership": reorder_membership_violations == 0,
         "reranker_statuses_accounted": sum(rerank_statuses.values())
         == expected_rerank_calls
         and set(rerank_statuses).issubset({"completed", "not_run"}),
+        "path_rerank_membership": path_rerank_membership_violations == 0,
+        "path_reranker_statuses_accounted": sum(path_rerank_statuses.values())
+        == expected_rerank_calls
+        and set(path_rerank_statuses).issubset({"completed", "not_run"}),
         "candidate_bound": final["max_candidates"]
         <= THRESHOLDS["max_candidates_per_query"],
         "neo4j_cleanup": graph_cleaned,
@@ -1252,13 +1344,11 @@ def quality_gate(
         "checks": checks,
         "failures": [name for name, passed in checks.items() if not passed],
         "thresholds": THRESHOLDS,
-        "baseline_profile": "assembled_topology_aware_exploration_hybrid",
+        "baseline_profile": "assembled_semantic_path_exploration_hybrid",
         "oracle_comparison_profile": (
             "assembled_oracle_exploration_hybrid_memory_reranking"
         ),
-        "profile": (
-            "assembled_topology_aware_exploration_hybrid_memory_reranking"
-        ),
+        "profile": ("assembled_semantic_path_exploration_hybrid_memory_reranking"),
     }
 
 
@@ -1299,11 +1389,12 @@ async def _main_async(args: argparse.Namespace) -> int:
             postgres_password=postgres_password,
             embedding_provider=embedding_provider,
             memory_reranker=memory_reranker,
+            relation_path_reranker=relation_reranker,
             rerank_window=args.rerank_window,
         )
     except Exception as exc:  # noqa: BLE001
         report = {
-            "result_schema_version": 3,
+            "result_schema_version": 4,
             "runner": RUNNER,
             "dataset": {
                 "suite": dataset.suite,

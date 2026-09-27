@@ -471,6 +471,17 @@ The next experiment must rerank whole revalidated path text before atomic reserv
 increasing independent vector overfetch or adding relation-name special cases is not
 the indicated repair.
 
+V7 freezes that generic whole-path experiment before opening its result. It reuses the
+same local cross-encoder that reranks independent memory candidates, but sends it one
+item per explored path: an opaque item ID, ordered relation types, and ordered edge
+facts. The scorer receives no scope, subject, memory ID, authority, lifecycle, or
+provenance fields. It may only reorder the exact bounded exploration membership;
+authorization, time/state filtering, provenance, and final memory membership remain
+the Store-backed assembly's responsibility. Missing, duplicate, unknown, malformed,
+non-finite, or failed scores trigger deterministic topology fallback; V7's quality
+gate rejects any fallback so provider failure cannot masquerade as quality. See
+[`reports/heterogeneous-retrieval-v7-path-semantic-rerank-plan-2026-09-27.md`](reports/heterogeneous-retrieval-v7-path-semantic-rerank-plan-2026-09-27.md).
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

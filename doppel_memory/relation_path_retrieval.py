@@ -31,6 +31,10 @@ from doppel_memory.relation import (
     RelationPathIndex,
     RelationPathQuery,
     RelationPathStep,
+    RelationReranker,
+    RelationRerankItem,
+    RelationRerankRequest,
+    RelationRerankScore,
 )
 from doppel_memory.store import MemoryStore
 
@@ -150,6 +154,29 @@ class RelationPathRetrievalHit(BaseModel):
     rrf_score: float = Field(gt=0.0)
 
 
+class RelationPathSemanticRerankResult(BaseModel):
+    """Auditable reorder-only result for explored paths awaiting Store validation."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    hits: list[RelationPathRetrievalHit] = Field(default_factory=list)
+    status: Literal["completed", "not_run", "fallback"]
+    error_type: str = ""
+
+    @field_validator("error_type", mode="before")
+    @classmethod
+    def _normalize_error_type(cls, value: object) -> str:
+        return str(value or "").strip()
+
+    @model_validator(mode="after")
+    def _validate_status(self) -> RelationPathSemanticRerankResult:
+        if self.status == "fallback" and not self.error_type:
+            raise ValueError("fallback path reranking requires an error_type")
+        if self.status != "fallback" and self.error_type:
+            raise ValueError("successful path reranking cannot report an error_type")
+        return self
+
+
 class HybridRetrievalCandidate(BaseModel):
     """One Store-revalidated memory exposed to the answer/context layer.
 
@@ -226,9 +253,13 @@ class HybridRetrievalAssembly(BaseModel):
     @model_validator(mode="after")
     def _validate_rejection_accounting(self) -> HybridRetrievalAssembly:
         if sum(self.rejected_base_reasons.values()) != self.rejected_base_hits:
-            raise ValueError("base rejection reasons must account for every rejected hit")
+            raise ValueError(
+                "base rejection reasons must account for every rejected hit"
+            )
         if sum(self.rejected_path_reasons.values()) != self.rejected_path_hits:
-            raise ValueError("path rejection reasons must account for every rejected hit")
+            raise ValueError(
+                "path rejection reasons must account for every rejected hit"
+            )
         return self
 
 
@@ -329,9 +360,7 @@ async def assemble_hybrid_retrieval_candidates(
         _extend_unique(discovery_sources[key], ["independent"])
         _extend_unique(discovery_sources[key], hit.candidate_evidence.sources)
 
-    valid_paths: list[
-        tuple[int, RelationPathRetrievalHit, list[tuple[str, str]]]
-    ] = []
+    valid_paths: list[tuple[int, RelationPathRetrievalHit, list[tuple[str, str]]]] = []
     rejected_path_reasons: Counter[HybridRejectionReason] = Counter()
     for rank, hit in enumerate(path_hits, start=1):
         candidate = hit.candidate
@@ -381,11 +410,7 @@ async def assemble_hybrid_retrieval_candidates(
     )
     selected: set[tuple[str, str]] = set(selected_literal_keys)
     reserved_base_keys = sorted(
-        (
-            key
-            for key in base_ranks
-            if key not in selected_literal_keys
-        ),
+        (key for key in base_ranks if key not in selected_literal_keys),
         key=lambda key: (base_ranks[key], key),
     )[: min(max(base_reserve - len(selected), 0), max(limit - len(selected), 0))]
     selected.update(reserved_base_keys)
@@ -703,6 +728,113 @@ def rank_explored_relation_paths(
     ]
 
 
+async def rerank_explored_relation_paths(
+    candidates: Sequence[RelationPathCandidate],
+    *,
+    query_text: str,
+    reranker: RelationReranker,
+    limit: int = 10,
+    rrf_k: int = 60,
+    prefer_complete_paths: bool = True,
+) -> RelationPathSemanticRerankResult:
+    """Semantically reorder explored paths without granting retrieval authority.
+
+    The scorer receives only opaque item IDs plus ordered relation types and facts.
+    Scope, subject, memory IDs, authority, lifecycle, and provenance never cross the
+    scoring boundary. Missing, duplicated, unknown, malformed, or failed scores cause
+    a deterministic fallback to :func:`rank_explored_relation_paths`.
+    """
+
+    fallback = rank_explored_relation_paths(
+        candidates,
+        limit=limit,
+        rrf_k=rrf_k,
+        prefer_complete_paths=prefer_complete_paths,
+    )
+    normalized_query = str(query_text or "").strip()
+    if limit <= 0 or not candidates or not normalized_query:
+        return RelationPathSemanticRerankResult(
+            hits=fallback,
+            status="not_run",
+        )
+
+    unique: dict[
+        tuple[str, tuple[str, ...], tuple[str, ...]], RelationPathCandidate
+    ] = {}
+    for candidate in candidates:
+        key = _candidate_key(candidate)
+        existing = unique.get(key)
+        if existing is None or candidate.score > existing.score:
+            unique[key] = candidate
+    entries = list(unique.items())
+    item_ids = [f"path-{index:03d}" for index in range(len(entries))]
+    items = [
+        RelationRerankItem(
+            item_id=item_id,
+            relation_type=" -> ".join(hop.relation_type for hop in candidate.hops),
+            fact="\n".join(hop.fact for hop in candidate.hops if hop.fact),
+        )
+        for item_id, (_, candidate) in zip(item_ids, entries, strict=True)
+    ]
+    allowed_ids = set(item_ids)
+    try:
+        raw_scores = await reranker.rerank(
+            RelationRerankRequest(query_text=normalized_query, items=items)
+        )
+        scores: dict[str, float] = {}
+        for raw_score in raw_scores:
+            score = RelationRerankScore.model_validate(raw_score)
+            if score.item_id not in allowed_ids:
+                raise ValueError("path reranker returned an unknown item ID")
+            if score.item_id in scores:
+                raise ValueError("path reranker returned a duplicate item ID")
+            scores[score.item_id] = score.score
+        if set(scores) != allowed_ids:
+            raise ValueError("path reranker omitted one or more item IDs")
+
+        signatures = {
+            key: tuple((hop.edge_id, hop.direction) for hop in candidate.hops)
+            for key, candidate in entries
+        }
+        strict_prefixes = {
+            key
+            for key, signature in signatures.items()
+            if any(
+                len(other) > len(signature) and other[: len(signature)] == signature
+                for other in signatures.values()
+            )
+        }
+        scored = list(zip(item_ids, entries, strict=True))
+        scored.sort(
+            key=lambda item: (
+                -scores[item[0]],
+                item[1][0] in strict_prefixes if prefer_complete_paths else False,
+                -item[1][1].score,
+                item[1][1].scope.scope_key,
+                item[1][1].path_id,
+            )
+        )
+        hits = [
+            RelationPathRetrievalHit(
+                candidate=candidate,
+                route_indexes=[0],
+                route_modes=["exploration"],
+                rrf_score=1.0 / (rrf_k + rank),
+            )
+            for rank, (_, (_, candidate)) in enumerate(scored[:limit], start=1)
+        ]
+        return RelationPathSemanticRerankResult(
+            hits=hits,
+            status="completed",
+        )
+    except Exception as exc:  # noqa: BLE001 - optional scorer fails closed
+        return RelationPathSemanticRerankResult(
+            hits=fallback,
+            status="fallback",
+            error_type=type(exc).__name__,
+        )
+
+
 def merge_relation_path_hits(
     *groups: Sequence[RelationPathRetrievalHit],
     limit: int = 10,
@@ -718,9 +850,9 @@ def merge_relation_path_hits(
         tuple[str, tuple[str, ...], tuple[str, ...]],
         dict[Literal["exact", "candidate", "exploration"], float],
     ] = defaultdict(dict)
-    indexes: defaultdict[
-        tuple[str, tuple[str, ...], tuple[str, ...]], list[int]
-    ] = defaultdict(list)
+    indexes: defaultdict[tuple[str, tuple[str, ...], tuple[str, ...]], list[int]] = (
+        defaultdict(list)
+    )
     modes: defaultdict[
         tuple[str, tuple[str, ...], tuple[str, ...]],
         list[Literal["exact", "candidate", "exploration"]],
@@ -850,7 +982,10 @@ def _record_matches_filter(record: MemoryRecord, filters: MemoryFilter) -> bool:
         return False
     if filters.tags is not None and not filters.tags.issubset(record.tags):
         return False
-    if filters.importance_min is not None and record.importance < filters.importance_min:
+    if (
+        filters.importance_min is not None
+        and record.importance < filters.importance_min
+    ):
         return False
     if filters.time_from is not None and record.created_at < filters.time_from:
         return False

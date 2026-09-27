@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a default-off whole-path semantic reranker for bounded graph exploration. The
+  scorer receives only opaque item IDs, the query, ordered relation types, and edge
+  facts; it cannot see scope, subject, memory IDs, authority, lifecycle, or
+  provenance, and it cannot add, remove, authorize, or suppress candidates. Invalid
+  scorer output falls back to deterministic topology ranking, while the authoritative
+  Store still revalidates every flattened memory. Freeze heterogeneous V7 on the
+  already-opened topology-adversarial V4 corpus before measuring whether this generic
+  ranking stage recovers V6's competing-branch failures without relation-name or
+  query-category special cases.
 - Add a versioned, opened heterogeneous-retrieval ablation for candidate assembly
   without oracle exact relation paths. The immutable 480-query V3 result showed that
   bounded Graphiti exploration contained every exact-path memory ID and added 144
