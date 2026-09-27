@@ -10,7 +10,13 @@
   recall@5, complete evidence@10, related-context recall@10, and MRR, together with all
   existing safety, Store-revalidation, boundedness, reranker, and cleanup gates. The
   evaluated profile uses no oracle graph route; Planner time/intent/count/entity
-  responsibilities remain explicitly out of scope for this ablation.
+  responsibilities remain explicitly out of scope for this ablation. Preserve the
+  first V4 failure: exploration-only reranking kept 1.000 related-context recall and
+  matched 0.933 MRR, but evidence recall@5 fell from 0.998 to 0.956 and complete
+  evidence@10 from 1.000 to 0.949. Every rank-10 failure was the second leg of a
+  two-hop object-holder-location chain, proving that memory-ID containment does not
+  replace atomic path-aware ranking. Keep exact relation paths in the highest-quality
+  profile pending a generic topology-aware exploration experiment.
 - Serialize database-global pgvector extension discovery and creation with a
   PostgreSQL transaction advisory lock. `CREATE EXTENSION IF NOT EXISTS` alone still
   races on `pg_extension_name_index` when independent processes initialize the first

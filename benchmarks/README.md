@@ -420,6 +420,17 @@ sealed claim and does not remove the Planner's time, intent, count, or entity du
 The frozen protocol is documented in
 [`reports/heterogeneous-retrieval-v4-exploration-only-plan-2026-09-26.md`](reports/heterogeneous-retrieval-v4-exploration-only-plan-2026-09-26.md).
 
+The first V4 run is preserved in
+[`reports/heterogeneous-retrieval-v4-exploration-only-result-2026-09-27.md`](reports/heterogeneous-retrieval-v4-exploration-only-result-2026-09-27.md).
+It failed the frozen oracle-parity gate: exploration-only plus memory reranking retained
+1.000 related-context recall and 0.933 MRR, but evidence recall@5 fell from 0.998 to
+0.956 and complete evidence@10 from 1.000 to 0.949. All 22 rank-10 evidence failures
+were the second leg of two-hop object-holder-location chains. Exact paths therefore
+currently contribute atomic multi-record path priority even when exploration already
+contains the same individual memory IDs. They remain part of the highest-quality
+profile until a generic topology-aware exploration alternative passes a separately
+frozen opened ablation.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several
