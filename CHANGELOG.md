@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a budgeted evidence-bundle judgment replay that separates retrieval
+  sufficiency, downstream evidence judgment, abstention, exact support selection, and
+  end-to-end support success. Candidate IDs are request-local and opaque; the model
+  cannot see Store IDs, gold labels, scopes, retrieval attribution, or graph scores.
+  Freeze the V7 rank-first versus V8 evidence-rich comparison before its first
+  provider result, mark the already-opened V4 source corpus as development-only, and
+  require a new owner-disjoint blind corpus before any publication-quality claim.
 - Add a default-off assembly order that keeps the already-selected independent base
   reserve ahead of atomically reserved graph-path evidence. It changes neither
   membership nor the five-item independent and one-path evidence budgets; graph paths

@@ -529,6 +529,30 @@ must use a separately frozen, previously unopened evidence-bundle or final-answe
 utility evaluation. V7 remains the rank-first control; V8 remains the evidence-rich
 control; V9 remains a negative control.
 
+### Evidence-bundle judgment replay
+
+MRR and evidence recall cannot show whether a downstream model can tell complete
+support from a semantically related but insufficient memory. The budgeted
+[`evidence_bundle_judgment.py`](evidence_bundle_judgment.py) replay compares the V7
+rank-first and V8 evidence-rich top-10 bundles at that boundary. The provider sees only
+the question, time, bounded memory text/temporal metadata, and request-local opaque
+item IDs. It never sees Store IDs, gold labels, scopes, retrieval attribution, or graph
+scores. It must either select all jointly supporting items or abstain.
+
+The runner reports retrieval sufficiency, conditional judgment accuracy, insufficient-
+bundle and no-answer abstention, exact support selection, and an end-to-end support
+proxy separately. Natural-language answer correctness remains explicitly unmeasured.
+Its source V4 corpus is already open, so this is a development replay rather than a
+publication claim. The frozen protocol and policy-comparison rule are recorded in
+[`reports/evidence-bundle-judgment-v1-preregistered-2026-09-28.md`](reports/evidence-bundle-judgment-v1-preregistered-2026-09-28.md),
+and the result envelope is defined by
+[`evidence-bundle-judgment-result.schema.json`](evidence-bundle-judgment-result.schema.json).
+
+```powershell
+.venv\Scripts\python.exe -m benchmarks.evidence_bundle_judgment `
+  --partition dev --max-cases 12 --max-calls 0
+```
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

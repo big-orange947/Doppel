@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/big-orange947/Doppel/benchmarks/evidence-bundle-judgment-result.schema.json",
+  "title": "Doppel evidence-bundle judgment result",
+  "type": "object",
+  "required": [
+    "result_schema_version",
+    "runner",
+    "generated_at",
+    "plan",
+    "provider",
+    "budget",
+    "cache",
+    "usage",
+    "profiles",
+    "errors",
+    "gate",
+    "limitations",
+    "details",
+    "report_sha256"
+  ],
+  "properties": {
+    "result_schema_version": {"const": 1},
+    "runner": {"const": "doppel.evidence-bundle-judgment.v1"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "plan": {
+      "type": "object",
+      "required": [
+        "dataset",
+        "retrieval_report",
+        "profiles",
+        "selected_cases",
+        "context_limit",
+        "gold_memory_ids_exposed_to_model",
+        "answer_text_scored"
+      ],
+      "properties": {
+        "dataset": {
+          "type": "object",
+          "required": ["suite", "fingerprint", "role"],
+          "properties": {
+            "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "role": {"const": "opened_development_replay"}
+          }
+        },
+        "retrieval_report": {
+          "type": "object",
+          "required": ["report_sha256"],
+          "properties": {
+            "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "profiles": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "selected_cases": {"type": "integer", "minimum": 1},
+        "context_limit": {"type": "integer", "minimum": 1, "maximum": 20},
+        "gold_memory_ids_exposed_to_model": {"const": false},
+        "scope_or_retrieval_attribution_exposed_to_model": {"const": false},
+        "answer_text_scored": {"const": false}
+      }
+    },
+    "provider": {
+      "type": "object",
+      "required": ["model", "generation_fingerprint", "schema_mode"],
+      "properties": {
+        "generation_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": ["provider_calls", "maximum", "within_budget"],
+      "properties": {
+        "provider_calls": {"type": "integer", "minimum": 0},
+        "maximum": {"type": "integer", "minimum": 0},
+        "within_budget": {"const": true}
+      }
+    },
+    "cache": {
+      "type": "object",
+      "required": ["hits", "misses"],
+      "properties": {
+        "hits": {"type": "integer", "minimum": 0},
+        "misses": {"type": "integer", "minimum": 0}
+      }
+    },
+    "usage": {"type": "object"},
+    "profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/profile"}
+    },
+    "errors": {"type": "array", "items": {"type": "object"}},
+    "gate": {
+      "type": "object",
+      "required": ["ok", "checks", "failures"],
+      "properties": {
+        "ok": {"type": "boolean"},
+        "checks": {"type": "object", "additionalProperties": {"type": "boolean"}},
+        "failures": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "limitations": {
+      "type": "object",
+      "required": [
+        "opened_source_corpus",
+        "answer_text_correctness_unmeasured",
+        "publication_quality_claim_allowed"
+      ],
+      "properties": {
+        "opened_source_corpus": {"const": true},
+        "answer_text_correctness_unmeasured": {"const": true},
+        "publication_quality_claim_allowed": {"const": false}
+      }
+    },
+    "details": {"type": "object"},
+    "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "profile": {
+      "type": "object",
+      "required": ["cases"],
+      "properties": {
+        "cases": {"type": "integer", "minimum": 0},
+        "retrieval_sufficiency_rate": {"$ref": "#/$defs/rate"},
+        "judgment_accuracy": {"$ref": "#/$defs/rate"},
+        "sufficient_bundle_judgment_accuracy": {"$ref": "#/$defs/rate"},
+        "insufficient_bundle_abstention_rate": {"$ref": "#/$defs/rate"},
+        "source_no_answer_abstention_rate": {"$ref": "#/$defs/rate"},
+        "exact_support_selection_rate": {"$ref": "#/$defs/rate"},
+        "mean_support_recall": {"$ref": "#/$defs/rate"},
+        "mean_support_precision": {"$ref": "#/$defs/rate"},
+        "end_to_end_support_success_rate": {"$ref": "#/$defs/rate"},
+        "related_items_selected": {"type": "integer", "minimum": 0},
+        "hard_forbidden_items_selected": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}
