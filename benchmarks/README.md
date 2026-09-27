@@ -519,6 +519,16 @@ the frozen top-10 quality window. Corpus, scorer, topology completion, budgets,
 thresholds, safety gates, and oracle comparison remain unchanged. See
 [`reports/heterogeneous-retrieval-v9-base-guard-plan-2026-09-28.md`](reports/heterogeneous-retrieval-v9-base-guard-plan-2026-09-28.md).
 
+The first V9 result is preserved in
+[`reports/heterogeneous-retrieval-v9-base-guard-result-2026-09-28.md`](reports/heterogeneous-retrieval-v9-base-guard-result-2026-09-28.md).
+It restores oracle MRR and retains complete evidence@10 at 1.000, but recall@5 drops
+to 0.911 and no-answer related-context recall@10 to 0.721. The five-position guard is
+therefore too strong. Because V7–V9 have now opened this corpus repeatedly, choosing a
+smaller guard from these results would be post-hoc tuning. The next policy decision
+must use a separately frozen, previously unopened evidence-bundle or final-answer
+utility evaluation. V7 remains the rank-first control; V8 remains the evidence-rich
+control; V9 remains a negative control.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

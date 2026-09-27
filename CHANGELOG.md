@@ -7,7 +7,12 @@
   membership nor the five-item independent and one-path evidence budgets; graph paths
   remain inside the bounded output but cannot displace stronger base candidates from
   their reserved positions. Freeze heterogeneous V9 on the unchanged topology corpus
-  and unchanged oracle-parity gate before opening its result.
+  and unchanged oracle-parity gate before opening its result. Preserve the first V9
+  failure: MRR and complete evidence@10 match oracle, but recall@5 falls to 0.911 and
+  no-answer related-context recall@10 to 0.721. Protecting all five base positions
+  delays useful graph evidence too aggressively. Do not tune a smaller guard on this
+  now-opened corpus; use a new preregistered evidence-bundle/answer-utility evaluation
+  to choose between rank-first and evidence-rich policies.
 - Add a default-off topology completion pass after whole-path semantic ranking. The
   semantic scorer still selects the relevant branch; when a scored path is a strict
   edge-and-direction prefix of an already-retrieved path, the best-ranked complete
