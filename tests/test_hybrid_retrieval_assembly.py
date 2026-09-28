@@ -24,7 +24,9 @@ from doppel_memory.relation import (
     RelationRerankScore,
 )
 from doppel_memory.relation_path_retrieval import (
+    EvidenceRichHybridRetrievalConfig,
     RelationPathRetrievalHit,
+    assemble_evidence_rich_hybrid_retrieval,
     assemble_hybrid_retrieval_candidates,
     promote_semantic_path_completions,
     rank_explored_relation_paths,
@@ -499,6 +501,112 @@ def test_semantic_path_completion_never_links_prefixes_across_scopes() -> None:
         "p-prefix",
         "p-other-scope",
     ]
+
+
+def test_evidence_rich_policy_rejects_invalid_reserve_configuration() -> None:
+    with pytest.raises(ValueError, match="base reserve cannot exceed"):
+        EvidenceRichHybridRetrievalConfig(output_limit=4, base_reserve=5)
+
+    with pytest.raises(ValueError, match="literal entity reserve cannot exceed"):
+        EvidenceRichHybridRetrievalConfig(
+            output_limit=5,
+            base_reserve=1,
+            literal_entity_reserve=2,
+        )
+
+
+@pytest.mark.asyncio
+async def test_evidence_rich_policy_composes_rerank_completion_and_store_assembly() -> (
+    None
+):
+    store = InMemoryStore()
+    base = _record("m-base")
+    first = _record("m-first")
+    second = _record("m-second")
+    await _put(store, base, first, second)
+    complete = _two_hop_path_hit(first.memory_id, second.memory_id).candidate
+    prefix = RelationPathCandidate(
+        scope=SCOPE,
+        source="tests.graph",
+        score=complete.score,
+        path_id="p-prefix",
+        start_entity_id=complete.start_entity_id,
+        end_entity_id="entity-middle",
+        hops=[complete.hops[0]],
+        supporting_memory_ids=[first.memory_id],
+    )
+    reranker = _PathReranker(
+        [
+            RelationRerankScore(item_id="path-000", score=0.9),
+            RelationRerankScore(item_id="path-001", score=0.8),
+        ]
+    )
+
+    result = await assemble_evidence_rich_hybrid_retrieval(
+        store,
+        [_base_hit(base)],
+        [prefix, complete],
+        [SCOPE],
+        query_text="保管物品的人住在哪里？",
+        reranker=reranker,
+        filters=FILTERS,
+        config=EvidenceRichHybridRetrievalConfig(
+            output_limit=3,
+            base_reserve=1,
+            literal_entity_reserve=0,
+        ),
+    )
+
+    assert result.policy == "evidence_rich_v1"
+    assert result.path_reranking.status == "completed"
+    assert [hit.candidate.path_id for hit in result.path_reranking.hits] == [
+        "p-prefix",
+        "p-two-hop",
+    ]
+    assert [hit.candidate.path_id for hit in result.promoted_path_hits] == [
+        "p-two-hop",
+        "p-prefix",
+    ]
+    assert [candidate.record.memory_id for candidate in result.assembly.candidates] == [
+        first.memory_id,
+        second.memory_id,
+        base.memory_id,
+    ]
+    assert all(
+        "path_evidence_reserve" in candidate.discovery_sources
+        for candidate in result.assembly.candidates[:2]
+    )
+    assert all(
+        candidate.answer_support == "unassessed"
+        for candidate in result.assembly.candidates
+    )
+
+
+@pytest.mark.asyncio
+async def test_evidence_rich_policy_exposes_reranker_fallback_without_bypassing_store() -> (
+    None
+):
+    store = InMemoryStore()
+    first = _record("m-first")
+    second = _record("m-second", state=MemoryState.EXPIRED)
+    await _put(store, first, second)
+    complete = _two_hop_path_hit(first.memory_id, second.memory_id).candidate
+    reranker = _PathReranker([RelationRerankScore(item_id="path-unknown", score=1.0)])
+
+    result = await assemble_evidence_rich_hybrid_retrieval(
+        store,
+        [],
+        [complete],
+        [SCOPE],
+        query_text="物品在哪里？",
+        reranker=reranker,
+        filters=FILTERS,
+    )
+
+    assert result.path_reranking.status == "fallback"
+    assert result.path_reranking.error_type == "ValueError"
+    assert result.assembly.candidates == []
+    assert result.assembly.rejected_path_reasons == {"filter_mismatch": 1}
 
 
 @pytest.mark.asyncio

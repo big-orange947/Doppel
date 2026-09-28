@@ -263,6 +263,49 @@ class HybridRetrievalAssembly(BaseModel):
         return self
 
 
+class EvidenceRichHybridRetrievalConfig(BaseModel):
+    """Versioned defaults for the opt-in V8 evidence-rich composition policy.
+
+    The policy is intentionally separate from the stable query engine. Callers may
+    lower output bounds for their context budget, but changing a default creates a
+    different, unevaluated deployment profile.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[1] = 1
+    policy: Literal["evidence_rich_v1"] = "evidence_rich_v1"
+    path_limit: int = Field(default=20, ge=1, le=100)
+    output_limit: int = Field(default=20, ge=1, le=100)
+    base_reserve: int = Field(default=5, ge=0, le=100)
+    literal_entity_reserve: int = Field(default=1, ge=0, le=100)
+    path_evidence_reserve: Literal[1] = 1
+    rrf_k: int = Field(default=60, ge=1)
+    base_weight: float = Field(default=1.0, gt=0.0)
+    path_weight: float = Field(default=0.8, gt=0.0)
+    max_path_support: int = Field(default=8, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def _validate_reserves(self) -> EvidenceRichHybridRetrievalConfig:
+        if self.literal_entity_reserve > self.base_reserve:
+            raise ValueError("literal entity reserve cannot exceed base reserve")
+        if self.base_reserve > self.output_limit:
+            raise ValueError("base reserve cannot exceed output limit")
+        return self
+
+
+class EvidenceRichHybridRetrievalResult(BaseModel):
+    """Auditable output from the named evidence-rich experimental policy."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    policy: Literal["evidence_rich_v1"] = "evidence_rich_v1"
+    configuration: EvidenceRichHybridRetrievalConfig
+    path_reranking: RelationPathSemanticRerankResult
+    promoted_path_hits: list[RelationPathRetrievalHit] = Field(default_factory=list)
+    assembly: HybridRetrievalAssembly
+
+
 async def assemble_hybrid_retrieval_candidates(
     store: MemoryStore,
     base_hits: Sequence[PersonalMemoryQueryHit],
@@ -917,6 +960,66 @@ def promote_semantic_path_completions(
         hit.model_copy(update={"rrf_score": 1.0 / (rrf_k + rank)})
         for rank, (_, hit) in enumerate(ranked, start=1)
     ]
+
+
+async def assemble_evidence_rich_hybrid_retrieval(
+    store: MemoryStore,
+    base_hits: Sequence[PersonalMemoryQueryHit],
+    explored_candidates: Sequence[RelationPathCandidate],
+    scopes: Sequence[MemoryScope],
+    *,
+    query_text: str,
+    reranker: RelationReranker,
+    filters: MemoryFilter,
+    config: EvidenceRichHybridRetrievalConfig | None = None,
+) -> EvidenceRichHybridRetrievalResult:
+    """Run the evaluated V8 path-rerank, completion, and Store assembly policy.
+
+    This helper is opt-in and module-only. It does not plan scopes or paths and it
+    does not claim answer sufficiency. The semantic scorer can only reorder the
+    supplied exploration membership; topology completion preserves that membership;
+    and every flattened memory is still reloaded from the authoritative Store.
+    Scorer failure remains visible in ``path_reranking.status`` and falls back to the
+    deterministic bounded path order before the same Store-backed assembly.
+    """
+
+    bound = EvidenceRichHybridRetrievalConfig.model_validate(
+        config or EvidenceRichHybridRetrievalConfig()
+    )
+    path_reranking = await rerank_explored_relation_paths(
+        explored_candidates,
+        query_text=query_text,
+        reranker=reranker,
+        limit=bound.path_limit,
+        rrf_k=bound.rrf_k,
+        prefer_complete_paths=True,
+    )
+    promoted = promote_semantic_path_completions(
+        path_reranking.hits,
+        rrf_k=bound.rrf_k,
+    )
+    assembly = await assemble_hybrid_retrieval_candidates(
+        store,
+        base_hits,
+        promoted,
+        scopes,
+        filters=filters,
+        limit=bound.output_limit,
+        base_reserve=bound.base_reserve,
+        literal_entity_reserve=bound.literal_entity_reserve,
+        path_evidence_reserve=bound.path_evidence_reserve,
+        preserve_base_reserve_order=False,
+        rrf_k=bound.rrf_k,
+        base_weight=bound.base_weight,
+        path_weight=bound.path_weight,
+        max_path_support=bound.max_path_support,
+    )
+    return EvidenceRichHybridRetrievalResult(
+        configuration=bound,
+        path_reranking=path_reranking,
+        promoted_path_hits=promoted,
+        assembly=assembly,
+    )
 
 
 def merge_relation_path_hits(

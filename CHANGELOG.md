@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add the named, versioned, module-only `evidence_rich_v1` opt-in helper. It composes
+  whole-path semantic reranking, membership-preserving path-family completion, one
+  atomic path-evidence reserve, and authoritative Store-backed hybrid assembly using
+  the evaluated V8 defaults. It never plans scopes or graph candidates, never grants
+  answer support, exposes reranker fallback explicitly, and leaves the stable query
+  engine unchanged.
 - Add a budgeted evidence-bundle judgment replay that separates retrieval
   sufficiency, downstream evidence judgment, abstention, exact support selection, and
   end-to-end support success. Candidate IDs are request-local and opaque; the model

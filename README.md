@@ -204,6 +204,36 @@ exact scope → time → Edge → Episode → memory_id → Store revalidation
 也不会静默改变 v1/v2 Planner。详见
 [关系路径实测报告](benchmarks/reports/personal-relation-path-live-2026-09-19.md)。
 
+最高配置下可以显式选择经过 V8 消融验证的 `evidence_rich_v1` 组合策略。它依次执行整条路径的
+文本重排、同一路径家族的完整两跳提升，以及权威 Store 回源装配；不会改变图探索成员，也不会判断
+候选是否足以回答问题：
+
+```python
+from doppel_memory.relation_path_retrieval import (
+    EvidenceRichHybridRetrievalConfig,
+    assemble_evidence_rich_hybrid_retrieval,
+)
+
+result = await assemble_evidence_rich_hybrid_retrieval(
+    store,
+    base_result.hits,
+    explored_path_candidates,
+    [owner_scope],
+    query_text=user_query,
+    reranker=local_cross_encoder,
+    filters=memory_filter,
+    config=EvidenceRichHybridRetrievalConfig(),
+)
+
+memory_hits = result.assembly.candidates
+path_status = result.path_reranking.status  # completed / not_run / fallback
+```
+
+这个 helper 仍是 opt-in、module-only experimental，不会偷偷接管稳定 `PersonalMemoryQueryEngine`。
+默认配置对应已测的 V8 evidence-rich profile；修改 reserve、limit 或权重会形成新的、未经同等评测的
+部署 profile。即使重排器失败，结果也会显式报告 `fallback`，并继续通过同一套 scope、authority、
+lifecycle、时间与 provenance 的 Store 门禁。
+
 ## 快速开始
 
 ### 安装

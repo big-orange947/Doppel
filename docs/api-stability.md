@@ -74,7 +74,9 @@ experimental. They are not root exports and do not change `RelationIndex` or per
 query Plan v1/v2. A path implementation must cap traversal at two hops and fail closed
 unless every hop independently survives exact-scope, time, provenance, and Store
 revalidation. Natural-language path planning is intentionally outside this first
-protocol revision.
+protocol revision. The named `evidence_rich_v1` composition helper and its config/result
+models remain in the same module-only experimental surface; selecting it is explicit,
+and it does not change the stable `PersonalMemoryQueryEngine` defaults.
 
 `relation_types` is an additive exact-match constraint. A host exposes its ontology
 through `available_relation_types`; planners cannot bind labels outside that

@@ -871,6 +871,16 @@ authoritative Store 复核。该模块目前不接默认 QueryEngine，也不生
 fixture 和 live Neo4j 验证 widened candidate route 的 evidence recall、forbidden noise、scope leakage、
 时间泄漏与延迟，再决定 Planner 如何表达不确定路径。
 
+`assemble_evidence_rich_hybrid_retrieval()` 将已验证的 V8 组合固化成一个命名、版本化、显式 opt-in
+的 module-only policy：先对宿主已经有界探索出的路径做纯文本整路径重排，再以 edge identity/direction
+把最佳完整 extension 放到自身 prefix 前，最后用一个原子 path-evidence reserve 与独立候选合并。重排器
+看不到 scope、subject、memory ID、authority、state、time 或 provenance，且只能重排原集合；completion
+既不增删候选也不按关系名判断答案；flatten 后的每条 memory 仍须重新通过 authoritative Store。结果
+同时返回 `path_reranking.status`、promoted path hits 与 assembly，确保 scorer fallback 不会被包装成成功。
+该 helper 不选择 scope、不调用 graph exploration、不接管默认 QueryEngine，也固定声明所有候选的
+`answer_support="unassessed"`。默认参数是已测 profile；宿主修改 limit/reserve/weight 后必须把它视为新的
+deployment profile，而不能沿用 V8 的质量结论。
+
 上述验证由独立的 candidate relation-path v2 draft 执行，不覆盖原有 exact-path v1 ceiling。三组 profile
 在同一组预置 rich edge 上比较 strict、candidate-only 与 exact+candidate union；八个 ontology-drift
 case 测量候选路线是否恢复严格类型漏召回，一个额外分支显式测量扩大类型后的相关噪声，另有断链、
