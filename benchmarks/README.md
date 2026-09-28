@@ -590,6 +590,13 @@ remain unopened until the full corpus passes review, is fingerprinted, and is
 committed. This new synthetic first run tests transfer, while a later anonymized real
 Agent replay remains necessary for a production-quality prevalence claim.
 
+The implemented `benchmarks.evidence_rich_blind_authoring` boundary turns one
+host-authoritative owner manifest into a deliberately narrower structured request.
+The output schema contains only entity names, memory/edge-fact wording, query wording,
+and opaque surface keys. Projection requires every key exactly once and maps accepted
+text back onto private host IDs; a provider cannot submit or overwrite scope, identity,
+relation type, time, lifecycle, authority, answerability, or evidence labels.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

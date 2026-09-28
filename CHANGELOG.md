@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add an authority-preserving blind-corpus surface-authoring boundary. Provider
+  requests expose only opaque surface slots and semantic briefs, while strict host
+  projection retains scopes, stable IDs, topology, time, authority, lifecycle,
+  answerability, and evidence gold. Partial, extra, or relation-inconsistent output
+  fails closed before any corpus can be assembled.
 - Preregister an owner-disjoint evidence-rich first-run corpus before authoring or
   retrieval. The host retains scopes, topology, time, provenance, and evidence gold;
   an external model may author only bounded surface text without seeing V7/V8 outputs.
