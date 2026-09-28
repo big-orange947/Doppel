@@ -569,6 +569,17 @@ or case limits. See
   --output data/doppel/evidence-bundle-judgment-v1-delta-diagnostic-first-live.json
 ```
 
+The first frozen delta diagnostic is preserved in
+[`reports/evidence-bundle-judgment-v1-delta-diagnostic-result-2026-09-28.md`](reports/evidence-bundle-judgment-v1-delta-diagnostic-result-2026-09-28.md).
+V7 supplied complete top-10 evidence for 3/8 answerable relation cases and reached
+0.375 end-to-end support success; V8 supplied complete evidence for 8/8 and reached
+1.000. Both profiles retained perfect judgment accuracy, exact selection on sufficient
+bundles, and 8/8 no-answer abstention with zero related or forbidden support selection.
+The five recovered paths therefore provide usable downstream evidence rather than only
+improving an offline recall counter. Because those five cases were selected from an
+already-opened report, the result supports an opt-in engineering preference for V8 but
+does not replace a new owner-disjoint blind evaluation.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

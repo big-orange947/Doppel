@@ -12,6 +12,11 @@
   a fingerprint-bound post-hoc diagnostic selection for the five V8-recovered paths,
   three one-hop rank shifts, and eight matched no-answer controls after the initial
   replay showed identical top-10 membership on all twelve selected development cases.
+  Preserve the first delta result: V8 raises complete retrieval and end-to-end support
+  from 3/8 to 8/8 answerable relation cases, while both profiles retain perfect
+  evidence judgment, exact selection on sufficient bundles, and 8/8 no-answer
+  abstention with zero forbidden selection. Prefer V8 only as an opt-in experimental
+  policy until a new owner-disjoint blind corpus confirms the result.
 - Add a default-off assembly order that keeps the already-selected independent base
   reserve ahead of atomically reserved graph-path evidence. It changes neither
   membership nor the five-item independent and one-path evidence budgets; graph paths
