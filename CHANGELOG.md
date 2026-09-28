@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preregister an owner-disjoint evidence-rich first-run corpus before authoring or
+  retrieval. The host retains scopes, topology, time, provenance, and evidence gold;
+  an external model may author only bounded surface text without seeing V7/V8 outputs.
+  Freeze the 24-owner/240-query minimum, relation-family diversity, resumable budgeted
+  acquisition boundary, pre-result invariants, and V7/V8 downstream comparison gates.
 - Add the named, versioned, module-only `evidence_rich_v1` opt-in helper. It composes
   whole-path semantic reranking, membership-preserving path-family completion, one
   atomic path-evidence reserve, and authoritative Store-backed hybrid assembly using

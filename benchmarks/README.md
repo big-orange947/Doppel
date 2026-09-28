@@ -580,6 +580,16 @@ improving an offline recall counter. Because those five cases were selected from
 already-opened report, the result supports an opt-in engineering preference for V8 but
 does not replace a new owner-disjoint blind evaluation.
 
+The next first-run corpus is specified before authoring in
+[`reports/evidence-rich-blind-v1-authoring-plan-2026-09-28.md`](reports/evidence-rich-blind-v1-authoring-plan-2026-09-28.md).
+It requires 24 new owner scopes, 240 questions, dense per-owner distractors, at least
+eight two-hop relation families, and host-owned scope/time/provenance/gold labels.
+External structured generation may author only entity, fact, and question surface
+text; it cannot see profile outputs or choose authority-bearing fields. Retrieval must
+remain unopened until the full corpus passes review, is fingerprinted, and is
+committed. This new synthetic first run tests transfer, while a later anonymized real
+Agent replay remains necessary for a production-quality prevalence claim.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several
