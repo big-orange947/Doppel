@@ -27,6 +27,11 @@
   bounded semantic/relation/time/answer-leak issues without rewriting text, and emits
   the first accepted or rejected review only after a zero-call replay. Review never
   opens retrieval outputs or exposes retrieval quality metrics.
+- Add the offline blind-corpus compiler. It requires the exact reviewed authored-file
+  hash and complete issue-free 48-batch coverage, then maps surfaces back onto
+  host-owned Store memories, Graph edges, validity intervals, provenance, relation
+  routes, and evidence labels. Duplicate/copied surfaces, inconsistent cross-owner
+  aliases, failed reviews, or tampering block compilation before retrieval is opened.
 - Add the named, versioned, module-only `evidence_rich_v1` opt-in helper. It composes
   whole-path semantic reranking, membership-preserving path-family completion, one
   atomic path-evidence reserve, and authoritative Store-backed hybrid assembly using

@@ -633,6 +633,20 @@ report semantic, relation, temporal, answer-leak, consistency, duplication, lang
 or shape issues, but cannot rewrite text. A rejected first review is preserved and
 returns a failing exit code; it does not silently regenerate until the gate passes.
 
+The final offline compiler is also dry-run by default:
+
+```bash
+python -m benchmarks.evidence_rich_blind_compile
+```
+
+With `--compile`, it requires both the exact `authored_unreviewed` artifact and its
+accepted first-review sidecar. It verifies the authored SHA-256, corpus fingerprint,
+all 48 review coverage fingerprints, scope and provenance closure, temporal and
+subject validity, relation endpoints, evidence labels, cross-owner shared-name
+constraints, unique surfaces, and non-copying from opened V4. Successful output is
+still labelled `compiled_unopened`; compilation performs zero HTTP/provider calls and
+does not execute V7, V8, embeddings, Graphiti, or any retrieval metric.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

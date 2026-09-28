@@ -455,6 +455,8 @@ class ProjectedOwnerSurfaces(BaseModel):
 AUTHORING_INSTRUCTIONS = """\
 Write natural Chinese surface text for the supplied synthetic personal-memory slots.
 Follow each semantic brief exactly and keep entity names consistent within this request.
+Use authoring_nonce only as a variation seed so different synthetic owners do not share
+verbatim wording; never quote, decode, or mention the nonce in any authored surface.
 Return every supplied surface_key exactly once and invent no keys. For relation memories,
 content must state the supplied relation and edge_fact must be a concise expression of
 that same relation. For non-relation memories edge_fact must be empty. Questions must
