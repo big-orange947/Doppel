@@ -597,6 +597,15 @@ and opaque surface keys. Projection requires every key exactly once and maps acc
 text back onto private host IDs; a provider cannot submit or overwrite scope, identity,
 relation type, time, lifecycle, authority, answerability, or evidence labels.
 
+`python -m benchmarks.build_evidence_rich_blind_manifest` deterministically rebuilds
+the host manifest under ignored `data/doppel/`. Its frozen fingerprint is
+`fa7da45c5822168e8bc30fcd4c26eb585375e3969018f682c7c5e18cf7515965`.
+The manifest contains 24 owner-disjoint scopes, 240 category-balanced query slots,
+4,608 memory slots (170 dense distractors per owner), 17 relation types, and eight
+two-hop relation families. It is intentionally not the final corpus: the generated
+artifact must not move into `benchmarks/datasets/` until every surface is authored,
+independently reviewed, projected, revalidated, fingerprinted, and committed.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

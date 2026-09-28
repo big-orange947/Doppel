@@ -7,6 +7,11 @@
   projection retains scopes, stable IDs, topology, time, authority, lifecycle,
   answerability, and evidence gold. Partial, extra, or relation-inconsistent output
   fails closed before any corpus can be assembled.
+- Freeze a deterministic builder for the blind corpus's host authority manifest:
+  24 owner-disjoint scopes, 240 balanced queries, 4,608 memory slots with 170 dense
+  distractors per owner, 17 relation types, and eight non-default two-hop families.
+  The generated 5 MB manifest stays in ignored runtime data until surface authoring
+  and independent semantic review finish; its rebuild fingerprint is regression-tested.
 - Preregister an owner-disjoint evidence-rich first-run corpus before authoring or
   retrieval. The host retains scopes, topology, time, provenance, and evidence gold;
   an external model may author only bounded surface text without seeing V7/V8 outputs.

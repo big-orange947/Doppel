@@ -7,7 +7,11 @@ remain in the host manifest and are never represented in the provider output sch
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections import Counter
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -39,13 +43,23 @@ class HostMemorySlot(BaseModel):
     surface_key: str
     memory_id: str
     scope: str
-    kind: str
+    conversation_id: str
+    source_kind: Literal["chat", "group_chat", "document", "system"]
+    kind: Literal["fact", "episode", "relation", "document_fact", "preference"]
     semantic_brief: str
     subject_id: str
-    authority: str
-    state: str
+    fact_key: str
+    event_key: str = ""
+    temporal_status: Literal[
+        "current", "historical", "planned", "cancelled", "timeless"
+    ]
+    authority: Literal["human_self", "peer_statement", "agent_output"]
+    state: Literal["candidate", "confirmed", "superseded", "expired"]
     valid_from: str
     valid_to: str = ""
+    evidence_id: str
+    corpus_role: Literal["required", "related", "forbidden", "support", "distractor"]
+    tags: list[str] = Field(default_factory=lambda: ["personal-memory"])
     relation_type: str = ""
     source_entity_key: str = ""
     target_entity_key: str = ""
@@ -59,6 +73,10 @@ class HostMemorySlot(BaseModel):
         )
         if any(relation_fields) and not all(relation_fields):
             raise ValueError("relation memories require type and both entity keys")
+        if self.kind == "episode" and not self.event_key:
+            raise ValueError("episode memories require an event key")
+        if self.kind != "episode" and self.event_key:
+            raise ValueError("only episode memories may use an event key")
         return self
 
 
@@ -71,16 +89,29 @@ class HostQuerySlot(BaseModel):
     case_id: str
     scope: str
     category: str
-    query_style: str
+    domain: Literal[
+        "residence",
+        "career",
+        "travel",
+        "possessions",
+        "documents",
+        "preferences",
+        "health",
+    ]
+    query_style: Literal["explicit", "paraphrase", "elliptical"]
+    conversation_id: str
     intent: Literal["lookup", "count"]
     temporal_view: Literal["current", "as_of", "history"]
     semantic_brief: str
     valid_at: str
+    subject_id: str
+    entity_mentions: list[str] = Field(default_factory=list)
     answerable: bool
     required_memory_keys: list[str] = Field(default_factory=list)
     related_memory_keys: list[str] = Field(default_factory=list)
     hard_forbidden_memory_keys: list[str] = Field(default_factory=list)
     required_relation_routes: list[list[str]] = Field(default_factory=list)
+    expected_count: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def _validate_private_gold(self) -> HostQuerySlot:
@@ -93,6 +124,12 @@ class HostQuerySlot(BaseModel):
             raise ValueError("query evidence labels must not overlap")
         if self.answerable != bool(self.required_memory_keys):
             raise ValueError("query answerability must match required evidence")
+        if self.intent == "count" and self.expected_count != len(
+            self.required_memory_keys
+        ):
+            raise ValueError("count query must match required evidence count")
+        if self.intent == "lookup" and self.expected_count is not None:
+            raise ValueError("lookup query cannot declare an expected count")
         if any(not 1 <= len(route) <= 2 for route in self.required_relation_routes):
             raise ValueError("relation routes must contain one or two hops")
         return self
@@ -134,6 +171,139 @@ class OwnerAuthoringManifest(BaseModel):
             if not labels.issubset(memory_keys):
                 raise ValueError("query labels reference an unknown memory key")
         return self
+
+
+class BlindCorpusAuthoringManifest(BaseModel):
+    """Frozen multi-owner authority manifest before any surface authoring."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    suite: str
+    version: str
+    language: Literal["zh-CN"]
+    status: Literal["structure_frozen"]
+    authoring_contract_version: Literal[1]
+    implementation_baseline: str
+    relation_types: list[str]
+    owners: list[OwnerAuthoringManifest]
+    requirements: dict[str, int]
+
+    @model_validator(mode="after")
+    def _validate_frozen_minimums(self) -> BlindCorpusAuthoringManifest:
+        if len(self.relation_types) != len(set(self.relation_types)):
+            raise ValueError("relation types must be unique")
+        ontology = set(self.relation_types)
+        _unique_values(self.owners, "owner_key", "owner key")
+        _unique_values(self.owners, "scope", "owner scope")
+        all_entities = [item for owner in self.owners for item in owner.entities]
+        all_memories = [item for owner in self.owners for item in owner.memories]
+        all_queries = [item for owner in self.owners for item in owner.queries]
+        _unique_values(all_entities, "entity_id", "global entity ID")
+        _unique_values(all_memories, "memory_id", "global memory ID")
+        _unique_values(all_queries, "case_id", "global case ID")
+        if any(
+            memory.relation_type and memory.relation_type not in ontology
+            for memory in all_memories
+        ):
+            raise ValueError("memory relation type outside the frozen ontology")
+        if any(
+            relation not in ontology
+            for query in all_queries
+            for route in query.required_relation_routes
+            for relation in route
+        ):
+            raise ValueError("query route type outside the frozen ontology")
+        for owner in self.owners:
+            memories = {item.surface_key: item for item in owner.memories}
+            for memory in owner.memories:
+                start = _parse_time(memory.valid_from)
+                if memory.valid_to and _parse_time(memory.valid_to) < start:
+                    raise ValueError("memory validity interval is reversed")
+            for query in owner.queries:
+                at = _parse_time(query.valid_at)
+                for key in query.required_memory_keys:
+                    memory = memories[key]
+                    if memory.subject_id != query.subject_id:
+                        raise ValueError("required memory subject does not match query")
+                    start = _parse_time(memory.valid_from)
+                    end = _parse_time(memory.valid_to) if memory.valid_to else None
+                    if at < start or (end is not None and at >= end):
+                        raise ValueError(
+                            "required memory is not effective at query time"
+                        )
+        pairs = {
+            tuple(route)
+            for query in all_queries
+            for route in query.required_relation_routes
+            if len(route) == 2
+        }
+        non_default_pairs = pairs - {("HELD_BY", "LIVES_IN")}
+        counts = {
+            "owners": len(self.owners),
+            "queries": len(all_queries),
+            "memories": len(all_memories),
+            "relation_types": len(ontology),
+            "two_hop_pairs": len(pairs),
+            "non_default_two_hop_pairs": len(non_default_pairs),
+        }
+        per_owner_queries = Counter(query.scope for query in all_queries)
+        per_owner_memories = Counter(memory.scope for memory in all_memories)
+        per_owner_distractors = Counter(
+            memory.scope
+            for memory in all_memories
+            if memory.corpus_role == "distractor"
+        )
+        counts.update(
+            {
+                "queries_per_owner": min(per_owner_queries.values(), default=0),
+                "memories_per_owner": min(per_owner_memories.values(), default=0),
+                "distractors_per_owner": min(per_owner_distractors.values(), default=0),
+            }
+        )
+        for name, actual in counts.items():
+            expected = int(self.requirements[f"min_{name}"])
+            if actual < expected:
+                raise ValueError(
+                    f"manifest {name} below minimum: {actual} < {expected}"
+                )
+        partition_counts = Counter(owner.partition for owner in self.owners)
+        for partition in ("dev", "sealed", "adversarial"):
+            expected = int(self.requirements[f"min_partition_{partition}"])
+            if partition_counts[partition] < expected:
+                raise ValueError(
+                    f"manifest partition {partition} below minimum: "
+                    f"{partition_counts[partition]} < {expected}"
+                )
+        category_counts = Counter(query.category for query in all_queries)
+        for category in (
+            "current_residence",
+            "temporary_residence_as_of",
+            "corrected_fact",
+            "episode_count",
+            "one_hop_relation",
+            "two_hop_relation",
+            "document_fact",
+            "cross_conversation",
+            "subject_correction",
+            "no_answer_related",
+        ):
+            expected = int(self.requirements[f"min_category_{category}"])
+            if category_counts[category] < expected:
+                raise ValueError(
+                    f"manifest category {category} below minimum: "
+                    f"{category_counts[category]} < {expected}"
+                )
+        return self
+
+    @property
+    def fingerprint(self) -> str:
+        payload = json.dumps(
+            self.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
 
 
 class AuthoredEntitySurface(BaseModel):
@@ -211,7 +381,9 @@ evidence labels, answerability, relation types, or any field outside the output 
 """
 
 
-def build_authoring_request(manifest: OwnerAuthoringManifest) -> StructuredGenerationRequest:
+def build_authoring_request(
+    manifest: OwnerAuthoringManifest,
+) -> StructuredGenerationRequest:
     """Build a surface-only request without exposing authority-bearing host fields."""
 
     bound = OwnerAuthoringManifest.model_validate(manifest)
@@ -342,15 +514,21 @@ def _unique_values(values: list[Any], field: str, label: str) -> set[str]:
 
 def _surface_map(values: list[Any], label: str) -> dict[str, Any]:
     keys = _unique_values(values, "surface_key", f"{label} key")
-    return {key: next(item for item in values if item.surface_key == key) for key in keys}
+    return {
+        key: next(item for item in values if item.surface_key == key) for key in keys
+    }
 
 
-def _require_exact_keys(actual: dict[str, Any], expected: list[Any], label: str) -> None:
+def _require_exact_keys(
+    actual: dict[str, Any], expected: list[Any], label: str
+) -> None:
     required = {item.surface_key for item in expected}
     if set(actual) != required:
         missing = sorted(required - set(actual))
         extra = sorted(set(actual) - required)
-        raise ValueError(f"{label} surface keys mismatch: missing={missing}, extra={extra}")
+        raise ValueError(
+            f"{label} surface keys mismatch: missing={missing}, extra={extra}"
+        )
 
 
 def _required_surface(value: Any, label: str) -> str:
@@ -358,3 +536,10 @@ def _required_surface(value: Any, label: str) -> str:
     if not normalized:
         raise ValueError(f"{label} is required")
     return normalized
+
+
+def _parse_time(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        raise ValueError("manifest times must include a timezone")
+    return parsed.astimezone(UTC)
