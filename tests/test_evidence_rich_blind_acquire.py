@@ -32,7 +32,8 @@ class _FakeProvider:
             "entities": [
                 {
                     "surface_key": item["surface_key"],
-                    "name": f"名称-{item['surface_key']}",
+                    "name": item["required_display_name"]
+                    or f"名称-{item['surface_key']}",
                 }
                 for item in request.input["entities"]
             ],

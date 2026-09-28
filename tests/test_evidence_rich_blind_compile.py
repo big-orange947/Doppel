@@ -26,7 +26,7 @@ def _sha256(path: Path) -> str:
 def _authored_payload() -> dict[str, Any]:
     manifest = build_manifest()
     return {
-        "runner": "doppel.evidence-rich-blind-authoring.v1",
+        "runner": "doppel.evidence-rich-blind-authoring.v2",
         "status": "authored_unreviewed",
         "manifest_fingerprint": manifest.fingerprint,
         "review_complete": False,
@@ -37,8 +37,8 @@ def _authored_payload() -> dict[str, Any]:
                 "owner_key": owner.owner_key,
                 "entity_names_by_id": {
                     entity.entity_id: (
-                        "云桥服务中心"
-                        if entity.shared_name_group
+                        entity.required_display_name
+                        if entity.required_display_name
                         else f"实体-{owner.owner_key}-{entity.surface_key}"
                     )
                     for entity in owner.entities
@@ -231,7 +231,7 @@ def test_compile_rejects_duplicate_surfaces_before_retrieval(tmp_path: Path) -> 
     assert not (tmp_path / "corpus.json").exists()
 
 
-def test_compile_rejects_inconsistent_cross_owner_shared_name(
+def test_compile_rejects_shared_name_that_violates_host_requirement(
     tmp_path: Path,
 ) -> None:
     authored, _ = _write_inputs(tmp_path)
@@ -246,7 +246,7 @@ def test_compile_rejects_inconsistent_cross_owner_shared_name(
         _accepted_review(_sha256(tmp_path / "authored.json")),
     )
 
-    with pytest.raises(ValueError, match="shared entity name group"):
+    with pytest.raises(ValueError, match="host requirement"):
         compiler.run(_args(tmp_path))
 
 

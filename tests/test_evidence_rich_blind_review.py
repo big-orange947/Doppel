@@ -23,7 +23,7 @@ from doppel_memory.intelligence import StructuredGenerationRequest
 def _write_authored(path: Path) -> dict[str, Any]:
     manifest = build_manifest()
     payload = {
-        "runner": "doppel.evidence-rich-blind-authoring.v1",
+        "runner": "doppel.evidence-rich-blind-authoring.v2",
         "status": "authored_unreviewed",
         "manifest_fingerprint": manifest.fingerprint,
         "review_complete": False,
@@ -33,7 +33,9 @@ def _write_authored(path: Path) -> dict[str, Any]:
             {
                 "owner_key": owner.owner_key,
                 "entity_names_by_id": {
-                    item.entity_id: f"名称-{item.surface_key}"
+                    item.entity_id: (
+                        item.required_display_name or f"名称-{item.surface_key}"
+                    )
                     for item in owner.entities
                 },
                 "memory_content_by_id": {

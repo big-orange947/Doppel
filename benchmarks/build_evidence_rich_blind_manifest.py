@@ -77,10 +77,10 @@ def build_manifest() -> BlindCorpusAuthoringManifest:
     }
     return BlindCorpusAuthoringManifest(
         suite="doppel-evidence-rich-blind-zh-v1-host-manifest",
-        version="1.0.0",
+        version="1.1.0",
         language="zh-CN",
         status="structure_frozen",
-        authoring_contract_version=1,
+        authoring_contract_version=2,
         implementation_baseline=IMPLEMENTATION_BASELINE,
         relation_types=RELATION_TYPES,
         owners=owners,
@@ -154,6 +154,7 @@ def _entities(stem: str, scope: str, route_brief: str) -> list[HostEntitySlot]:
             entity_type=entity_type,
             semantic_brief=brief,
             shared_name_group=("shared-org-alias-v1" if key == "shared-alias" else ""),
+            required_display_name=("启明服务中心" if key == "shared-alias" else ""),
         )
         for key, entity_type, brief in specifications
     ]

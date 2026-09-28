@@ -33,6 +33,7 @@ class HostEntitySlot(BaseModel):
     entity_type: str
     semantic_brief: str
     shared_name_group: str = ""
+    required_display_name: str = ""
 
 
 class HostMemorySlot(BaseModel):
@@ -222,7 +223,7 @@ class BlindCorpusAuthoringManifest(BaseModel):
     version: str
     language: Literal["zh-CN"]
     status: Literal["structure_frozen"]
-    authoring_contract_version: Literal[1]
+    authoring_contract_version: Literal[2]
     implementation_baseline: str
     relation_types: list[str]
     owners: list[OwnerAuthoringManifest]
@@ -457,6 +458,8 @@ Write natural Chinese surface text for the supplied synthetic personal-memory sl
 Follow each semantic brief exactly and keep entity names consistent within this request.
 Use authoring_nonce only as a variation seed so different synthetic owners do not share
 verbatim wording; never quote, decode, or mention the nonce in any authored surface.
+When required_display_name is non-empty, return that exact entity name. All other
+entity names must be distinct within this owner request, including from required names.
 Return every supplied surface_key exactly once and invent no keys. For relation memories,
 content must state the supplied relation and edge_fact must be a concise expression of
 that same relation. For non-relation memories edge_fact must be empty. Questions must
@@ -548,6 +551,7 @@ def build_authoring_request(
                     "entity_type": item.entity_type,
                     "semantic_brief": item.semantic_brief,
                     "shared_name_group": item.shared_name_group,
+                    "required_display_name": item.required_display_name,
                 }
                 for item in bound.entities
             ],
@@ -612,6 +616,7 @@ def build_review_request(
                     "entity_type": item.entity_type,
                     "semantic_brief": item.semantic_brief,
                     "shared_name_group": item.shared_name_group,
+                    "required_display_name": item.required_display_name,
                     "authored_name": entities[item.surface_key].name,
                 }
                 for item in bound.entities
@@ -726,6 +731,10 @@ def project_owner_surfaces(
     entity_names = [item.name for item in authored.entities]
     if len(entity_names) != len(set(entity_names)):
         raise ValueError("entity display names must be unique within one owner")
+    for item in bound.entities:
+        required = item.required_display_name.strip()
+        if required and entities[item.surface_key].name != required:
+            raise ValueError("entity display name does not match the host requirement")
     query_texts = [item.query for item in authored.queries]
     if len(query_texts) != len(set(query_texts)):
         raise ValueError("query text must be unique within one owner")
@@ -765,7 +774,7 @@ def _authoring_nonce(manifest: OwnerAuthoringManifest | OwnerAuthoringBatch) -> 
     batch_id = (
         manifest.batch_id if isinstance(manifest, OwnerAuthoringBatch) else "full"
     )
-    payload = f"doppel-blind-surface-v1:{manifest.owner_key}:{batch_id}".encode()
+    payload = f"doppel-blind-surface-v2:{manifest.owner_key}:{batch_id}".encode()
     return hashlib.sha256(payload).hexdigest()[:24]
 
 

@@ -332,6 +332,10 @@ def _validate_authored(manifest: Any, authored: dict[str, Any]) -> None:
                 raise ValueError(
                     "authored edge fact does not match host relation shape"
                 )
+        for entity in owner.entities:
+            required = entity.required_display_name.strip()
+            if required and item["entity_names_by_id"][entity.entity_id] != required:
+                raise ValueError("authored entity name violates a host requirement")
     shared_names: dict[str, list[str]] = {}
     for owner in manifest.owners:
         item = actual[owner.owner_key]

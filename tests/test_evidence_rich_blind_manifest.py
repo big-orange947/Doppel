@@ -16,7 +16,7 @@ from benchmarks.evidence_rich_blind_authoring import (
 
 ROOT = Path(__file__).resolve().parents[1]
 OPENED_V4 = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v4.json"
-FROZEN_FINGERPRINT = "fa7da45c5822168e8bc30fcd4c26eb585375e3969018f682c7c5e18cf7515965"
+FROZEN_FINGERPRINT = "eb76c6d920d489fa0cd3dff7524b00ada82ec05ac8d511db9aae6f99177e9785"
 
 
 def test_manifest_rebuild_has_frozen_counts_and_fingerprint() -> None:
@@ -59,6 +59,12 @@ def test_manifest_has_balanced_categories_and_diverse_two_hop_routes() -> None:
         sum(bool(entity.shared_name_group) for entity in owner.entities) == 1
         for owner in manifest.owners
     )
+    assert {
+        entity.required_display_name
+        for owner in manifest.owners
+        for entity in owner.entities
+        if entity.shared_name_group
+    } == {"启明服务中心"}
 
 
 def test_manifest_ids_do_not_reuse_opened_v4_ids_or_scopes() -> None:

@@ -599,7 +599,7 @@ relation type, time, lifecycle, authority, answerability, or evidence labels.
 
 `python -m benchmarks.build_evidence_rich_blind_manifest` deterministically rebuilds
 the host manifest under ignored `data/doppel/`. Its frozen fingerprint is
-`fa7da45c5822168e8bc30fcd4c26eb585375e3969018f682c7c5e18cf7515965`.
+`eb76c6d920d489fa0cd3dff7524b00ada82ec05ac8d511db9aae6f99177e9785`.
 The manifest contains 24 owner-disjoint scopes, 240 category-balanced query slots,
 4,608 memory slots (170 dense distractors per owner), 17 relation types, and eight
 two-hop relation families. It is intentionally not the final corpus: the generated
@@ -618,6 +618,15 @@ Live acquisition additionally requires `--live-authoring`, an explicit
 provider. It is resumable and commit/manifest-bound. Partial runs report only progress
 and usage; they do not emit surfaces or retrieval metrics. Even a complete pass is
 labelled `authored_unreviewed` until a separate independent review stage succeeds.
+
+The first live authoring attempt is preserved in
+[`reports/evidence-rich-blind-v1-authoring-v1-incomplete-2026-09-28.md`](reports/evidence-rich-blind-v1-authoring-v1-incomplete-2026-09-28.md).
+Five provider calls demonstrated that a semantic brief alone did not guarantee unique
+owner-local entity names or one exact repeated alias across owners. No retrieval was
+opened. Authoring contract V2 fixes the contract before restarting: the repeated alias
+is a host-required surface and every other name must be distinct. V2 deliberately uses
+a new runner, nonce namespace, cache, progress file, and manifest fingerprint; V1 raw
+outputs remain preserved and are never migrated into V2 cache entries.
 
 Independent semantic review is also dry-run by default:
 

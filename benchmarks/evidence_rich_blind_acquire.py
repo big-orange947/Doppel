@@ -31,12 +31,14 @@ from doppel_memory.openai_compatible import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CACHE = ROOT / "data/doppel/evidence-rich-blind-v1-authoring-cache"
-DEFAULT_PROGRESS = ROOT / "data/doppel/evidence-rich-blind-v1-authoring-progress.json"
+DEFAULT_CACHE = ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v2-cache"
+DEFAULT_PROGRESS = (
+    ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v2-progress.json"
+)
 DEFAULT_OUTPUT = ROOT / "data/doppel/evidence-rich-blind-v1-authored-surfaces.json"
 MANIFEST_NAME = "acquisition-manifest.json"
 STATE_NAME = "acquisition-state.json"
-RUNNER = "doppel.evidence-rich-blind-authoring.v1"
+RUNNER = "doppel.evidence-rich-blind-authoring.v2"
 MEMORY_BATCH_SIZE = 96
 
 

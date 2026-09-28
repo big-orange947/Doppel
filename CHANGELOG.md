@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve the incomplete blind authoring V1 result after five provider calls exposed
+  duplicate within-owner names and inconsistent cross-owner shared aliases. Retrieval
+  was never opened. Bump the authoring contract and runner to V2: the shared alias now
+  has one host-required display name, all other owner-local entity names must remain
+  distinct, and V2 uses a fresh nonce/cache/progress namespace.
 - Add an authority-preserving blind-corpus surface-authoring boundary. Provider
   requests expose only opaque surface slots and semantic briefs, while strict host
   projection retains scopes, stable IDs, topology, time, authority, lifecycle,

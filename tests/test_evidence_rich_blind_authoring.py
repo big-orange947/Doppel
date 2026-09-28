@@ -198,6 +198,15 @@ def test_projection_requires_relation_fact_and_rejects_fact_edge() -> None:
         project_owner_surfaces(_manifest(), invented_fact_edge)
 
 
+def test_projection_enforces_host_required_entity_display_name() -> None:
+    payload = _manifest().model_dump(mode="json")
+    payload["entities"][0]["required_display_name"] = "固定共享名称"
+    manifest = OwnerAuthoringManifest.model_validate(payload)
+
+    with pytest.raises(ValueError, match="host requirement"):
+        project_owner_surfaces(manifest, _draft())
+
+
 class _SurfaceModel:
     name = "tests.surface-model"
     version = "1"
