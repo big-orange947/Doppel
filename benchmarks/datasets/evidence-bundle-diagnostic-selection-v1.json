@@ -1,0 +1,44 @@
+{
+  "suite": "doppel-evidence-bundle-diagnostic-selection",
+  "version": "1.0.0",
+  "status": "opened_posthoc_diagnostic",
+  "publication_ready": false,
+  "source_dataset_fingerprint": "0b0d0c8ab8aaf35350e465325540acc3b8c81f00496ed0d02901bc9f10e6a771",
+  "source_retrieval_report_sha256": "5f44ac144ca1d266945dac5df7a27ba6ad1c29d671618198f698198ac92acce9",
+  "groups": [
+    {
+      "name": "v8_recovered_complete_path",
+      "rationale": "Five opened two-hop cases where V7 misses one required memory at rank 10 and V8 contains the complete support set.",
+      "case_ids": [
+        "q-u13-object-city",
+        "q-u20-object-city",
+        "q-u24-object-city",
+        "q-u25-object-city",
+        "q-u38-object-city"
+      ]
+    },
+    {
+      "name": "v8_one_hop_rank_shift",
+      "rationale": "Three opened one-hop cases where V8 moves the first required memory from rank two to rank three.",
+      "case_ids": [
+        "q-u17-holder",
+        "q-u25-holder",
+        "q-u33-holder"
+      ]
+    },
+    {
+      "name": "relation_no_answer_controls",
+      "rationale": "Matched related-but-insufficient buyer questions test whether extra graph context causes false support selection.",
+      "case_ids": [
+        "q-u13-buyer-unknown",
+        "q-u17-buyer-unknown",
+        "q-u20-buyer-unknown",
+        "q-u24-buyer-unknown",
+        "q-u25-buyer-unknown",
+        "q-u33-buyer-unknown",
+        "q-u38-buyer-unknown",
+        "q-u01-buyer-unknown"
+      ]
+    }
+  ]
+}

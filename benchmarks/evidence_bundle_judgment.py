@@ -20,7 +20,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -92,11 +92,60 @@ class EvidenceJudgment(BaseModel):
         return self
 
 
+class EvidenceJudgmentSelectionGroup(BaseModel):
+    """One explicit post-hoc diagnostic stratum."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    rationale: str = Field(min_length=1)
+    case_ids: list[str] = Field(min_length=1)
+
+    @field_validator("case_ids", mode="before")
+    @classmethod
+    def _normalize_case_ids(cls, value: object) -> list[str]:
+        items = value if isinstance(value, (list, tuple)) else []
+        normalized = [str(item or "").strip() for item in items]
+        result = [item for item in normalized if item]
+        if len(result) != len(set(result)):
+            raise ValueError("selection group repeats a case ID")
+        return result
+
+
+class EvidenceJudgmentSelection(BaseModel):
+    """Bound diagnostic selection; never an unseen-quality corpus."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    suite: Literal["doppel-evidence-bundle-diagnostic-selection"]
+    version: Literal["1.0.0"]
+    status: Literal["opened_posthoc_diagnostic"]
+    publication_ready: Literal[False]
+    source_dataset_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_retrieval_report_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    groups: list[EvidenceJudgmentSelectionGroup] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_unique_cases(self) -> EvidenceJudgmentSelection:
+        names = [group.name for group in self.groups]
+        if len(names) != len(set(names)):
+            raise ValueError("selection group names must be unique")
+        case_ids = [case_id for group in self.groups for case_id in group.case_ids]
+        if len(case_ids) != len(set(case_ids)):
+            raise ValueError("diagnostic case IDs cannot overlap between groups")
+        return self
+
+    @property
+    def case_ids(self) -> list[str]:
+        return [case_id for group in self.groups for case_id in group.case_ids]
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--live", action="store_true")
     result.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     result.add_argument("--retrieval-report", type=Path, default=DEFAULT_REPORT)
+    result.add_argument("--selection-file", type=Path, default=None)
     result.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     result.add_argument("--profile", action="append", dest="profiles")
     result.add_argument(
@@ -161,6 +210,33 @@ def _selected_cases(
     if not selected:
         raise ValueError("selected partitions contain no cases")
     return selected
+
+
+def load_selection(
+    path: Path,
+    dataset: HeterogeneousRetrievalDataset,
+    retrieval_report: Mapping[str, Any],
+) -> EvidenceJudgmentSelection:
+    selection = EvidenceJudgmentSelection.model_validate_json(path.read_bytes())
+    if selection.source_dataset_fingerprint != dataset.fingerprint:
+        raise ValueError("selection dataset fingerprint mismatch")
+    if selection.source_retrieval_report_sha256 != retrieval_report.get(
+        "report_sha256"
+    ):
+        raise ValueError("selection retrieval report fingerprint mismatch")
+    known = {case.case_id for case in dataset.queries}
+    unknown = sorted(set(selection.case_ids).difference(known))
+    if unknown:
+        raise ValueError("selection contains unknown case IDs")
+    return selection
+
+
+def _selection_cases(
+    dataset: HeterogeneousRetrievalDataset,
+    selection: EvidenceJudgmentSelection,
+) -> list[HeterogeneousQuery]:
+    by_id = {case.case_id: case for case in dataset.queries}
+    return [by_id[case_id] for case_id in selection.case_ids]
 
 
 def _load_profile_rows(
@@ -402,14 +478,26 @@ def compare_default_profiles(
 
 async def run(args: argparse.Namespace) -> int:
     profiles = tuple(dict.fromkeys(args.profiles or DEFAULT_PROFILES))
-    partitions = tuple(
-        dict.fromkeys(args.partition or ("dev", "sealed", "adversarial"))
-    )
     dataset = load_dataset(args.dataset)
-    cases = _selected_cases(dataset, partitions=partitions, max_cases=args.max_cases)
     profile_rows, source_report = _load_profile_rows(
         args.retrieval_report, dataset, profiles
     )
+    selection: EvidenceJudgmentSelection | None = None
+    if args.selection_file is not None:
+        if args.partition or args.max_cases:
+            raise ValueError(
+                "selection-file cannot be combined with partition or max-cases"
+            )
+        selection = load_selection(args.selection_file, dataset, source_report)
+        cases = _selection_cases(dataset, selection)
+        partitions = tuple(dict.fromkeys(case.partition for case in cases))
+    else:
+        partitions = tuple(
+            dict.fromkeys(args.partition or ("dev", "sealed", "adversarial"))
+        )
+        cases = _selected_cases(
+            dataset, partitions=partitions, max_cases=args.max_cases
+        )
     missing = {
         profile: sorted(
             case.case_id for case in cases if case.case_id not in profile_rows[profile]
@@ -436,6 +524,24 @@ async def run(args: argparse.Namespace) -> int:
         },
         "profiles": list(profiles),
         "partitions": list(partitions),
+        "selection": (
+            {
+                "path": str(args.selection_file.resolve()),
+                "sha256": hashlib.sha256(args.selection_file.read_bytes()).hexdigest(),
+                "status": selection.status,
+                "publication_ready": selection.publication_ready,
+                "groups": [
+                    {
+                        "name": group.name,
+                        "case_count": len(group.case_ids),
+                        "rationale": group.rationale,
+                    }
+                    for group in selection.groups
+                ],
+            }
+            if selection is not None and args.selection_file is not None
+            else None
+        ),
         "selected_cases": len(cases),
         "context_limit": args.context_limit,
         "maximum_logical_requests": len(cases) * len(profiles),

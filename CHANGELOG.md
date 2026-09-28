@@ -8,7 +8,10 @@
   cannot see Store IDs, gold labels, scopes, retrieval attribution, or graph scores.
   Freeze the V7 rank-first versus V8 evidence-rich comparison before its first
   provider result, mark the already-opened V4 source corpus as development-only, and
-  require a new owner-disjoint blind corpus before any publication-quality claim.
+  require a new owner-disjoint blind corpus before any publication-quality claim. Add
+  a fingerprint-bound post-hoc diagnostic selection for the five V8-recovered paths,
+  three one-hop rank shifts, and eight matched no-answer controls after the initial
+  replay showed identical top-10 membership on all twelve selected development cases.
 - Add a default-off assembly order that keeps the already-selected independent base
   reserve ahead of atomically reserved graph-path evidence. It changes neither
   membership nor the five-item independent and one-path evidence budgets; graph paths

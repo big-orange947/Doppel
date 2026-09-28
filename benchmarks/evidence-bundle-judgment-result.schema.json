@@ -56,6 +56,34 @@
         "gold_memory_ids_exposed_to_model": {"const": false},
         "scope_or_retrieval_attribution_exposed_to_model": {"const": false},
         "answer_text_scored": {"const": false}
+        ,
+        "selection": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["sha256", "status", "publication_ready", "groups"],
+              "properties": {
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "status": {"const": "opened_posthoc_diagnostic"},
+                "publication_ready": {"const": false},
+                "groups": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": ["name", "case_count", "rationale"],
+                    "properties": {
+                      "name": {"type": "string"},
+                      "case_count": {"type": "integer", "minimum": 1},
+                      "rationale": {"type": "string", "minLength": 1}
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
       }
     },
     "provider": {

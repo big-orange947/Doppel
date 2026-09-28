@@ -553,6 +553,22 @@ and the result envelope is defined by
   --partition dev --max-cases 12 --max-calls 0
 ```
 
+The first 12-case replay gave both profiles perfect judgment scores, but their top-10
+membership was identical on every selected case. A separate, explicitly post-hoc
+diagnostic therefore freezes five V8-recovered two-hop cases, three V8 one-hop rank
+shifts, and eight relation no-answer controls before asking the provider to judge
+them. The selection is fingerprint-bound and cannot be combined with ad-hoc partition
+or case limits. See
+[`reports/evidence-bundle-judgment-v1-delta-diagnostic-plan-2026-09-28.md`](reports/evidence-bundle-judgment-v1-delta-diagnostic-plan-2026-09-28.md).
+
+```powershell
+.venv\Scripts\python.exe -m benchmarks.evidence_bundle_judgment `
+  --live `
+  --selection-file benchmarks/datasets/evidence-bundle-diagnostic-selection-v1.json `
+  --max-calls 32 `
+  --output data/doppel/evidence-bundle-judgment-v1-delta-diagnostic-first-live.json
+```
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

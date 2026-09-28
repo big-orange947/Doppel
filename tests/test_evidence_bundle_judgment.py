@@ -10,9 +10,12 @@ from benchmarks.evidence_bundle_judgment import (
     EVIDENCE_RICH_PROFILE,
     RANK_FIRST_PROFILE,
     EvidenceJudgment,
+    EvidenceJudgmentSelection,
     _load_profile_rows,
+    _selection_cases,
     build_judgment_request,
     compare_default_profiles,
+    load_selection,
     score_judgment,
     summarize,
 )
@@ -20,6 +23,7 @@ from benchmarks.heterogeneous_retrieval_quality import load_dataset
 
 ROOT = Path(__file__).resolve().parents[1]
 DATASET = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v4.json"
+SELECTION = ROOT / "benchmarks/datasets/evidence-bundle-diagnostic-selection-v1.json"
 
 
 def _fixture():
@@ -201,3 +205,33 @@ def test_profile_loader_binds_report_to_dataset_and_rejects_duplicates(
     path.write_text(json.dumps(payload), "utf-8")
     with pytest.raises(ValueError, match="repeats"):
         _load_profile_rows(path, dataset, ["p"])
+
+
+def test_diagnostic_selection_is_bound_unique_and_owner_diverse() -> None:
+    dataset = load_dataset(DATASET)
+    selection = EvidenceJudgmentSelection.model_validate_json(SELECTION.read_bytes())
+    report = {
+        "report_sha256": selection.source_retrieval_report_sha256,
+    }
+
+    loaded = load_selection(SELECTION, dataset, report)
+    cases = _selection_cases(dataset, loaded)
+
+    assert len(cases) == 16
+    assert [len(group.case_ids) for group in loaded.groups] == [5, 3, 8]
+    assert {case.partition for case in cases} == {"dev", "sealed"}
+    assert {case.category for case in cases} == {
+        "one_hop_relation",
+        "two_hop_relation",
+        "no_answer_related",
+    }
+    assert len({case.scope for case in cases}) == 8
+    assert loaded.publication_ready is False
+    assert loaded.status == "opened_posthoc_diagnostic"
+
+
+def test_diagnostic_selection_rejects_report_fingerprint_mismatch() -> None:
+    dataset = load_dataset(DATASET)
+
+    with pytest.raises(ValueError, match="report fingerprint"):
+        load_selection(SELECTION, dataset, {"report_sha256": "0" * 64})
