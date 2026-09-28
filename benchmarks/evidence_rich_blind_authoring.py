@@ -173,6 +173,46 @@ class OwnerAuthoringManifest(BaseModel):
         return self
 
 
+class OwnerAuthoringBatch(BaseModel):
+    """One bounded surface-authoring request derived from a complete owner manifest."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    owner_key: str
+    scope: str
+    partition: Literal["dev", "sealed", "adversarial"]
+    batch_id: str
+    entities: list[HostEntitySlot] = Field(default_factory=list)
+    memories: list[HostMemorySlot] = Field(default_factory=list)
+    queries: list[HostQuerySlot] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_batch_boundary(self) -> OwnerAuthoringBatch:
+        if not self.entities and not self.memories and not self.queries:
+            raise ValueError("authoring batch must not be empty")
+        entity_keys = _unique_values(self.entities, "surface_key", "entity surface key")
+        memory_keys = _unique_values(self.memories, "surface_key", "memory surface key")
+        _unique_values(self.queries, "surface_key", "query surface key")
+        for item in [*self.entities, *self.memories, *self.queries]:
+            if item.scope != self.scope:
+                raise ValueError("authoring batch must contain one exact scope")
+        for memory in self.memories:
+            referenced = {memory.source_entity_key, memory.target_entity_key} - {""}
+            if not referenced.issubset(entity_keys):
+                raise ValueError("batch relation references an unavailable entity key")
+        for query in self.queries:
+            labels = {
+                *query.required_memory_keys,
+                *query.related_memory_keys,
+                *query.hard_forbidden_memory_keys,
+            }
+            if not labels.issubset(memory_keys):
+                raise ValueError(
+                    "batch query labels reference an unavailable memory key"
+                )
+        return self
+
+
 class BlindCorpusAuthoringManifest(BaseModel):
     """Frozen multi-owner authority manifest before any surface authoring."""
 
@@ -381,16 +421,67 @@ evidence labels, answerability, relation types, or any field outside the output 
 """
 
 
+def split_owner_authoring_batches(
+    manifest: OwnerAuthoringManifest, *, memory_batch_size: int = 96
+) -> list[OwnerAuthoringBatch]:
+    """Split one owner without separating queries from their private evidence slots."""
+
+    bound = OwnerAuthoringManifest.model_validate(manifest)
+    if memory_batch_size < 1:
+        raise ValueError("memory batch size must be positive")
+    labelled = {
+        key
+        for query in bound.queries
+        for key in (
+            query.required_memory_keys
+            + query.related_memory_keys
+            + query.hard_forbidden_memory_keys
+        )
+    }
+    first = [item for item in bound.memories if item.surface_key in labelled]
+    first.extend(
+        item
+        for item in bound.memories
+        if item.surface_key not in labelled and len(first) < memory_batch_size
+    )
+    first_keys = {item.surface_key for item in first}
+    remaining = [item for item in bound.memories if item.surface_key not in first_keys]
+    batches = [
+        OwnerAuthoringBatch(
+            owner_key=bound.owner_key,
+            scope=bound.scope,
+            partition=bound.partition,
+            batch_id=f"{bound.owner_key}:01",
+            entities=bound.entities,
+            memories=first,
+            queries=bound.queries,
+        )
+    ]
+    for offset in range(0, len(remaining), memory_batch_size):
+        batch_number = len(batches) + 1
+        batches.append(
+            OwnerAuthoringBatch(
+                owner_key=bound.owner_key,
+                scope=bound.scope,
+                partition=bound.partition,
+                batch_id=f"{bound.owner_key}:{batch_number:02d}",
+                memories=remaining[offset : offset + memory_batch_size],
+            )
+        )
+    return batches
+
+
 def build_authoring_request(
-    manifest: OwnerAuthoringManifest,
+    manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
 ) -> StructuredGenerationRequest:
     """Build a surface-only request without exposing authority-bearing host fields."""
 
-    bound = OwnerAuthoringManifest.model_validate(manifest)
+    bound = manifest
     return StructuredGenerationRequest(
         instructions=AUTHORING_INSTRUCTIONS,
         input={
             "language": "zh-CN",
+            "authoring_nonce": _authoring_nonce(bound),
             "partition_style": _partition_style(bound.partition),
             "entities": [
                 {
@@ -439,7 +530,8 @@ def build_authoring_request(
 
 
 async def author_owner_surfaces(
-    manifest: OwnerAuthoringManifest, model: StructuredOutputModel
+    manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
+    model: StructuredOutputModel,
 ) -> ProjectedOwnerSurfaces:
     """Generate, strictly validate, and project one owner's surface-only draft."""
 
@@ -451,12 +543,12 @@ async def author_owner_surfaces(
 
 
 def project_owner_surfaces(
-    manifest: OwnerAuthoringManifest,
+    manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
     draft: OwnerSurfaceDraft | Mapping[str, Any],
 ) -> ProjectedOwnerSurfaces:
     """Reject partial/extra drafts and bind surface text to private host identifiers."""
 
-    bound = OwnerAuthoringManifest.model_validate(manifest)
+    bound = manifest
     authored = OwnerSurfaceDraft.model_validate(draft)
     entities = _surface_map(authored.entities, "authored entity")
     memories = _surface_map(authored.memories, "authored memory")
@@ -501,6 +593,14 @@ def _partition_style(partition: str) -> str:
         "sealed": "natural wording with indirect but unambiguous references",
         "adversarial": "elliptical wording with dense same-domain distractors",
     }[partition]
+
+
+def _authoring_nonce(manifest: OwnerAuthoringManifest | OwnerAuthoringBatch) -> str:
+    batch_id = (
+        manifest.batch_id if isinstance(manifest, OwnerAuthoringBatch) else "full"
+    )
+    payload = f"doppel-blind-surface-v1:{manifest.owner_key}:{batch_id}".encode()
+    return hashlib.sha256(payload).hexdigest()[:24]
 
 
 def _unique_values(values: list[Any], field: str, label: str) -> set[str]:

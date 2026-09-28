@@ -17,6 +17,11 @@
   an external model may author only bounded surface text without seeing V7/V8 outputs.
   Freeze the 24-owner/240-query minimum, relation-family diversity, resumable budgeted
   acquisition boundary, pre-result invariants, and V7/V8 downstream comparison gates.
+- Add a dry-run-by-default blind surface-authoring runner. It deterministically splits
+  each owner into two 96-memory batches, caps each invocation's new provider calls,
+  resumes through content-addressed raw-output cache entries, binds cache state to the
+  corpus fingerprint and implementation commit, and exposes no retrieval metric. Only
+  a complete zero-call replay may emit the local `authored_unreviewed` surface artifact.
 - Add the named, versioned, module-only `evidence_rich_v1` opt-in helper. It composes
   whole-path semantic reranking, membership-preserving path-family completion, one
   atomic path-evidence reserve, and authoritative Store-backed hybrid assembly using

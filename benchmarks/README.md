@@ -606,6 +606,19 @@ two-hop relation families. It is intentionally not the final corpus: the generat
 artifact must not move into `benchmarks/datasets/` until every surface is authored,
 independently reviewed, projected, revalidated, fingerprinted, and committed.
 
+Surface authoring is dry-run by default:
+
+```bash
+python -m benchmarks.evidence_rich_blind_acquire
+```
+
+The plan contains 48 batches: two bounded 96-memory requests for each of 24 owners.
+Live acquisition additionally requires `--live-authoring`, an explicit
+`--max-new-calls` budget, and `DOPPEL_API_KEY` whenever a cache miss could reach the
+provider. It is resumable and commit/manifest-bound. Partial runs report only progress
+and usage; they do not emit surfaces or retrieval metrics. Even a complete pass is
+labelled `authored_unreviewed` until a separate independent review stage succeeds.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

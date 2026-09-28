@@ -80,11 +80,11 @@ def test_manifest_ids_do_not_reuse_opened_v4_ids_or_scopes() -> None:
 
 
 def test_every_owner_request_hides_private_identifiers_and_gold() -> None:
+    nonces: set[str] = set()
     for owner in build_manifest().owners:
-        serialized = json.dumps(
-            build_authoring_request(owner).model_dump(mode="json"),
-            ensure_ascii=False,
-        )
+        request = build_authoring_request(owner)
+        serialized = json.dumps(request.model_dump(mode="json"), ensure_ascii=False)
+        nonces.add(str(request.input["authoring_nonce"]))
         assert owner.scope not in serialized
         assert owner.owner_key not in serialized
         assert all(entity.entity_id not in serialized for entity in owner.entities)
@@ -92,6 +92,7 @@ def test_every_owner_request_hides_private_identifiers_and_gold() -> None:
         assert all(query.case_id not in serialized for query in owner.queries)
         assert '"answerable"' not in serialized
         assert '"hard_forbidden_memory_keys"' not in serialized
+    assert len(nonces) == 24
 
 
 def test_top_level_validation_rejects_unknown_route_and_ineffective_gold() -> None:
