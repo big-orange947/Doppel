@@ -619,6 +619,20 @@ provider. It is resumable and commit/manifest-bound. Partial runs report only pr
 and usage; they do not emit surfaces or retrieval metrics. Even a complete pass is
 labelled `authored_unreviewed` until a separate independent review stage succeeds.
 
+Independent semantic review is also dry-run by default:
+
+```bash
+python -m benchmarks.evidence_rich_blind_review
+```
+
+Live review requires the exact `authored_unreviewed` artifact, `--live-review`, an
+explicit new-call budget, and an API key for cache misses. The review cache is bound to
+the authored artifact SHA-256, corpus fingerprint, implementation commit, and provider
+configuration. Every anonymous surface key must be explicitly covered. Reviewers may
+report semantic, relation, temporal, answer-leak, consistency, duplication, language,
+or shape issues, but cannot rewrite text. A rejected first review is preserved and
+returns a failing exit code; it does not silently regenerate until the gate passes.
+
 ### Multi-instance reliability gate
 
 Retrieval quality does not prove that shared backends remain correct when several

@@ -22,6 +22,11 @@
   resumes through content-addressed raw-output cache entries, binds cache state to the
   corpus fingerprint and implementation commit, and exposes no retrieval metric. Only
   a complete zero-call replay may emit the local `authored_unreviewed` surface artifact.
+- Add the separate dry-run-by-default blind semantic-review runner. It binds its raw
+  cache to the authored artifact hash, requires explicit per-surface coverage, reports
+  bounded semantic/relation/time/answer-leak issues without rewriting text, and emits
+  the first accepted or rejected review only after a zero-call replay. Review never
+  opens retrieval outputs or exposes retrieval quality metrics.
 - Add the named, versioned, module-only `evidence_rich_v1` opt-in helper. It composes
   whole-path semantic reranking, membership-preserving path-family completion, one
   atomic path-evidence reserve, and authoritative Store-backed hybrid assembly using

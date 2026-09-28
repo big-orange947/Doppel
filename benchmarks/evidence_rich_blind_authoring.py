@@ -398,6 +398,49 @@ class OwnerSurfaceDraft(BaseModel):
     queries: list[AuthoredQuerySurface]
 
 
+class SurfaceReviewIssue(BaseModel):
+    """One reviewer finding; it cannot change the authored surface or host gold."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    surface_key: str
+    issue_code: Literal[
+        "semantic_drift",
+        "entity_inconsistent",
+        "relation_mismatch",
+        "temporal_mismatch",
+        "answer_leak",
+        "unnatural_language",
+        "duplicate_surface",
+        "malformed_surface",
+    ]
+    detail: str
+
+    @field_validator("detail", mode="before")
+    @classmethod
+    def _require_detail(cls, value: Any) -> str:
+        return _required_surface(value, "review issue detail")
+
+
+class OwnerSurfaceReview(BaseModel):
+    """Independent semantic review output with explicit coverage."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    reviewed_surface_keys: list[str]
+    issues: list[SurfaceReviewIssue] = Field(default_factory=list)
+
+    @field_validator("reviewed_surface_keys")
+    @classmethod
+    def _require_unique_review_keys(cls, value: list[str]) -> list[str]:
+        normalized = [str(item or "").strip() for item in value]
+        if any(not item for item in normalized):
+            raise ValueError("reviewed surface keys must not be empty")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("reviewed surface keys must be unique")
+        return normalized
+
+
 class ProjectedOwnerSurfaces(BaseModel):
     """Validated surface maps keyed by host-only stable identifiers."""
 
@@ -418,6 +461,20 @@ that same relation. For non-relation memories edge_fact must be empty. Questions
 match the supplied intent, temporal view, query style, and semantic brief. Do not add
 answers to questions. Do not emit IDs, scope, authority, lifecycle, validity intervals,
 evidence labels, answerability, relation types, or any field outside the output schema.
+"""
+
+REVIEW_INSTRUCTIONS = """\
+Independently review synthetic Chinese surface text against each supplied semantic
+brief. Review every surface_key exactly once. Do not rewrite any text and do not infer
+hidden labels. Entity names must fit their type and remain internally consistent.
+Memory content must express the semantic brief without adding contradictory facts; a
+relation edge_fact must express exactly the supplied relation and endpoints. Questions
+must match their intent, temporal view, style, and semantic brief without stating an
+answer. Report only concrete issues using the allowed issue codes. If a surface is
+acceptable or not, include its key in reviewed_surface_keys exactly once; report any
+problem separately in issues.
+Do not emit scope, identity, authority, lifecycle, evidence, answerability, rankings,
+retrieval judgments, rewritten surfaces, or fields outside the output schema.
 """
 
 
@@ -529,6 +586,113 @@ def build_authoring_request(
     )
 
 
+def build_review_request(
+    manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
+    draft: OwnerSurfaceDraft | Mapping[str, Any],
+) -> StructuredGenerationRequest:
+    """Build an authority-free request for an independent semantic review pass."""
+
+    bound = manifest
+    authored = OwnerSurfaceDraft.model_validate(draft)
+    # Validate coverage and relation shape before asking a reviewer to assess meaning.
+    project_owner_surfaces(bound, authored)
+    entities = {item.surface_key: item for item in authored.entities}
+    memories = {item.surface_key: item for item in authored.memories}
+    queries = {item.surface_key: item for item in authored.queries}
+    return StructuredGenerationRequest(
+        instructions=REVIEW_INSTRUCTIONS,
+        input={
+            "language": "zh-CN",
+            "review_nonce": _review_nonce(bound),
+            "entities": [
+                {
+                    "surface_key": item.surface_key,
+                    "entity_type": item.entity_type,
+                    "semantic_brief": item.semantic_brief,
+                    "shared_name_group": item.shared_name_group,
+                    "authored_name": entities[item.surface_key].name,
+                }
+                for item in bound.entities
+            ],
+            "memories": [
+                {
+                    "surface_key": item.surface_key,
+                    "kind": item.kind,
+                    "semantic_brief": item.semantic_brief,
+                    "relation": (
+                        {
+                            "type": item.relation_type,
+                            "source_entity_key": item.source_entity_key,
+                            "target_entity_key": item.target_entity_key,
+                        }
+                        if item.relation_type
+                        else None
+                    ),
+                    "authored_content": memories[item.surface_key].content,
+                    "authored_edge_fact": memories[item.surface_key].edge_fact,
+                }
+                for item in bound.memories
+            ],
+            "queries": [
+                {
+                    "surface_key": item.surface_key,
+                    "category": item.category,
+                    "query_style": item.query_style,
+                    "intent": item.intent,
+                    "temporal_view": item.temporal_view,
+                    "semantic_brief": item.semantic_brief,
+                    "required_route_shape": [
+                        [f"hop-{index + 1}" for index, _ in enumerate(route)]
+                        for route in item.required_relation_routes
+                    ],
+                    "authored_query": queries[item.surface_key].query,
+                }
+                for item in bound.queries
+            ],
+        },
+        output_schema=OwnerSurfaceReview.model_json_schema(),
+    )
+
+
+def validate_surface_review(
+    manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
+    review: OwnerSurfaceReview | Mapping[str, Any],
+) -> OwnerSurfaceReview:
+    """Require complete review coverage and issue references inside the batch."""
+
+    bound = manifest
+    checked = OwnerSurfaceReview.model_validate(review)
+    expected = {
+        item.surface_key for item in [*bound.entities, *bound.memories, *bound.queries]
+    }
+    if set(checked.reviewed_surface_keys) != expected:
+        missing = sorted(expected - set(checked.reviewed_surface_keys))
+        extra = sorted(set(checked.reviewed_surface_keys) - expected)
+        raise ValueError(
+            f"reviewed surface keys mismatch: missing={missing}, extra={extra}"
+        )
+    issue_keys = [item.surface_key for item in checked.issues]
+    if not set(issue_keys).issubset(expected):
+        raise ValueError("review issue references an unknown surface key")
+    issue_identities = [(item.surface_key, item.issue_code) for item in checked.issues]
+    if len(issue_identities) != len(set(issue_identities)):
+        raise ValueError("review issue code must be unique per surface key")
+    return checked
+
+
+async def review_owner_surfaces(
+    manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
+    draft: OwnerSurfaceDraft | Mapping[str, Any],
+    model: StructuredOutputModel,
+) -> OwnerSurfaceReview:
+    """Run the independent structured reviewer and enforce complete coverage."""
+
+    raw = await model.generate(build_review_request(manifest, draft))
+    if isinstance(raw, BaseModel):
+        raw = raw.model_dump(mode="json", warnings=False)
+    return validate_surface_review(manifest, raw)
+
+
 async def author_owner_surfaces(
     manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
     model: StructuredOutputModel,
@@ -600,6 +764,14 @@ def _authoring_nonce(manifest: OwnerAuthoringManifest | OwnerAuthoringBatch) -> 
         manifest.batch_id if isinstance(manifest, OwnerAuthoringBatch) else "full"
     )
     payload = f"doppel-blind-surface-v1:{manifest.owner_key}:{batch_id}".encode()
+    return hashlib.sha256(payload).hexdigest()[:24]
+
+
+def _review_nonce(manifest: OwnerAuthoringManifest | OwnerAuthoringBatch) -> str:
+    batch_id = (
+        manifest.batch_id if isinstance(manifest, OwnerAuthoringBatch) else "full"
+    )
+    payload = f"doppel-blind-review-v1:{manifest.owner_key}:{batch_id}".encode()
     return hashlib.sha256(payload).hexdigest()[:24]
 
 
