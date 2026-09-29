@@ -23,7 +23,7 @@ from doppel_memory.intelligence import StructuredGenerationRequest
 def _write_authored(path: Path) -> dict[str, Any]:
     manifest = build_manifest()
     payload = {
-        "runner": "doppel.evidence-rich-blind-authoring.v2",
+        "runner": "doppel.evidence-rich-blind-authoring.v3",
         "status": "authored_unreviewed",
         "manifest_fingerprint": manifest.fingerprint,
         "review_complete": False,

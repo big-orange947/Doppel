@@ -599,7 +599,7 @@ relation type, time, lifecycle, authority, answerability, or evidence labels.
 
 `python -m benchmarks.build_evidence_rich_blind_manifest` deterministically rebuilds
 the host manifest under ignored `data/doppel/`. Its frozen fingerprint is
-`eb76c6d920d489fa0cd3dff7524b00ada82ec05ac8d511db9aae6f99177e9785`.
+`7c4df04d6bc1ee3db5ac2f7f920c08225697a075b0e68595e444c5492b5ce4d4`.
 The manifest contains 24 owner-disjoint scopes, 240 category-balanced query slots,
 4,608 memory slots (170 dense distractors per owner), 17 relation types, and eight
 two-hop relation families. It is intentionally not the final corpus: the generated
@@ -613,6 +613,8 @@ python -m benchmarks.evidence_rich_blind_acquire
 ```
 
 The plan contains 48 batches: two bounded 96-memory requests for each of 24 owners.
+Each batch has at most three sealed variation attempts, so 48 calls is nominal and 144
+is the hard worst-case ceiling; every retry consumes the explicit call budget.
 Live acquisition additionally requires `--live-authoring`, an explicit
 `--max-new-calls` budget, and `DOPPEL_API_KEY` whenever a cache miss could reach the
 provider. It is resumable and commit/manifest-bound. Partial runs report only progress
@@ -627,6 +629,17 @@ opened. Authoring contract V2 fixes the contract before restarting: the repeated
 is a host-required surface and every other name must be distinct. V2 deliberately uses
 a new runner, nonce namespace, cache, progress file, and manifest fingerprint; V1 raw
 outputs remain preserved and are never migrated into V2 cache entries.
+
+V2 is likewise preserved as an incomplete observation in
+[`reports/evidence-rich-blind-v1-authoring-v2-incomplete-2026-09-28.md`](reports/evidence-rich-blind-v1-authoring-v2-incomplete-2026-09-28.md).
+Its first 10 valid batches fixed the required shared alias and owner-local uniqueness,
+but an audit across five owners found repeated ordinary entity names, five repeated
+memory strings, and twelve repeated query strings. Retrieval remained unopened. V3
+therefore validates global surface uniqueness during acquisition rather than waiting
+for final compilation. Only host-declared shared-name groups may repeat. A collision
+causes a bounded, budgeted variation attempt that receives opaque local surface keys,
+never another owner's text or private gold. V3 has independent runner, nonce, cache,
+progress, and manifest identities; V1/V2 raw outputs remain preserved and unmigrated.
 
 Independent semantic review is also dry-run by default:
 

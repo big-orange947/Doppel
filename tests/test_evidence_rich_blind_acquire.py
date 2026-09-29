@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,10 @@ import pytest
 
 import benchmarks.evidence_rich_blind_acquire as acquire
 from benchmarks.build_evidence_rich_blind_manifest import build_manifest
-from benchmarks.evidence_rich_blind_authoring import split_owner_authoring_batches
+from benchmarks.evidence_rich_blind_authoring import (
+    ProjectedOwnerSurfaces,
+    split_owner_authoring_batches,
+)
 from doppel_memory.intelligence import StructuredGenerationRequest
 
 
@@ -25,24 +29,32 @@ class _FakeProvider:
         self.usage_observer = usage_observer
         self.closed = False
 
+    def _variant(self, request: StructuredGenerationRequest) -> str:
+        return hashlib.sha256(
+            str(request.input["authoring_nonce"]).encode()
+        ).hexdigest()[:8]
+
     async def generate(self, request: StructuredGenerationRequest) -> dict[str, Any]:
         if self.usage_observer is not None:
             self.usage_observer({"prompt_tokens": 100, "completion_tokens": 50})
+        variant = self._variant(request)
         return {
             "entities": [
                 {
                     "surface_key": item["surface_key"],
                     "name": item["required_display_name"]
-                    or f"名称-{item['surface_key']}",
+                    or f"名称-{variant}-{item['surface_key']}",
                 }
                 for item in request.input["entities"]
             ],
             "memories": [
                 {
                     "surface_key": item["surface_key"],
-                    "content": f"自然表述-{item['surface_key']}",
+                    "content": f"自然表述-{variant}-{item['surface_key']}",
                     "edge_fact": (
-                        f"关系表述-{item['surface_key']}" if item["relation"] else ""
+                        f"关系表述-{variant}-{item['surface_key']}"
+                        if item["relation"]
+                        else ""
                     ),
                 }
                 for item in request.input["memories"]
@@ -50,7 +62,7 @@ class _FakeProvider:
             "queries": [
                 {
                     "surface_key": item["surface_key"],
-                    "query": f"自然问题-{item['surface_key']}？",
+                    "query": f"自然问题-{variant}-{item['surface_key']}？",
                 }
                 for item in request.input["queries"]
             ],
@@ -58,6 +70,28 @@ class _FakeProvider:
 
     async def aclose(self) -> None:
         self.closed = True
+
+
+class _CollisionThenUniqueProvider(_FakeProvider):
+    def _variant(self, request: StructuredGenerationRequest) -> str:
+        if request.input["variation_attempt"] == 0:
+            return "shared-attempt-zero"
+        return super()._variant(request)
+
+
+class _InvalidThenUniqueProvider(_FakeProvider):
+    async def generate(self, request: StructuredGenerationRequest) -> dict[str, Any]:
+        result = await super().generate(request)
+        if request.input["variation_attempt"] == 0 and request.input["entities"]:
+            mutable_keys = [
+                item["surface_key"]
+                for item in request.input["entities"]
+                if not item["required_display_name"]
+            ][:2]
+            for entity in result["entities"]:
+                if entity["surface_key"] in mutable_keys:
+                    entity["name"] = "重复名称"
+        return result
 
 
 def _args(tmp_path: Path, *, max_new_calls: int, live: bool = True) -> Any:
@@ -76,6 +110,30 @@ def _args(tmp_path: Path, *, max_new_calls: int, live: bool = True) -> Any:
     if live:
         values.insert(0, "--live-authoring")
     return acquire.parser().parse_args(values)
+
+
+def _projected_for_batch(batch: Any, variant: str) -> ProjectedOwnerSurfaces:
+    return ProjectedOwnerSurfaces(
+        entity_names_by_id={
+            item.entity_id: item.required_display_name
+            or f"实体-{variant}-{item.surface_key}"
+            for item in batch.entities
+        },
+        memory_content_by_id={
+            item.memory_id: f"记忆-{variant}-{item.surface_key}"
+            for item in batch.memories
+        },
+        edge_fact_by_memory_id={
+            item.memory_id: (
+                f"关系-{variant}-{item.surface_key}" if item.relation_type else ""
+            )
+            for item in batch.memories
+        },
+        query_text_by_case_id={
+            item.case_id: f"问题-{variant}-{item.surface_key}？"
+            for item in batch.queries
+        },
+    )
 
 
 def test_frozen_manifest_splits_into_exactly_two_batches_per_owner() -> None:
@@ -99,6 +157,30 @@ def test_frozen_manifest_splits_into_exactly_two_batches_per_owner() -> None:
         } == {memory.memory_id for memory in owner.memories}
 
 
+def test_global_registry_allows_only_declared_shared_entity_name() -> None:
+    owners = build_manifest().owners[:2]
+    first_batch = split_owner_authoring_batches(owners[0])[0]
+    second_batch = split_owner_authoring_batches(owners[1])[0]
+    first = _projected_for_batch(first_batch, "一")
+    second = _projected_for_batch(second_batch, "二")
+    registry = acquire.SurfaceUniquenessRegistry()
+
+    registry.add(first_batch, first)
+    assert registry.collisions(second_batch, second) == ()
+
+    first_plain = next(item for item in first_batch.entities if not item.shared_name_group)
+    second_plain = next(item for item in second_batch.entities if not item.shared_name_group)
+    duplicated_names = dict(second.entity_names_by_id)
+    duplicated_names[second_plain.entity_id] = first.entity_names_by_id[
+        first_plain.entity_id
+    ]
+    duplicated = second.model_copy(
+        update={"entity_names_by_id": duplicated_names}
+    )
+
+    assert registry.collisions(second_batch, duplicated) == (second_plain.surface_key,)
+
+
 @pytest.mark.asyncio
 async def test_dry_run_is_zero_write_and_needs_no_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -110,7 +192,9 @@ async def test_dry_run_is_zero_write_and_needs_no_key(
     plan = json.loads(capsys.readouterr().out)
     assert plan["mode"] == "dry_run"
     assert plan["batch_count"] == 48
-    assert plan["maximum_total_uncached_calls"] == 48
+    assert plan["nominal_uncached_calls"] == 48
+    assert plan["maximum_total_uncached_calls"] == 144
+    assert plan["maximum_attempts_per_batch"] == 3
     assert plan["quality_metrics_available"] is False
     assert not tmp_path.joinpath("cache").exists()
 
@@ -145,6 +229,53 @@ async def test_partial_authoring_resumes_from_raw_cache_without_metrics(
     assert not (tmp_path / "surfaces.json").exists()
     serialized = json.dumps(second)
     assert "test-only-secret" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_cross_owner_collision_uses_budgeted_reproducible_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DOPPEL_API_KEY", "test-only-secret")
+    monkeypatch.setattr(
+        acquire, "OpenAICompatibleStructuredOutputModel", _CollisionThenUniqueProvider
+    )
+    monkeypatch.setattr(acquire, "_git_commit_hash", lambda: "fixed-commit")
+
+    assert await acquire.run(_args(tmp_path, max_new_calls=2)) == 0
+    first = json.loads((tmp_path / "progress.json").read_text("utf-8"))
+    assert first["completed_batch_count"] == 2
+    assert first["provider_calls_cumulative"] == 2
+
+    assert await acquire.run(_args(tmp_path, max_new_calls=2)) == 0
+    second = json.loads((tmp_path / "progress.json").read_text("utf-8"))
+    assert second["completed_batch_count"] == 3
+    assert second["provider_calls_cumulative"] == 4
+    assert second["last_invocation"]["cache_hits"] == 2
+    assert second["last_invocation"]["surface_collision_attempts"] == 1
+    assert second["accepted_attempts_by_batch"]["owner-blind-02:01"] == 2
+    assert second["last_invocation"]["stopped_reason"] == "budget_exhausted"
+
+
+@pytest.mark.asyncio
+async def test_invalid_surface_attempt_is_bounded_and_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DOPPEL_API_KEY", "test-only-secret")
+    monkeypatch.setattr(
+        acquire, "OpenAICompatibleStructuredOutputModel", _InvalidThenUniqueProvider
+    )
+    monkeypatch.setattr(acquire, "_git_commit_hash", lambda: "fixed-commit")
+
+    assert await acquire.run(_args(tmp_path, max_new_calls=2)) == 0
+    progress = json.loads((tmp_path / "progress.json").read_text("utf-8"))
+    assert progress["completed_batch_count"] == 1
+    assert progress["provider_calls_cumulative"] == 2
+    assert progress["accepted_attempts_by_batch"]["owner-blind-01:01"] == 2
+    assert (
+        progress["last_invocation"]["surface_validation_rejection_attempts"]
+        == 1
+    )
+    assert progress["last_invocation"]["stopped_reason"] == "budget_exhausted"
 
 
 @pytest.mark.asyncio

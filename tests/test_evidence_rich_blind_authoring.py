@@ -157,6 +157,27 @@ def test_provider_request_excludes_all_authority_and_gold_fields() -> None:
     assert '"type": "HELD_BY"' in serialized
 
 
+def test_retry_request_changes_nonce_without_exposing_prior_owner_text() -> None:
+    first = build_authoring_request(_manifest())
+    retry = build_authoring_request(
+        _manifest(), variation_attempt=1, must_change_surface_keys=("query-a",)
+    )
+
+    assert first.input["authoring_nonce"] != retry.input["authoring_nonce"]
+    assert retry.input["variation_attempt"] == 1
+    assert retry.input["must_change_surface_keys"] == ["query-a"]
+    serialized = json.dumps(retry.model_dump(mode="json"), ensure_ascii=False)
+    assert "private-scope-secret" not in serialized
+    assert "我那本摄影集现在在谁手上" not in serialized
+
+    with pytest.raises(ValueError, match="not present"):
+        build_authoring_request(
+            _manifest(),
+            variation_attempt=1,
+            must_change_surface_keys=("unknown-surface",),
+        )
+
+
 def test_projection_changes_only_surface_fields() -> None:
     result = project_owner_surfaces(_manifest(), _draft())
 

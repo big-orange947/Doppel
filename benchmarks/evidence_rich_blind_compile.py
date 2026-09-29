@@ -16,6 +16,7 @@ from benchmarks.evidence_rich_blind_acquire import (
 )
 from benchmarks.evidence_rich_blind_acquire import MEMORY_BATCH_SIZE
 from benchmarks.evidence_rich_blind_authoring import (
+    MAX_AUTHORING_ATTEMPTS,
     build_authoring_request,
     split_owner_authoring_batches,
 )
@@ -347,12 +348,39 @@ def _validate_authored(manifest: Any, authored: dict[str, Any]) -> None:
     for group, names in shared_names.items():
         if len(names) < 2 or len(set(names)) != 1:
             raise ValueError(f"shared entity name group is inconsistent: {group}")
+    entity_name_groups: dict[str, list[str]] = {}
+    edge_facts: list[str] = []
+    for owner in manifest.owners:
+        item = actual[owner.owner_key]
+        for entity in owner.entities:
+            entity_name_groups.setdefault(
+                item["entity_names_by_id"][entity.entity_id], []
+            ).append(entity.shared_name_group)
+        edge_facts.extend(
+            str(value)
+            for value in item["edge_fact_by_memory_id"].values()
+            if str(value).strip()
+        )
+    invalid_entity_reuse = [
+        name
+        for name, groups in entity_name_groups.items()
+        if len(groups) > 1 and not (groups[0] and len(set(groups)) == 1)
+    ]
+    if invalid_entity_reuse:
+        raise ValueError("authored entity name repeats outside a shared-name group")
+    if len(edge_facts) != len(set(edge_facts)):
+        raise ValueError("authored relation edge facts contain duplicate surface text")
     nonces = {
-        str(build_authoring_request(batch).input["authoring_nonce"])
+        str(
+            build_authoring_request(batch, variation_attempt=attempt).input[
+                "authoring_nonce"
+            ]
+        )
         for owner in manifest.owners
         for batch in split_owner_authoring_batches(
             owner, memory_batch_size=MEMORY_BATCH_SIZE
         )
+        for attempt in range(MAX_AUTHORING_ATTEMPTS)
     }
     surfaces = [
         str(value)

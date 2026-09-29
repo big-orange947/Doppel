@@ -16,7 +16,7 @@ from benchmarks.evidence_rich_blind_authoring import (
 
 ROOT = Path(__file__).resolve().parents[1]
 OPENED_V4 = ROOT / "benchmarks/datasets/heterogeneous-retrieval-zh-v4.json"
-FROZEN_FINGERPRINT = "eb76c6d920d489fa0cd3dff7524b00ada82ec05ac8d511db9aae6f99177e9785"
+FROZEN_FINGERPRINT = "7c4df04d6bc1ee3db5ac2f7f920c08225697a075b0e68595e444c5492b5ce4d4"
 
 
 def test_manifest_rebuild_has_frozen_counts_and_fingerprint() -> None:

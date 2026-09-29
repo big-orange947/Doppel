@@ -77,10 +77,10 @@ def build_manifest() -> BlindCorpusAuthoringManifest:
     }
     return BlindCorpusAuthoringManifest(
         suite="doppel-evidence-rich-blind-zh-v1-host-manifest",
-        version="1.1.0",
+        version="1.2.0",
         language="zh-CN",
         status="structure_frozen",
-        authoring_contract_version=2,
+        authoring_contract_version=3,
         implementation_baseline=IMPLEMENTATION_BASELINE,
         relation_types=RELATION_TYPES,
         owners=owners,

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Harden the unopened evidence-rich blind corpus authoring path with a V3 global
+  surface registry, capped and budgeted collision retries, a fresh sealed cache/nonce
+  namespace, and preserved V2 failure evidence before any retrieval metrics are opened.
+
 - Preserve the incomplete blind authoring V1 result after five provider calls exposed
   duplicate within-owner names and inconsistent cross-owner shared aliases. Retrieval
   was never opened. Bump the authoring contract and runner to V2: the shared alias now

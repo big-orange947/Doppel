@@ -26,7 +26,7 @@ def _sha256(path: Path) -> str:
 def _authored_payload() -> dict[str, Any]:
     manifest = build_manifest()
     return {
-        "runner": "doppel.evidence-rich-blind-authoring.v2",
+        "runner": "doppel.evidence-rich-blind-authoring.v3",
         "status": "authored_unreviewed",
         "manifest_fingerprint": manifest.fingerprint,
         "review_complete": False,
@@ -229,6 +229,42 @@ def test_compile_rejects_duplicate_surfaces_before_retrieval(tmp_path: Path) -> 
     with pytest.raises(ValueError, match="duplicate memory surface"):
         compiler.run(_args(tmp_path))
     assert not (tmp_path / "corpus.json").exists()
+
+
+def test_compile_rejects_undeclared_entity_name_reuse(tmp_path: Path) -> None:
+    authored, _ = _write_inputs(tmp_path)
+    manifest = build_manifest()
+    first_owner, second_owner = manifest.owners[:2]
+    first_entity = next(item for item in first_owner.entities if not item.shared_name_group)
+    second_entity = next(
+        item for item in second_owner.entities if not item.shared_name_group
+    )
+    first_name = authored["owners"][0]["entity_names_by_id"][first_entity.entity_id]
+    authored["owners"][1]["entity_names_by_id"][second_entity.entity_id] = first_name
+
+    with pytest.raises(ValueError, match="outside a shared-name group"):
+        compiler._validate_authored(manifest, authored)
+
+
+def test_compile_rejects_duplicate_relation_edge_facts(tmp_path: Path) -> None:
+    authored, _ = _write_inputs(tmp_path)
+    manifest = build_manifest()
+    relation_memories = [
+        memory
+        for owner in manifest.owners[:2]
+        for memory in owner.memories
+        if memory.relation_type
+    ]
+    first_memory, second_memory = relation_memories[0], relation_memories[-1]
+    first_fact = authored["owners"][0]["edge_fact_by_memory_id"][
+        first_memory.memory_id
+    ]
+    authored["owners"][1]["edge_fact_by_memory_id"][second_memory.memory_id] = (
+        first_fact
+    )
+
+    with pytest.raises(ValueError, match="edge facts contain duplicate"):
+        compiler._validate_authored(manifest, authored)
 
 
 def test_compile_rejects_shared_name_that_violates_host_requirement(

@@ -15,6 +15,8 @@ from typing import Any
 
 from benchmarks.build_evidence_rich_blind_manifest import build_manifest
 from benchmarks.evidence_rich_blind_authoring import (
+    MAX_AUTHORING_ATTEMPTS,
+    OwnerAuthoringBatch,
     ProjectedOwnerSurfaces,
     author_owner_surfaces,
     split_owner_authoring_batches,
@@ -31,15 +33,75 @@ from doppel_memory.openai_compatible import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CACHE = ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v2-cache"
+DEFAULT_CACHE = ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v3-cache"
 DEFAULT_PROGRESS = (
-    ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v2-progress.json"
+    ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v3-progress.json"
 )
 DEFAULT_OUTPUT = ROOT / "data/doppel/evidence-rich-blind-v1-authored-surfaces.json"
 MANIFEST_NAME = "acquisition-manifest.json"
 STATE_NAME = "acquisition-state.json"
-RUNNER = "doppel.evidence-rich-blind-authoring.v2"
+RUNNER = "doppel.evidence-rich-blind-authoring.v3"
 MEMORY_BATCH_SIZE = 96
+
+
+class SurfaceUniquenessRegistry:
+    """Track exact authored surfaces while allowing declared shared-name groups."""
+
+    def __init__(self) -> None:
+        self._entity_names: dict[str, str] = {}
+        self._memory_contents: set[str] = set()
+        self._edge_facts: set[str] = set()
+        self._queries: set[str] = set()
+
+    def collisions(
+        self, batch: OwnerAuthoringBatch, surfaces: ProjectedOwnerSurfaces
+    ) -> tuple[str, ...]:
+        collisions: set[str] = set()
+        local_entities = dict(self._entity_names)
+        local_memories = set(self._memory_contents)
+        local_edges = set(self._edge_facts)
+        local_queries = set(self._queries)
+        for entity in batch.entities:
+            text = surfaces.entity_names_by_id[entity.entity_id]
+            prior_group = local_entities.get(text)
+            group = entity.shared_name_group
+            if prior_group is not None and not (group and prior_group == group):
+                collisions.add(entity.surface_key)
+            else:
+                local_entities[text] = group
+        for memory in batch.memories:
+            content = surfaces.memory_content_by_id[memory.memory_id]
+            if content in local_memories:
+                collisions.add(memory.surface_key)
+            local_memories.add(content)
+            edge_fact = surfaces.edge_fact_by_memory_id[memory.memory_id]
+            if edge_fact:
+                if edge_fact in local_edges:
+                    collisions.add(memory.surface_key)
+                local_edges.add(edge_fact)
+        for query in batch.queries:
+            text = surfaces.query_text_by_case_id[query.case_id]
+            if text in local_queries:
+                collisions.add(query.surface_key)
+            local_queries.add(text)
+        return tuple(sorted(collisions))
+
+    def add(
+        self, batch: OwnerAuthoringBatch, surfaces: ProjectedOwnerSurfaces
+    ) -> None:
+        collisions = self.collisions(batch, surfaces)
+        if collisions:
+            raise ValueError(f"cannot register duplicate surfaces: {list(collisions)}")
+        for entity in batch.entities:
+            text = surfaces.entity_names_by_id[entity.entity_id]
+            self._entity_names.setdefault(text, entity.shared_name_group)
+        for memory in batch.memories:
+            self._memory_contents.add(surfaces.memory_content_by_id[memory.memory_id])
+            edge_fact = surfaces.edge_fact_by_memory_id[memory.memory_id]
+            if edge_fact:
+                self._edge_facts.add(edge_fact)
+        for query in batch.queries:
+            self._queries.add(surfaces.query_text_by_case_id[query.case_id])
 
 
 def parser() -> argparse.ArgumentParser:
@@ -94,7 +156,9 @@ async def run(args: argparse.Namespace) -> int:
         "owner_count": len(manifest.owners),
         "batch_count": len(batches),
         "memory_batch_size": MEMORY_BATCH_SIZE,
-        "maximum_total_uncached_calls": len(batches),
+        "nominal_uncached_calls": len(batches),
+        "maximum_total_uncached_calls": len(batches) * MAX_AUTHORING_ATTEMPTS,
+        "maximum_attempts_per_batch": MAX_AUTHORING_ATTEMPTS,
         "maximum_new_calls_this_invocation": args.max_new_calls,
         "model": config.model,
         "base_url": config.base_url,
@@ -137,20 +201,63 @@ async def run(args: argparse.Namespace) -> int:
     _bind_manifest(manifest_path, binding)
     prior_state = _load_state(state_path)
     completed: list[str] = []
+    accepted_attempts: dict[str, int] = {}
+    projected_by_owner: defaultdict[str, list[ProjectedOwnerSurfaces]] = defaultdict(
+        list
+    )
+    registry = SurfaceUniquenessRegistry()
+    collision_attempts = 0
+    validation_rejection_attempts = 0
     stopped_reason = ""
     stopped_at = ""
     try:
         for batch in batches:
-            try:
-                await author_owner_surfaces(batch, cached)
-            except PlannerCallBudgetExceeded:
-                stopped_reason = "budget_exhausted"
+            must_change: tuple[str, ...] = ()
+            accepted: ProjectedOwnerSurfaces | None = None
+            for attempt in range(MAX_AUTHORING_ATTEMPTS):
+                try:
+                    candidate = await author_owner_surfaces(
+                        batch,
+                        cached,
+                        variation_attempt=attempt,
+                        must_change_surface_keys=must_change,
+                    )
+                except PlannerCallBudgetExceeded:
+                    stopped_reason = "budget_exhausted"
+                    stopped_at = batch.batch_id
+                    break
+                except ValueError:
+                    validation_rejection_attempts += 1
+                    must_change = tuple(
+                        sorted(
+                            item.surface_key
+                            for item in [
+                                *batch.entities,
+                                *batch.memories,
+                                *batch.queries,
+                            ]
+                        )
+                    )
+                    continue
+                except Exception as exc:  # noqa: BLE001 - provider details stay private
+                    stopped_reason = type(exc).__name__
+                    stopped_at = batch.batch_id
+                    break
+                must_change = registry.collisions(batch, candidate)
+                if must_change:
+                    collision_attempts += 1
+                    continue
+                registry.add(batch, candidate)
+                accepted = candidate
+                accepted_attempts[batch.batch_id] = attempt + 1
+                break
+            if stopped_reason:
+                break
+            if accepted is None:
+                stopped_reason = "SurfaceGenerationExhausted"
                 stopped_at = batch.batch_id
                 break
-            except Exception as exc:  # noqa: BLE001 - provider details stay private
-                stopped_reason = type(exc).__name__
-                stopped_at = batch.batch_id
-                break
+            projected_by_owner[batch.owner_key].append(accepted)
             completed.append(batch.batch_id)
     finally:
         await provider.aclose()
@@ -172,9 +279,12 @@ async def run(args: argparse.Namespace) -> int:
             "cache_hits": cached.hits,
             "cache_misses": cached.misses,
             "invalid_cache_entries": cached.invalid_entries_ignored,
+            "surface_collision_attempts": collision_attempts,
+            "surface_validation_rejection_attempts": validation_rejection_attempts,
             "stopped_reason": stopped_reason,
             "stopped_at_batch_id": stopped_at,
         },
+        "accepted_attempts_by_batch": accepted_attempts,
     }
     _write_json(state_path, state)
     progress = {
@@ -186,6 +296,7 @@ async def run(args: argparse.Namespace) -> int:
         "batch_count": len(batches),
         "provider_calls_cumulative": cumulative_calls,
         "usage_cumulative": cumulative_usage,
+        "accepted_attempts_by_batch": accepted_attempts,
         "last_invocation": state["last_invocation"],
         "surfaces_available": complete,
         "quality_metrics_available": False,
@@ -195,17 +306,6 @@ async def run(args: argparse.Namespace) -> int:
         print(json.dumps(progress, ensure_ascii=False, indent=2))
         return 0
 
-    # Re-project every raw cache entry with zero provider allowance. This proves the
-    # output is complete under current host validation before surfaces are exposed.
-    replay_budget = StructuredOutputCallBudget(provider, max_calls=0)
-    replay_cache = CachedStructuredOutputModel(replay_budget, args.cache_dir)
-    projected_by_owner: defaultdict[str, list[ProjectedOwnerSurfaces]] = defaultdict(
-        list
-    )
-    for batch in batches:
-        projected_by_owner[batch.owner_key].append(
-            await author_owner_surfaces(batch, replay_cache)
-        )
     owners = [
         _merge_owner_surfaces(owner.owner_key, projected_by_owner[owner.owner_key])
         for owner in manifest.owners
