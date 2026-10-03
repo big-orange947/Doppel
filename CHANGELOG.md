@@ -5,6 +5,10 @@
 - Harden the unopened evidence-rich blind corpus authoring path with a V3 global
   surface registry, capped and budgeted collision retries, a fresh sealed cache/nonce
   namespace, and preserved V2 failure evidence before any retrieval metrics are opened.
+- Preserve the V3 collision-exhaustion evidence and correct the unopened V4 authoring
+  contract: cross-owner entity/query equality is realistic isolation pressure, while
+  memory and relation evidence remain globally unique. Compile reports now expose the
+  effective unique-query/entity surface counts instead of hiding repeated templates.
 
 - Preserve the incomplete blind authoring V1 result after five provider calls exposed
   duplicate within-owner names and inconsistent cross-owner shared aliases. Retrieval

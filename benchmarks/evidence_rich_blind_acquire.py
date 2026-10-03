@@ -33,42 +33,30 @@ from doppel_memory.openai_compatible import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CACHE = ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v3-cache"
+DEFAULT_CACHE = ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v4-cache"
 DEFAULT_PROGRESS = (
-    ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v3-progress.json"
+    ROOT / "data/doppel/evidence-rich-blind-v1-authoring-v4-progress.json"
 )
 DEFAULT_OUTPUT = ROOT / "data/doppel/evidence-rich-blind-v1-authored-surfaces.json"
 MANIFEST_NAME = "acquisition-manifest.json"
 STATE_NAME = "acquisition-state.json"
-RUNNER = "doppel.evidence-rich-blind-authoring.v3"
+RUNNER = "doppel.evidence-rich-blind-authoring.v4"
 MEMORY_BATCH_SIZE = 96
 
 
 class SurfaceUniquenessRegistry:
-    """Track exact authored surfaces while allowing declared shared-name groups."""
+    """Reject repeated evidence text without outlawing realistic scope collisions."""
 
     def __init__(self) -> None:
-        self._entity_names: dict[str, str] = {}
         self._memory_contents: set[str] = set()
         self._edge_facts: set[str] = set()
-        self._queries: set[str] = set()
 
     def collisions(
         self, batch: OwnerAuthoringBatch, surfaces: ProjectedOwnerSurfaces
     ) -> tuple[str, ...]:
         collisions: set[str] = set()
-        local_entities = dict(self._entity_names)
         local_memories = set(self._memory_contents)
         local_edges = set(self._edge_facts)
-        local_queries = set(self._queries)
-        for entity in batch.entities:
-            text = surfaces.entity_names_by_id[entity.entity_id]
-            prior_group = local_entities.get(text)
-            group = entity.shared_name_group
-            if prior_group is not None and not (group and prior_group == group):
-                collisions.add(entity.surface_key)
-            else:
-                local_entities[text] = group
         for memory in batch.memories:
             content = surfaces.memory_content_by_id[memory.memory_id]
             if content in local_memories:
@@ -79,11 +67,6 @@ class SurfaceUniquenessRegistry:
                 if edge_fact in local_edges:
                     collisions.add(memory.surface_key)
                 local_edges.add(edge_fact)
-        for query in batch.queries:
-            text = surfaces.query_text_by_case_id[query.case_id]
-            if text in local_queries:
-                collisions.add(query.surface_key)
-            local_queries.add(text)
         return tuple(sorted(collisions))
 
     def add(
@@ -92,16 +75,11 @@ class SurfaceUniquenessRegistry:
         collisions = self.collisions(batch, surfaces)
         if collisions:
             raise ValueError(f"cannot register duplicate surfaces: {list(collisions)}")
-        for entity in batch.entities:
-            text = surfaces.entity_names_by_id[entity.entity_id]
-            self._entity_names.setdefault(text, entity.shared_name_group)
         for memory in batch.memories:
             self._memory_contents.add(surfaces.memory_content_by_id[memory.memory_id])
             edge_fact = surfaces.edge_fact_by_memory_id[memory.memory_id]
             if edge_fact:
                 self._edge_facts.add(edge_fact)
-        for query in batch.queries:
-            self._queries.add(surfaces.query_text_by_case_id[query.case_id])
 
 
 def parser() -> argparse.ArgumentParser:

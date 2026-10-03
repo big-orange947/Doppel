@@ -225,7 +225,7 @@ class BlindCorpusAuthoringManifest(BaseModel):
     version: str
     language: Literal["zh-CN"]
     status: Literal["structure_frozen"]
-    authoring_contract_version: Literal[3]
+    authoring_contract_version: Literal[4]
     implementation_baseline: str
     relation_types: list[str]
     owners: list[OwnerAuthoringManifest]
@@ -462,11 +462,12 @@ Use authoring_nonce only as a variation seed so different synthetic owners do no
 verbatim wording; never quote, decode, or mention the nonce in any authored surface.
 When required_display_name is non-empty, return that exact entity name. All other
 entity names must be distinct within this owner request, including from required names.
-Except for an explicitly required shared display name, entity names, memory content,
-relation edge facts, and questions must not repeat exact wording used for another
-synthetic owner. When must_change_surface_keys is non-empty, an earlier sealed attempt
-collided with already accepted wording at those opaque keys. Use the new variation seed
-to rewrite those surfaces naturally; do not mention the retry, key, or seed in output.
+Memory content and relation edge facts must not repeat exact wording used for another
+synthetic owner. Entity names and questions may naturally repeat across owners because
+scope isolation is part of the benchmark, but they must remain distinct within this
+owner request. When must_change_surface_keys is non-empty, an earlier sealed attempt
+was invalid or collided at those opaque keys. Use the new variation seed to rewrite the
+requested surfaces naturally; do not mention the retry, key, or seed in output.
 Return every supplied surface_key exactly once and invent no keys. For relation memories,
 content must state the supplied relation and edge_fact must be a concise expression of
 that same relation. For non-relation memories edge_fact must be empty. Questions must
@@ -810,7 +811,7 @@ def _authoring_nonce(
         manifest.batch_id if isinstance(manifest, OwnerAuthoringBatch) else "full"
     )
     payload = (
-        f"doppel-blind-surface-v3:{manifest.owner_key}:{batch_id}:"
+        f"doppel-blind-surface-v4:{manifest.owner_key}:{batch_id}:"
         f"attempt-{variation_attempt}"
     ).encode()
     return hashlib.sha256(payload).hexdigest()[:24]

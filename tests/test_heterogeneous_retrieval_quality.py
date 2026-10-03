@@ -293,12 +293,21 @@ def test_validator_rejects_cross_scope_evidence_label() -> None:
         HeterogeneousRetrievalDataset.model_validate(payload)
 
 
-def test_validator_rejects_duplicate_query_text() -> None:
+def test_validator_rejects_duplicate_query_text_within_scope() -> None:
     payload = _mutable_dataset()
     payload["queries"][1]["query"] = payload["queries"][0]["query"]
 
-    with pytest.raises(ValidationError, match="duplicate full query text"):
+    with pytest.raises(ValidationError, match="duplicate query text within scope"):
         HeterogeneousRetrievalDataset.model_validate(payload)
+
+
+def test_validator_allows_same_query_text_across_scopes() -> None:
+    payload = _mutable_dataset()
+    first = payload["queries"][0]
+    other = next(item for item in payload["queries"] if item["scope"] != first["scope"])
+    other["query"] = first["query"]
+
+    HeterogeneousRetrievalDataset.model_validate(payload)
 
 
 def test_validator_rejects_reversed_edge_validity() -> None:

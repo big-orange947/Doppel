@@ -26,7 +26,7 @@ def _sha256(path: Path) -> str:
 def _authored_payload() -> dict[str, Any]:
     manifest = build_manifest()
     return {
-        "runner": "doppel.evidence-rich-blind-authoring.v3",
+        "runner": "doppel.evidence-rich-blind-authoring.v4",
         "status": "authored_unreviewed",
         "manifest_fingerprint": manifest.fingerprint,
         "review_complete": False,
@@ -172,6 +172,14 @@ def test_compile_cli_writes_unopened_corpus_and_hash_bound_report(
     assert report["status"] == "compiled_unopened"
     assert report["corpus_sha256"] == _sha256(tmp_path / "corpus.json")
     assert report["corpus_fingerprint"] == corpus.fingerprint
+    assert report["query_count"] == 240
+    assert report["unique_query_text_count"] == 240
+    assert report["repeated_query_text_group_count"] == 0
+    assert report["maximum_query_text_repetition"] == 1
+    assert report["entity_count"] == 384
+    assert report["unique_entity_name_count"] == 361
+    assert report["repeated_entity_name_group_count"] == 1
+    assert report["maximum_entity_name_repetition"] == 24
     assert report["review_accepted"] is True
     assert report["retrieval_opened"] is False
     assert report["quality_metrics_available"] is False
@@ -231,7 +239,9 @@ def test_compile_rejects_duplicate_surfaces_before_retrieval(tmp_path: Path) -> 
     assert not (tmp_path / "corpus.json").exists()
 
 
-def test_compile_rejects_undeclared_entity_name_reuse(tmp_path: Path) -> None:
+def test_compile_allows_cross_owner_entity_and_query_surface_collisions(
+    tmp_path: Path,
+) -> None:
     authored, _ = _write_inputs(tmp_path)
     manifest = build_manifest()
     first_owner, second_owner = manifest.owners[:2]
@@ -241,8 +251,35 @@ def test_compile_rejects_undeclared_entity_name_reuse(tmp_path: Path) -> None:
     )
     first_name = authored["owners"][0]["entity_names_by_id"][first_entity.entity_id]
     authored["owners"][1]["entity_names_by_id"][second_entity.entity_id] = first_name
+    first_query = first_owner.queries[0]
+    second_query = second_owner.queries[0]
+    first_text = authored["owners"][0]["query_text_by_case_id"][first_query.case_id]
+    authored["owners"][1]["query_text_by_case_id"][second_query.case_id] = first_text
 
-    with pytest.raises(ValueError, match="outside a shared-name group"):
+    compiler._validate_authored(manifest, authored)
+    dataset = compiler.compile_corpus(manifest, authored)
+    compiler._validate_novel_surfaces(dataset)
+
+
+def test_compile_rejects_owner_local_entity_and_query_duplicates(
+    tmp_path: Path,
+) -> None:
+    authored, _ = _write_inputs(tmp_path)
+    manifest = build_manifest()
+    owner = manifest.owners[0]
+    first_entity, second_entity = owner.entities[:2]
+    names = authored["owners"][0]["entity_names_by_id"]
+    names[second_entity.entity_id] = names[first_entity.entity_id]
+
+    with pytest.raises(ValueError, match="entity names must be unique within one owner"):
+        compiler._validate_authored(manifest, authored)
+
+    authored, _ = _write_inputs(tmp_path)
+    first_query, second_query = owner.queries[:2]
+    queries = authored["owners"][0]["query_text_by_case_id"]
+    queries[second_query.case_id] = queries[first_query.case_id]
+
+    with pytest.raises(ValueError, match="query text must be unique within one owner"):
         compiler._validate_authored(manifest, authored)
 
 

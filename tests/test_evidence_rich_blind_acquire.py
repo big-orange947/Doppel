@@ -157,7 +157,7 @@ def test_frozen_manifest_splits_into_exactly_two_batches_per_owner() -> None:
         } == {memory.memory_id for memory in owner.memories}
 
 
-def test_global_registry_allows_only_declared_shared_entity_name() -> None:
+def test_global_registry_allows_scope_collisions_but_rejects_repeated_evidence() -> None:
     owners = build_manifest().owners[:2]
     first_batch = split_owner_authoring_batches(owners[0])[0]
     second_batch = split_owner_authoring_batches(owners[1])[0]
@@ -177,8 +177,29 @@ def test_global_registry_allows_only_declared_shared_entity_name() -> None:
     duplicated = second.model_copy(
         update={"entity_names_by_id": duplicated_names}
     )
+    first_query = first_batch.queries[0]
+    second_query = second_batch.queries[0]
+    duplicated_queries = dict(duplicated.query_text_by_case_id)
+    duplicated_queries[second_query.case_id] = first.query_text_by_case_id[
+        first_query.case_id
+    ]
+    duplicated = duplicated.model_copy(
+        update={"query_text_by_case_id": duplicated_queries}
+    )
 
-    assert registry.collisions(second_batch, duplicated) == (second_plain.surface_key,)
+    assert registry.collisions(second_batch, duplicated) == ()
+
+    first_memory = first_batch.memories[0]
+    second_memory = second_batch.memories[0]
+    duplicated_memories = dict(duplicated.memory_content_by_id)
+    duplicated_memories[second_memory.memory_id] = first.memory_content_by_id[
+        first_memory.memory_id
+    ]
+    duplicated = duplicated.model_copy(
+        update={"memory_content_by_id": duplicated_memories}
+    )
+
+    assert registry.collisions(second_batch, duplicated) == (second_memory.surface_key,)
 
 
 @pytest.mark.asyncio

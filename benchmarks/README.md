@@ -599,7 +599,7 @@ relation type, time, lifecycle, authority, answerability, or evidence labels.
 
 `python -m benchmarks.build_evidence_rich_blind_manifest` deterministically rebuilds
 the host manifest under ignored `data/doppel/`. Its frozen fingerprint is
-`7c4df04d6bc1ee3db5ac2f7f920c08225697a075b0e68595e444c5492b5ce4d4`.
+`852dfde146d8ac2920683ac275eb5a35700bdb47e01cf09cad4dd0433065d253`.
 The manifest contains 24 owner-disjoint scopes, 240 category-balanced query slots,
 4,608 memory slots (170 dense distractors per owner), 17 relation types, and eight
 two-hop relation families. It is intentionally not the final corpus: the generated
@@ -641,6 +641,18 @@ causes a bounded, budgeted variation attempt that receives opaque local surface 
 never another owner's text or private gold. V3 has independent runner, nonce, cache,
 progress, and manifest identities; V1/V2 raw outputs remain preserved and unmigrated.
 
+V3's bounded global-surface retry experiment is preserved in
+[`reports/evidence-rich-blind-v1-authoring-v3-incomplete-2026-09-29.md`](reports/evidence-rich-blind-v1-authoring-v3-incomplete-2026-09-29.md).
+It proved that the gate detects and rejects collisions, but also showed that globally
+unique entity names and questions are the wrong invariant for owner-disjoint evaluation:
+different people can naturally mention Shanghai or ask the same current-residence
+question, and those collisions are useful scope-isolation pressure. V4 therefore keeps
+entity and query uniqueness within each owner while permitting exact cross-owner
+collisions. Memory content and non-empty relation edge facts remain globally unique so
+repeated evidence cannot silently overweight retrieval metrics. The offline compile
+report records raw and unique query/entity counts, repeated groups, and maximum
+repetition. V3 raw outputs remain preserved and are not migrated into V4.
+
 Independent semantic review is also dry-run by default:
 
 ```bash
@@ -665,7 +677,8 @@ With `--compile`, it requires both the exact `authored_unreviewed` artifact and 
 accepted first-review sidecar. It verifies the authored SHA-256, corpus fingerprint,
 all 48 review coverage fingerprints, scope and provenance closure, temporal and
 subject validity, relation endpoints, evidence labels, cross-owner shared-name
-constraints, unique surfaces, and non-copying from opened V4. Successful output is
+constraints, owner-local entity/query uniqueness, globally unique evidence surfaces,
+and non-copying of memory evidence from opened V4. Successful output is
 still labelled `compiled_unopened`; compilation performs zero HTTP/provider calls and
 does not execute V7, V8, embeddings, Graphiti, or any retrieval metric.
 

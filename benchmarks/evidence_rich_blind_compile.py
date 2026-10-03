@@ -76,6 +76,8 @@ def run(args: argparse.Namespace) -> int:
     _validate_novel_surfaces(dataset)
     payload = dataset.model_dump(mode="json")
     _write_json(args.output, payload)
+    query_text_counts = Counter(item.query for item in dataset.queries)
+    entity_name_counts = Counter(item.name for item in dataset.entities)
     report = {
         "runner": RUNNER,
         "status": "compiled_unopened",
@@ -86,8 +88,18 @@ def run(args: argparse.Namespace) -> int:
         "corpus_fingerprint": dataset.fingerprint,
         "owner_count": len(dataset.scopes),
         "query_count": len(dataset.queries),
+        "unique_query_text_count": len(query_text_counts),
+        "repeated_query_text_group_count": sum(
+            count > 1 for count in query_text_counts.values()
+        ),
+        "maximum_query_text_repetition": max(query_text_counts.values(), default=0),
         "memory_count": len(dataset.memories),
         "entity_count": len(dataset.entities),
+        "unique_entity_name_count": len(entity_name_counts),
+        "repeated_entity_name_group_count": sum(
+            count > 1 for count in entity_name_counts.values()
+        ),
+        "maximum_entity_name_repetition": max(entity_name_counts.values(), default=0),
         "edge_count": len(dataset.edges),
         "review_accepted": True,
         "retrieval_opened": False,
@@ -337,6 +349,12 @@ def _validate_authored(manifest: Any, authored: dict[str, Any]) -> None:
             required = entity.required_display_name.strip()
             if required and item["entity_names_by_id"][entity.entity_id] != required:
                 raise ValueError("authored entity name violates a host requirement")
+        entity_names = list(item["entity_names_by_id"].values())
+        if len(entity_names) != len(set(entity_names)):
+            raise ValueError("authored entity names must be unique within one owner")
+        query_texts = list(item["query_text_by_case_id"].values())
+        if len(query_texts) != len(set(query_texts)):
+            raise ValueError("authored query text must be unique within one owner")
     shared_names: dict[str, list[str]] = {}
     for owner in manifest.owners:
         item = actual[owner.owner_key]
@@ -348,26 +366,14 @@ def _validate_authored(manifest: Any, authored: dict[str, Any]) -> None:
     for group, names in shared_names.items():
         if len(names) < 2 or len(set(names)) != 1:
             raise ValueError(f"shared entity name group is inconsistent: {group}")
-    entity_name_groups: dict[str, list[str]] = {}
     edge_facts: list[str] = []
     for owner in manifest.owners:
         item = actual[owner.owner_key]
-        for entity in owner.entities:
-            entity_name_groups.setdefault(
-                item["entity_names_by_id"][entity.entity_id], []
-            ).append(entity.shared_name_group)
         edge_facts.extend(
             str(value)
             for value in item["edge_fact_by_memory_id"].values()
             if str(value).strip()
         )
-    invalid_entity_reuse = [
-        name
-        for name, groups in entity_name_groups.items()
-        if len(groups) > 1 and not (groups[0] and len(set(groups)) == 1)
-    ]
-    if invalid_entity_reuse:
-        raise ValueError("authored entity name repeats outside a shared-name group")
     if len(edge_facts) != len(set(edge_facts)):
         raise ValueError("authored relation edge facts contain duplicate surface text")
     nonces = {
@@ -452,16 +458,11 @@ def _validate_review(
 
 def _validate_novel_surfaces(dataset: HeterogeneousRetrievalDataset) -> None:
     memory_texts = [item.content for item in dataset.memories]
-    query_texts = [item.query for item in dataset.queries]
     if len(memory_texts) != len(set(memory_texts)):
         raise ValueError("compiled corpus contains duplicate memory surface text")
-    if len(query_texts) != len(set(query_texts)):
-        raise ValueError("compiled corpus contains duplicate query surface text")
     opened = json.loads(OPENED_V4.read_text("utf-8"))
     if set(memory_texts).intersection(item["content"] for item in opened["memories"]):
         raise ValueError("compiled memory text copies the opened V4 corpus")
-    if set(query_texts).intersection(item["query"] for item in opened["queries"]):
-        raise ValueError("compiled query text copies the opened V4 corpus")
     if {item.memory_id for item in dataset.memories}.intersection(
         item["memory_id"] for item in opened["memories"]
     ):

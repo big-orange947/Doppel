@@ -189,7 +189,7 @@ class HeterogeneousRetrievalDataset(BaseModel):
             ):
                 raise ValueError(f"{edge.edge_id}: reversed validity")
 
-        query_texts: set[str] = set()
+        query_texts: set[tuple[str, str]] = set()
         categories: Counter[str] = Counter()
         domains: Counter[str] = Counter()
         partitions: Counter[str] = Counter()
@@ -199,9 +199,10 @@ class HeterogeneousRetrievalDataset(BaseModel):
                 raise ValueError(f"{query.case_id}: unknown scope")
             if query.partition != self.scopes[query.scope].partition:
                 raise ValueError(f"{query.case_id}: partition crosses owner scope")
-            if query.query in query_texts:
-                raise ValueError(f"{query.case_id}: duplicate full query text")
-            query_texts.add(query.query)
+            scoped_query_text = (query.scope, query.query)
+            if scoped_query_text in query_texts:
+                raise ValueError(f"{query.case_id}: duplicate query text within scope")
+            query_texts.add(scoped_query_text)
             valid_at = _parse_time(query.valid_at)
             categories[query.category] += 1
             domains[query.domain] += 1
