@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Complete the unopened V8 blind surface-authoring run: deterministic parent replay
+  recovers 23/48 batches without a call, 31 new calls complete the remaining 25, and
+  the sealed artifact covers all 24 owner scopes, 4,608 memory slots, and 240 query
+  slots. Preserve its SHA-256 and retry distribution while keeping semantic review,
+  compilation, and every retrieval metric closed.
 - Preserve V7's zero-call cache-lineage observation: changing the evidence registry
   correctly changed collision keys but also changed the content-addressed request path
   before historical retries could be found. Add a V8 continuation that reconstructs

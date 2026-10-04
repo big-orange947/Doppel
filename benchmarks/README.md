@@ -736,6 +736,15 @@ The 225-call value is a hard ceiling for the 25 remaining batches at nine attemp
 batch, not an expected spend. The runner stops as soon as all batches complete or one
 batch exhausts its sealed attempts; it never spends the unused remainder of the cap.
 
+The sealed V8 run completed all 48 batches. It reconstructed 23 batches from immutable
+parent caches and used 31 new calls for the remaining 25: 38 batches were accepted on
+their first attempt, eight on their second, and two on their fourth. The authored
+artifact SHA-256 is
+`b381788d6efa0ee0fe307f452a5895d05ad077ef35ac7983cbb55c5884f0ba37`.
+The result remains `authored_unreviewed`; retrieval and quality metrics are still
+closed. The preserved result is documented in
+[`reports/evidence-rich-blind-v1-authoring-v8-complete-2026-10-05.md`](reports/evidence-rich-blind-v1-authoring-v8-complete-2026-10-05.md).
+
 Independent semantic review is also dry-run by default:
 
 ```bash
