@@ -18,6 +18,7 @@ from benchmarks.evidence_rich_blind_authoring import (
     OwnerSurfaceDraft,
     author_owner_surfaces,
     build_authoring_request,
+    build_authoring_request_v5,
     project_owner_surfaces,
 )
 from doppel_memory.intelligence import StructuredGenerationRequest
@@ -176,6 +177,18 @@ def test_retry_request_changes_nonce_without_exposing_prior_owner_text() -> None
             variation_attempt=1,
             must_change_surface_keys=("unknown-surface",),
         )
+
+
+def test_v5_request_adds_batch_uniqueness_without_changing_v4_request() -> None:
+    legacy = build_authoring_request(_manifest())
+    strengthened = build_authoring_request_v5(_manifest())
+
+    assert legacy.input == strengthened.input
+    assert legacy.output_schema == strengthened.output_schema
+    assert "same request" not in legacy.instructions
+    assert "same request" in strengthened.instructions
+    assert "collapsing several" in strengthened.instructions
+    assert "slots into one generic sentence" in strengthened.instructions
 
 
 def test_projection_changes_only_surface_fields() -> None:

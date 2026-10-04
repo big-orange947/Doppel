@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Preserve the unopened V4 authoring stop after 29 calls and 16/48 accepted batches
+  exposed a prompt/validator mismatch: distinct semantic briefs could collapse into
+  identical same-batch memory strings. Add a V5 continuation that hashes and replays
+  the V4 cache read-only, strengthens within-batch memory/edge uniqueness, extends the
+  sealed retry ceiling to six, and writes all new responses to an independently bound
+  cache without exposing retrieval metrics.
 - Harden the unopened evidence-rich blind corpus authoring path with a V3 global
   surface registry, capped and budgeted collision retries, a fresh sealed cache/nonce
   namespace, and preserved V2 failure evidence before any retrieval metrics are opened.

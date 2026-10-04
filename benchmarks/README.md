@@ -653,6 +653,28 @@ repeated evidence cannot silently overweight retrieval metrics. The offline comp
 report records raw and unique query/entity counts, repeated groups, and maximum
 repetition. V3 raw outputs remain preserved and are not migrated into V4.
 
+V4 stopped unopened after 29 provider calls and 16/48 accepted batches. The first
+owner-09 batch contained 96 distinct host semantic briefs, but its three provider
+drafts contained only 49, 65, and 91 unique memory strings. The V4 prompt prohibited
+cross-owner evidence reuse without explicitly prohibiting same-batch reuse, while the
+registry correctly enforced both. The immutable observation is recorded in
+[`reports/evidence-rich-blind-v1-authoring-v4-incomplete-2026-10-04.md`](reports/evidence-rich-blind-v1-authoring-v4-incomplete-2026-10-04.md).
+
+V5 is a continuation rather than a restart. It hashes and reads the 29 V4 provider
+cache entries without modifying them, replays the first three attempts with the exact
+V4 request contract, and uses a distinct cache plus strengthened within-batch evidence
+instruction for later or previously unseen attempts. The retry ceiling is six. The V5
+binding includes the V4 manifest and provider-cache fingerprints, so parent mutation
+fails closed. Retrieval and quality metrics remain unopened:
+
+```powershell
+python -m benchmarks.evidence_rich_blind_acquire_v5
+
+python -m benchmarks.evidence_rich_blind_acquire_v5 `
+  --live-authoring `
+  --max-new-calls 1
+```
+
 Independent semantic review is also dry-run by default:
 
 ```bash

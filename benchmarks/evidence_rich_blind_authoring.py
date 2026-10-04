@@ -476,6 +476,14 @@ answers to questions. Do not emit IDs, scope, authority, lifecycle, validity int
 evidence labels, answerability, relation types, or any field outside the output schema.
 """
 
+AUTHORING_INSTRUCTIONS_V5 = AUTHORING_INSTRUCTIONS + """\
+Every memory content string must also be distinct from every other memory content
+string in this same request, even when several slots are semantically similar. Every
+non-empty relation edge_fact must likewise be distinct within this request. Preserve
+the specific semantic difference in each supplied brief instead of collapsing several
+slots into one generic sentence.
+"""
+
 REVIEW_INSTRUCTIONS = """\
 Independently review synthetic Chinese surface text against each supplied semantic
 brief. Review every surface_key exactly once. Do not rewrite any text and do not infer
@@ -613,6 +621,27 @@ def build_authoring_request(
         },
         output_schema=OwnerSurfaceDraft.model_json_schema(),
     )
+
+
+def build_authoring_request_v5(
+    manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
+    *,
+    variation_attempt: int = 0,
+    must_change_surface_keys: tuple[str, ...] = (),
+) -> StructuredGenerationRequest:
+    """Build the V5 request with explicit within-batch evidence uniqueness.
+
+    The V4 request builder remains byte-for-byte stable so an interrupted sealed run
+    can be replayed from its content-addressed cache. V5 changes only the instruction
+    text and therefore receives a distinct request fingerprint and cache namespace.
+    """
+
+    request = build_authoring_request(
+        manifest,
+        variation_attempt=variation_attempt,
+        must_change_surface_keys=must_change_surface_keys,
+    )
+    return request.model_copy(update={"instructions": AUTHORING_INSTRUCTIONS_V5})
 
 
 def build_review_request(
