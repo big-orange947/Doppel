@@ -19,6 +19,7 @@ from benchmarks.evidence_rich_blind_authoring import (
     author_owner_surfaces,
     build_authoring_request,
     build_authoring_request_v5,
+    build_authoring_request_v6,
     project_owner_surfaces,
 )
 from doppel_memory.intelligence import StructuredGenerationRequest
@@ -189,6 +190,17 @@ def test_v5_request_adds_batch_uniqueness_without_changing_v4_request() -> None:
     assert "same request" in strengthened.instructions
     assert "collapsing several" in strengthened.instructions
     assert "slots into one generic sentence" in strengthened.instructions
+
+
+def test_v6_request_adds_entity_type_and_pairwise_self_audit() -> None:
+    v5_request = build_authoring_request_v5(_manifest())
+    v6_request = build_authoring_request_v6(_manifest())
+
+    assert v5_request.input == v6_request.input
+    assert v5_request.output_schema == v6_request.output_schema
+    assert "audit the complete entities array" not in v5_request.instructions
+    assert "audit the complete entities array" in v6_request.instructions
+    assert "A city name must not be reused" in v6_request.instructions
 
 
 def test_projection_changes_only_surface_fields() -> None:

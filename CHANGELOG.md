@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve the unopened V5 continuation stop after 44 cumulative calls and 22/48
+  accepted batches exposed a second provider-contract weakness: two differently typed
+  entity slots repeatedly received one display name. Add a V6 continuation bound to
+  both immutable parent-cache inventories, explicit pairwise entity/type self-audit,
+  nine sealed attempts, and a third independent provider-output cache.
 - Preserve the unopened V4 authoring stop after 29 calls and 16/48 accepted batches
   exposed a prompt/validator mismatch: distinct semantic briefs could collapse into
   identical same-batch memory strings. Add a V5 continuation that hashes and replays

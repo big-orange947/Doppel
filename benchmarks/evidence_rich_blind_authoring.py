@@ -484,6 +484,15 @@ the specific semantic difference in each supplied brief instead of collapsing se
 slots into one generic sentence.
 """
 
+AUTHORING_INSTRUCTIONS_V6 = AUTHORING_INSTRUCTIONS_V5 + """\
+Before returning output, audit the complete entities array for pairwise uniqueness.
+Every entity without a required_display_name must receive a plausible display name
+that fits its own entity_type and differs exactly from every other entity name in this
+request. A city name must not be reused as an organization, person, object, document,
+or other differently typed entity. Preserve every required_display_name exactly, and
+do not reuse a required name for another entity.
+"""
+
 REVIEW_INSTRUCTIONS = """\
 Independently review synthetic Chinese surface text against each supplied semantic
 brief. Review every surface_key exactly once. Do not rewrite any text and do not infer
@@ -642,6 +651,22 @@ def build_authoring_request_v5(
         must_change_surface_keys=must_change_surface_keys,
     )
     return request.model_copy(update={"instructions": AUTHORING_INSTRUCTIONS_V5})
+
+
+def build_authoring_request_v6(
+    manifest: OwnerAuthoringManifest | OwnerAuthoringBatch,
+    *,
+    variation_attempt: int = 0,
+    must_change_surface_keys: tuple[str, ...] = (),
+) -> StructuredGenerationRequest:
+    """Build V6 text-only requests with explicit entity-array self-audit."""
+
+    request = build_authoring_request(
+        manifest,
+        variation_attempt=variation_attempt,
+        must_change_surface_keys=must_change_surface_keys,
+    )
+    return request.model_copy(update={"instructions": AUTHORING_INSTRUCTIONS_V6})
 
 
 def build_review_request(

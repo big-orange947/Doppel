@@ -675,6 +675,22 @@ python -m benchmarks.evidence_rich_blind_acquire_v5 `
   --max-new-calls 1
 ```
 
+V5 then stopped unopened at 22/48 accepted batches after its six attempts for the
+first owner-12 batch alternated between typed global evidence collisions and the same
+pair of owner-local entity names. The immutable result is recorded in
+[`reports/evidence-rich-blind-v1-authoring-v5-incomplete-2026-10-04.md`](reports/evidence-rich-blind-v1-authoring-v5-incomplete-2026-10-04.md).
+V6 binds both parent cache inventories, replays V4 and V5 requests exactly, adds an
+explicit pairwise entity-array and entity-type self-audit for new requests, and allows
+nine sealed attempts per batch. New output again uses an independent cache:
+
+```powershell
+python -m benchmarks.evidence_rich_blind_acquire_v6
+
+python -m benchmarks.evidence_rich_blind_acquire_v6 `
+  --live-authoring `
+  --max-new-calls 100
+```
+
 Independent semantic review is also dry-run by default:
 
 ```bash
