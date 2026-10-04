@@ -222,21 +222,29 @@ def test_compile_rejects_review_bound_to_different_authored_bytes(
     assert not (tmp_path / "corpus.json").exists()
 
 
-def test_compile_rejects_duplicate_surfaces_before_retrieval(tmp_path: Path) -> None:
+def test_compile_allows_cross_owner_memory_surface_collisions(tmp_path: Path) -> None:
     authored, _ = _write_inputs(tmp_path)
     first, second = authored["owners"][:2]
     first_text = next(iter(first["memory_content_by_id"].values()))
     second_key = next(iter(second["memory_content_by_id"]))
     second["memory_content_by_id"][second_key] = first_text
-    _write_json(tmp_path / "authored.json", authored)
-    _write_json(
-        tmp_path / "review.json",
-        _accepted_review(_sha256(tmp_path / "authored.json")),
-    )
 
-    with pytest.raises(ValueError, match="duplicate memory surface"):
-        compiler.run(_args(tmp_path))
-    assert not (tmp_path / "corpus.json").exists()
+    manifest = build_manifest()
+    compiler._validate_authored(manifest, authored)
+    dataset = compiler.compile_corpus(manifest, authored)
+    compiler._validate_novel_surfaces(dataset)
+
+
+def test_compile_rejects_owner_local_memory_surface_collisions(
+    tmp_path: Path,
+) -> None:
+    authored, _ = _write_inputs(tmp_path)
+    memories = authored["owners"][0]["memory_content_by_id"]
+    first_key, second_key = list(memories)[:2]
+    memories[second_key] = memories[first_key]
+
+    with pytest.raises(ValueError, match="unique within one owner"):
+        compiler._validate_authored(build_manifest(), authored)
 
 
 def test_compile_allows_cross_owner_entity_and_query_surface_collisions(
@@ -283,7 +291,9 @@ def test_compile_rejects_owner_local_entity_and_query_duplicates(
         compiler._validate_authored(manifest, authored)
 
 
-def test_compile_rejects_duplicate_relation_edge_facts(tmp_path: Path) -> None:
+def test_compile_allows_cross_owner_relation_edge_fact_collisions(
+    tmp_path: Path,
+) -> None:
     authored, _ = _write_inputs(tmp_path)
     manifest = build_manifest()
     relation_memories = [
@@ -300,7 +310,22 @@ def test_compile_rejects_duplicate_relation_edge_facts(tmp_path: Path) -> None:
         first_fact
     )
 
-    with pytest.raises(ValueError, match="edge facts contain duplicate"):
+    compiler._validate_authored(manifest, authored)
+
+
+def test_compile_rejects_owner_local_relation_edge_fact_collisions(
+    tmp_path: Path,
+) -> None:
+    authored, _ = _write_inputs(tmp_path)
+    manifest = build_manifest()
+    relation_memories = [
+        memory for memory in manifest.owners[0].memories if memory.relation_type
+    ]
+    first_memory, second_memory = relation_memories[:2]
+    facts = authored["owners"][0]["edge_fact_by_memory_id"]
+    facts[second_memory.memory_id] = facts[first_memory.memory_id]
+
+    with pytest.raises(ValueError, match="unique within one owner"):
         compiler._validate_authored(manifest, authored)
 
 

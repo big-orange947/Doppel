@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve the unopened V6 stop after three otherwise valid attempts repeated evidence
+  only across owner scopes. Align V7 authoring and compilation with the authority
+  boundary: memory and edge text remain unique within each owner, exact cross-owner
+  equality becomes deliberate isolation pressure, global repetition stays visible in
+  compile reports, and all V4/V5/V6 cache inventories remain immutable and bound.
 - Preserve the unopened V5 continuation stop after 44 cumulative calls and 22/48
   accepted batches exposed a second provider-contract weakness: two differently typed
   entity slots repeatedly received one display name. Add a V6 continuation bound to

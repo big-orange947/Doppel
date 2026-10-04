@@ -691,6 +691,24 @@ python -m benchmarks.evidence_rich_blind_acquire_v6 `
   --max-new-calls 100
 ```
 
+V6 corrected the entity contract but all three new attempts for owner 12 were rejected
+only because their otherwise valid evidence repeated text from a different owner. No
+V6 attempt contained a same-batch or same-owner duplicate. The preserved result is in
+[`reports/evidence-rich-blind-v1-authoring-v6-incomplete-2026-10-05.md`](reports/evidence-rich-blind-v1-authoring-v6-incomplete-2026-10-05.md).
+V7 therefore aligns evidence uniqueness with the retrieval authority boundary: memory
+and edge text must be unique within an owner scope, while exact cross-owner equality is
+allowed as deliberate isolation pressure. The compiler applies the same `(scope,
+text)` rule, retains the opened-corpus copy prohibition, and reports global repetition
+instead of hiding it. V7 binds all three immutable parent-cache inventories:
+
+```powershell
+python -m benchmarks.evidence_rich_blind_acquire_v7
+
+python -m benchmarks.evidence_rich_blind_acquire_v7 `
+  --live-authoring `
+  --max-new-calls 225
+```
+
 Independent semantic review is also dry-run by default:
 
 ```bash
@@ -715,7 +733,7 @@ With `--compile`, it requires both the exact `authored_unreviewed` artifact and 
 accepted first-review sidecar. It verifies the authored SHA-256, corpus fingerprint,
 all 48 review coverage fingerprints, scope and provenance closure, temporal and
 subject validity, relation endpoints, evidence labels, cross-owner shared-name
-constraints, owner-local entity/query uniqueness, globally unique evidence surfaces,
+constraints, owner-local entity/query/evidence uniqueness, global repetition counts,
 and non-copying of memory evidence from opened V4. Successful output is
 still labelled `compiled_unopened`; compilation performs zero HTTP/provider calls and
 does not execute V7, V8, embeddings, Graphiti, or any retrieval metric.

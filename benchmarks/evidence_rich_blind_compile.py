@@ -78,6 +78,8 @@ def run(args: argparse.Namespace) -> int:
     _write_json(args.output, payload)
     query_text_counts = Counter(item.query for item in dataset.queries)
     entity_name_counts = Counter(item.name for item in dataset.entities)
+    memory_content_counts = Counter(item.content for item in dataset.memories)
+    edge_fact_counts = Counter(item.fact for item in dataset.edges)
     report = {
         "runner": RUNNER,
         "status": "compiled_unopened",
@@ -94,6 +96,13 @@ def run(args: argparse.Namespace) -> int:
         ),
         "maximum_query_text_repetition": max(query_text_counts.values(), default=0),
         "memory_count": len(dataset.memories),
+        "unique_memory_content_count": len(memory_content_counts),
+        "repeated_memory_content_group_count": sum(
+            count > 1 for count in memory_content_counts.values()
+        ),
+        "maximum_memory_content_repetition": max(
+            memory_content_counts.values(), default=0
+        ),
         "entity_count": len(dataset.entities),
         "unique_entity_name_count": len(entity_name_counts),
         "repeated_entity_name_group_count": sum(
@@ -101,6 +110,11 @@ def run(args: argparse.Namespace) -> int:
         ),
         "maximum_entity_name_repetition": max(entity_name_counts.values(), default=0),
         "edge_count": len(dataset.edges),
+        "unique_edge_fact_count": len(edge_fact_counts),
+        "repeated_edge_fact_group_count": sum(
+            count > 1 for count in edge_fact_counts.values()
+        ),
+        "maximum_edge_fact_repetition": max(edge_fact_counts.values(), default=0),
         "review_accepted": True,
         "retrieval_opened": False,
         "quality_metrics_available": False,
@@ -366,16 +380,22 @@ def _validate_authored(manifest: Any, authored: dict[str, Any]) -> None:
     for group, names in shared_names.items():
         if len(names) < 2 or len(set(names)) != 1:
             raise ValueError(f"shared entity name group is inconsistent: {group}")
-    edge_facts: list[str] = []
     for owner in manifest.owners:
         item = actual[owner.owner_key]
-        edge_facts.extend(
+        memory_contents = list(item["memory_content_by_id"].values())
+        if len(memory_contents) != len(set(memory_contents)):
+            raise ValueError(
+                "authored memory contents must be unique within one owner"
+            )
+        edge_facts = [
             str(value)
             for value in item["edge_fact_by_memory_id"].values()
             if str(value).strip()
-        )
-    if len(edge_facts) != len(set(edge_facts)):
-        raise ValueError("authored relation edge facts contain duplicate surface text")
+        ]
+        if len(edge_facts) != len(set(edge_facts)):
+            raise ValueError(
+                "authored relation edge facts must be unique within one owner"
+            )
     nonces = {
         str(
             build_authoring_request(batch, variation_attempt=attempt).input[
@@ -458,8 +478,11 @@ def _validate_review(
 
 def _validate_novel_surfaces(dataset: HeterogeneousRetrievalDataset) -> None:
     memory_texts = [item.content for item in dataset.memories]
-    if len(memory_texts) != len(set(memory_texts)):
-        raise ValueError("compiled corpus contains duplicate memory surface text")
+    scoped_memory_texts = [(item.scope, item.content) for item in dataset.memories]
+    if len(scoped_memory_texts) != len(set(scoped_memory_texts)):
+        raise ValueError(
+            "compiled corpus contains duplicate memory surface text within scope"
+        )
     opened = json.loads(OPENED_V4.read_text("utf-8"))
     if set(memory_texts).intersection(item["content"] for item in opened["memories"]):
         raise ValueError("compiled memory text copies the opened V4 corpus")
