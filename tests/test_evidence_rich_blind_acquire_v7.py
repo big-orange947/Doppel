@@ -12,12 +12,21 @@ import benchmarks.evidence_rich_blind_acquire as v4
 import benchmarks.evidence_rich_blind_acquire_v5 as v5
 import benchmarks.evidence_rich_blind_acquire_v6 as v6
 import benchmarks.evidence_rich_blind_acquire_v7 as v7
+import benchmarks.evidence_rich_blind_acquire_v8 as v8
 from benchmarks.build_evidence_rich_blind_manifest import build_manifest
 from benchmarks.evidence_rich_blind_authoring import (
     ProjectedOwnerSurfaces,
+    build_authoring_request,
     split_owner_authoring_batches,
 )
 from doppel_memory.intelligence import StructuredGenerationRequest
+
+_SECOND_OWNER_FIRST_BATCH = split_owner_authoring_batches(
+    build_manifest().owners[1]
+)[0]
+_DIVERGENT_NONCE = build_authoring_request(
+    _SECOND_OWNER_FIRST_BATCH, variation_attempt=0
+).input["authoring_nonce"]
 
 
 class _CrossOwnerRepeatProvider:
@@ -33,6 +42,21 @@ class _CrossOwnerRepeatProvider:
     async def generate(self, request: StructuredGenerationRequest) -> dict[str, Any]:
         if self.usage_observer is not None:
             self.usage_observer({"prompt_tokens": 100, "completion_tokens": 50})
+        memories = [
+            {
+                "surface_key": item["surface_key"],
+                "content": f"记忆-{item['surface_key']}",
+                "edge_fact": (
+                    f"关系-{item['surface_key']}" if item["relation"] else ""
+                ),
+            }
+            for item in request.input["memories"]
+        ]
+        if (
+            request.input["authoring_nonce"] == _DIVERGENT_NONCE
+            and len(memories) > 1
+        ):
+            memories[1]["content"] = memories[0]["content"]
         return {
             "entities": [
                 {
@@ -42,16 +66,7 @@ class _CrossOwnerRepeatProvider:
                 }
                 for item in request.input["entities"]
             ],
-            "memories": [
-                {
-                    "surface_key": item["surface_key"],
-                    "content": f"记忆-{item['surface_key']}",
-                    "edge_fact": (
-                        f"关系-{item['surface_key']}" if item["relation"] else ""
-                    ),
-                }
-                for item in request.input["memories"]
-            ],
+            "memories": memories,
             "queries": [
                 {
                     "surface_key": item["surface_key"],
@@ -145,17 +160,27 @@ def _args(parser: Any, tmp_path: Path, version: int, calls: int) -> Any:
             "--v6-cache-dir",
             str(tmp_path / "v6-cache"),
         ],
+        8: [
+            "--v4-cache-dir",
+            str(tmp_path / "v4-cache"),
+            "--v5-cache-dir",
+            str(tmp_path / "v5-cache"),
+            "--v6-cache-dir",
+            str(tmp_path / "v6-cache"),
+            "--v7-cache-dir",
+            str(tmp_path / "v7-cache"),
+        ],
     }
     values[1:1] = parent_args.get(version, [])
     return parser.parse_args(values)
 
 
 @pytest.mark.asyncio
-async def test_v7_replays_three_exhausted_layers_and_accepts_cross_scope_repeat(
+async def test_v8_reconstructs_historical_path_after_v7_fingerprint_divergence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("DOPPEL_API_KEY", "test-only-secret")
-    for module in (v4, v5, v6, v7):
+    for module in (v4, v5, v6, v7, v8):
         monkeypatch.setattr(
             module, "OpenAICompatibleStructuredOutputModel", _CrossOwnerRepeatProvider
         )
@@ -173,12 +198,22 @@ async def test_v7_replays_three_exhausted_layers_and_accepts_cross_scope_repeat(
 
     assert await v7.run(_args(v7.parser(), tmp_path, 7, 0)) == 0
     progress = json.loads((tmp_path / "v7-progress.json").read_text("utf-8"))
-    assert progress["completed_batch_count"] == 3
+    assert progress["completed_batch_count"] == 2
     assert progress["provider_calls_cumulative"] == 11
-    assert progress["accepted_attempts_by_batch"]["owner-blind-02:01"] == 1
     assert progress["evidence_uniqueness"] == "scope_local"
     assert progress["last_invocation"]["provider_calls"] == 0
     assert progress["last_invocation"]["v4_cache_hits"] == 3
-    assert progress["last_invocation"]["surface_collision_attempts"] == 0
+    assert progress["last_invocation"]["surface_collision_attempts"] == 1
     assert progress["last_invocation"]["stopped_reason"] == "budget_exhausted"
     assert "test-only-secret" not in json.dumps(progress)
+
+    assert await v8.run(_args(v8.parser(), tmp_path, 8, 0)) == 0
+    recovered = json.loads((tmp_path / "v8-progress.json").read_text("utf-8"))
+    assert recovered["seed_completed_batch_count"] == 3
+    assert recovered["completed_batch_count"] == 3
+    assert recovered["provider_calls_cumulative"] == 11
+    assert recovered["accepted_attempts_by_batch"]["owner-blind-02:01"] == 2
+    assert recovered["last_invocation"]["provider_calls"] == 0
+    assert recovered["last_invocation"]["stopped_at_batch_id"] == (
+        "owner-blind-02:02"
+    )

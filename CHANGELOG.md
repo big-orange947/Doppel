@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Preserve V7's zero-call cache-lineage observation: changing the evidence registry
+  correctly changed collision keys but also changed the content-addressed request path
+  before historical retries could be found. Add a V8 continuation that reconstructs
+  the exact V4/V5/V6 request lineage with the historical registry, independently
+  selects candidates with scope-local evidence rules, recovers 23/48 batches without
+  an API call, and writes only future provider responses to a fresh bound cache.
 - Preserve the unopened V6 stop after three otherwise valid attempts repeated evidence
   only across owner scopes. Align V7 authoring and compilation with the authority
   boundary: memory and edge text remain unique within each owner, exact cross-owner

@@ -709,6 +709,33 @@ python -m benchmarks.evidence_rich_blind_acquire_v7 `
   --max-new-calls 225
 ```
 
+V7's zero-call replay then exposed a content-addressed cache-lineage dependency rather
+than a corpus failure. Applying the corrected scope-local registry immediately changed
+the opaque `must_change` keys in a historical retry request, so the next request
+fingerprint no longer matched the immutable V4 cache entry. V7 stopped at 2/48 without
+calling the provider. The observation is preserved in
+[`reports/evidence-rich-blind-v1-authoring-v7-incomplete-2026-10-05.md`](reports/evidence-rich-blind-v1-authoring-v7-incomplete-2026-10-05.md).
+
+V8 reconstructs historical request lookup and corrected candidate acceptance as two
+separate deterministic operations. It follows the original V4/V5/V6 global-registry
+path solely to locate exact cached attempts, while an independent scope-local registry
+selects the earliest valid candidate. This recovers 23/48 batches from the existing
+47 calls, including owner 12's first structurally valid V6 draft, and leaves 25 batches
+for live authoring. The three parent-cache inventories and the V7 observation are
+hash-bound and read-only. New responses use only the V8 cache:
+
+```powershell
+python -m benchmarks.evidence_rich_blind_acquire_v8
+
+python -m benchmarks.evidence_rich_blind_acquire_v8 `
+  --live-authoring `
+  --max-new-calls 225
+```
+
+The 225-call value is a hard ceiling for the 25 remaining batches at nine attempts per
+batch, not an expected spend. The runner stops as soon as all batches complete or one
+batch exhausts its sealed attempts; it never spends the unused remainder of the cap.
+
 Independent semantic review is also dry-run by default:
 
 ```bash
