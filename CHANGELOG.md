@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Record the blind corpus V3's completed 48-batch generation and rejected full review
+  (23 findings), with hash-bound coverage and usage. Audit reviewer false positives,
+  lifecycle/interval ambiguities and unflagged relation-family defects; keep
+  compilation/retrieval closed and plan calibration plus bounded surface repair,
+  rather than regenerating until acceptance or weakening evaluation gates.
 - Preserve the blind revision V2's 37-call, 33/48-batch authoring stop and diagnose
   its contradictory competing-endpoint brief. Add a prose-only V3 host revision
   and explicit entity-name self-audit, with read-only replay of all V2 retries to

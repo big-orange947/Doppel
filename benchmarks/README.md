@@ -768,6 +768,15 @@ Use `python -m benchmarks.evidence_rich_blind_revision_v3 author` for the curren
 plan. The frozen V2 runner and historical review command below remain available for
 reproducibility, not as the active paid continuation.
 
+V3 generation is now complete: 33 inherited batches plus 15 heads completed with
+21 new calls. Its complete 48-call review rejected the artifact with 23 findings.
+Diagnostic inspection identifies both reviewer false positives and real/ambiguous
+relation and temporal contracts, including issues missed in other family members.
+The rejected report is unchanged and compilation remains blocked. Do not rerun the
+completed author/review commands or treat this as a retrieval score; the next work
+is reviewer calibration and a frozen, bounded repair inventory. See
+[`reports/evidence-rich-blind-v1-revision-v3-review-audit-2026-10-05.md`](reports/evidence-rich-blind-v1-revision-v3-review-audit-2026-10-05.md).
+
 ```bash
 python -m benchmarks.evidence_rich_blind_review
 ```
