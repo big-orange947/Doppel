@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve the blind revision V2's 37-call, 33/48-batch authoring stop and diagnose
+  its contradictory competing-endpoint brief. Add a prose-only V3 host revision
+  and explicit entity-name self-audit, with read-only replay of all V2 retries to
+  recover 33 accepted batch projections. Keep rejected outputs, prior usage and
+  authority/gold fields unchanged; a fresh complete semantic review remains required.
 - Preserve the completed blind corpus's first semantic-review rejection (126 findings)
   and repair the pre-retrieval host contract in a separate manifest: typed relation
   endpoints, aligned branch identities, an independent no-answer object, and explicit

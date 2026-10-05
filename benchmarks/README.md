@@ -751,13 +751,22 @@ The complete first review rejected the original artifact with 126 findings on 12
 owner-local surface slots. Both host-schema contradictions and unsupported reviewer
 claims were found; these are not retrieval scores. Preserve that first rejection in
 [`reports/evidence-rich-blind-v1-first-review-rejected-2026-10-05.md`](reports/evidence-rich-blind-v1-first-review-rejected-2026-10-05.md).
-The active continuation is a separately bound pre-retrieval revision, with 24 unchanged
+The first continuation is a separately bound pre-retrieval revision, with 24 unchanged
 tail batches reused and 24 core batches regenerated under coherent endpoint types.
 Its new authoring and review caches never overwrite the originals. Commands and
 immutable comparison rules are frozen in
 [`reports/evidence-rich-blind-v1-revision-plan-2026-10-05.md`](reports/evidence-rich-blind-v1-revision-plan-2026-10-05.md).
-Use `python -m benchmarks.evidence_rich_blind_revision author` for its current dry-run
-plan; the historical review command below remains documented for reproducibility.
+That V2 continuation stopped at 33/48 batches after 37 calls. A remaining contradictory
+brief repeatedly collapsed a distinct competing endpoint into a shared-alias entity.
+The current V3 continuation repairs only that prose, replays the V2 cache read-only,
+and retains all 33 accepted projections with semantic review still pending. It needs
+15 further core batches, then a complete 48-batch review; it does not relax any
+validation or change retrieval code. Its commands, failure accounting and lineage are
+documented in
+[`reports/evidence-rich-blind-v1-revision-v2-stop-and-v3-continuation-2026-10-05.md`](reports/evidence-rich-blind-v1-revision-v2-stop-and-v3-continuation-2026-10-05.md).
+Use `python -m benchmarks.evidence_rich_blind_revision_v3 author` for the current dry-run
+plan. The frozen V2 runner and historical review command below remain available for
+reproducibility, not as the active paid continuation.
 
 ```bash
 python -m benchmarks.evidence_rich_blind_review
