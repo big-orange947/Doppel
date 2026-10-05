@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Preserve the failed V2 reviewer run and add a bounded two-stage calibration:
+  contract-blind literal reading followed by grounded public-contract review, with
+  frozen role/query observations and request-level caching across interruptions.
+  Audit all control families, version the exclusive-interval temporal category,
+  retain old scores, and expose failed/uncertain controls for manual review without
+  overriding corpus acceptance. Production retrieval remains unchanged.
 - Preserve the failed first reviewer calibration and add a separate 36-control V2
   experiment with exhaustive query/endpoint observations, public-contract checks,
   and new active/passive/confirmation controls. Explicitly version the lifecycle

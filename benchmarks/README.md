@@ -806,6 +806,27 @@ can still reflect incorrect model interpretation. See the frozen V2 plan and V1
 result audit in
 [`reports/surface-review-calibration-v2-plan-2026-10-06.md`](reports/surface-review-calibration-v2-plan-2026-10-06.md).
 
+V2 also completed and failed: 32/36 correct, one false-positive control and three
+strict misses. Inspection identifies two true role-reading misses and a temporal
+category omission, not three semantic misses. Role observations sometimes repaired
+the literal text to match the supplied endpoint/type contract. V3 tests information
+separation: a contract-blind literal reading, then a grounded contract comparison
+that cannot replace the frozen first reading. The same 36 opened development
+controls are used; the one-time category audit is explicit and old scores stay intact.
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.surface_review_calibration_v3 --live --max-new-calls 72
+```
+
+Both phases share a strict request-level budget/cache. A between-phase interruption
+resumes without recharging the first request. Errors and incorrect judgments create
+a manual-review queue, not an acceptance override. Only three control relation types
+have host role adapters; unsupported or unresolved references block automatic review.
+This is benchmark tooling, not a new production extractor or retrieval change.
+The bounded experiment, limitations, family taxonomy audit and preserved V2 result
+are in
+[`reports/surface-review-calibration-v3-plan-2026-10-06.md`](reports/surface-review-calibration-v3-plan-2026-10-06.md).
+
 ```bash
 python -m benchmarks.evidence_rich_blind_review
 ```

@@ -6,6 +6,8 @@ import argparse
 import asyncio
 import json
 import os
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +22,11 @@ from benchmarks.relation_planner_quality import (
     StructuredOutputCallBudget,
     UsageLedger,
 )
-from benchmarks.surface_review_controls import build_baseline_request, fingerprint
+from benchmarks.surface_review_controls import (
+    ReviewControl,
+    build_baseline_request,
+    fingerprint,
+)
 from benchmarks.surface_review_controls import build_controls as build_v1_controls
 from benchmarks.surface_review_controls_v2 import GOLD_REVISION, build_controls
 from benchmarks.surface_review_grounding import (
@@ -40,6 +46,20 @@ from doppel_memory.openai_compatible import (
 
 RUNNER = "doppel.surface-review-calibration.v2"
 REFERENCE_SHA = "b3d5e63310757d34ca99d13e05e4e0bb9e41d573a983ab2a6a242f64960ec838"
+
+
+@dataclass(frozen=True)
+class CalibrationExperiment:
+    """Internal extension hooks; the default frozen V2 protocol remains unchanged."""
+
+    runner: str
+    protocol: str
+    gold_revision: str
+    controls: Callable[[], list[ReviewControl]]
+    reference: Callable[[Path, Path, str], dict[str, Any]]
+    review: Callable[[v1.StrictReviewCache, ReviewControl], Awaitable[dict[str, Any]]]
+    calls_per_control: int
+    protected_paths: tuple[Path, ...] = ()
 
 
 def summarize(controls: list[Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -201,10 +221,12 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-async def run(args: argparse.Namespace) -> int:
+async def run(
+    args: argparse.Namespace, *, experiment: CalibrationExperiment | None = None
+) -> int:
     if args.max_new_calls < 0:
         raise ValueError("max-new-calls must not be negative")
-    controls = build_controls()
+    controls = build_controls() if experiment is None else experiment.controls()
     config = OpenAICompatibleStructuredOutputConfig(
         model=args.model,
         base_url=args.base_url,
@@ -240,6 +262,16 @@ async def run(args: argparse.Namespace) -> int:
         "retrieval_enabled": False,
         "blind_corpus_acceptance_granted": False,
     }
+    if experiment is not None:
+        plan.update(
+            runner=experiment.runner,
+            review_protocol=experiment.protocol,
+            gold_revision=experiment.gold_revision,
+            maximum_uncached_calls=len(controls) * experiment.calls_per_control,
+            opened_v2_control_count=len(controls),
+            additional_development_control_count=0,
+        )
+        del plan["opened_v1_control_count"]
     if not args.live:
         print(json.dumps(plan, ensure_ascii=False, indent=2))
         return 0
@@ -249,6 +281,8 @@ async def run(args: argparse.Namespace) -> int:
         )
     # Reject aliasing before binding or writing any experiment files.
     protected = [args.reference_report.resolve(), args.reference_cache.resolve()]
+    if experiment is not None:
+        protected.extend(p.resolve() for p in experiment.protected_paths)
     for target in (args.output, args.progress_output, args.cache_dir):
         resolved = target.resolve()
         if any(
@@ -261,7 +295,8 @@ async def run(args: argparse.Namespace) -> int:
         for p in (args.output, args.progress_output)
     ):
         raise ValueError("V2 result paths overlap cache/progress")
-    reference = load_reference(
+    reference_loader = load_reference if experiment is None else experiment.reference
+    reference = reference_loader(
         args.reference_report, args.reference_cache, args.reference_sha256
     )
     for k in (
@@ -300,18 +335,28 @@ async def run(args: argparse.Namespace) -> int:
         if prior and prior.get("binding_sha256") != acquire._fingerprint(binding):
             raise ValueError("calibration state binding mismatch")
         for control in controls:
-            request = build_observed_request(build_baseline_request(control))
             row: dict[str, Any] = {
                 "case_id": control.case_id,
                 "family": control.family,
                 "pair_id": control.pair_id,
-                "cohort": "opened_v1"
+                "cohort": "opened_v2"
+                if experiment is not None
+                else "opened_v1"
                 if control.case_id in {c.case_id for c in build_v1_controls()}
                 else "additional_development",
             }
             try:
-                raw = await cached.generate(request)
-                review, effective_issues = validate_observed_review(request, raw)
+                if experiment is None:
+                    request = build_observed_request(build_baseline_request(control))
+                    raw = await cached.generate(request)
+                    review, effective_issues = validate_observed_review(request, raw)
+                    result = {
+                        "review": review.model_dump(mode="json"),
+                        "effective_issues": effective_issues,
+                    }
+                else:
+                    result = await experiment.review(cached, control)
+                    effective_issues = result["effective_issues"]
             except PlannerCallBudgetExceeded:
                 stopped = {"reason": "budget_exhausted", "case_id": control.case_id}
                 break
@@ -329,12 +374,12 @@ async def run(args: argparse.Namespace) -> int:
             else:
                 row.update(
                     status="reviewed",
-                    review=review.model_dump(mode="json"),
-                    effective_issues=effective_issues,
+                    **result,
                     score=v1.score_review(control, effective_issues),
                 )
             rows.append(row)
-            print(f"observations_v2 {control.case_id}: {row['status']}", flush=True)
+            label = "observations_v2" if experiment is None else "separated_v3"
+            print(f"{label} {control.case_id}: {row['status']}", flush=True)
     finally:
         await provider.aclose()
     summary = summarize(controls, rows)
@@ -344,13 +389,19 @@ async def run(args: argparse.Namespace) -> int:
         "usage": acquire._merge_usage(prior.get("usage", {}), usage.report()),
     }
     acquire._write_json(state_path, state)
-    cohorts = {
-        name: summarize(controls[start:end], [r for r in rows if r["cohort"] == name])
-        for name, start, end in (
-            ("opened_v1", 0, 24),
-            ("additional_development", 24, 36),
-        )
-    }
+    cohorts = (
+        {
+            name: summarize(
+                controls[start:end], [r for r in rows if r["cohort"] == name]
+            )
+            for name, start, end in (
+                ("opened_v1", 0, 24),
+                ("additional_development", 24, 36),
+            )
+        }
+        if experiment is None
+        else {"opened_v2": summarize(controls, rows)}
+    )
     report = {
         **plan,
         "status": "complete" if summary["gate"]["complete"] else "incomplete",
@@ -375,6 +426,22 @@ async def run(args: argparse.Namespace) -> int:
             "calibration does not accept a corpus or measure Doppel retrieval",
         ],
     }
+    if experiment is not None:
+        report["limitations"] = [
+            "all 36 controls are opened development controls, not independent heldout quality",
+            "first-pass literal interpretations remain fallible even without public-contract hints",
+            "the reference is an immutable V2 run; taxonomy rescoring is not new evidence",
+            "a calibration pass grants no corpus acceptance or Doppel retrieval quality claim",
+        ]
+        report["manual_review_queue"] = [
+            {
+                "case_id": r["case_id"],
+                "status": r["status"],
+                "reason": r.get("error", "incorrect_control_judgment"),
+            }
+            for r in rows
+            if r["status"] != "reviewed" or not r["score"]["correct"]
+        ]
     acquire._write_json(args.progress_output, report)
     if report["status"] == "complete":
         acquire._write_json(args.output, report)
