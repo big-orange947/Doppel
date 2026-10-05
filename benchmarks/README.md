@@ -787,6 +787,25 @@ correct; it does not grant corpus acceptance or publication readiness. The froze
 controls, gate, limits and next repair boundary are documented in
 [`reports/surface-review-calibration-v1-plan-2026-10-05.md`](reports/surface-review-calibration-v1-plan-2026-10-05.md).
 
+V1 completed and failed its preliminary gate: baseline 19/24 correct, grounded
+21/24; grounded missed two actual defects and the original scorer excluded a
+legitimate lifecycle `temporal_mismatch` category. Its first report and all 48 raw
+responses remain unchanged. The separately versioned V2 adds exhaustive query/role
+observations, a declared taxonomy correction, and twelve additional development
+controls. It makes at most 36 new requests; old profiles are checked, immutable
+historical references on the shared 24, not newly run baselines on the extensions.
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.surface_review_calibration_v2 --live --max-new-calls 36
+```
+
+This experiment uses no Docker/GPU and does not read the blind corpus or measure
+retrieval. Both cohorts are reported separately; the gate requires all 36 judgments
+correct and grants no corpus acceptance. Exact quotes and structured observations
+can still reflect incorrect model interpretation. See the frozen V2 plan and V1
+result audit in
+[`reports/surface-review-calibration-v2-plan-2026-10-06.md`](reports/surface-review-calibration-v2-plan-2026-10-06.md).
+
 ```bash
 python -m benchmarks.evidence_rich_blind_review
 ```

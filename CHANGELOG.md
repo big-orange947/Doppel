@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve the failed first reviewer calibration and add a separate 36-control V2
+  experiment with exhaustive query/endpoint observations, public-contract checks,
+  and new active/passive/confirmation controls. Explicitly version the lifecycle
+  scoring taxonomy correction; verify and retain all V1 responses/scores as an
+  opened reference, with no new baseline calls or corpus acceptance override.
 - Add a separate 24-control reviewer calibration experiment comparing the frozen V3
   protocol with evidence-grounded issue citations. Freeze false-positive/defect
   detection scoring and a strict preliminary gate before live output; bound calls,
