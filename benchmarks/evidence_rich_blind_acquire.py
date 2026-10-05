@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from benchmarks.evidence_rich_blind_authoring import (
     OwnerAuthoringBatch,
     ProjectedOwnerSurfaces,
     author_owner_surfaces,
+    project_owner_surfaces,
     split_owner_authoring_batches,
 )
 from benchmarks.relation_planner_quality import (
@@ -27,9 +29,11 @@ from benchmarks.relation_planner_quality import (
     StructuredOutputCallBudget,
     UsageLedger,
 )
+from doppel_memory.intelligence import StructuredGenerationRequest
 from doppel_memory.openai_compatible import (
     OpenAICompatibleStructuredOutputConfig,
     OpenAICompatibleStructuredOutputModel,
+    StructuredOutputProviderError,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,9 +73,7 @@ class SurfaceUniquenessRegistry:
                 local_edges.add(edge_fact)
         return tuple(sorted(collisions))
 
-    def add(
-        self, batch: OwnerAuthoringBatch, surfaces: ProjectedOwnerSurfaces
-    ) -> None:
+    def add(self, batch: OwnerAuthoringBatch, surfaces: ProjectedOwnerSurfaces) -> None:
         collisions = self.collisions(batch, surfaces)
         if collisions:
             raise ValueError(f"cannot register duplicate surfaces: {list(collisions)}")
@@ -106,10 +108,20 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-async def run(args: argparse.Namespace) -> int:
+async def run(
+    args: argparse.Namespace,
+    *,
+    manifest_factory: Callable[[], Any] = build_manifest,
+    request_builder: Callable[..., StructuredGenerationRequest] | None = None,
+    registry_factory: Callable[[], Any] = SurfaceUniquenessRegistry,
+    runner: str = RUNNER,
+    maximum_attempts: int = MAX_AUTHORING_ATTEMPTS,
+    seed_batches: dict[str, ProjectedOwnerSurfaces] | None = None,
+    parents: dict[str, Any] | None = None,
+) -> int:
     if args.max_new_calls < 0:
         raise ValueError("max-new-calls must not be negative")
-    manifest = build_manifest()
+    manifest = manifest_factory()
     batches = [
         batch
         for owner in manifest.owners
@@ -128,15 +140,16 @@ async def run(args: argparse.Namespace) -> int:
         timeout_seconds=args.timeout_seconds,
     )
     plan = {
-        "runner": RUNNER,
+        "runner": runner,
         "mode": "live_authoring" if args.live_authoring else "dry_run",
         "manifest_fingerprint": manifest.fingerprint,
         "owner_count": len(manifest.owners),
         "batch_count": len(batches),
         "memory_batch_size": MEMORY_BATCH_SIZE,
-        "nominal_uncached_calls": len(batches),
-        "maximum_total_uncached_calls": len(batches) * MAX_AUTHORING_ATTEMPTS,
-        "maximum_attempts_per_batch": MAX_AUTHORING_ATTEMPTS,
+        "nominal_uncached_calls": len(batches) - len(seed_batches or {}),
+        "maximum_total_uncached_calls": (len(batches) - len(seed_batches or {}))
+        * maximum_attempts,
+        "maximum_attempts_per_batch": maximum_attempts,
         "maximum_new_calls_this_invocation": args.max_new_calls,
         "model": config.model,
         "base_url": config.base_url,
@@ -149,6 +162,13 @@ async def run(args: argparse.Namespace) -> int:
         "quality_metrics_available": False,
         "implementation_commit": _git_commit_hash(),
     }
+    if seed_batches is not None:
+        available_ids = {batch.batch_id for batch in batches}
+        if not set(seed_batches).issubset(available_ids):
+            raise ValueError("seed contains unknown authoring batches")
+        plan["seed_batch_count"] = len(seed_batches)
+    if parents is not None:
+        plan["parents"] = parents
     if not args.live_authoring:
         print(json.dumps(plan, ensure_ascii=False, indent=2))
         return 0
@@ -183,23 +203,51 @@ async def run(args: argparse.Namespace) -> int:
     projected_by_owner: defaultdict[str, list[ProjectedOwnerSurfaces]] = defaultdict(
         list
     )
-    registry = SurfaceUniquenessRegistry()
+    registry = registry_factory()
+    for batch in batches:
+        if seed_batches and batch.batch_id in seed_batches:
+            seed = seed_batches[batch.batch_id]
+            registry.add(batch, seed)
+            projected_by_owner[batch.owner_key].append(seed)
+            completed.append(batch.batch_id)
     collision_attempts = 0
     validation_rejection_attempts = 0
     stopped_reason = ""
     stopped_at = ""
+    provider_error: dict[str, Any] = {}
     try:
         for batch in batches:
+            if seed_batches and batch.batch_id in seed_batches:
+                continue
             must_change: tuple[str, ...] = ()
             accepted: ProjectedOwnerSurfaces | None = None
-            for attempt in range(MAX_AUTHORING_ATTEMPTS):
+            for attempt in range(maximum_attempts):
                 try:
-                    candidate = await author_owner_surfaces(
-                        batch,
-                        cached,
-                        variation_attempt=attempt,
-                        must_change_surface_keys=must_change,
-                    )
+                    if request_builder is None:
+                        candidate = await author_owner_surfaces(
+                            batch,
+                            cached,
+                            variation_attempt=attempt,
+                            must_change_surface_keys=must_change,
+                        )
+                    else:
+                        request = request_builder(
+                            batch,
+                            variation_attempt=attempt,
+                            must_change_surface_keys=must_change,
+                        )
+                        candidate = project_owner_surfaces(
+                            batch, await cached.generate(request)
+                        )
+                        nonce = str(request.input.get("authoring_nonce", ""))
+                        if nonce and any(
+                            nonce in text
+                            for values in candidate.model_dump(mode="json").values()
+                            for text in values.values()
+                        ):
+                            raise ValueError(
+                                "authored surface exposes the variation nonce"
+                            )
                 except PlannerCallBudgetExceeded:
                     stopped_reason = "budget_exhausted"
                     stopped_at = batch.batch_id
@@ -217,6 +265,15 @@ async def run(args: argparse.Namespace) -> int:
                         )
                     )
                     continue
+                except StructuredOutputProviderError as exc:
+                    stopped_reason = type(exc).__name__
+                    stopped_at = batch.batch_id
+                    provider_error = {
+                        "code": exc.code,
+                        "http_status": exc.status_code,
+                        "retryable": exc.retryable,
+                    }
+                    break
                 except Exception as exc:  # noqa: BLE001 - provider details stay private
                     stopped_reason = type(exc).__name__
                     stopped_at = batch.batch_id
@@ -264,9 +321,11 @@ async def run(args: argparse.Namespace) -> int:
         },
         "accepted_attempts_by_batch": accepted_attempts,
     }
+    if provider_error:
+        state["last_invocation"]["provider_error"] = provider_error
     _write_json(state_path, state)
     progress = {
-        "runner": RUNNER,
+        "runner": runner,
         "status": "complete" if complete else "incomplete",
         "manifest_fingerprint": manifest.fingerprint,
         "implementation_commit": plan["implementation_commit"],
@@ -279,6 +338,10 @@ async def run(args: argparse.Namespace) -> int:
         "surfaces_available": complete,
         "quality_metrics_available": False,
     }
+    if seed_batches is not None:
+        progress["seed_batch_count"] = len(seed_batches)
+    if parents is not None:
+        progress["parents"] = parents
     _write_json(args.progress_output, progress)
     if not complete:
         print(json.dumps(progress, ensure_ascii=False, indent=2))
@@ -289,7 +352,7 @@ async def run(args: argparse.Namespace) -> int:
         for owner in manifest.owners
     ]
     output = {
-        "runner": RUNNER,
+        "runner": runner,
         "status": "authored_unreviewed",
         "manifest_fingerprint": manifest.fingerprint,
         "implementation_commit": plan["implementation_commit"],
@@ -302,6 +365,8 @@ async def run(args: argparse.Namespace) -> int:
         "quality_metrics_available": False,
         "generated_at": datetime.now(UTC).isoformat(),
     }
+    if parents is not None:
+        output["parents"] = parents
     _validate_complete_output(manifest, output)
     _write_json(args.output, output)
     print(f"output: {args.output.resolve()}")

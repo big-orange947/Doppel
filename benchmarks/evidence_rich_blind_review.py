@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from benchmarks.evidence_rich_blind_authoring import (
     OwnerSurfaceDraft,
     review_owner_surfaces,
     split_owner_authoring_batches,
+    validate_surface_review,
 )
 from benchmarks.relation_planner_quality import (
     CachedStructuredOutputModel,
@@ -34,9 +36,11 @@ from benchmarks.relation_planner_quality import (
     StructuredOutputCallBudget,
     UsageLedger,
 )
+from doppel_memory.intelligence import StructuredGenerationRequest
 from doppel_memory.openai_compatible import (
     OpenAICompatibleStructuredOutputConfig,
     OpenAICompatibleStructuredOutputModel,
+    StructuredOutputProviderError,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,10 +79,16 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-async def run(args: argparse.Namespace) -> int:
+async def run(
+    args: argparse.Namespace,
+    *,
+    manifest_factory: Callable[[], Any] = build_manifest,
+    request_builder: Callable[..., StructuredGenerationRequest] | None = None,
+    runner: str = RUNNER,
+) -> int:
     if args.max_new_calls < 0:
         raise ValueError("max-new-calls must not be negative")
-    manifest = build_manifest()
+    manifest = manifest_factory()
     batches = [
         batch
         for owner in manifest.owners
@@ -97,7 +107,7 @@ async def run(args: argparse.Namespace) -> int:
         timeout_seconds=args.timeout_seconds,
     )
     plan = {
-        "runner": RUNNER,
+        "runner": runner,
         "mode": "live_review" if args.live_review else "dry_run",
         "manifest_fingerprint": manifest.fingerprint,
         "authored_surfaces_path": str(args.authored_surfaces.resolve()),
@@ -155,13 +165,30 @@ async def run(args: argparse.Namespace) -> int:
     completed: list[str] = []
     stopped_reason = ""
     stopped_at = ""
+    provider_error: dict[str, Any] = {}
+
+    async def review_batch(batch: OwnerAuthoringBatch, model: Any) -> Any:
+        if request_builder is None:
+            return await review_owner_surfaces(batch, drafts[batch.batch_id], model)
+        raw = await model.generate(request_builder(batch, drafts[batch.batch_id]))
+        return validate_surface_review(batch, raw)
+
     try:
         for batch in batches:
             try:
-                await review_owner_surfaces(batch, drafts[batch.batch_id], cached)
+                await review_batch(batch, cached)
             except PlannerCallBudgetExceeded:
                 stopped_reason = "budget_exhausted"
                 stopped_at = batch.batch_id
+                break
+            except StructuredOutputProviderError as exc:
+                stopped_reason = type(exc).__name__
+                stopped_at = batch.batch_id
+                provider_error = {
+                    "code": exc.code,
+                    "http_status": exc.status_code,
+                    "retryable": exc.retryable,
+                }
                 break
             except Exception as exc:  # noqa: BLE001 - redact provider details
                 stopped_reason = type(exc).__name__
@@ -192,9 +219,11 @@ async def run(args: argparse.Namespace) -> int:
             "stopped_at_batch_id": stopped_at,
         },
     }
+    if provider_error:
+        state["last_invocation"]["provider_error"] = provider_error
     _write_json(state_path, state)
     progress = {
-        "runner": RUNNER,
+        "runner": runner,
         "status": "complete" if complete else "incomplete",
         "manifest_fingerprint": manifest.fingerprint,
         "authored_surfaces_sha256": authored_sha256,
@@ -217,9 +246,7 @@ async def run(args: argparse.Namespace) -> int:
     replay_cache = CachedStructuredOutputModel(replay_budget, args.cache_dir)
     reports: list[dict[str, Any]] = []
     for batch in batches:
-        review = await review_owner_surfaces(
-            batch, drafts[batch.batch_id], replay_cache
-        )
+        review = await review_batch(batch, replay_cache)
         reports.append(
             {
                 "batch_id": batch.batch_id,
@@ -235,7 +262,7 @@ async def run(args: argparse.Namespace) -> int:
     issue_count = sum(item["issue_count"] for item in reports)
     accepted = issue_count == 0
     output = {
-        "runner": RUNNER,
+        "runner": runner,
         "status": "reviewed_accepted" if accepted else "reviewed_rejected",
         "manifest_fingerprint": manifest.fingerprint,
         "authored_surfaces_sha256": authored_sha256,

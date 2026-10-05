@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Preserve the completed blind corpus's first semantic-review rejection (126 findings)
+  and repair the pre-retrieval host contract in a separate manifest: typed relation
+  endpoints, aligned branch identities, an independent no-answer object, and explicit
+  temporal briefs. Add a hash-bound revision workflow that retains 24 unchanged,
+  issue-free tail batches, regenerates 24 core batches, and requires a fresh complete
+  semantic review before compilation. Record safe provider error codes for diagnosis.
 - Complete the unopened V8 blind surface-authoring run: deterministic parent replay
   recovers 23/48 batches without a call, 31 new calls complete the remaining 25, and
   the sealed artifact covers all 24 owner scopes, 4,608 memory slots, and 240 query

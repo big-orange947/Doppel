@@ -747,6 +747,18 @@ closed. The preserved result is documented in
 
 Independent semantic review is also dry-run by default:
 
+The complete first review rejected the original artifact with 126 findings on 121
+owner-local surface slots. Both host-schema contradictions and unsupported reviewer
+claims were found; these are not retrieval scores. Preserve that first rejection in
+[`reports/evidence-rich-blind-v1-first-review-rejected-2026-10-05.md`](reports/evidence-rich-blind-v1-first-review-rejected-2026-10-05.md).
+The active continuation is a separately bound pre-retrieval revision, with 24 unchanged
+tail batches reused and 24 core batches regenerated under coherent endpoint types.
+Its new authoring and review caches never overwrite the originals. Commands and
+immutable comparison rules are frozen in
+[`reports/evidence-rich-blind-v1-revision-plan-2026-10-05.md`](reports/evidence-rich-blind-v1-revision-plan-2026-10-05.md).
+Use `python -m benchmarks.evidence_rich_blind_revision author` for its current dry-run
+plan; the historical review command below remains documented for reproducibility.
+
 ```bash
 python -m benchmarks.evidence_rich_blind_review
 ```

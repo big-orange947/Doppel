@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -42,8 +43,10 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-def run(args: argparse.Namespace) -> int:
-    manifest = build_manifest()
+def run(
+    args: argparse.Namespace, *, manifest_factory: Callable[[], Any] = build_manifest
+) -> int:
+    manifest = manifest_factory()
     plan = {
         "runner": RUNNER,
         "mode": "compile" if args.compile else "dry_run",
@@ -384,9 +387,7 @@ def _validate_authored(manifest: Any, authored: dict[str, Any]) -> None:
         item = actual[owner.owner_key]
         memory_contents = list(item["memory_content_by_id"].values())
         if len(memory_contents) != len(set(memory_contents)):
-            raise ValueError(
-                "authored memory contents must be unique within one owner"
-            )
+            raise ValueError("authored memory contents must be unique within one owner")
         edge_facts = [
             str(value)
             for value in item["edge_fact_by_memory_id"].values()
