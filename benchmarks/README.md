@@ -777,6 +777,16 @@ completed author/review commands or treat this as a retrieval score; the next wo
 is reviewer calibration and a frozen, bounded repair inventory. See
 [`reports/evidence-rich-blind-v1-revision-v3-review-audit-2026-10-05.md`](reports/evidence-rich-blind-v1-revision-v3-review-audit-2026-10-05.md).
 
+Reviewer calibration is now a separate experiment, not a V3 acceptance override.
+`python -m benchmarks.surface_review_calibration` prints its zero-call plan;
+`--live --max-new-calls 48` compares the frozen baseline and an exact-quote-grounded
+protocol on 24 balanced development controls. It measures false flags and missed
+defects, refuses paid replacement of corrupt cache entries, and preserves its first
+result. Passing requires valid reviews for both profiles and all candidate controls
+correct; it does not grant corpus acceptance or publication readiness. The frozen
+controls, gate, limits and next repair boundary are documented in
+[`reports/surface-review-calibration-v1-plan-2026-10-05.md`](reports/surface-review-calibration-v1-plan-2026-10-05.md).
+
 ```bash
 python -m benchmarks.evidence_rich_blind_review
 ```

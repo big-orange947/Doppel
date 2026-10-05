@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add a separate 24-control reviewer calibration experiment comparing the frozen V3
+  protocol with evidence-grounded issue citations. Freeze false-positive/defect
+  detection scoring and a strict preliminary gate before live output; bound calls,
+  preserve first results and corrupt caches, and grant no blind-corpus acceptance.
 - Record the blind corpus V3's completed 48-batch generation and rejected full review
   (23 findings), with hash-bound coverage and usage. Audit reviewer false positives,
   lifecycle/interval ambiguities and unflagged relation-family defects; keep
