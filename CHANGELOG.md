@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Compose a local durable textual-ingestion host around the existing Miner,
+  proposal writer, consolidation and index maintenance. Persist replayable plans,
+  bind explicit host role attribution and Store/index profile identities, block
+  later scope writes behind pending predecessors, and revalidate raw provenance.
+  Test real SQLite restart, partial writes, index repair, competing instances and
+  abrupt subprocess death with fake models/indexes; do not claim live retrieval.
+- Canonicalize extractor/Miner actor-set fingerprints across Python hash seeds.
+  Old host checkpoint fingerprints may differ; preserve old state and use a fresh
+  namespace or explicit migration rather than silently bypassing compatibility.
+- Preregister three complete LongMemEval diagnostic histories and three reserved
+  groups with seeded, label-independent selection and original-turn mappings.
+  Retain the full supplied haystack and declare question-date calendar semantics;
+  manifests remain zero-model and contain no recall/QA score.
 - Keep local BGE embeddings for the first public raw-history diagnostic. Add a
   LongMemEval history/query adapter, scoring-only labels, source-time and scope
   identities, deterministic chunking and a zero-model preflight with source hashes

@@ -22,6 +22,14 @@ deterministic source/time identities, and a zero-model preflight. It is not yet
 a live ingest/retrieval/answer runner. LoCoMo is a later adapter, not silently
 treated as AML's LoCoMo-Refined.
 
+The next local implementation adds a durable host ingestion journal around the
+existing Miner, proposal writer, consolidation and index maintenance. Real SQLite
+restart/process-death tests use fake model/index outputs; this is not a live
+provider/vector/graph validation. Ingestion stage completion is **not** an AML
+searchable receipt. Provider accounting, actual retrieval composition, attributed
+assistant-context evidence and HTTP hosting remain pending. See the pilot document
+for fixed complete-history selection, temporal policy and fingerprint compatibility.
+
 Doppel remains a personal memory/context core. The integration adapts a transport
 and host identity policy, not a benchmark-specific retrieval algorithm. No dataset
 names, expected answers or query-specific exceptions may influence production code.

@@ -398,7 +398,11 @@ class PersonalMemoryExtractorConfig(BaseModel):
 
     @property
     def fingerprint(self) -> str:
-        return _fingerprint(self.model_dump(mode="json"))
+        payload = self.model_dump(mode="json")
+        # JSON serializes sets as arrays in hash-seed-dependent iteration order.
+        # Host checkpoints must bind the same configuration across processes.
+        payload["allowed_source_actors"] = sorted(self.allowed_source_actors)
+        return _fingerprint(payload)
 
 
 class PersonalMemoryMinerConfig(PersonalMemoryExtractorConfig):

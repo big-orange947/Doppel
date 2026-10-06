@@ -10,6 +10,8 @@ Public-data preparation: [local-embedding raw-history pilot](../docs/public-memo
 `python -m benchmarks.public_longmemeval` checks the official cleaned LongMemEval
 format and projects history separately from scoring labels. It is zero-model
 preparation, not a retrieval/QA benchmark result or an AML academic model profile.
+`python -m benchmarks.public_memory_pilot` preregisters complete-history diagnostic/
+reserved groups and original-turn provenance mappings; it also runs no models.
 
 Latest bounded diagnostic: [2026-10-06 evidence-rich V7/V8 comparison](reports/evidence-rich-curated-diagnostic-v1-result-2026-10-06.md).
 It retains all 4,608 background memories and evaluates a preregistered 208-query

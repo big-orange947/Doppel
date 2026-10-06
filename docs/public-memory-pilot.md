@@ -131,3 +131,86 @@ both document/query vector namespaces rather than mixing incompatible vectors.
 LoCoMo's original public release is a separate future adapter. Its original and
 Refined versions, licenses, category rules and multimedia/text projections must
 not be silently substituted for one another.
+
+## Durable composition and preregistered pilot, 2026-10-07
+
+`integrations/aml/ingestion.py` now composes the existing production
+`PersonalMemoryMiner`, `ProposalWriter`, `ConsolidationRunner` and `IndexMaintainer`.
+The host injects the analyzer/model, consolidator and real index writers. The
+authoritative Store can be file-backed SQLite or a transactional/paginated Store
+such as PostgreSQL; non-SQLite callers must bind a trusted, non-secret, stable
+`store_identity` to the database/schema. This declaration does not prove a custom
+Store's durability. This round exercised **real SQLite, fake models/indexes**; it
+did not verify a live PostgreSQL/vector/Neo4j composition.
+
+This is an ingestion component, **not a completed AML Search backend or server**.
+`IngestionCompletion` is deliberately not `WriteReceipt`: reported index
+maintenance completion does not itself prove retrieval/answer correctness.
+Keep core role/state policies intact; specifically:
+
+- Role attribution is explicit host configuration (`role_actors`), not something
+  inferred as verified owner identity from an incoming `role="user"`. The personal
+  owner-chat pilot binds user to owner and historical assistant to agent. Contact
+  attribution needs a richer trusted speaker binding and is not implemented here.
+- Both roles remain in raw storage. Original text is retained even where
+  `ChatMessage` normalizes surrounding whitespace. Excluding an input role or
+  truncating a chunk is an error, not silent successful ingestion.
+- Extracted claims still pass subject/source-actor and scope gates. Configuring a
+  proposed lifecycle state does not change source authority. Default core
+  extraction policy is unchanged. Assistant evidence needs an attributed context
+  retrieval channel; do not lower owner-fact gates to pass assistant-side questions.
+- Raw event IDs, extracted proposals and bound consolidation plans are persisted
+  before later stages. Successful-stage replay does not re-extract. Raw provenance
+  is reloaded from the exact authoritative Store; index loss is repairable, but
+  missing raw evidence is an explicit failure, not fabricated/reinserted history.
+- SQLite checkpoints commit separately from a coordinator transaction. Cooperating
+  local processes sharing the journal/coordinator have one writer. A competing
+  writer fails before model calls; process termination releases the coordinator
+  lock. This is not distributed multi-host locking, nor protection against direct
+  external Store mutations. A later chunk in a scope waits for its pending predecessor.
+- Provider response caching is **still required** for the crash interval between a
+  successful model response and proposal-plan persistence. Do not claim exactly-once
+  billing from the write journal alone. Invalid-draft/low-confidence rejection
+  accounting is also a remaining live-execution gate.
+
+The subprocess crash test exposed and fixed a core fingerprint defect: extractor/
+Miner `allowed_source_actors` was JSON-serialized as an unordered set, producing
+different checkpoint identities under different Python hash seeds. It is now
+sorted before hashing. **Compatibility note:** old host checkpoints/caches may
+carry the former noncanonical fingerprint. Preserve them; use a new diagnostic
+namespace or an explicit audited migration, not automatic deletion or bypass of
+profile checks. Different hash-seed subprocesses now verify stable fingerprints.
+
+The manifest generator is zero-model and refuses to overwrite a prior plan:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.public_memory_pilot `
+  --dataset data\public-benchmarks\longmemeval_s_cleaned.json `
+  --output data\doppel\longmemeval-local-pilot-manifest-next.json
+```
+
+Fixed source snapshot: the SHA-256 recorded above. Fixed seed: `20261007`.
+The generated local manifest is `data/doppel/longmemeval-local-pilot-manifest-v1.json`,
+fingerprint `6f9f01932b6a93e5edabbfba412af724ab9c78a762db5f94e3ddcd33de90c9fc`.
+It records chunk/event-to-original-session/turn mappings without query/answer text.
+The selected diagnostic cases are `50635ada`, `0100672e`, `cc539528`: **145 sessions,
+1,513 raw turns, 147 complete-history Add chunks**. Three other history groups are
+reserved and not executed. Exact full-history groups are kept together; selection
+does not consult questions, answers, evidence labels or categories. One session
+content is shared across selected groups; the reserved set is explicitly **not
+claimed as independently blind**. Do not select replacement cases after seeing scores.
+
+Freeze the native local temporal protocol as: ingest the **entire supplied
+haystack in source order**, retain every source timestamp, and use `question_date`
+only as the question's calendar reference—not as an implicit history arrival
+cutoff. The upstream [LongMemEval instructions](https://github.com/xiaowu0162/LongMemEval)
+describe answering after all supplied sessions. This local choice does not assert
+that the cleaned file's date inversions or later timestamps are correct; it avoids
+silently editing the provided benchmark. Report those properties separately and
+do not translate this into an AML `question_date` field.
+
+No live model or retrieval performance result exists for this pilot yet. Next:
+provider cache/budget/rejection accounting; actual local-vector/reranker + attributed
+raw-context retrieval; raw-derived graph projection; natural Planner/path retrieval
+and evidence scoring. The earlier oracle-seeded recall numbers must not be copied
+onto this raw-history evaluation.
