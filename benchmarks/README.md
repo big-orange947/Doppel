@@ -6,6 +6,12 @@ retrieval evidence quality, observable style, and semantic-index correctness rem
 separate reports; Doppel does not combine them into a flattering but meaningless
 "memory intelligence" score.
 
+Latest bounded diagnostic: [2026-10-06 evidence-rich V7/V8 comparison](reports/evidence-rich-curated-diagnostic-v1-result-2026-10-06.md).
+It retains all 4,608 background memories and evaluates a preregistered 208-query
+assistant-curated subset. It is **not independently accepted blind evaluation**;
+oracle planning, unmeasured counts, invalid earlier adapter runs and remaining
+related-label uncertainty are explicitly documented.
+
 Development results: [2026-09-05 natural Planner replay: relation candidates and
 BGE reranking](reports/relation-candidate-replay-2026-09-05.md). All six local
 profiles executed; quality gates still fail. The report documents the

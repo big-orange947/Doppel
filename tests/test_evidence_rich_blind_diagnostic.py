@@ -116,6 +116,55 @@ def test_artifact_write_is_exclusive(tmp_path: Path) -> None:
     assert json.loads(path.read_text("utf-8")) == {"a": 1}
 
 
+def test_empty_retrieval_is_not_positive_safety_evidence(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    selection_path = tmp_path / "selection.json"
+    diagnostic.write_new(selection_path, {})
+    monkeypatch.setattr(diagnostic, "SELECTION", selection_path)
+    metrics = {
+        "queries": 208,
+        "average_candidates": 0,
+        "max_candidates": 0,
+        **{
+            key: 0
+            for key in (
+                "scope_leakage",
+                "subject_violations",
+                "ineligible_hits",
+                "temporal_violations",
+                "orphan_provenance",
+                "hard_forbidden_hits",
+                "evidence_recall_at_5",
+                "evidence_recall_at_10",
+                "complete_evidence_rate_at_10",
+                "related_evidence_recall_at_10",
+                "mrr",
+            )
+        },
+    }
+    raw = {
+        "profiles": {name: metrics for name in diagnostic.COMPARISON.values()},
+        "semantic_path_reranking_assembly": {},
+        "semantic_path_family_reranking_assembly": {},
+        "reorder_membership_violations": 0,
+        "path_rerank_membership_violations": 0,
+        "path_family_membership_violations": 0,
+        "rerank_statuses": {"not_run": 208},
+        "path_rerank_statuses": {"not_run": 208},
+        "runtime": {
+            "neo4j_cleanup_performed": True,
+            "postgres_cleanup_performed": True,
+        },
+    }
+    result = diagnostic.diagnostic_report(raw, {})
+    assert not result["diagnostic_safety_gate"]["ok"]
+    assert not result["diagnostic_safety_gate"]["checks"]["v8_retrieval_exercised"]
+    assert result["count_quality"]["exact_count_rate"] is None
+    assert not result["publication_ready"]
+    assert not result["full_corpus_review_accepted"]
+
+
 @pytest.mark.parametrize(
     "database,user", [("user_data", "postgres"), ("doppel_ablation", "user")]
 )
