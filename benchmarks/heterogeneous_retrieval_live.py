@@ -275,7 +275,14 @@ async def run_live(
         for name, scope in dataset.scopes.items()
     }
     groups = [scope.scope_key for scope in scopes.values()]
-    records = [_record(memory, scopes[memory.scope]) for memory in dataset.memories]
+    records = [
+        _record(
+            memory,
+            scopes[memory.scope],
+            owner_subject_id=dataset.scopes[memory.scope].user_id,
+        )
+        for memory in dataset.memories
+    ]
     records_by_id = {record.memory_id: record for record in records}
     memories_by_id = {memory.memory_id: memory for memory in dataset.memories}
     rows_by_profile: dict[str, list[dict[str, Any]]] = {
@@ -1227,15 +1234,17 @@ def _oracle_path_plan(
     )
 
 
-def _record(item: HeterogeneousMemory, scope: MemoryScope) -> MemoryRecord:
+def _record(
+    item: HeterogeneousMemory, scope: MemoryScope, *, owner_subject_id: str
+) -> MemoryRecord:
     valid_from = _timestamp(item.valid_from)
-    subject = Actor.OWNER if item.subject_id.startswith("owner-") else Actor.CONTACT
+    subject = Actor.OWNER if item.subject_id == owner_subject_id else Actor.CONTACT
     actor = {
         "human_self": Actor.OWNER,
         "peer_statement": Actor.CONTACT,
         "agent_output": Actor.AGENT,
     }[item.authority]
-    subject_id = scope.user_id if subject == Actor.OWNER else item.subject_id.lower()
+    subject_id = scope.user_id if subject == Actor.OWNER else item.subject_id
     return MemoryRecord(
         memory_id=item.memory_id,
         scope=scope,

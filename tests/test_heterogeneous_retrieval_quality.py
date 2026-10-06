@@ -367,7 +367,11 @@ def test_oracle_path_and_memory_projection_preserve_contract_fields() -> None:
     one_hop = _oracle_path_plan(queries["q-u01-holder"], scope)
     two_hop = _oracle_path_plan(queries["q-u01-object-city"], scope)
     nonrelation = _oracle_path_plan(queries["q-u01-document"], scope)
-    record = _record(memories["m-u01-trip-a"], scope)
+    record = _record(
+        memories["m-u01-trip-a"],
+        scope,
+        owner_subject_id=dataset.scopes[memories["m-u01-trip-a"].scope].user_id,
+    )
 
     assert [len(route.steps) for route in one_hop.routes] == [1]
     assert [len(route.steps) for route in two_hop.routes] == [2]

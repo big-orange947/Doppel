@@ -12,7 +12,7 @@ from test_evidence_rich_blind_repair_inventory import make_inputs
 
 from benchmarks import evidence_rich_blind_diagnostic as diagnostic
 from benchmarks.evidence_rich_blind_compile import _validate_review, compile_corpus
-from benchmarks.heterogeneous_retrieval_live import _oracle_path_plan
+from benchmarks.heterogeneous_retrieval_live import _oracle_path_plan, _record
 from doppel_memory.models import MemoryScope
 from doppel_memory.relation_path_retrieval import RelationPathCandidateOntologyError
 
@@ -74,6 +74,23 @@ def test_formal_rejected_review_is_still_rejected() -> None:
     manifest, _, review = make_inputs()
     with pytest.raises(ValueError, match="accepted first semantic review"):
         _validate_review(manifest, review, "authored-test-sha")
+
+
+def test_identity_projection_uses_explicit_owner_not_prefix(parent: Any) -> None:
+    for item in parent.memories:
+        owner_id = parent.scopes[item.scope].user_id
+        scope = MemoryScope(user_id=f"{owner_id}:run", agent_id="eval")
+        record = _record(item, scope, owner_subject_id=owner_id)
+        assert record.metadata["subject"] == (
+            "owner" if item.subject_id == owner_id else "contact"
+        )
+        assert record.metadata["subject_id"] == (
+            scope.user_id if item.subject_id == owner_id else item.subject_id
+        )
+    item = parent.memories[0].model_copy(update={"subject_id": "owner-Foreign"})
+    record = _record(item, scope, owner_subject_id="arbitrary-account-id")
+    assert record.metadata["subject"] == "contact"
+    assert record.metadata["subject_id"] == "owner-Foreign"
 
 
 def test_parent_with_missing_exclusion_rejected(parent: Any) -> None:

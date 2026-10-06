@@ -31,12 +31,12 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data/doppel"
 PREFIX = "evidence-rich-curated-diagnostic-v1"
 CORPUS = DATA / f"{PREFIX}-corpus.json"
-SELECTION = DATA / f"{PREFIX}-selection-v2.json"
-PREVIOUS_SELECTION = DATA / f"{PREFIX}-selection.json"
+SELECTION = DATA / f"{PREFIX}-selection-v3.json"
+PREVIOUS_SELECTION = DATA / f"{PREFIX}-selection-v2.json"
 PREVIOUS_SELECTION_SHA = (
-    "d9ebc46634047ef4023c90f04dd3440a07e10003dbab5098433e34facc07f62a"
+    "67b6e7d5fd654bbfa130cab6e5eee1143d556da4e2e0333e39b00e01507d9647"
 )
-OUTPUT = DATA / f"{PREFIX}-live.json"
+OUTPUT = DATA / f"{PREFIX}-live-v3.json"
 SOURCES = {
     "manifest": (
         DATA / "evidence-rich-blind-v1-bounded-revised-final-manifest.json",
@@ -165,7 +165,7 @@ def prepare() -> None:
     subset = build_subset(parent)
     if CORPUS.exists():
         # Explicit harness-only amendment. Never rewrite the original corpus or
-        # selection. The interrupted attempt exposed no complete quality result.
+        # selection. The prior complete result had invalid identity projection.
         if sha(PREVIOUS_SELECTION) != PREVIOUS_SELECTION_SHA:
             raise ValueError("previous preregistration changed")
         previous = json.loads(PREVIOUS_SELECTION.read_text("utf-8"))
@@ -208,9 +208,9 @@ def prepare() -> None:
             "provider_calls": 0,
             "harness_amendment": {
                 "previous_selection_sha256": PREVIOUS_SELECTION_SHA,
-                "interrupted_attempt": "RelationPathCandidateOntologyError",
-                "complete_quality_result_available": False,
-                "change": "oracle control uses declared dataset ontology instead of two hardcoded types",
+                "previous_complete_result_sha256": "452453634917d27dfecbac1ec8fb1770563904b90e2f68dbb0a75579e5b5ffc5",
+                "previous_result_status": "invalid fixture projection: all host owners were classified as contacts",
+                "change": "project subject by explicit host identity equality, not ID prefix",
                 "corpus_and_membership_unchanged": True,
             },
         },
@@ -295,6 +295,7 @@ def diagnostic_report(raw: dict[str, Any], selection: dict[str, Any]) -> dict[st
     checks: dict[str, bool] = {}
     for label, metrics in profiles.items():
         checks[f"{label}_coverage"] = metrics["queries"] == 208
+        checks[f"{label}_retrieval_exercised"] = metrics["average_candidates"] > 0
         for field in (
             "scope_leakage",
             "subject_violations",

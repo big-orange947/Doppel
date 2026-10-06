@@ -107,3 +107,34 @@ The ordinary project `.venv` lacks CUDA PyTorch; use the existing previously use
 `.doppel-eval-cu128` environment above. No package installation or lockfile change
 is required. Fixed-HEAD full regression before the amendment: 949 passed,
 33 skipped, three subtests passed, one existing Graphiti deprecation warning.
+
+## Explicit identity-projection correction after invalid full result
+
+The next execution under `901cb0c` completed all 208 queries but returned zero
+candidates in every profile. Its report is preserved unchanged at
+`data/doppel/evidence-rich-curated-diagnostic-v1-live.json`, SHA-256
+`452453634917d27dfecbac1ec8fb1770563904b90e2f68dbb0a75579e5b5ffc5`.
+It must NOT be interpreted as valid algorithm-comparison evidence or a successful
+security test: its safety gate was vacuous with empty results.
+
+Direct projection inspection showed that the benchmark adapter recognized an owner
+only by `subject_id.startswith("owner-")`. This corpus declares owner identities
+such as `subject-blind-01`; every actual owner became a contact. The engine's owner
+filter correctly rejected those misbound fixtures. The generic correction compares
+each record's subject with its scope's explicitly declared host user identity, and
+retains foreign identity strings exactly. No ID naming pattern is authoritative.
+
+This is a test-fixture binding fix, not weakening Doppel's subject isolation,
+changing gold labels, tuning scores or adding a scenario-specific query rule.
+The correction is covered over all 4,608 synthetic parent records, including a
+foreign subject whose name happens to start with `owner-`.
+
+The immutable selection-v2 and invalid complete report remain. Selection-v3 chains
+their hashes, keeps the same corpus and 208 membership, and freezes the adapter fix
+before rerunning. The diagnostic safety gate now also requires nonempty retrieval
+to be exercised; absence of leaks from an empty result is not useful evidence.
+These observations mean this is an **opened diagnostic rerun**, never a fresh blind
+result. Any subsequent quality changes require separately declared experiments.
+
+Selection-v3 SHA-256:
+`4f4fa03488874a4221a9847a269ff37713b69def38f09c5de78e47fe4ab2e458`.
