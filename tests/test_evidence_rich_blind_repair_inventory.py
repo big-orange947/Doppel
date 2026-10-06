@@ -11,8 +11,7 @@ from benchmarks import evidence_rich_blind_repair_inventory as inventory
 from benchmarks.evidence_rich_blind_authoring import split_owner_authoring_batches
 
 
-@pytest.fixture(scope="module")
-def inputs() -> tuple[Any, dict[str, Any], dict[str, Any]]:
+def make_inputs() -> tuple[Any, dict[str, Any], dict[str, Any]]:
     manifest = inventory.source.build_manifest()
     authored = {
         "status": "authored_unreviewed",
@@ -78,6 +77,11 @@ def inputs() -> tuple[Any, dict[str, Any], dict[str, Any]]:
         "batches": batches,
     }
     return manifest, authored, review
+
+
+@pytest.fixture(scope="module")
+def inputs() -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    return make_inputs()
 
 
 def build(inputs: tuple[Any, dict[str, Any], dict[str, Any]]) -> dict[str, Any]:
