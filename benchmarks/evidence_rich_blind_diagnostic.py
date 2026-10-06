@@ -31,7 +31,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data/doppel"
 PREFIX = "evidence-rich-curated-diagnostic-v1"
 CORPUS = DATA / f"{PREFIX}-corpus.json"
-SELECTION = DATA / f"{PREFIX}-selection.json"
+SELECTION = DATA / f"{PREFIX}-selection-v2.json"
+PREVIOUS_SELECTION = DATA / f"{PREFIX}-selection.json"
+PREVIOUS_SELECTION_SHA = (
+    "d9ebc46634047ef4023c90f04dd3440a07e10003dbab5098433e34facc07f62a"
+)
 OUTPUT = DATA / f"{PREFIX}-live.json"
 SOURCES = {
     "manifest": (
@@ -146,8 +150,8 @@ def build_subset(
 
 
 def prepare() -> None:
-    if CORPUS.exists() or SELECTION.exists():
-        raise FileExistsError("diagnostic corpus/selection already exists")
+    if SELECTION.exists():
+        raise FileExistsError("diagnostic selection already exists")
     for path, expected in SOURCES.values():
         if sha(path) != expected:
             raise ValueError("diagnostic source hash mismatch")
@@ -159,12 +163,27 @@ def prepare() -> None:
     parent = compile_corpus(manifest, authored)
     _validate_novel_surfaces(parent)
     subset = build_subset(parent)
-    write_new(CORPUS, subset.model_dump(mode="json"))
+    if CORPUS.exists():
+        # Explicit harness-only amendment. Never rewrite the original corpus or
+        # selection. The interrupted attempt exposed no complete quality result.
+        if sha(PREVIOUS_SELECTION) != PREVIOUS_SELECTION_SHA:
+            raise ValueError("previous preregistration changed")
+        previous = json.loads(PREVIOUS_SELECTION.read_text("utf-8"))
+        if (
+            sha(CORPUS) != previous["corpus_sha256"]
+            or load_dataset(CORPUS).fingerprint != subset.fingerprint
+            or previous["selected_case_ids"] != [q.case_id for q in subset.queries]
+            or previous["excluded_case_ids_with_reasons"] != EXCLUSIONS
+            or previous["runtime_config"] != CONFIG
+        ):
+            raise ValueError("harness amendment cannot change the selection")
+    else:
+        write_new(CORPUS, subset.model_dump(mode="json"))
     write_new(
         SELECTION,
         {
             "runner": "doppel.curated-diagnostic-selection.v1",
-            "status": "frozen_before_retrieval",
+            "status": "harness_amended_before_complete_scores",
             "selection_method": "fixed semantic audit exclusions, no retrieval scores",
             "source_hashes": {k: digest for k, (_, digest) in SOURCES.items()},
             "implementation_hashes": code_hashes(),
@@ -187,6 +206,13 @@ def prepare() -> None:
             "full_corpus_review_accepted": False,
             "publication_ready": False,
             "provider_calls": 0,
+            "harness_amendment": {
+                "previous_selection_sha256": PREVIOUS_SELECTION_SHA,
+                "interrupted_attempt": "RelationPathCandidateOntologyError",
+                "complete_quality_result_available": False,
+                "change": "oracle control uses declared dataset ontology instead of two hardcoded types",
+                "corpus_and_membership_unchanged": True,
+            },
         },
     )
     print(

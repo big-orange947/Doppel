@@ -70,7 +70,7 @@ Existing unrelated nodes and Docker volumes must not be removed.
 
 ```powershell
 .\.venv\Scripts\python.exe -m benchmarks.evidence_rich_blind_diagnostic prepare
-.\.venv\Scripts\python.exe -m benchmarks.evidence_rich_blind_diagnostic run
+D:\project\.doppel-eval-cu128\Scripts\python.exe -m benchmarks.evidence_rich_blind_diagnostic run
 ```
 
 No DeepSeek API key is needed. Backend credentials are obtained only in memory
@@ -83,3 +83,27 @@ This opening means the diagnostic population is no longer untouched blind data.
 The complete corpus remains unaccepted. Do not compare its 208-query scores with
 older 480-query scores as an isolated algorithm improvement, and do not infer
 real-user, extraction, natural-planner or whole-history count quality from them.
+
+## Harness-only amendment before any complete scores
+
+The first attempt under `9ea2e3b` failed with
+`RelationPathCandidateOntologyError`. The auxiliary exact-path oracle still used
+the old corpus's hardcoded `HELD_BY` / `LIVES_IN` allowlist, whereas the new host
+declares 17 relation types. The normal exploration path already used the declared
+ontology. Both benchmark backends cleaned up; no complete result was emitted.
+
+The fix passes the declared host ontology to the oracle-control builder. This is
+not a V7/V8 algorithm, scoring, membership or gold change. All 208 queries and
+all background records remain byte-identical. The original selection is retained;
+an explicitly chained `selection-v2` binds the harness correction. No complete
+quality results were available when amending; this is not a best-run selection.
+Amended selection SHA-256:
+`67b6e7d5fd654bbfa130cab6e5eee1143d556da4e2e0333e39b00e01507d9647`.
+The corpus should now be called **first completed diagnostic execution**, not an
+uninterrupted first attempted execution. The partial attempt already opened some
+queries; independent blind-corpus claims remain prohibited.
+
+The ordinary project `.venv` lacks CUDA PyTorch; use the existing previously used
+`.doppel-eval-cu128` environment above. No package installation or lockfile change
+is required. Fixed-HEAD full regression before the amendment: 949 passed,
+33 skipped, three subtests passed, one existing Graphiti deprecation warning.

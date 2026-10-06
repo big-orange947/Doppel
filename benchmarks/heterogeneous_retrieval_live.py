@@ -380,7 +380,9 @@ async def run_live(
             )
             rerank_statuses[status] += 1
 
-            path_plan = _oracle_path_plan(case, scope)
+            path_plan = _oracle_path_plan(
+                case, scope, allowed_relation_types=dataset.relation_types
+            )
             path_started = time.perf_counter()
             path_hits = await search_relation_path_routes(
                 graph_index,
@@ -1199,7 +1201,12 @@ class _LiveGraphClientAdapter:
         return _LiveGraphClient(driver)
 
 
-def _oracle_path_plan(case: HeterogeneousQuery, scope: MemoryScope) -> Any:
+def _oracle_path_plan(
+    case: HeterogeneousQuery,
+    scope: MemoryScope,
+    *,
+    allowed_relation_types: Sequence[str] = ("HELD_BY", "LIVES_IN"),
+) -> Any:
     path_steps = case.required_routes[0] if case.required_routes else []
     draft = PersonalMemoryRelationPathDraftV4(
         operation=case.intent,
@@ -1216,7 +1223,7 @@ def _oracle_path_plan(case: HeterogeneousQuery, scope: MemoryScope) -> Any:
     )
     return build_relation_path_retrieval_plan(
         draft,
-        allowed_relation_types=("HELD_BY", "LIVES_IN"),
+        allowed_relation_types=allowed_relation_types,
     )
 
 

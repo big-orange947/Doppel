@@ -12,6 +12,9 @@ from test_evidence_rich_blind_repair_inventory import make_inputs
 
 from benchmarks import evidence_rich_blind_diagnostic as diagnostic
 from benchmarks.evidence_rich_blind_compile import _validate_review, compile_corpus
+from benchmarks.heterogeneous_retrieval_live import _oracle_path_plan
+from doppel_memory.models import MemoryScope
+from doppel_memory.relation_path_retrieval import RelationPathCandidateOntologyError
 
 
 @pytest.fixture(scope="module")
@@ -50,6 +53,21 @@ def test_exclusions_predeclared_by_semantics_not_scores() -> None:
         )
         == 24
     )
+
+
+def test_oracle_control_uses_declared_host_ontology(parent: Any) -> None:
+    scope = MemoryScope(user_id="owner-01:diagnostic", agent_id="eval")
+    for query in parent.queries:
+        plan = _oracle_path_plan(
+            query, scope, allowed_relation_types=parent.relation_types
+        )
+        if query.required_routes:
+            assert plan.routes[0].steps == query.required_routes[0]
+        else:
+            assert not plan.routes
+    query = next(q for q in parent.queries if q.required_routes)
+    with pytest.raises(RelationPathCandidateOntologyError):
+        _oracle_path_plan(query, scope, allowed_relation_types=())
 
 
 def test_formal_rejected_review_is_still_rejected() -> None:
