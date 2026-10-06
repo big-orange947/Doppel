@@ -6,6 +6,11 @@ retrieval evidence quality, observable style, and semantic-index correctness rem
 separate reports; Doppel does not combine them into a flattering but meaningless
 "memory intelligence" score.
 
+Public-data preparation: [local-embedding raw-history pilot](../docs/public-memory-pilot.md).
+`python -m benchmarks.public_longmemeval` checks the official cleaned LongMemEval
+format and projects history separately from scoring labels. It is zero-model
+preparation, not a retrieval/QA benchmark result or an AML academic model profile.
+
 Latest bounded diagnostic: [2026-10-06 evidence-rich V7/V8 comparison](reports/evidence-rich-curated-diagnostic-v1-result-2026-10-06.md).
 It retains all 4,608 background memories and evaluates a preregistered 208-query
 assistant-curated subset. It is **not independently accepted blind evaluation**;

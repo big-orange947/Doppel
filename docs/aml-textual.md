@@ -4,8 +4,23 @@ Status: **experimental local contracts, not a submitted or deployed service**.
 Decision date: 2026-10-06. Track: Textual; division: academic/open-source methods.
 Initial user budget ceiling: **CNY 1,000**. This document grants no authority to
 purchase hosting, disclose credentials, start paid calls or launch Full evaluation.
-The user currently has **no confirmed compliant gpt-4o-mini service channel**.
-Live provider testing is therefore pending; offline preparation can continue.
+The user can prepare both model API keys; none has been configured or inspected by
+this integration. Credential setup is not a blocker for offline development.
+
+## Local diagnostic first (decision updated 2026-10-06)
+
+Before switching embeddings, use the existing local `BAAI/bge-small-zh-v1.5`
+512-dimensional embedding and `bge-reranker-v2-m3` configuration to find pipeline
+defects on public raw histories. This is a **local development profile, not an
+AML academic submission**. Required-model migration and paired embedding
+comparisons follow after the raw-history pipeline is working. Do not attribute
+any local BGE result to text-embedding-v4 or publish it as an AML score.
+
+The first implementation is [LongMemEval preparation](public-memory-pilot.md):
+explicit history/query projection, a separate scoring-only label object,
+deterministic source/time identities, and a zero-model preflight. It is not yet
+a live ingest/retrieval/answer runner. LoCoMo is a later adapter, not silently
+treated as AML's LoCoMo-Refined.
 
 Doppel remains a personal memory/context core. The integration adapts a transport
 and host identity policy, not a benchmark-specific retrieval algorithm. No dataset
@@ -80,8 +95,9 @@ not claimed as live backend verification.
 
 ## Next implementation gates
 
-1. **Provider composition, offline first.** Implement the required embedding
-   provider with fake HTTP tests for ordering, dimensions, document/query modes,
+1. **Local composition first; required providers later.** Keep the existing BGE
+   embedding and reranker for early public-data diagnosis. After that, implement
+   the required embedding provider with fake HTTP tests for ordering, dimensions, document/query modes,
    batching, failures and usage. Exercise the existing structured-output transport
    with `gpt-4o-mini`, without paid credentials. Audit *all* LLM paths. Choose and
    freeze embedding dimensions before creating a dedicated vector schema; never

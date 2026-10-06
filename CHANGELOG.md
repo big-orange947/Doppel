@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Keep local BGE embeddings for the first public raw-history diagnostic. Add a
+  LongMemEval history/query adapter, scoring-only labels, source-time and scope
+  identities, deterministic chunking and a zero-model preflight with source hashes
+  and no-overwrite reports. Test label/query mutation isolation and retained
+  assistant evidence; explicitly defer live ingestion, retrieval/QA and AML model
+  migration rather than presenting format checks as quality scores.
+  Validate all 500 official cleaned-S inputs, retaining repeated session
+  occurrences and out-of-order timestamps, mapping blank-turn transport positions
+  back to raw provenance, and flagging unresolved question-relative time policy.
 - Start a repository-only AML Textual boundary with strict input/output contracts,
   exact opaque user-scope mapping, retry/payload identities, durable/searchable
   receipt checks and ranked, scoped evidence responses. Add zero-paid fake-backend
