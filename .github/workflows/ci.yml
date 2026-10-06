@@ -45,8 +45,8 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - run: uv sync --locked --extra dev --extra graphiti
-      - run: uv run ruff format --check doppel_memory tests examples benchmarks
-      - run: uv run ruff check doppel_memory tests examples benchmarks
+      - run: uv run ruff format --check doppel_memory tests examples benchmarks integrations
+      - run: uv run ruff check doppel_memory tests examples benchmarks integrations
       - run: uv run pyright
 
   benchmark-smoke:

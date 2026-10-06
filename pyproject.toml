@@ -68,4 +68,4 @@ target-version = "py311"
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
-include = ["doppel_memory", "benchmarks"]
+include = ["doppel_memory", "benchmarks", "integrations"]

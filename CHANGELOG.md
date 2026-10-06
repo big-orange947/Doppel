@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Start a repository-only AML Textual boundary with strict input/output contracts,
+  exact opaque user-scope mapping, retry/payload identities, durable/searchable
+  receipt checks and ranked, scoped evidence responses. Add zero-paid fake-backend
+  tests and an academic-division preparation/cost plan. No HTTP server, persistent
+  integration backend, provider calls, hosting or formal evaluation is claimed.
 - Preserve the failed V2 reviewer run and add a bounded two-stage calibration:
   contract-blind literal reading followed by grounded public-contract review, with
   frozen role/query observations and request-level caching across interruptions.
