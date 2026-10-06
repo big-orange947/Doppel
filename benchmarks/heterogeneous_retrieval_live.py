@@ -1442,7 +1442,9 @@ def _summarize_slice(
         "candidate_window_evidence_recall": _ratio(candidate_required, required_total),
         "candidate_window_related_recall": _ratio(candidate_related, related_total),
         "mrr": round(statistics.mean(reciprocal_ranks), 6) if reciprocal_ranks else 1.0,
-        "exact_episode_count_rate_at_10": _ratio(exact_counts, len(count_rows)),
+        "exact_episode_count_rate_at_10": (
+            _ratio(exact_counts, len(count_rows)) if count_rows else None
+        ),
         "hard_forbidden_hits": sum(
             len(set(row["ids"]) & set(row["hard_forbidden"])) for row in rows
         ),
@@ -1520,7 +1522,7 @@ def quality_gate(
         "complete_evidence_rate_at_10": final["complete_evidence_rate_at_10"]
         >= THRESHOLDS["min_complete_evidence_rate_at_10"],
         "per_category_recall_at_10": all(
-            final["by_category"][category]["evidence_recall_at_10"]
+            final["by_category"].get(category, {}).get("evidence_recall_at_10", 0)
             >= THRESHOLDS["min_category_evidence_recall_at_10"]
             for category in ANSWERABLE_CATEGORIES
         ),
@@ -1540,9 +1542,12 @@ def quality_gate(
         ]
         >= oracle_final["related_evidence_recall_at_10"],
         "oracle_mrr_non_regression": final["mrr"] >= oracle_final["mrr"],
-        "exact_episode_count_rate_at_10": final["by_category"]["episode_count"][
-            "exact_episode_count_rate_at_10"
-        ]
+        "exact_episode_count_rate_at_10": (
+            final["by_category"]
+            .get("episode_count", {})
+            .get("exact_episode_count_rate_at_10")
+            or 0
+        )
         >= THRESHOLDS["min_exact_episode_count_rate_at_10"],
         "hard_forbidden_hits": final["hard_forbidden_hits"] == 0,
         "scope_leakage": final["scope_leakage"] == 0,

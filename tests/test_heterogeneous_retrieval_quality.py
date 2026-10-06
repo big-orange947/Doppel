@@ -425,6 +425,7 @@ def test_retrieval_metrics_separate_related_context_from_answer_support() -> Non
     assert summary["complete_evidence_rate_at_10"] == 1.0
     assert summary["related_evidence_recall_at_10"] == 1.0
     assert summary["answerable_queries"] == 1
+    assert summary["exact_episode_count_rate_at_10"] is None
 
 
 def test_first_run_gate_requires_complete_selection_and_all_safety_checks() -> None:

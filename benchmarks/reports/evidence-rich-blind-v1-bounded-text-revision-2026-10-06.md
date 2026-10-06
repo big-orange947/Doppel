@@ -83,6 +83,7 @@ bind the committed applier `947c0287c5a5874b76355c455e9443693b853d21`:
 
 - `data/doppel/evidence-rich-blind-v1-bounded-revised-final-manifest.json`:
   `893eab19077b76412796aa829359c566812bfb1c472abb2cfb2f85ed7d69b32a`.
+- `data/doppel/evidence-rich-blind-v1-bounded-revised-final-surfaces.json`:
   `591275a89778efe6ca5dabfe0ff43b090632a656e25a905f6a4b5d5ce3c4ebc9`.
 - `data/doppel/evidence-rich-blind-v1-bounded-revised-final-diff.json`:
   `90c5a48a41b5584f60816b3f11a57e48fe2e58f4d77fe1d65d51a1fb53f048bf`.
