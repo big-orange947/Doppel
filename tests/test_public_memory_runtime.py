@@ -81,6 +81,67 @@ async def test_restart_replays_raw_invalid_drafts_without_spending(
     restarted.close()
 
 
+async def test_read_only_parent_cache_reuses_raw_outputs_without_rewriting_or_rebilling(
+    tmp_path: Path,
+) -> None:
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    old_ledger = ledger_at(parent, calls=1)
+    old_model = FakeModel(old_ledger)
+    old = wrap(parent, old_ledger, old_model)
+    output = await old.generate(REQUEST)
+    snapshot = {path: path.read_bytes() for path in (parent / "cache").rglob("*.json")}
+    old_ledger.close()
+    child = tmp_path / "child"
+    child.mkdir()
+    new_ledger = ledger_at(child, calls=0)
+    provider = FakeModel(new_ledger)
+    model = wrap(
+        child,
+        new_ledger,
+        provider,
+        cache_only=True,
+        read_only_cache_dirs=[parent / "cache"],
+    )
+    assert await model.generate(REQUEST) == output
+    assert provider.calls == 0 and new_ledger.report()["attempts_reserved"] == 0
+    assert model.report()["read_only_cache_hits_this_instance"] == 1
+    assert not list((child / "cache").rglob("*.json"))
+    assert {path: path.read_bytes() for path in snapshot} == snapshot
+    changed = REQUEST.model_copy(update={"instructions": "Different prompt"})
+    with pytest.raises(PilotRuntimeError):
+        await model.generate(changed)
+    assert provider.calls == 0
+    new_ledger.close()
+
+
+@pytest.mark.asyncio
+async def test_invalid_parent_cache_fails_closed_without_rebilling(
+    tmp_path: Path,
+) -> None:
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    old_ledger = ledger_at(parent, calls=1)
+    await wrap(parent, old_ledger, FakeModel(old_ledger)).generate(REQUEST)
+    old_ledger.close()
+    cache_file = next((parent / "cache").rglob("*.json"))
+    cache_file.write_text("{broken", encoding="utf-8")
+    child = tmp_path / "child"
+    child.mkdir()
+    ledger = ledger_at(child, calls=1)
+    provider = FakeModel(ledger)
+    try:
+        model = wrap(child, ledger, provider, read_only_cache_dirs=[parent / "cache"])
+        with pytest.raises(PilotRuntimeError, match="cache/read"):
+            await model.generate(REQUEST)
+        assert provider.calls == ledger.report()["attempts_reserved"] == 0
+        assert model.report()["invalid_cache_entries_this_instance"] == 1
+        assert cache_file.read_text(encoding="utf-8") == "{broken"
+        assert not list((child / "cache").rglob("*.json"))
+    finally:
+        ledger.close()
+
+
 @pytest.mark.asyncio
 async def test_same_request_concurrency_coalesces_locally(tmp_path: Path) -> None:
     ledger = ledger_at(tmp_path, calls=1)

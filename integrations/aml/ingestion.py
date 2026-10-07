@@ -36,6 +36,7 @@ from doppel_memory.consolidation import (
 )
 from doppel_memory.indexing import IndexMaintainer, IndexWriter
 from doppel_memory.intelligence import (
+    _EVIDENCE_REJECTION_REASONS,
     PersonalMemoryAnalysisDiagnostics,
     PersonalMemoryEvidenceError,
     PersonalMemoryMiner,
@@ -646,6 +647,64 @@ class DurableTextualIngestor:
                 for value in proposal_counts.values()
             ):
                 raise IngestionFailure("invalid proposal diagnostic counts")
+            if raw_counts.get("evidence_error_policy") == "quarantine":
+                if plan is None or any(
+                    type(value) is not int for value in proposal_counts.values()
+                ):
+                    raise IngestionFailure(
+                        "quarantine requires a complete proposal plan"
+                    )
+                rejected = raw_counts.get("evidence_rejected_drafts")
+                reasons = raw_counts.get("evidence_rejection_counts")
+                items = raw_counts.get("rejected_drafts")
+                if (
+                    type(rejected) is not int
+                    or rejected < 0
+                    or not isinstance(reasons, dict)
+                    or not set(reasons).issubset(_EVIDENCE_REJECTION_REASONS)
+                    or any(
+                        type(count) is not int or count < 0
+                        for count in reasons.values()
+                    )
+                    or sum(reasons.values()) != rejected
+                    or not isinstance(items, list)
+                    or len(items) != rejected
+                ):
+                    raise IngestionFailure("invalid evidence quarantine counts")
+                indices = set()
+                for item in items:
+                    if (
+                        not isinstance(item, dict)
+                        or set(item) != {"analysis_draft_index", "reason"}
+                        or type(item["analysis_draft_index"]) is not int
+                        or not 0
+                        <= item["analysis_draft_index"]
+                        < raw_counts["valid_drafts"]
+                        or item["analysis_draft_index"] in indices
+                        or item["reason"] not in _EVIDENCE_REJECTION_REASONS
+                    ):
+                        raise IngestionFailure("invalid quarantined draft observation")
+                    indices.add(item["analysis_draft_index"])
+                item_reasons = {
+                    reason: sum(item["reason"] == reason for item in items)
+                    for reason in reasons
+                }
+                if item_reasons != reasons or (
+                    raw_counts["valid_drafts"]
+                    != len(plan.proposals)
+                    + raw_counts["low_confidence_drafts"]
+                    + raw_counts["duplicate_drafts"]
+                    + rejected
+                ):
+                    raise IngestionFailure("quarantine partition does not reconcile")
+                proposal_counts.update(
+                    {
+                        "evidence_error_policy": "quarantine",
+                        "evidence_rejected_drafts": rejected,
+                        "evidence_rejection_counts": reasons,
+                        "rejected_drafts": items,
+                    }
+                )
             chunks.append(
                 {
                     "write_key": row["key"],

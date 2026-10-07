@@ -12,7 +12,7 @@ import asyncio
 import hashlib
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
@@ -278,16 +278,29 @@ class PilotStructuredModel:
         ledger: DurableCallLedger,
         cache_dir: Path,
         cache_only: bool = False,
+        read_only_cache_dirs: Sequence[Path] = (),
     ) -> None:
         self.name, self.version = model.name, model.version
         self.ledger = ledger
         self._provider = model
+        budgeted = _BudgetedModel(model, ledger)
         self._cache = CachedStructuredOutputModel(
-            _BudgetedModel(model, ledger),
+            budgeted,
             cache_dir,
             cache_only=cache_only,
             fail_on_invalid_cache=True,
         )
+        paths = [path.resolve() for path in read_only_cache_dirs]
+        if len(set(paths)) != len(paths) or cache_dir.resolve() in paths:
+            raise ValueError("cache parents must be distinct from the writable cache")
+        if any(not path.is_dir() for path in paths):
+            raise ValueError("read-only provider cache directory is unavailable")
+        self._parents = [
+            CachedStructuredOutputModel(
+                budgeted, path, cache_only=True, fail_on_invalid_cache=True
+            )
+            for path in paths
+        ]
         self._lock = asyncio.Lock()
 
     async def generate(self, request: StructuredGenerationRequest) -> Mapping[str, Any]:
@@ -301,6 +314,14 @@ class PilotStructuredModel:
             ):
                 raise PilotRuntimeError("model identity changed after binding")
             try:
+                primary_path = self._cache._cache_path(bound)
+                if primary_path is not None and not primary_path.is_file():
+                    for parent in self._parents:
+                        parent_path = parent._cache_path(bound)
+                        if parent_path is not None and parent_path.is_file():
+                            # Envelope binds exact prompt/input/schema/model. Invalid
+                            # parent output fails closed; never rebill or rewrite it.
+                            return await parent.generate(bound)
                 return await self._cache.generate(bound)
             except PilotRuntimeError:
                 raise
@@ -312,7 +333,12 @@ class PilotStructuredModel:
     def report(self) -> dict[str, Any]:
         return {
             "ledger": self.ledger.report(),
-            "cache_hits_this_instance": self._cache.hits,
+            "cache_hits_this_instance": self._cache.hits
+            + sum(parent.hits for parent in self._parents),
+            "read_only_cache_hits_this_instance": sum(
+                parent.hits for parent in self._parents
+            ),
             "cache_misses_this_instance": self._cache.misses,
-            "invalid_cache_entries_this_instance": self._cache.invalid_entries_ignored,
+            "invalid_cache_entries_this_instance": self._cache.invalid_entries_ignored
+            + sum(parent.invalid_entries_ignored for parent in self._parents),
         }

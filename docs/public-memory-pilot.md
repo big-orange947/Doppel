@@ -407,3 +407,40 @@ an LLM request. Invalid/missing cache still fails, and evidence gates still appl
 Store audits classify conflict markers separately as governance records; they
 are not owner facts. An audit failure preserves the earlier ingestion stop as a
 separate field instead of hiding the original failed stage.
+
+### Opt-in batch evidence quarantine
+
+The default still fails the whole chunk on unsafe evidence. A separate opt-in
+`--evidence-error-policy quarantine` profile rejects only unsafe drafts and records
+their closed reason counts and schema-valid analysis-list indices. It never changes
+citations, subject identity or authority. Schema/provider/storage/index errors still
+fail; accepted proposals plus low-confidence/duplicate/evidence rejections must
+reconcile with all schema-valid drafts. An all-rejected chunk preserves raw events
+and records zero accepted proposals, not "correct extraction" or "noise only".
+
+Use a **new run directory** for the changed policy; the fixed plan gives it a new
+PostgreSQL schema. Keep the old failure, journals and raw outputs. The
+[quarantine replay plan](../benchmarks/reports/public-memory-quarantine-plan-2026-10-07.md)
+freezes this host-only change before execution. Strict read-only cache reuse keeps
+the same provider/model/request identity and fails on missing or invalid entries
+in cache-only mode, without reading a key or making a model request:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.public_memory_ingestion `
+  --dataset data\public-benchmarks\longmemeval_s_cleaned.json `
+  --manifest data\doppel\longmemeval-local-pilot-manifest-v1.json `
+  --output data\doppel\longmemeval-memory-quarantine-cache-next.json `
+  --run-dir data\doppel\public-memory-ingestion-quarantine-v1 `
+  --model deepseek-v4-flash --base-url https://api.deepseek.com `
+  --embedding-cache-dir C:\Users\freeze\AppData\Local\Temp\fastembed_cache `
+  --evidence-error-policy quarantine `
+  --read-only-cache-dir data\doppel\public-memory-ingestion-v1\provider-cache `
+  --live --cache-only --max-new-chunks 8 --max-calls 147
+```
+
+The first eight cached chunks yield 50 schema-valid drafts: 49 accepted proposals,
+one mixed-source rejection, no low-confidence/duplicate drops. All 86 raw events
+remain, with one separately audited governance record. The old profile remains
+failed at chunk eight; the new profile has processed 8/147 chunks with zero new
+provider calls. Source checks do not verify semantic truth. This is still a partial
+opened diagnostic, not a new blind test, extraction-quality score or AML result.

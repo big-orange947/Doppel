@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add explicit per-draft evidence quarantine to the batch Miner, preserving the
+  default fail-batch behavior and old default fingerprints. Keep all source/subject
+  gates and authority rules; persist closed rejection reasons/analysis ordinals and
+  validate the proposal partition on host audit. Schema/provider/storage errors
+  still fail. Add strict read-only parent raw-output caches so a new, separately
+  bound profile can replay existing responses without rewriting or rebilling them.
+  Cached live replay completes eight chunks with 49 accepted proposals and one
+  rejected mixed-source draft; raw messages remain intact. This is ingestion
+  robustness evidence, not semantic correctness or a retrieval/QA score.
 - Add a bounded public-history live extraction/ingestion runner using the existing
   reference Miner, proposal writer, deterministic consolidation and actual local
   PostgreSQL/pgvector. Persist query-free source maps, fixed non-secret profiles and

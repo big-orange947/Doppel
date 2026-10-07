@@ -984,6 +984,54 @@ async def test_assistant_claim_cannot_be_promoted_to_owner_fact(tmp_path: Path) 
         await store.close()
 
 
+@pytest.mark.parametrize("all_unsafe", [False, True])
+async def test_quarantine_persists_rejection_partition_and_replays_without_model(
+    tmp_path: Path,
+    all_unsafe: bool,
+) -> None:
+    store = SQLiteStore(str(tmp_path / "store.sqlite3"))
+    model, index = ScriptedModel(), MemoryIndex()
+    model.bad_subject = True
+    model.bad_evidence = all_unsafe
+    config = PersonalMemoryMinerConfig(
+        allowed_source_actors={Actor.OWNER, Actor.AGENT},
+        proposed_state=MemoryState.CONFIRMED,
+        evidence_error_policy="quarantine",
+    )
+    source = request()
+    scope = memory_scope("local-test", source.user_id)
+    ingestor = host(tmp_path, store, model, index, config=config)
+    try:
+        completion = await ingestor.ingest(scope, source)
+        assert completion.completed and completion.raw_event_count == 2
+        assert completion.proposal_count == (0 if all_unsafe else 1)
+        audit = ingestor.audit_report()
+        counts = audit["chunks"][0]["proposal_diagnostics"]
+        assert counts["valid_drafts"] == 2
+        assert counts["evidence_rejected_drafts"] == (2 if all_unsafe else 1)
+        assert counts["evidence_rejection_counts"] == (
+            {"unknown_evidence": 2} if all_unsafe else {"subject_source_mismatch": 1}
+        )
+        derived = (
+            await store.scan(scope, filters=MemoryFilter(tags={"personal-memory"}))
+        ).records
+        assert len(derived) == completion.proposal_count
+        assert all(record.authority == FactAuthority.HUMAN_SELF for record in derived)
+        for identity in event_ids(scope, source):
+            assert await ingestor.resolve_event(scope, identity) is not None
+    finally:
+        ingestor.close()
+    restarted_model = ScriptedModel()
+    restarted = host(tmp_path, store, restarted_model, index, config=config)
+    try:
+        assert await restarted.ingest(scope, source) == completion
+        assert restarted.audit_report() == audit
+        assert not restarted_model.requests
+    finally:
+        restarted.close()
+        await store.close()
+
+
 async def test_invalid_model_copy_is_revalidated_without_text_disclosure(
     tmp_path: Path,
 ) -> None:

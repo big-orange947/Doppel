@@ -600,6 +600,7 @@ MODEL_FIELDS = {
         "proposed_state",
         "page_size",
         "max_messages",
+        "evidence_error_policy",
     ),
     "MemoryRecord": (
         "memory_id",

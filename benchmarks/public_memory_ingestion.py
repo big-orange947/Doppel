@@ -14,7 +14,7 @@ import json
 import os
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from benchmarks.personal_retrieval_ablation import _LocalEmbeddingProvider
@@ -49,7 +49,10 @@ from integrations.aml.contract import AddRequest, event_ids, memory_scope, write
 from integrations.aml.ingestion import DurableTextualIngestor, IngestionFailure
 
 
-def miner_config(max_messages: int) -> PersonalMemoryMinerConfig:
+def miner_config(
+    max_messages: int,
+    evidence_error_policy: Literal["fail_batch", "quarantine"] = "fail_batch",
+) -> PersonalMemoryMinerConfig:
     return PersonalMemoryMinerConfig(
         allowed_source_actors={Actor.OWNER, Actor.AGENT},
         require_subject_matches_source_actor=True,
@@ -57,6 +60,7 @@ def miner_config(max_messages: int) -> PersonalMemoryMinerConfig:
         minimum_confidence=0.75,
         max_memories=100,
         max_messages=max_messages,
+        evidence_error_policy=evidence_error_policy,
     )
 
 
@@ -66,6 +70,7 @@ def build_ingestion_plan(
     config: OpenAICompatibleStructuredOutputConfig,
     *,
     max_calls: int,
+    evidence_error_policy: Literal["fail_batch", "quarantine"] = "fail_batch",
 ) -> dict[str, Any]:
     """History/transport projection only; accepts neither gold nor query fields."""
     if not cases or type(max_calls) is not int or max_calls < 1:
@@ -98,7 +103,9 @@ def build_ingestion_plan(
         "total_messages": sum(row["message_count"] for row in rows),
         "chunks": rows,
         "provider_config": config.model_dump(mode="json"),
-        "miner_config": miner_config(manifest["max_messages"]).model_dump(mode="json"),
+        "miner_config": miner_config(
+            manifest["max_messages"], evidence_error_policy
+        ).model_dump(mode="json"),
         "max_calls": max_calls,
         "temporal_policy": manifest["temporal_policy"],
         "graph_configured": False,
@@ -122,6 +129,8 @@ def build_ingestion_plan(
     plan["miner_config"]["allowed_source_actors"] = sorted(
         plan["miner_config"]["allowed_source_actors"]
     )
+    if plan["miner_config"]["evidence_error_policy"] == "fail_batch":
+        plan["miner_config"].pop("evidence_error_policy")
     return {**plan, "plan_fingerprint": _hash(plan)}
 
 
@@ -149,6 +158,7 @@ def ingestion_execution_metadata() -> dict[str, Any]:
             Path(__file__).resolve(),
             root / "benchmarks/public_memory_runtime.py",
             root / "integrations/aml/ingestion.py",
+            root / "doppel_memory/intelligence.py",
         )
     }
     return metadata
@@ -372,12 +382,19 @@ async def run_live(
     max_new_chunks: int,
     embedding_cache_dir: Path | None,
     cache_only: bool = False,
+    read_only_cache_dirs: Sequence[Path] = (),
 ) -> dict[str, Any]:
     config = OpenAICompatibleStructuredOutputConfig.model_validate(
         plan["provider_config"]
     )
     if build_ingestion_plan(
-        cases, manifest, config, max_calls=plan["max_calls"]
+        cases,
+        manifest,
+        config,
+        max_calls=plan["max_calls"],
+        evidence_error_policy=plan["miner_config"].get(
+            "evidence_error_policy", "fail_batch"
+        ),
     ) != dict(plan):
         raise ValueError("live histories/configuration differ from the bound plan")
     _bind_json(run_dir / "plan.json", plan)
@@ -402,6 +419,7 @@ async def run_live(
             ledger=ledger,
             cache_dir=run_dir / "provider-cache",
             cache_only=cache_only or max_new_chunks == 0,
+            read_only_cache_dirs=read_only_cache_dirs,
         )
         embedding = _LocalEmbeddingProvider(cache_dir=embedding_cache_dir)
         index = PostgreSQLVectorIndex(
@@ -423,7 +441,10 @@ async def run_live(
             journal_path=run_dir / "ingestion.sqlite3",
             miner=PersonalMemoryMiner(
                 ReferencePersonalMemoryAnalyzer(model, diagnostics_observer=observe),
-                miner_config(manifest["max_messages"]),
+                miner_config(
+                    manifest["max_messages"],
+                    plan["miner_config"].get("evidence_error_policy", "fail_batch"),
+                ),
             ),
             consolidator=DeterministicMemoryConsolidator(),
             index_writers=[index],
@@ -472,6 +493,9 @@ async def run_live(
             },
             "graph_configured": False,
             "cache_only": cache_only or max_new_chunks == 0,
+            "read_only_cache_dirs": [
+                str(path.resolve()) for path in read_only_cache_dirs
+            ],
             "store_record_audit": record_audit,
             "secrets_persisted": False,
         }
@@ -512,6 +536,12 @@ def main() -> None:
         help="resume/revalidate using existing outputs; no API key or network model call",
     )
     parser.add_argument("--max-new-chunks", type=int, default=3)
+    parser.add_argument(
+        "--evidence-error-policy",
+        choices=("fail_batch", "quarantine"),
+        default="fail_batch",
+    )
+    parser.add_argument("--read-only-cache-dir", type=Path, action="append", default=[])
     parser.add_argument("--max-calls", type=int, default=147)
     parser.add_argument("--model", required=True)
     parser.add_argument("--base-url", required=True)
@@ -551,7 +581,13 @@ def main() -> None:
         thinking="disabled",
         timeout_seconds=120,
     )
-    plan = build_ingestion_plan(cases, manifest, config, max_calls=args.max_calls)
+    plan = build_ingestion_plan(
+        cases,
+        manifest,
+        config,
+        max_calls=args.max_calls,
+        evidence_error_policy=args.evidence_error_policy,
+    )
     if not args.live:
         report = preflight_report(plan)
     else:
@@ -576,6 +612,7 @@ def main() -> None:
                 max_new_chunks=args.max_new_chunks,
                 embedding_cache_dir=args.embedding_cache_dir,
                 cache_only=args.cache_only,
+                read_only_cache_dirs=args.read_only_cache_dir,
             )
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)

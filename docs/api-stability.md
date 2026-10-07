@@ -46,6 +46,16 @@ stable `MemoryProcessor`/`MemoryProposal` surface and the existing provisional b
 surface;
 the model boundary never receives Store access or authority to select write scopes.
 
+`PersonalMemoryMinerConfig.evidence_error_policy` is an additive provisional batch
+option. The default `fail_batch` preserves the old behavior and configuration
+fingerprint. Explicit `quarantine` requires subject/source matching and records
+closed per-draft evidence rejection diagnostics in the next checkpoint; callers
+must persist that checkpoint to retain the observations. It never repairs citations
+or changes source authority. Schema/provider/storage failures remain hard failures.
+Changing this option changes the configuration fingerprint and requires a separate
+host journal or explicit migration; do not silently resume an old bound run.
+The online extractor has no quarantine option and still fails on unsafe evidence.
+
 The v0.7.3 consolidation decision, plan, checkpoint, result, consolidator, and runner
 types are provisional root APIs. Plans are serializable and integrity-bound for safe
 host persistence and replay, but host scheduling and plan/checkpoint durability are not

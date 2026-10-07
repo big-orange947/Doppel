@@ -104,6 +104,30 @@ def test_run_binding_never_overwrites_another_profile(tmp_path: Path) -> None:
     assert path.read_bytes() == original
 
 
+def test_quarantine_is_explicit_and_cannot_reuse_default_run_binding(
+    tmp_path: Path,
+) -> None:
+    cases, manifest = fixture()
+    default = build_ingestion_plan(cases, manifest, config(), max_calls=4)
+    explicit_default = build_ingestion_plan(
+        cases, manifest, config(), max_calls=4, evidence_error_policy="fail_batch"
+    )
+    quarantined = build_ingestion_plan(
+        cases, manifest, config(), max_calls=4, evidence_error_policy="quarantine"
+    )
+    assert default == explicit_default
+    assert "evidence_error_policy" not in default["miner_config"]
+    assert quarantined["miner_config"]["evidence_error_policy"] == "quarantine"
+    assert quarantined["plan_fingerprint"] != default["plan_fingerprint"]
+    assert quarantined["chunks"] == default["chunks"]
+    path = tmp_path / "plan.json"
+    _bind_json(path, default)
+    original = path.read_bytes()
+    with pytest.raises(ValueError, match="different plan"):
+        _bind_json(path, quarantined)
+    assert path.read_bytes() == original
+
+
 class ScriptedHost:
     def __init__(self) -> None:
         self.rows: dict[str, dict] = {}

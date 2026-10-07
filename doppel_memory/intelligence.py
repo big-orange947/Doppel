@@ -440,6 +440,9 @@ class PersonalMemoryExtractorConfig(BaseModel):
         # JSON serializes sets as arrays in hash-seed-dependent iteration order.
         # Host checkpoints must bind the same configuration across processes.
         payload["allowed_source_actors"] = sorted(self.allowed_source_actors)
+        # Additive batch policy must not invalidate existing fail-batch journals.
+        if payload.get("evidence_error_policy") == "fail_batch":
+            payload.pop("evidence_error_policy")
         return _fingerprint(payload)
 
 
@@ -448,10 +451,39 @@ class PersonalMemoryMinerConfig(PersonalMemoryExtractorConfig):
 
     page_size: int = Field(default=200, ge=1, le=2_000)
     max_messages: int = Field(default=500, ge=1, le=50_000)
+    evidence_error_policy: Literal["fail_batch", "quarantine"] = "fail_batch"
+
+    @model_validator(mode="after")
+    def _quarantine_requires_subject_gate(self) -> PersonalMemoryMinerConfig:
+        if (
+            self.evidence_error_policy == "quarantine"
+            and not self.require_subject_matches_source_actor
+        ):
+            raise ValueError("quarantine requires subject/source actor matching")
+        return self
 
 
 class PersonalMemoryEvidenceError(ValueError):
     """Analyzer output cannot be bound safely to the supplied evidence."""
+
+
+_EVIDENCE_REJECTION_REASONS = frozenset(
+    {
+        "unknown_evidence",
+        "excluded_source_actor",
+        "mixed_source_actors",
+        "subject_source_mismatch",
+        "untrusted_subject_identity",
+    }
+)
+
+
+class _DraftEvidenceError(PersonalMemoryEvidenceError):
+    """Private closed rejection code; quarantine never persists exception text."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 class PersonalMemoryExtractor:
@@ -537,7 +569,7 @@ class PersonalMemoryMiner:
                 break
 
         proposals: list[MemoryProposal] = []
-        proposal_diagnostics = {
+        proposal_diagnostics: dict[str, Any] = {
             "valid_drafts": 0,
             "low_confidence_drafts": 0,
             "duplicate_drafts": 0,
@@ -582,7 +614,7 @@ def _analysis_to_proposals(
     processor: str,
     processor_version: str,
     config: PersonalMemoryExtractorConfig,
-    diagnostics: dict[str, int] | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[MemoryProposal]:
     analysis = PersonalMemoryAnalysis.model_validate(raw_analysis)
     if diagnostics is not None:
@@ -590,6 +622,18 @@ def _analysis_to_proposals(
             valid_drafts=len(analysis.memories),
             low_confidence_drafts=0,
             duplicate_drafts=0,
+        )
+    quarantine = getattr(config, "evidence_error_policy", "fail_batch") == "quarantine"
+    if quarantine:
+        if not config.require_subject_matches_source_actor:
+            raise ValueError("quarantine requires subject/source actor matching")
+        if diagnostics is None:
+            raise ValueError("quarantine requires explicit rejection accounting")
+        diagnostics.update(
+            evidence_rejected_drafts=0,
+            evidence_rejection_counts={},
+            rejected_drafts=[],
+            evidence_error_policy="quarantine",
         )
     if len(analysis.memories) > config.max_memories:
         raise PersonalMemoryEvidenceError(
@@ -602,36 +646,35 @@ def _analysis_to_proposals(
     ranked_drafts = sorted(
         enumerate(analysis.memories), key=lambda item: (-item[1].confidence, item[0])
     )
-    for _, draft in ranked_drafts:
-        unknown = set(draft.evidence_ids).difference(evidence)
-        if unknown:
-            raise PersonalMemoryEvidenceError(
-                f"memory references unknown evidence IDs: {sorted(unknown)}"
-            )
-        bound_messages = [evidence[item] for item in draft.evidence_ids]
-        source_actors = {message.actor for message in bound_messages}
-        if not source_actors.issubset(config.allowed_source_actors):
-            raise PersonalMemoryEvidenceError(
-                "memory references an actor excluded by extraction policy"
-            )
-        if len(source_actors) != 1:
-            raise PersonalMemoryEvidenceError(
-                "one memory draft must use evidence from exactly one source actor"
-            )
-        source_actor = next(iter(source_actors))
-        if (
-            config.require_subject_matches_source_actor
-            and draft.subject != source_actor
-        ):
-            raise PersonalMemoryEvidenceError(
-                f"memory subject {draft.subject!r} does not match evidence actor "
-                f"{source_actor!r}"
-            )
+
+    def reject(index: int, reason: str) -> None:
+        assert diagnostics is not None  # quarantine requires durable checkpoint counts
+        diagnostics["evidence_rejected_drafts"] += 1
+        counts = diagnostics["evidence_rejection_counts"]
+        counts[reason] = counts.get(reason, 0) + 1
+        diagnostics["rejected_drafts"].append(
+            {"analysis_draft_index": index, "reason": reason}
+        )
+
+    for draft_index, draft in ranked_drafts:
+        try:
+            bound_messages, source_actor = _bind_evidence(draft, evidence, config)
+        except _DraftEvidenceError as exc:
+            if not quarantine:
+                raise
+            reject(draft_index, exc.reason)
+            continue
         if draft.confidence < config.minimum_confidence:
             if diagnostics is not None:
                 diagnostics["low_confidence_drafts"] += 1
             continue
-        subject_id = _subject_id(draft, request.scope, bound_messages)
+        try:
+            subject_id = _subject_id(draft, request.scope, bound_messages)
+        except PersonalMemoryEvidenceError:
+            if not quarantine:
+                raise
+            reject(draft_index, "untrusted_subject_identity")
+            continue
         target_scope = _target_scope(
             request.scope, draft.subject, config.owner_target_scope
         )
@@ -710,6 +753,39 @@ def _analysis_to_proposals(
             )
         )
     return proposals
+
+
+def _bind_evidence(
+    draft: PersonalMemoryDraft,
+    evidence: Mapping[str, ChatMessage],
+    config: PersonalMemoryExtractorConfig,
+) -> tuple[list[ChatMessage], str]:
+    """Same gates for fail-batch and quarantine; never repair a draft's citations."""
+    unknown = set(draft.evidence_ids).difference(evidence)
+    if unknown:
+        raise _DraftEvidenceError(
+            f"memory references unknown evidence IDs: {sorted(unknown)}",
+            "unknown_evidence",
+        )
+    bound = [evidence[item] for item in draft.evidence_ids]
+    actors = {message.actor for message in bound}
+    if not actors.issubset(config.allowed_source_actors):
+        raise _DraftEvidenceError(
+            "memory references an actor excluded by extraction policy",
+            "excluded_source_actor",
+        )
+    if len(actors) != 1:
+        raise _DraftEvidenceError(
+            "one memory draft must use evidence from exactly one source actor",
+            "mixed_source_actors",
+        )
+    actor = next(iter(actors))
+    if config.require_subject_matches_source_actor and draft.subject != actor:
+        raise _DraftEvidenceError(
+            f"memory subject {draft.subject!r} does not match evidence actor {actor!r}",
+            "subject_source_mismatch",
+        )
+    return bound, actor
 
 
 def _subject_id(

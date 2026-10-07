@@ -104,3 +104,15 @@ based on `ceeed84`, not falsely labeled as later clean-commit executions.
 
 No graph, natural Planner, retrieved-evidence ranking or answer reader ran in this
 stage. There is **no new recall/QA score** and no basis for publication readiness.
+
+## Follow-up correction from production cache replay
+
+The later opt-in quarantine replay corrects the manual classification above: chunk
+8's first draft cites one owner and one agent message; the second cites one owner
+message and has subject owner. The earlier "single bound evidence actor mismatch"
+description was inaccurate. An exact production-analyzer/source-binding replay
+finds **one** rejected mixed-source draft and **one** source-valid draft, not two
+rejected drafts. The old fail-batch response still correctly stops at the first
+unsafe draft. Original reports, failed journal and provider outputs remain intact.
+See the separately preregistered quarantine profile and its result report; this
+correction does not turn source validity into verified semantic truth.
