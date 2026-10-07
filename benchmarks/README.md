@@ -13,6 +13,15 @@ preparation, not a retrieval/QA benchmark result or an AML academic model profil
 `python -m benchmarks.public_memory_pilot` preregisters complete-history diagnostic/
 reserved groups and original-turn provenance mappings; it also runs no models.
 
+`python -m benchmarks.public_context_baseline` runs those frozen diagnostic histories
+through real PostgreSQL/pgvector/local BGE and attributed raw-dialogue retrieval.
+It reports turn/session annotation coverage for lexical/vector/RRF **raw-only**
+profiles; it does not run extraction, natural planning, graph, reranker or QA, and
+is not a full Doppel or AML score. `benchmarks.public_memory_runtime` provides a
+durable attempt/JSON-byte ledger and strict provider-output replay for later
+extraction/planner stages; unknown token use is not zero spend. See the pilot
+document for measured results, limitations, provenance and the reproduction command.
+
 Latest bounded diagnostic: [2026-10-06 evidence-rich V7/V8 comparison](reports/evidence-rich-curated-diagnostic-v1-result-2026-10-06.md).
 It retains all 4,608 background memories and evaluates a preregistered 208-query
 assistant-curated subset. It is **not independently accepted blind evaluation**;

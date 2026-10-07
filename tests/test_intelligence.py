@@ -447,6 +447,42 @@ async def test_reference_analyzer_keeps_valid_drafts_when_one_is_invalid(
 
 
 @pytest.mark.asyncio
+async def test_analyzer_diagnostics_are_content_free_and_observational(caplog) -> None:
+    observed = []
+    model = StubStructuredModel(
+        {
+            "memories": [
+                {"content": "valid", "evidence_ids": ["source"]},
+                {"NEVER_LOG_THIS_SECRET_FIELD": "NEVER_LOG_THIS_SECRET_VALUE"},
+            ]
+        }
+    )
+    request = PersonalMemoryAnalysisRequest(
+        scope=SCOPE, messages=[_message("source", "text")]
+    )
+    analyzer = ReferencePersonalMemoryAnalyzer(
+        model, diagnostics_observer=observed.append
+    )
+    result = await analyzer.analyze(request)
+    assert len(result.memories) == 1
+    assert observed[0].total_drafts == 2
+    assert observed[0].valid_drafts == 1
+    assert observed[0].invalid_drafts == 1
+    assert observed[0].validation_error_counts["missing"] >= 1
+    assert "NEVER_LOG" not in observed[0].model_dump_json() + caplog.text
+
+    def failing_observer(_):
+        raise ValueError("NEVER_LOG_CALLBACK_SECRET")
+
+    failing = ReferencePersonalMemoryAnalyzer(
+        model, diagnostics_observer=failing_observer
+    )
+    assert await failing.analyze(request) == result
+    assert "NEVER_LOG" not in caplog.text
+    assert failing.version == analyzer.version
+
+
+@pytest.mark.asyncio
 async def test_reference_analyzer_discards_model_supplied_subject_identity() -> None:
     model = StubStructuredModel(
         {
@@ -521,6 +557,11 @@ async def test_contextual_miner_reads_history_and_binds_multiple_evidence() -> N
     assert result.committable_checkpoint is not None
     assert result.committable_checkpoint.metadata["eligible_messages"] == 2
     assert result.committable_checkpoint.metadata["truncated"] is False
+    assert result.committable_checkpoint.metadata["proposal_diagnostics"] == {
+        "valid_drafts": 1,
+        "low_confidence_drafts": 0,
+        "duplicate_drafts": 0,
+    }
 
 
 def test_personal_memory_models_reject_unstable_evidence_and_time() -> None:

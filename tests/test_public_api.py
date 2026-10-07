@@ -319,6 +319,12 @@ MODEL_FIELDS = {
         "thinking",
     ),
     "PersonalMemoryAnalysis": ("memories",),
+    "PersonalMemoryAnalysisDiagnostics": (
+        "total_drafts",
+        "valid_drafts",
+        "invalid_drafts",
+        "validation_error_counts",
+    ),
     "PersonalMemoryAnalysisRequest": ("scope", "messages"),
     "PersonalMemoryDraft": (
         "content",
@@ -928,7 +934,10 @@ SIGNATURES = {
     "PersonalMemoryMiner.propose": (("context", "POSITIONAL_OR_KEYWORD"),),
     "PersonalMemoryQueryPlanner.plan": (("request", "POSITIONAL_OR_KEYWORD"),),
     "PersonalMemoryQueryPlannerV2.plan": (("request", "POSITIONAL_OR_KEYWORD"),),
-    "ReferencePersonalMemoryAnalyzer.__init__": (("model", "POSITIONAL_OR_KEYWORD"),),
+    "ReferencePersonalMemoryAnalyzer.__init__": (
+        ("model", "POSITIONAL_OR_KEYWORD"),
+        ("diagnostics_observer", "KEYWORD_ONLY"),
+    ),
     "ReferencePersonalMemoryAnalyzer.analyze": (("request", "POSITIONAL_OR_KEYWORD"),),
     "ReferencePersonalMemoryQueryPlanner.__init__": (
         ("model", "POSITIONAL_OR_KEYWORD"),

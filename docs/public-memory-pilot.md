@@ -209,8 +209,106 @@ that the cleaned file's date inversions or later timestamps are correct; it avoi
 silently editing the provided benchmark. Report those properties separately and
 do not translate this into an AML `question_date` field.
 
-No live model or retrieval performance result exists for this pilot yet. Next:
-provider cache/budget/rejection accounting; actual local-vector/reranker + attributed
-raw-context retrieval; raw-derived graph projection; natural Planner/path retrieval
-and evidence scoring. The earlier oracle-seeded recall numbers must not be copied
-onto this raw-history evaluation.
+At this manifest/ingestion stage, no live model or retrieval result existed. The
+next section records the subsequent **raw-context-only** execution. Full extracted
+memory, reranker, raw-derived graph projection, natural Planner/path retrieval and
+reader/answer scoring remain unexecuted. Earlier oracle-seeded recall numbers must
+not be copied onto this raw-history evaluation.
+
+## Raw-context baseline and accounting, 2026-10-07
+
+`benchmarks/public_memory_runtime.py` reuses the existing content-addressed raw
+provider cache and adds a SQLite WAL/FULL ledger. Limits bind a non-secret run/stage
+identity and stable provider name/version. Reserve attempts atomically before
+provider generation; timeout, failure, cancellation and unresolved post-crash
+reservations are **not refunded**. Instance-local duplicate requests are serialized;
+different instances can still duplicate misses, but share the durable total cap.
+Invalid cache envelopes fail without another provider call. Cache-only misses also
+fail before reaching a provider. Successful raw JSON is cached even if downstream
+draft validation rejects it, allowing schema/projection diagnostics to be replayed.
+
+These are attempt and canonical request-JSON byte caps, **not a tokenizer-based
+hard cap or an exact-billing guarantee**. Configure the provider's completion cap
+separately. Wire `ledger.observe_usage` to the provider's usage callback: observed
+input/output/total tokens are reported; missing or partial usage is explicit and
+never reinterpreted as zero spend. A returned provider result is not proof of a
+successful extraction/index/answer stage. Cache write failure after a paid response
+is still a surfaced uncertainty; this is not exactly-once billing. Cache files hold
+raw model outputs, so treat the ignored local cache as potentially sensitive data.
+
+`ReferencePersonalMemoryAnalyzer` now optionally emits content-free per-response
+valid/invalid draft counts and validation error types; it no longer logs arbitrary
+model-supplied extra-field names. Bad top-level shape remains a hard stage failure.
+The observer is observational and does not change extraction versions/proposals;
+hosts must persist/report it with stage identities, and distinguish replay from
+new responses when aggregating. Miner checkpoints include valid-draft,
+low-confidence and exact-duplicate counts. Evidence/subject violations still fail,
+rather than silently disappearing into a success count. Core authority/state
+defaults were not weakened.
+
+`integrations/aml/context.py` retrieves historical dialogue as an explicit context
+channel, independent of personal-fact query results. Source roles, authority,
+session, source event and timestamp are returned from the exact authoritative
+Store after provenance reload. Stale/unconfirmed/orphan/unresolved records are
+rejected and counted; scope violations fail. Optional rerankers can change order,
+not fabricate evidence or rewrite its text/authority. Both user and assistant
+evidence remain available without granting assistant claims owner-fact authority.
+This is repository host composition, not an AML server or completed Search backend.
+
+The raw-only runner is reproducible with a local PostgreSQL DSN supplied in the
+`DOPPEL_PUBLIC_PILOT_PG_DSN` environment variable (do not commit the credential):
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.public_context_baseline `
+  --dataset data\public-benchmarks\longmemeval_s_cleaned.json `
+  --manifest data\doppel\longmemeval-local-pilot-manifest-v1.json `
+  --output data\doppel\longmemeval-raw-context-baseline-next.json `
+  --embedding-cache-dir C:\Users\freeze\AppData\Local\Temp\fastembed_cache
+```
+
+It verifies the frozen manifest/source hash and selection, then ingests only the
+three diagnostic histories. The three reserved histories are not run. Original
+roles, full histories, unsorted dates and source-turn positions are preserved.
+Use a new output path: source, manifest and previous results are never overwritten.
+The dedicated schema is `public_raw_6f9f01932b6a`; no database/schema/volume is reset
+or deleted. Data and vectors remain for resumption/diagnosis.
+
+Actual ignored artifact: `data/doppel/longmemeval-raw-context-baseline-v1.json`.
+**145 sessions, 1,513 raw records, three queries, real PostgreSQL/pgvector and local
+FastEmbed BGE-small-zh-v1.5 (512 dimensions), zero LLM calls/tokens.** The table uses
+micro-averaged annotation coverage: five annotated turns and five annotated session
+occurrences across three queries. It does not count any alternative valid evidence
+as a false positive solely because it lacks the upstream annotation.
+
+| Raw-only profile | Turn recall@5 | Turn recall@20 | Session recall@5 | Session recall@20 | Queries covering all annotated sessions@20 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| PostgreSQL lexical Store search | 0/5 | 0/5 | 0/5 | 0/5 | 0/3 |
+| Local vector | 2/5 (40%) | 4/5 (80%) | 4/5 (80%) | 5/5 (100%) | 3/3 |
+| Lexical + vector RRF | 2/5 (40%) | 4/5 (80%) | 4/5 (80%) | 5/5 (100%) | 3/3 |
+
+There were 480 candidate Store/provenance revalidations across the two vector-backed
+profiles (80 per query/profile), with zero rejected candidates in this run. This
+alone is **not an adversarial isolation benchmark**; cross-scope/orphan/reranker
+guards have separate synthetic tests.
+
+The lexical result is a concrete baseline limitation: PostgreSQLStore currently
+uses case-sensitive `strpos` with the entire supplied query, not BM25/FTS or a
+natural-language keyword planner. All three full questions produce no lexical
+candidates. Thus this run's RRF ranking is equivalent to the vector-only ranking;
+it is **not evidence of an independently useful hybrid gain**. Preserve the failed
+baseline when adding a generic lexical strategy. Do not add question-specific
+keywords or preseed entity/time/intent fields.
+
+Session coverage is not exact-turn completeness: case `50635ada` covers both
+annotated sessions but misses one annotated source turn at top 20. The other two
+cases need deeper ranks to recover their additional source turns. This is why
+session-only "100% recall" must not be advertised as perfect memory performance.
+Three questions are too few for a robust overall quality claim, and English
+LongMemEval is not the strongest language setting for the Chinese BGE baseline.
+
+No extractor, graph, natural Planner, reranker or answer reader was run/substituted
+in this baseline. There is no QA accuracy, formal AML score or publication claim.
+Recorded search timings include serial Store/provenance checks and are not the
+highest-config GPU latency benchmark. Next, add generic lexical candidates and the
+declared reranker, then compose bounded real extraction/derived-memory/graph and
+natural planning against the same frozen histories, with a separate reader scorer.

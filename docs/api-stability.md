@@ -36,8 +36,14 @@ module-only experimental even when it structurally satisfies `IndexWriter`.
 
 The v0.7.2 personal-memory analysis models, `StructuredOutputModel`,
 `PersonalMemoryAnalyzer`, `ReferencePersonalMemoryAnalyzer`, online extractor, and
-periodic miner are provisional root APIs. They compose with the unchanged stable
-`MemoryProcessor`/`MemoryProposal` surface and the existing provisional batch surface;
+periodic miner are provisional root APIs. `PersonalMemoryAnalysisDiagnostics` is
+an additive provisional content-free observation model. The reference analyzer's
+optional keyword-only `diagnostics_observer` does not change its prompt/schema,
+version, extraction output or authority policy; existing one-argument construction
+remains valid. Miner checkpoint metadata adds per-run proposal filtering counts.
+These are diagnostics, not memory-quality scores. They compose with the unchanged
+stable `MemoryProcessor`/`MemoryProposal` surface and the existing provisional batch
+surface;
 the model boundary never receives Store access or authority to select write scopes.
 
 The v0.7.3 consolidation decision, plan, checkpoint, result, consolidator, and runner

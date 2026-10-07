@@ -10,7 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -303,14 +304,37 @@ that is a separate audited stage.
 """
 
 
+class PersonalMemoryAnalysisDiagnostics(BaseModel):
+    """Content-free, per-response schema accounting, not a quality score.
+
+    A draft can have several validation errors; invalid_drafts counts drafts,
+    while validation_error_counts counts error occurrences. No model-supplied
+    field names, values, evidence IDs or conversation text are included.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    total_drafts: int = Field(ge=0)
+    valid_drafts: int = Field(ge=0)
+    invalid_drafts: int = Field(ge=0)
+    validation_error_counts: dict[str, int] = Field(default_factory=dict)
+
+
 class ReferencePersonalMemoryAnalyzer:
     """Reference prompt and schema around any structured-output model provider."""
 
     name = "doppel.reference-personal-memory-analyzer"
     version = "8"
 
-    def __init__(self, model: StructuredOutputModel) -> None:
+    def __init__(
+        self,
+        model: StructuredOutputModel,
+        *,
+        diagnostics_observer: Callable[[PersonalMemoryAnalysisDiagnostics], None]
+        | None = None,
+    ) -> None:
         self.model = model
+        self._diagnostics_observer = diagnostics_observer
         _require_identity(model, "structured output model")
         self.version = _model_bound_version(self.version, model)
 
@@ -350,8 +374,9 @@ class ReferencePersonalMemoryAnalyzer:
         if set(raw) != {"memories"} or not isinstance(raw.get("memories"), list):
             return PersonalMemoryAnalysis.model_validate(raw)
         accepted: list[PersonalMemoryDraft] = []
-        rejected: list[tuple[int, list[tuple[str, str]]]] = []
-        for index, item in enumerate(raw["memories"]):
+        invalid_drafts = 0
+        validation_errors: Counter[str] = Counter()
+        for item in raw["memories"]:
             try:
                 # Reference-model identity is never authoritative. Owner/agent IDs
                 # come from scope and contact IDs from bound evidence later.
@@ -359,18 +384,31 @@ class ReferencePersonalMemoryAnalyzer:
                     item = {**item, "subject_id": ""}
                 accepted.append(PersonalMemoryDraft.model_validate(item))
             except ValidationError as exc:
-                errors = [
-                    (".".join(str(part) for part in error["loc"]), error["type"])
+                invalid_drafts += 1
+                validation_errors.update(
+                    error["type"]
                     for error in exc.errors(include_url=False, include_input=False)
-                ]
-                rejected.append((index, errors))
-        if rejected:
+                )
+        if invalid_drafts:
             logger.warning(
                 "personal-memory analyzer rejected %d/%d invalid drafts: %s",
-                len(rejected),
+                invalid_drafts,
                 len(raw["memories"]),
-                rejected,
+                dict(validation_errors),
             )
+        if self._diagnostics_observer is not None:
+            try:
+                self._diagnostics_observer(
+                    PersonalMemoryAnalysisDiagnostics(
+                        total_drafts=len(raw["memories"]),
+                        valid_drafts=len(accepted),
+                        invalid_drafts=invalid_drafts,
+                        validation_error_counts=dict(validation_errors),
+                    )
+                )
+            except Exception:  # noqa: BLE001 - optional observation cannot change output
+                # Observability must not change proposals or expose callback text.
+                logger.warning("personal-memory diagnostics observer failed")
         return PersonalMemoryAnalysis(memories=accepted)
 
 
@@ -499,6 +537,11 @@ class PersonalMemoryMiner:
                 break
 
         proposals: list[MemoryProposal] = []
+        proposal_diagnostics = {
+            "valid_drafts": 0,
+            "low_confidence_drafts": 0,
+            "duplicate_drafts": 0,
+        }
         if messages:
             request = PersonalMemoryAnalysisRequest(
                 scope=context.scope, messages=messages
@@ -511,6 +554,7 @@ class PersonalMemoryMiner:
                 processor=self.name,
                 processor_version=self.version,
                 config=self.config,
+                diagnostics=proposal_diagnostics,
             )
         return BatchProposalPlan(
             proposals=proposals,
@@ -520,6 +564,7 @@ class PersonalMemoryMiner:
                     "window_end": context.window.end.isoformat(),
                     "eligible_messages": len(messages),
                     "proposals": len(proposals),
+                    "proposal_diagnostics": proposal_diagnostics,
                     "truncated": truncated,
                     "config_fingerprint": self.config.fingerprint,
                     "analyzer": self.analyzer.name,
@@ -537,8 +582,15 @@ def _analysis_to_proposals(
     processor: str,
     processor_version: str,
     config: PersonalMemoryExtractorConfig,
+    diagnostics: dict[str, int] | None = None,
 ) -> list[MemoryProposal]:
     analysis = PersonalMemoryAnalysis.model_validate(raw_analysis)
+    if diagnostics is not None:
+        diagnostics.update(
+            valid_drafts=len(analysis.memories),
+            low_confidence_drafts=0,
+            duplicate_drafts=0,
+        )
     if len(analysis.memories) > config.max_memories:
         raise PersonalMemoryEvidenceError(
             f"analyzer returned {len(analysis.memories)} memories; "
@@ -576,6 +628,8 @@ def _analysis_to_proposals(
                 f"{source_actor!r}"
             )
         if draft.confidence < config.minimum_confidence:
+            if diagnostics is not None:
+                diagnostics["low_confidence_drafts"] += 1
             continue
         subject_id = _subject_id(draft, request.scope, bound_messages)
         target_scope = _target_scope(
@@ -596,6 +650,8 @@ def _analysis_to_proposals(
         }
         identity = _fingerprint(identity_payload)
         if identity in seen:
+            if diagnostics is not None:
+                diagnostics["duplicate_drafts"] += 1
             continue
         seen.add(identity)
         evidence_metadata = [

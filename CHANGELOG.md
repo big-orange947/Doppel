@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add a durable provider-attempt/JSON-byte ledger and strict cache-only/raw-output
+  replay for the public-history pilot. Failed/interrupted attempts are not refunded;
+  missing token usage stays unknown. Add content-free schema rejection diagnostics
+  and Miner low-confidence/duplicate counts without changing extraction policies.
+- Add an attributed raw-dialogue context channel with Store/event revalidation,
+  role/authority preservation and optional guarded reranking. Historical assistant
+  output remains context, never upgraded to owner fact. Run three preregistered
+  complete LongMemEval histories through real PostgreSQL/pgvector/local BGE with
+  zero LLM calls; report raw-only annotation coverage separately from full Doppel,
+  Planner/graph/reranker/reader quality and AML compliance.
 - Compose a local durable textual-ingestion host around the existing Miner,
   proposal writer, consolidation and index maintenance. Persist replayable plans,
   bind explicit host role attribution and Store/index profile identities, block

@@ -97,6 +97,7 @@ from doppel_memory.indexing import (
 from doppel_memory.intelligence import (
     MemoryTemporalStatus,
     PersonalMemoryAnalysis,
+    PersonalMemoryAnalysisDiagnostics,
     PersonalMemoryAnalysisRequest,
     PersonalMemoryAnalyzer,
     PersonalMemoryDraft,
@@ -361,6 +362,7 @@ __all__ = [
     "PassThroughProposalPolicy",
     "PersonaMaterialsBuilder",
     "PersonalMemoryAnalysis",
+    "PersonalMemoryAnalysisDiagnostics",
     "PersonalMemoryAnalysisRequest",
     "PersonalMemoryAnalyzer",
     "PersonalMemoryCandidateEvidence",

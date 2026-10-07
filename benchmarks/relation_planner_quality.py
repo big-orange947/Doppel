@@ -163,7 +163,14 @@ class CachedStructuredOutputModel:
     Legacy final-draft entries live outside this namespace and are never read.
     """
 
-    def __init__(self, model: Any, cache_dir: Path | None) -> None:
+    def __init__(
+        self,
+        model: Any,
+        cache_dir: Path | None,
+        *,
+        cache_only: bool = False,
+        fail_on_invalid_cache: bool = False,
+    ) -> None:
         self._model = model
         self._cache_dir = cache_dir
         self.name = str(model.name)
@@ -172,10 +179,10 @@ class CachedStructuredOutputModel:
         self.misses = 0
         self.invalid_entries_ignored = 0
         self.legacy_final_drafts_read = 0
+        self.cache_only = cache_only
+        self.fail_on_invalid_cache = fail_on_invalid_cache
 
-    async def generate(
-        self, request: StructuredGenerationRequest
-    ) -> Mapping[str, Any]:
+    async def generate(self, request: StructuredGenerationRequest) -> Mapping[str, Any]:
         bound = StructuredGenerationRequest.model_validate(request)
         cache_path = self._cache_path(bound)
         if cache_path is not None and cache_path.is_file():
@@ -184,10 +191,18 @@ class CachedStructuredOutputModel:
                 output = self._validate_envelope(envelope, bound)
             except (OSError, TypeError, ValueError):
                 self.invalid_entries_ignored += 1
+                if self.fail_on_invalid_cache:
+                    raise ValueError(
+                        "invalid provider-output cache; provider not called"
+                    ) from None
             else:
                 self.hits += 1
                 return output
         self.misses += 1
+        if self.cache_only:
+            raise PlannerCallBudgetExceeded(
+                "cache-only replay has no valid provider output"
+            )
         raw = await self._model.generate(bound)
         output = (
             raw.model_dump(mode="json", warnings=False)
@@ -511,9 +526,7 @@ async def run_relation_planner_quality(
             "misses": cache.misses if cache is not None else 0,
             "kind": "provider_raw" if cache is not None else "none",
             "schema": PROVIDER_OUTPUT_CACHE_SCHEMA if cache is not None else "",
-            "namespace": (
-                PROVIDER_OUTPUT_CACHE_NAMESPACE if cache is not None else ""
-            ),
+            "namespace": (PROVIDER_OUTPUT_CACHE_NAMESPACE if cache is not None else ""),
             "invalid_entries_ignored": (
                 cache.invalid_entries_ignored if cache is not None else 0
             ),
@@ -697,9 +710,7 @@ async def _evaluate_case(
     )
     time_range_presence_ok = expected_has_range == actual_has_range
     time_range_boundary_ok = time_range_presence_ok and (
-        _same_boundary_date(
-            query.time_from, draft.time_from, query.accepted_time_from
-        )
+        _same_boundary_date(query.time_from, draft.time_from, query.accepted_time_from)
         and _same_boundary_date(query.time_to, draft.time_to, query.accepted_time_to)
     )
     interval_covers_as_of = bool(
