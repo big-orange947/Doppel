@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a bounded unified reader and judge over the frozen opened raw/derived/combined
+  retrieval rows. The reader receives only the question, its benchmark reference time
+  and that row's packed context; the judge receives the reference answer and the cited
+  item texts, and never reaches the reader. Citation legality is a deterministic check
+  against the row's own context, while correctness and citation support are independent
+  judged assessments. Separate durable reader/judge attempt budgets, plan-bound run
+  directories, content-addressed request deduplication, redacted failures and a
+  key-free cache-only replay keep the stage bounded and reproducible. Three opened
+  questions remain a diagnostic, not a full benchmark, blind evaluation or AML score.
 - Add a fixed-budget, completed-public-history raw/derived/combined retrieval
   diagnostic using existing authoritative PostgreSQL/pgvector records and optional
   strict local reranking. Bind read-only source journals, check existing index
