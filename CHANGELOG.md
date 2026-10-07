@@ -11,6 +11,12 @@
   directories, content-addressed request deduplication, redacted failures and a
   key-free cache-only replay keep the stage bounded and reproducible. Three opened
   questions remain a diagnostic, not a full benchmark, blind evaluation or AML score.
+  First run: 10/18 answers correct, 18/18 citations legal, 17/18 citations supported,
+  31 new calls and 73,872 reported tokens, reproduced by a zero-call cache-only
+  replay. Packing (not the reader) lost the `50635ada` evidence in two rows; the
+  memory-only channel cannot carry the assistant recommendation; the arithmetic
+  failures were reader conservatism over fully retrieved facts; the same-model judge
+  disagreed on near-identical answers.
 - Add a fixed-budget, completed-public-history raw/derived/combined retrieval
   diagnostic using existing authoritative PostgreSQL/pgvector records and optional
   strict local reranking. Bind read-only source journals, check existing index

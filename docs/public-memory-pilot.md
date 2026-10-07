@@ -511,3 +511,42 @@ This is an exhaustive small-corpus retrieval diagnostic, not the complete produc
 query engine, a scalability/latency benchmark, answer-quality score or AML result.
 The next stage is a fixed reader/judge comparison on the packed outputs, with gold
 isolated to scoring and explicit token bounds, before extending unopened histories.
+
+### Unified reader and judge on the frozen rows
+
+The [frozen answer plan](../benchmarks/reports/public-memory-answer-comparison-plan-2026-10-07.md)
+and [actual result](../benchmarks/reports/public-memory-answer-comparison-result-2026-10-07.md)
+add `benchmarks/public_memory_answer_comparison.py`: one reader prompt and schema for
+all profiles, one judge prompt and schema, identical generation settings, and a
+deterministic citation check against each row's own packed context. Reader input is
+the question, the benchmark reference time and that row's packed items only; the
+reference answer reaches the judge but never the reader. Citation legality is code,
+while correctness and citation support are judged independently.
+
+On the same opened rows: **10/18 answers correct, 18/18 citations legal, 17/18
+citations supported**, 4/18 reader abstentions. 31 new provider calls (16 reader, 15
+judge; 73,872 reported tokens) produced the live report; a separate-process
+`--live --cache-only` replay reproduced every answer and judgment with zero new calls
+and no API key. The two `50635ada` abstentions are a packing loss (no Silver item in
+those contexts), not reader or temporal failure; the memory-only `cc539528` rows
+cannot answer an assistant-recommendation question because their channel holds no
+assistant text, and no assistant reply was promoted to an owner fact; the
+`0100672e` arithmetic failures are reader conservatism over fully retrieved facts.
+The same model served both reader and judge, and its near-identical labels differed
+on near-identical answers, so this is a diagnostic comparison, not an independent
+or publication-ready score.
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.public_memory_answer_comparison `
+  --dataset data\public-benchmarks\longmemeval_s_cleaned.json `
+  --manifest data\doppel\longmemeval-local-pilot-manifest-v1.json `
+  --comparison data\doppel\longmemeval-memory-comparison-v1.json `
+  --comparison-sha256 a152356232524db418bcdcc9b6104f9ce90c8d94627338effd379440e7195ae7 `
+  --output data\doppel\longmemeval-answer-comparison-v1.json `
+  --run-dir data\doppel\public-memory-answer-comparison-v1 --live
+```
+
+Add `--live --cache-only` to replay an existing run directory without a key. The
+runner refuses a different comparison hash, a manifest mismatch, an incomplete row
+set, an existing output path or a changed plan, and never re-retrieves, writes a
+Store or expands a source.
