@@ -54,6 +54,8 @@ class ContextSearchResult(BaseModel):
     candidates_seen: int
     revalidated: int
     rejected: dict[str, int]
+    candidate_evidence_ids: list[str]
+    final_store_checks: int
 
 
 class AttributedContextRetriever:
@@ -94,6 +96,7 @@ class AttributedContextRetriever:
         if bound_scope.scope_key != expected_scope_key:
             raise MemoryIsolationError("context strategy changed the bound scope")
         snippets: dict[str, ContextSnippet] = {}
+        snapshots: dict[str, MemoryRecord] = {}
         validated: list[RecallResult] = []
         for candidate in candidates:
             if (
@@ -165,6 +168,7 @@ class AttributedContextRetriever:
                 similarity=candidate.similarity,
             )
             snippets[record.memory_id] = snippet
+            snapshots[record.memory_id] = record.model_copy(deep=True)
             validated.append(
                 RecallResult(
                     scope=bound_scope,
@@ -183,6 +187,7 @@ class AttributedContextRetriever:
         if self.reranker is not None:
             ordered = list(await self.reranker.rerank(query, validated, limit=limit))
         result, seen = [], set()
+        final_checks = 0
         if bound_scope.scope_key != expected_scope_key:
             raise MemoryIsolationError("context reranker changed the bound scope")
         for candidate in ordered:
@@ -195,11 +200,26 @@ class AttributedContextRetriever:
                 raise ValueError("context reranker introduced a noncandidate record")
             if candidate.memory_id not in seen:
                 seen.add(candidate.memory_id)
+                # Optional neural ordering may await a slow model. Never return a
+                # snapshot revoked/changed in the authoritative Store meanwhile.
+                refreshed = await self.store.get(bound_scope, candidate.memory_id)
+                final_checks += 1
+                if refreshed is None or refreshed.model_dump(mode="json") != snapshots[
+                    candidate.memory_id
+                ].model_dump(mode="json"):
+                    rejected["changed_after_ordering"] += 1
+                    continue
                 # Only order is consumed. Reranker-supplied text/role is never trusted.
                 result.append(snippets[candidate.memory_id])
+                if len(result) >= limit:
+                    break
         return ContextSearchResult(
             snippets=result[:limit],
             candidates_seen=len(candidates),
             revalidated=len(snippets),
             rejected=dict(rejected),
+            candidate_evidence_ids=[
+                snippet.evidence_id for snippet in snippets.values()
+            ],
+            final_store_checks=final_checks,
         )

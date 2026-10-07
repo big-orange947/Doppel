@@ -199,6 +199,31 @@ async def test_reranker_cannot_invent_a_hit_or_poison_source_text(
         await store.close()
 
 
+@pytest.mark.asyncio
+async def test_store_revocation_during_reranker_is_not_returned(tmp_path: Path) -> None:
+    store, host, _, scope, _, candidates = await setup(tmp_path)
+
+    class RevokingReranker:
+        async def rerank(self, query, items, *, limit):
+            await store.transition(scope, items[1].memory_id, MemoryState.EXPIRED)
+            return items
+
+    try:
+        result = await AttributedContextRetriever(
+            store,
+            strategy=Candidates(candidates),
+            resolve_event=host.resolve_event,
+            reranker=RevokingReranker(),
+        ).search(scope, "query")
+        assert len(result.snippets) == 2
+        assert all(item.role == "user" for item in result.snippets)
+        assert result.rejected == {"changed_after_ordering": 1}
+        assert len(result.candidate_evidence_ids) == 3
+        assert result.final_store_checks == 3
+    finally:
+        await store.close()
+
+
 def test_scoring_counts_occurrences_and_complete_coverage_separately() -> None:
     scoring = prepare_case(sample(), dataset_namespace="synthetic").scoring
     partial = score_evidence(scoring, [(0, 0), (0, 0), (0, 1)])

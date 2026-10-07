@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add an opt-in, bounded per-scope BM25 reference retrieval strategy with generic
+  Unicode normalization/tokenization, complete-corpus pagination and filter/scope
+  revalidation. Keep Store substring behavior and framework defaults unchanged;
+  the reference scan is not a persistent large-scale full-text index.
+- Compare the frozen raw-history pilot with BM25/vector RRF and strict local BGE
+  context reranking; record candidate coverage, score execution, model-file hashes
+  and tokenizer truncation. Revalidate final Store snapshots after ordering so
+  intervening revocation/change cannot return stale dialogue evidence. Results
+  remain opened three-query diagnostics, not a full-memory/QA/AML quality claim.
 - Add a durable provider-attempt/JSON-byte ledger and strict cache-only/raw-output
   replay for the public-history pilot. Failed/interrupted attempts are not refunded;
   missing token usage stays unknown. Add content-free schema rejection diagnostics

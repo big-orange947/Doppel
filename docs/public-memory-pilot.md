@@ -312,3 +312,52 @@ Recorded search timings include serial Store/provenance checks and are not the
 highest-config GPU latency benchmark. Next, add generic lexical candidates and the
 declared reranker, then compose bounded real extraction/derived-memory/graph and
 natural planning against the same frozen histories, with a separate reader scorer.
+
+## Generic lexical candidates and local reranking
+
+The [2026-10-07 comparison](../benchmarks/reports/public-context-bm25-rerank-result-2026-10-07.md)
+adds opt-in `doppel_memory.lexical.BM25RetrievalStrategy`. It implements the existing
+`RetrievalStrategy` protocol and can be injected as
+`HybridRetrievalStrategy(..., lexical_strategy=BM25RetrievalStrategy())`. No Store
+capability/default/root API is silently changed. The module-only reference reads
+each complete filtered scope per query, so its corpus and page limits are strict
+and it is **not** an indexed/scalable replacement for production full-text search.
+Its tokenizer uses NFKC/casefold word tokens and basic Han unigrams/bigrams; it
+does not perform Chinese word segmentation, stemming, synonym/alias expansion,
+translation or domain intent recognition. BM25 returns candidates, not facts.
+
+Opt-in local BGE ordering uses the existing bounded personal-memory score
+validation. It receives request-local candidate IDs, the raw question and candidate
+content only. It cannot choose scopes, write memories or raise source authority.
+Failures/limits stop the reranked profile instead of masquerading as execution.
+The context retriever now exposes the authorized candidate-window IDs for
+scoring-only analysis and rechecks selected Store snapshots after ordering.
+Returned role/source/original text remains authoritative; intervening deletion,
+expiration or record change is counted and not returned.
+
+Using the existing CUDA evaluation environment/model directory:
+
+```powershell
+& D:\project\.doppel-eval-cu128\Scripts\python.exe -m benchmarks.public_context_baseline `
+  --dataset data\public-benchmarks\longmemeval_s_cleaned.json `
+  --manifest data\doppel\longmemeval-local-pilot-manifest-v1.json `
+  --output data\doppel\longmemeval-raw-context-bm25-rerank-next.json `
+  --embedding-cache-dir C:\Users\freeze\AppData\Local\Temp\fastembed_cache `
+  --with-bm25 `
+  --reranker-model D:\project\.doppel-eval-models\bge-reranker-v2-m3 `
+  --reranker-device cuda --reranker-max-length 8192 --reranker-batch-size 1
+```
+
+Set the local diagnostic DSN in `DOPPEL_PUBLIC_PILOT_PG_DSN` first. Model loading
+is local-only; no new model installation, account/key access or paid LLM call is
+needed. Preserve existing outputs. The three reserved histories remain unrun.
+
+The vector candidate pool already contained all five annotated turns, although
+top-20 output missed one. Reordering this pool moved all five into top five in
+this **three-question opened diagnostic**. BM25 and BM25/vector reached four of
+five at top five; adding reranking to those pools did not improve that aggregate.
+Do not promote one profile to the framework default based on these tiny results.
+Next: compose bounded real extraction/derived-memory/graph and natural planning,
+then compare extracted memory, raw context and their combination under a frozen
+reader/evidence budget. Validate broader generalization without adding special
+rules for already opened questions.

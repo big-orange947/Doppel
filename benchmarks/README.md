@@ -22,6 +22,16 @@ durable attempt/JSON-byte ledger and strict provider-output replay for later
 extraction/planner stages; unknown token use is not zero spend. See the pilot
 document for measured results, limitations, provenance and the reproduction command.
 
+The same runner accepts `--with-bm25` and `--reranker-model <local directory>`.
+It preserves the old substring baseline and adds generic BM25/vector/RRF and
+strict local content-only ordering profiles. The
+[frozen comparison plan](reports/public-context-bm25-rerank-plan-2026-10-07.md)
+declares candidate limits, BM25 parameters and the local reranker configuration;
+the [result](reports/public-context-bm25-rerank-result-2026-10-07.md) reports all
+profiles, including those where reranking did not help. A failed reranker profile
+is not silently reported as a successful base-order fallback. These are opened
+raw-dialogue diagnostics, not a new blind benchmark or changes to product defaults.
+
 Latest bounded diagnostic: [2026-10-06 evidence-rich V7/V8 comparison](reports/evidence-rich-curated-diagnostic-v1-result-2026-10-06.md).
 It retains all 4,608 background memories and evaluates a preregistered 208-query
 assistant-curated subset. It is **not independently accepted blind evaluation**;

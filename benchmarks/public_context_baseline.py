@@ -1,8 +1,9 @@
 """Real raw-history retrieval baseline, not full Doppel/AML or answer quality.
 
 Uses only preregistered diagnostic histories, production PostgreSQL/pgvector and
-local embeddings. No extraction, graph, Planner, reranker or reader is substituted
-with an oracle/fake implementation. Those stages are explicitly not run here.
+local embeddings, with opt-in BM25 and strict local CrossEncoder comparisons.
+No extraction, graph, Planner or reader is substituted with an oracle/fake.
+Those stages are explicitly not run here; reranking runs only when configured.
 """
 
 from __future__ import annotations
@@ -23,8 +24,13 @@ from benchmarks.personal_retrieval_ablation import (
     _git_tracked_dirty_paths,
     _LocalEmbeddingProvider,
 )
+from benchmarks.public_context_rerank import (
+    LocalContextCrossEncoder,
+    StrictContextReranker,
+)
 from benchmarks.public_longmemeval import RuntimeCase, ScoringCase, prepare_case
 from benchmarks.public_memory_pilot import _hash, build_manifest
+from doppel_memory.lexical import BM25RetrievalStrategy
 from doppel_memory.models import (
     Actor,
     ChatMessage,
@@ -54,6 +60,7 @@ def execution_metadata() -> dict[str, Any]:
         root / "benchmarks/public_longmemeval.py",
         root / "benchmarks/public_memory_pilot.py",
         root / "benchmarks/personal_retrieval_ablation.py",
+        root / "benchmarks/public_context_rerank.py",
         root / "integrations/aml/context.py",
         root / "integrations/aml/contract.py",
         *root.joinpath("doppel_memory").rglob("*.py"),
@@ -222,6 +229,8 @@ async def run_baseline(
     dsn: str,
     schema: str,
     embedding_cache_dir: Path | None,
+    with_bm25: bool = False,
+    reranker: StrictContextReranker | None = None,
 ) -> dict[str, Any]:
     if not cases:
         raise ValueError(
@@ -253,18 +262,40 @@ async def run_baseline(
                     index, fallback_to_lexical=False
                 ),
             }
-            for profile, strategy in strategies.items():
+            if with_bm25:
+                strategies["raw_bm25"] = BM25RetrievalStrategy()
+                strategies["raw_bm25_vector"] = HybridRetrievalStrategy(
+                    index,
+                    lexical_strategy=BM25RetrievalStrategy(),
+                    candidate_multiplier=1,
+                    fallback_to_lexical=False,
+                )
+            profiles: list[tuple[str, Any, StrictContextReranker | None]] = [
+                (name, strategy, None) for name, strategy in strategies.items()
+            ]
+            if reranker is not None:
+                profiles.extend(
+                    (name + "_reranked", strategy, reranker)
+                    for name, strategy in strategies.items()
+                    if name in {"raw_local_vector", "raw_bm25", "raw_bm25_vector"}
+                )
+            for profile, strategy, ordering in profiles:
                 # SemanticIndex lacks the Store parameter: adapt without changing ranking.
-                if profile == "raw_local_vector":
+                if profile in {"raw_local_vector", "raw_local_vector_reranked"}:
                     strategy = _VectorStrategy(index)
                 retriever = AttributedContextRetriever(
                     store,
                     strategy=strategy,
                     resolve_event=host.resolve_event,
+                    reranker=ordering,
                 )
                 start = perf_counter()
                 result = await retriever.search(scope, runtime.query.query, limit=20)
                 positions = host.retrieved_positions(result.snippets)
+                candidate_positions = [
+                    host.positions[(scope.scope_key, evidence_id)]
+                    for evidence_id in result.candidate_evidence_ids
+                ]
                 rows.append(
                     {
                         "case_id": scoring.case_id,
@@ -274,6 +305,14 @@ async def run_baseline(
                         "candidates_seen": result.candidates_seen,
                         "revalidated": result.revalidated,
                         "rejected": result.rejected,
+                        "final_store_checks": result.final_store_checks,
+                        "candidate_window_positions": candidate_positions,
+                        "candidate_window_score": score_evidence(
+                            scoring, candidate_positions
+                        ),
+                        "rerank_summary": ordering.last_summary.model_dump(mode="json")
+                        if ordering and ordering.last_summary
+                        else None,
                         "returned_roles": [s.role for s in result.snippets],
                         "retrieved_source_positions": positions,
                         "search_ms": (perf_counter() - start) * 1000,
@@ -286,14 +325,30 @@ async def run_baseline(
                     flush=True,
                 )
         return {
-            "runner": "doppel.public-raw-context-baseline.v1",
+            "runner": "doppel.public-raw-context-comparison.v1"
+            if with_bm25 or reranker
+            else "doppel.public-raw-context-baseline.v1",
             "execution_metadata": source_metadata,
             "manifest_fingerprint": manifest["manifest_fingerprint"],
             "source_sha256": manifest["source_sha256"],
             "postgres_schema": schema,
             "scope_count": len(cases),
             "raw_records": total_records,
-            "profiles": list(strategies),
+            "profiles": [name for name, _, _ in profiles],
+            "bm25": {
+                "name": BM25RetrievalStrategy.name,
+                "version": BM25RetrievalStrategy.version,
+                "config": BM25RetrievalStrategy().config.model_dump(mode="json"),
+            }
+            if with_bm25
+            else None,
+            "reranker": reranker.provider.report() if reranker else None,
+            "candidate_budget": {
+                "final_window": 80,
+                "output_limit": 20,
+                "bm25_vector_per_source": 80,
+                "legacy_lexical_vector_per_source": 320,
+            },
             "rows": rows,
             "embedding": {
                 "name": provider.name,
@@ -305,7 +360,7 @@ async def run_baseline(
             "graph_used": False,
             "extraction_used": False,
             "planner_used": False,
-            "reranker_used": False,
+            "reranker_used": reranker is not None,
             "reader_used": False,
             "qa_metrics_available": False,
             "retrieval_metrics_available": True,
@@ -335,6 +390,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dsn-env", default="DOPPEL_PUBLIC_PILOT_PG_DSN")
     parser.add_argument("--embedding-cache-dir", type=Path)
+    parser.add_argument("--with-bm25", action="store_true")
+    parser.add_argument("--reranker-model", type=Path)
+    parser.add_argument("--reranker-device", default="cuda")
+    parser.add_argument("--reranker-max-length", type=int, default=8192)
+    parser.add_argument("--reranker-batch-size", type=int, default=1)
     args = parser.parse_args()
     if args.output.exists() or args.output.resolve() in {
         args.dataset.resolve(),
@@ -362,6 +422,17 @@ def main() -> None:
             dsn=dsn,
             schema=schema,
             embedding_cache_dir=args.embedding_cache_dir,
+            with_bm25=args.with_bm25,
+            reranker=StrictContextReranker(
+                LocalContextCrossEncoder(
+                    args.reranker_model,
+                    device=args.reranker_device,
+                    max_length=args.reranker_max_length,
+                    batch_size=args.reranker_batch_size,
+                )
+            )
+            if args.reranker_model
+            else None,
         )
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
