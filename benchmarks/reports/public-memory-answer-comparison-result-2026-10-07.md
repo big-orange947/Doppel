@@ -10,9 +10,12 @@ blind evaluation, an independent verification or an AML academic score.**
 
 ## Execution
 
-- Frozen code `a97bec3` (module, tests and plan). Live run and replay bind the same
-  plan fingerprint `ffb3c0679fbb239cbe5b87bfa3422249697cbd9dff1f2dd23df4384499a5eb45`
-  and the same input hashes: dataset `d6f21ea9…`, manifest `9b21d2c2…`, comparison
+- Frozen code `a97bec3` (module, tests and plan). The zero-provider preflight ran on
+  the same module bytes (`answer_source_sha256 f16f7d91…`) while they were still
+  uncommitted on base `093ca11`; the live run and the replay both bind `a97bec3` and
+  only the user-owned `uv.lock` was tracked-dirty. All three runs share plan
+  fingerprint `ffb3c0679fbb239cbe5b87bfa3422249697cbd9dff1f2dd23df4384499a5eb45` and
+  the same input hashes: dataset `d6f21ea9…`, manifest `9b21d2c2…`, comparison
   `a152356232524db418bcdcc9b6104f9ce90c8d94627338effd379440e7195ae7`.
 - Contract hashes: reader instructions `f75f473e…`, judge instructions `2a941b50…`,
   reader schema `f739410a…`, judge schema `489da84c…`.
