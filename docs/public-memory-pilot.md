@@ -462,3 +462,15 @@ and quarantine-v1 provider caches. Cache-only regression reprocesses all 37 save
 responses with zero model calls, retaining the 392 raw events and 175 accepted
 proposals. Only after this regression should the unchanged remaining 110 chunks
 continue. Neither the saved prefix nor its source checks are a retrieval/QA score.
+
+The committed v4 continuation subsequently completed **all 147 chunks** for the
+three diagnostic owners: 1513 nonblank raw messages, 599 accepted derived memories,
+4 governance records and 19 explicitly rejected drafts. Store/source audit:
+2291 checks with zero failures. New-model usage was 110 calls / 557,750 reported
+tokens; the prior 37 outputs were reused without another extraction call.
+Zero-provider new-process replay of all 147 completed chunks preserved the exact
+audit, Store counts and provider ledger. This finishes ingestion of the opened
+pilot histories, not the full 500-case benchmark or a recall/answer-quality score.
+The next comparison is raw context versus extracted memory versus their combination
+with matched evidence/reader budgets; reserved groups and AML model migration stay
+separate from these opened diagnostics.

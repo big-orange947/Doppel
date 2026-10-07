@@ -68,3 +68,67 @@ Verification: **1129 passed, 33 skipped**, plus 3 subtests passed. Targeted run:
 build and offline isolated wheel import/identity smoke passed. Unrelated pre-existing
 format differences were not bulk rewritten. User-owned uv.lock was not modified or
 staged. Committed unchanged-profile live continuation is recorded after it finishes.
+
+## Completed full-history ingestion and restart verification
+
+Live execution and completed restart replay both bind source commit
+`024e859d699031b51bcab32fd421ce75639f22cc`; only pre-existing user-owned uv.lock
+was dirty. The runtime source fingerprint was
+`508a9787a13159bcba494f3a37f44dc3dac0b9850fad9312259d38a49fbe4ce7`.
+The same source/manifest/profile processed every planned chunk in original order,
+with no skipped predecessor, replacement source or changed threshold/prompt.
+
+| Final observation | Count |
+| --- | ---: |
+| Completed / planned chunks | **147 / 147** |
+| Diagnostic owners / supplied sessions | 3 / 145 |
+| Original nonblank raw messages retained | 1513 |
+| Schema-valid drafts | 618 |
+| Accepted proposals / derived records including inactive | 599 |
+| Explicit evidence rejections | 19 |
+| Mixed-source / subject-source mismatch rejections | 15 / 4 |
+| Invalid-schema / low-confidence / duplicate drops | 0 / 0 / 0 |
+| Missing analysis observations | 0 |
+| Separate governance records | 4 |
+| Store raw + derived + governance records | 2116 |
+| Store/source checks / failures | 2291 / 0 |
+| New-profile live calls / reported tokens | 110 / 557,750 |
+| Original plus new calls / reported tokens | 147 / 746,665 |
+| Completed restart chunks replayed | 147 |
+| Restart new calls / tokens | 0 / 0 |
+
+All 110 new provider attempts succeeded with complete observed usage, no retry,
+interrupted/reserved remainder or invalid raw-output cache entry. Attempt/byte
+bounds held; reported token totals are not an exact-billing guarantee. Previous
+37 provider responses were reused, not billed again.
+
+The rejection partition reconciles as 618 = 599 accepted + 19 evidence-rejected.
+Those 19 drafts were not repaired or promoted; their original source messages
+remain available as attributed raw context. This is not extraction accuracy:
+valid source binding cannot prove the semantic claim follows from that source,
+and rejections can lose information that a later retrieval/reader needs.
+
+Every diagnostic owner's complete history is now ingested and its index reconciled.
+New-process zero-provider restart replay reproduces **exactly the same audit,
+Store record counts and provider ledger**, including rejection observations and
+governance records. Both reports have status complete. No checkpoint reset or
+extra extraction was needed.
+
+Preserved ignored reports:
+
+- `longmemeval-memory-trusted-partition-live-v1.json`, SHA-256
+  `f7d41141b2d34da9c41187a9122e9691946cc4d4dca7fde688028aa73d972e5e`.
+- `longmemeval-memory-trusted-partition-complete-replay-v1.json`, SHA-256
+  `3b899f08aa9dabbb15a89e455a2907046228a81abd776407eff0348c809b7d1c`.
+
+This closes the complete-history **ingestion** pilot, not the complete benchmark.
+The three opened questions are not a representative or blind quality sample;
+reserved groups remain untouched. No graph, natural Planner, retrieved-evidence
+ordering, answer-reader score or AML compliance is claimed by these results.
+
+Next: freeze matched evidence/reader budgets and compare attributed raw context,
+extracted memory and their combination on these same complete histories. Measure
+evidence coverage, irrelevant evidence load and answer quality separately, including
+whether the 19 rejected drafts leave recoverable information only in raw context.
+Do not use answers/annotations in runtime selection or tune to these opened cases.
+Validate the chosen general approach on reserved groups before broader claims.
