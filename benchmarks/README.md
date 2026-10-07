@@ -13,6 +13,18 @@ preparation, not a retrieval/QA benchmark result or an AML academic model profil
 `python -m benchmarks.public_memory_pilot` preregisters complete-history diagnostic/
 reserved groups and original-turn provenance mappings; it also runs no models.
 
+`python -m benchmarks.public_memory_ingestion` preflights the fixed history plan;
+explicit `--live` composes real reference extraction, proposal writes, deterministic
+consolidation and local PostgreSQL/pgvector under a durable provider budget/cache.
+Per-chunk observations and Store provenance are audited; partial prefixes are not
+complete histories, and this runner emits no retrieval/QA scores. A zero-new-chunk
+replay reads no key and cannot call the LLM. See the
+[frozen ingestion plan](reports/public-memory-ingestion-plan-2026-10-07.md).
+The [live prefix report](reports/public-memory-ingestion-result-2026-10-07.md)
+records seven completed chunks and the eighth chunk's evidence-binding rejection,
+plus zero-paid-call replay and generic governance/replay fixes. It is not a
+complete-history retrieval or answer-quality result.
+
 `python -m benchmarks.public_context_baseline` runs those frozen diagnostic histories
 through real PostgreSQL/pgvector/local BGE and attributed raw-dialogue retrieval.
 It reports turn/session annotation coverage for lexical/vector/RRF **raw-only**

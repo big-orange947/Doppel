@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sqlite3
 import subprocess
@@ -10,9 +11,11 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from benchmarks.public_memory_ingestion import audit_stored_records
 from doppel_memory.consolidation import DeterministicMemoryConsolidator
 from doppel_memory.indexing import (
     IndexEntry,
@@ -22,6 +25,7 @@ from doppel_memory.indexing import (
     memory_index_fingerprint,
 )
 from doppel_memory.intelligence import (
+    PersonalMemoryAnalysisDiagnostics,
     PersonalMemoryMiner,
     PersonalMemoryMinerConfig,
     ReferencePersonalMemoryAnalyzer,
@@ -319,6 +323,37 @@ async def test_index_failure_and_cancelled_write_resume_without_reextracting(
         await store.close()
 
 
+async def test_completed_replay_allowed_while_later_chunk_is_pending(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStore(str(tmp_path / "store.sqlite3"))
+    model, index = ScriptedModel(), MemoryIndex()
+    ingestor = host(tmp_path, store, model, index)
+    first = request()
+    second = first.model_copy(update={"request_id": "chunk-2"})
+    third = first.model_copy(update={"request_id": "chunk-3"})
+    scope = memory_scope("local-test", first.user_id)
+    try:
+        await ingestor.ingest(scope, first)
+        model.bad_evidence = True
+        with pytest.raises(IngestionFailure):
+            await ingestor.ingest(scope, second)
+        calls = len(model.requests)
+        assert (await ingestor.ingest(scope, first)).completed
+        assert len(model.requests) == calls
+        with pytest.raises(WriteNotReady):
+            await ingestor.ingest(scope, third)
+        assert len(model.requests) == calls
+        with pytest.raises(WriteConflict):
+            await ingestor.ingest(
+                scope, first.model_copy(update={"session_id": "changed"})
+            )
+        assert len(model.requests) == calls
+    finally:
+        ingestor.close()
+        await store.close()
+
+
 async def test_unknown_evidence_is_not_persisted_as_a_fact(tmp_path: Path) -> None:
     store = SQLiteStore(str(tmp_path / "store.sqlite3"))
     model, index = ScriptedModel(), MemoryIndex()
@@ -334,6 +369,231 @@ async def test_unknown_evidence_is_not_persisted_as_a_fact(tmp_path: Path) -> No
             await store.scan(scope, filters=MemoryFilter(tags={"personal-memory"}))
         ).records
         assert not index.entries
+    finally:
+        ingestor.close()
+        await store.close()
+
+
+async def test_content_free_audit_persists_and_replays_without_double_counting(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStore(str(tmp_path / "store.sqlite3"))
+    model, index = ScriptedModel(), MemoryIndex()
+    ingestor = host(tmp_path, store, model, index)
+    source = request()
+    scope = memory_scope("local-test", source.user_id)
+    diagnostics = PersonalMemoryAnalysisDiagnostics(
+        total_drafts=2, valid_drafts=2, invalid_drafts=0
+    )
+    try:
+        with pytest.raises(WriteConflict):
+            ingestor.record_analysis_diagnostics(scope, source, diagnostics)
+        await ingestor.ingest(scope, source)
+        missing = ingestor.audit_report()
+        assert missing["chunks_without_analysis_observation"] == 1
+        assert missing["chunks"][0]["analysis_diagnostics"] is None
+        ingestor.record_analysis_diagnostics(scope, source, diagnostics)
+        ingestor.record_analysis_diagnostics(scope, source, diagnostics)
+        report = ingestor.audit_report()
+        assert report["chunk_count"] == report["completed_chunks"] == 1
+        row = report["chunks"][0]
+        assert row["raw_events"] == row["proposals"] == 2
+        records = await audit_stored_records(
+            [SimpleNamespace(user_id=source.user_id)],
+            {"run_namespace": "local-test"},
+            ingestor,
+        )
+        assert (
+            records["raw_records"] == records["derived_records_including_inactive"] == 2
+        )
+        assert records["provenance_checks"] == 4 and records["provenance_failures"] == 0
+        assert records["semantic_truth_verified"] is False
+        assert row["analysis_diagnostics"]["valid_drafts"] == 2
+        assert report["chunks_without_analysis_observation"] == 0
+        assert "astronomy" not in json.dumps(
+            report
+        ) and "assistant's" not in json.dumps(report)
+        assert row["proposal_diagnostics"] == {
+            "valid_drafts": 2,
+            "low_confidence_drafts": 0,
+            "duplicate_drafts": 0,
+        }
+        with pytest.raises(WriteConflict):
+            ingestor.record_analysis_diagnostics(
+                scope, source.model_copy(update={"session_id": "changed"}), diagnostics
+            )
+        with pytest.raises(ValueError, match="reconcile"):
+            ingestor.record_analysis_diagnostics(
+                scope, source, diagnostics.model_copy(update={"total_drafts": 3})
+            )
+    finally:
+        ingestor.close()
+    restarted = host(tmp_path, store, ScriptedModel(), index)
+    try:
+        assert restarted.audit_report() == report
+        await restarted.ingest(scope, source)
+        assert restarted.audit_report() == report
+    finally:
+        restarted.close()
+        await store.close()
+
+
+async def test_failed_evidence_binding_has_observation_but_no_proposal_plan(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStore(str(tmp_path / "store.sqlite3"))
+    model, index = ScriptedModel(), MemoryIndex()
+    model.bad_evidence = True
+    ingestor = host(tmp_path, store, model, index)
+    source = request()
+    scope = memory_scope("local-test", source.user_id)
+    try:
+        with pytest.raises(IngestionFailure):
+            await ingestor.ingest(scope, source)
+        ingestor.record_analysis_diagnostics(
+            scope,
+            source,
+            PersonalMemoryAnalysisDiagnostics(
+                total_drafts=2, valid_drafts=2, invalid_drafts=0
+            ),
+        )
+        report = ingestor.audit_report()
+        row = report["chunks"][0]
+        assert row["raw_stage_persisted"] and row["raw_events"] == 2
+        assert not row["proposal_stage_persisted"] and row["proposals"] is None
+        assert row["analysis_diagnostics"]["valid_drafts"] == 2
+        assert row["proposal_diagnostics"] is None
+        assert not row["completed"] and report["completed_chunks"] == 0
+        assert not row["consolidation_done"] and not index.entries
+    finally:
+        ingestor.close()
+        await store.close()
+
+
+async def test_live_analyzer_observation_reconciles_invalid_low_confidence_duplicates(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStore(str(tmp_path / "store.sqlite3"))
+    index = MemoryIndex()
+    source = request()
+    scope = memory_scope("local-test", source.user_id)
+
+    class DraftModel:
+        name, version = "fake-diagnostic-model", "1"
+
+        async def generate(self, request: StructuredGenerationRequest) -> dict:
+            valid = {
+                "content": "An attributed preference",
+                "subject": "owner",
+                "evidence_ids": [request.input["messages"][0]["evidence_id"]],
+            }
+            return {
+                "memories": [
+                    valid,
+                    valid,
+                    {**valid, "confidence": 0.1},
+                    {"invalid": True},
+                ]
+            }
+
+    def observer(diagnostics: PersonalMemoryAnalysisDiagnostics) -> None:
+        ingestor.record_analysis_diagnostics(scope, source, diagnostics)
+
+    ingestor = DurableTextualIngestor(
+        store,
+        journal_path=tmp_path / "journal.sqlite3",
+        miner=PersonalMemoryMiner(
+            ReferencePersonalMemoryAnalyzer(
+                DraftModel(), diagnostics_observer=observer
+            ),
+            PersonalMemoryMinerConfig(
+                allowed_source_actors={Actor.OWNER, Actor.AGENT},
+                proposed_state=MemoryState.CONFIRMED,
+            ),
+        ),
+        consolidator=DeterministicMemoryConsolidator(),
+        index_writers=[index],
+        role_actors={"user": Actor.OWNER, "assistant": Actor.AGENT},
+    )
+    try:
+        await ingestor.ingest(scope, source)
+        row = ingestor.audit_report()["chunks"][0]
+        assert row["analysis_diagnostics"]["total_drafts"] == 4
+        assert row["analysis_diagnostics"]["valid_drafts"] == 3
+        assert row["analysis_diagnostics"]["invalid_drafts"] == 1
+        assert row["proposal_diagnostics"] == {
+            "valid_drafts": 3,
+            "low_confidence_drafts": 1,
+            "duplicate_drafts": 1,
+        }
+        assert row["proposals"] == 1 and row["completed"]
+    finally:
+        ingestor.close()
+        await store.close()
+
+
+async def test_store_audit_classifies_conflict_as_governance_not_owner_fact(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteStore(str(tmp_path / "store.sqlite3"))
+    source = request()
+    scope = memory_scope("local-test", source.user_id)
+
+    class ConflictingModel:
+        name, version = "fake-conflict-model", "1"
+
+        async def generate(self, request: StructuredGenerationRequest) -> dict:
+            message = request.input["messages"][0]
+            return {
+                "memories": [
+                    {
+                        "content": message["text"],
+                        "subject": "owner",
+                        "memory_type": "state",
+                        "topic_key": "synthetic.slot",
+                        "temporal_status": "current",
+                        "evidence_ids": [message["evidence_id"]],
+                    }
+                ]
+            }
+
+    ingestor = DurableTextualIngestor(
+        store,
+        journal_path=tmp_path / "journal.sqlite3",
+        miner=PersonalMemoryMiner(
+            ReferencePersonalMemoryAnalyzer(ConflictingModel()),
+            PersonalMemoryMinerConfig(
+                allowed_source_actors={Actor.OWNER, Actor.AGENT},
+                proposed_state=MemoryState.CONFIRMED,
+            ),
+        ),
+        consolidator=DeterministicMemoryConsolidator(),
+        index_writers=[MemoryIndex()],
+        role_actors={"user": Actor.OWNER, "assistant": Actor.AGENT},
+    )
+    try:
+        await ingestor.ingest(scope, source)
+        other = source.model_copy(
+            update={
+                "request_id": "other-claim",
+                "messages": [
+                    source.messages[0].model_copy(
+                        update={"content": "An incompatible slot value"}
+                    )
+                ],
+            }
+        )
+        await ingestor.ingest(scope, other)
+        report = await audit_stored_records(
+            [SimpleNamespace(user_id=source.user_id)],
+            {"run_namespace": "local-test"},
+            ingestor,
+        )
+        assert report["raw_records"] == 3
+        assert report["derived_records_including_inactive"] == 2
+        assert report["governance_records"] == 1
+        assert report["provenance_checks"] == 7 and report["provenance_failures"] == 0
+        assert report["semantic_truth_verified"] is False
     finally:
         ingestor.close()
         await store.close()

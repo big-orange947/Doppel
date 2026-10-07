@@ -15,6 +15,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -34,7 +35,11 @@ from doppel_memory.consolidation import (
     MemoryConsolidator,
 )
 from doppel_memory.indexing import IndexMaintainer, IndexWriter
-from doppel_memory.intelligence import PersonalMemoryMiner
+from doppel_memory.intelligence import (
+    PersonalMemoryAnalysisDiagnostics,
+    PersonalMemoryEvidenceError,
+    PersonalMemoryMiner,
+)
 from doppel_memory.models import (
     Actor,
     ChatMessage,
@@ -59,9 +64,10 @@ from integrations.aml.contract import (
 class IngestionFailure(BoundaryError):
     """Redacted failure; a pending journal is retained for repair/replay."""
 
-    def __init__(self, message: str, *, stage: str = "") -> None:
+    def __init__(self, message: str, *, stage: str = "", reason: str = "") -> None:
         super().__init__(message)
         self.stage = stage
+        self.reason = reason
 
 
 class IngestionCompletion(BaseModel):
@@ -200,6 +206,9 @@ class DurableTextualIngestor:
             CREATE TABLE IF NOT EXISTS sources (
                 scope TEXT NOT NULL, event TEXT NOT NULL, memory TEXT NOT NULL,
                 PRIMARY KEY(scope, event)
+            );
+            CREATE TABLE IF NOT EXISTS analysis_observations (
+                key TEXT PRIMARY KEY REFERENCES writes(key), diagnostics TEXT NOT NULL
             );"""
         )
         self._coordinator = sqlite3.connect(coordinator_path, timeout=0)
@@ -283,11 +292,21 @@ class DurableTextualIngestor:
         fingerprint = payload_fingerprint(snapshot)
         async with self._lock:
             with self._exclusive():
+                existing = self._journal.execute(
+                    "SELECT payload, scope, completion FROM writes WHERE key=?", (key,)
+                ).fetchone()
+                if existing is not None and (
+                    existing["payload"] != fingerprint
+                    or existing["scope"] != scope.scope_key
+                ):
+                    raise WriteConflict("request identity reused with changed payload")
                 pending = self._journal.execute(
                     "SELECT key FROM writes WHERE scope=? AND completion IS NULL AND key<>? LIMIT 1",
                     (scope.scope_key, key),
                 ).fetchone()
-                if pending is not None:
+                if pending is not None and (
+                    existing is None or existing["completion"] is None
+                ):
                     raise WriteNotReady(
                         "resume the pending scope write before a later chunk"
                     )
@@ -366,10 +385,16 @@ class DurableTextualIngestor:
                     )
                     self._save(key, "completion", completion.model_dump(mode="json"))
                     return completion
-                except Exception:  # noqa: BLE001 - redacted plugin boundary
+                except Exception as exc:  # noqa: BLE001 - redacted plugin boundary
                     # Never interpolate plugin exception text (may contain keys/text).
                     raise IngestionFailure(
-                        "ingestion stage failed; journal retained", stage=stage
+                        "ingestion stage failed; journal retained",
+                        stage=stage,
+                        reason="evidence-binding-rejected"
+                        if isinstance(exc, PersonalMemoryEvidenceError)
+                        else "invalid-stage-schema"
+                        if isinstance(exc, ValidationError)
+                        else "stage-execution-failed",
                     ) from None
 
     def _messages(self, scope: MemoryScope, request: AddRequest) -> list[ChatMessage]:
@@ -543,6 +568,111 @@ class DurableTextualIngestor:
         if record is None or record.source_event_id != evidence_id:
             raise IngestionFailure("evidence provenance Store revalidation failed")
         return record
+
+    def record_analysis_diagnostics(
+        self,
+        scope: MemoryScope,
+        request: AddRequest,
+        diagnostics: PersonalMemoryAnalysisDiagnostics,
+    ) -> None:
+        """Persist one content-free observation per chunk, including failed drafts.
+
+        Re-reading cached output replaces the same observation, not an additional
+        count. Missing observations remain explicit in ``audit_report``. Callers
+        bind this callback to the current chunk, never to a scoring annotation.
+        """
+        if self._closed:
+            raise IngestionFailure("ingestor is closed")
+        key = write_key(scope, request)
+        row = self._journal.execute(
+            "SELECT payload, scope FROM writes WHERE key=?", (key,)
+        ).fetchone()
+        if row is None or (
+            row["payload"] != payload_fingerprint(request)
+            or row["scope"] != scope.scope_key
+        ):
+            raise WriteConflict("analysis observation has no matching chunk")
+        bound = PersonalMemoryAnalysisDiagnostics.model_validate(diagnostics)
+        if bound.valid_drafts + bound.invalid_drafts != bound.total_drafts:
+            raise ValueError("analysis observation draft counts do not reconcile")
+        self._journal.execute(
+            "INSERT INTO analysis_observations VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET diagnostics=excluded.diagnostics",
+            (key, bound.model_dump_json()),
+        )
+
+    def audit_report(self) -> dict[str, Any]:
+        """Read durable stage/count evidence, never raw/model text or quality scores.
+
+        Proposal/checkpoint counts describe the persisted plan, not the number
+        of final unique active memories. Completion describes configured indexes
+        only. No observation is interpreted as zero invalid drafts.
+        """
+        if self._closed:
+            raise IngestionFailure("ingestor is closed")
+        chunks = []
+        for row in self._journal.execute(
+            "SELECT writes.*, analysis_observations.diagnostics FROM writes "
+            "LEFT JOIN analysis_observations USING(key) ORDER BY writes.rowid"
+        ):
+            observation = (
+                PersonalMemoryAnalysisDiagnostics.model_validate_json(
+                    row["diagnostics"]
+                ).model_dump(mode="json")
+                if row["diagnostics"] is not None
+                else None
+            )
+            plan = (
+                BatchProposalPlan.model_validate_json(row["proposals"])
+                if row["proposals"] is not None
+                else None
+            )
+            checkpoint = plan.next_checkpoint if plan else None
+            raw_counts = (
+                checkpoint.metadata.get("proposal_diagnostics", {})
+                if checkpoint is not None
+                else {}
+            )
+            proposal_counts = {
+                name: raw_counts.get(name)
+                for name in (
+                    "valid_drafts",
+                    "low_confidence_drafts",
+                    "duplicate_drafts",
+                )
+            }
+            if any(
+                value is not None and (type(value) is not int or value < 0)
+                for value in proposal_counts.values()
+            ):
+                raise IngestionFailure("invalid proposal diagnostic counts")
+            chunks.append(
+                {
+                    "write_key": row["key"],
+                    "scope_key": row["scope"],
+                    "raw_stage_persisted": row["events"] is not None,
+                    "raw_events": len(json.loads(row["events"]))
+                    if row["events"] is not None
+                    else 0,
+                    "proposal_stage_persisted": plan is not None,
+                    "proposals": len(plan.proposals) if plan else None,
+                    "proposal_diagnostics": proposal_counts if plan else None,
+                    "analysis_diagnostics": observation,
+                    "consolidation_plan_persisted": row["consolidation"] is not None,
+                    "consolidation_done": bool(row["consolidation_done"]),
+                    "completed": row["completion"] is not None,
+                }
+            )
+        return {
+            "profile_fingerprint": self.profile_fingerprint,
+            "chunk_count": len(chunks),
+            "completed_chunks": sum(bool(row["completed"]) for row in chunks),
+            "chunks_without_analysis_observation": sum(
+                row["analysis_diagnostics"] is None for row in chunks
+            ),
+            "chunks": chunks,
+            "quality_metrics_available": False,
+        }
 
     def close(self) -> None:
         """Close host journal only; callers own Store/provider/index lifetimes."""

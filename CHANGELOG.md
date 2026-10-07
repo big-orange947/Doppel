@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Add a bounded public-history live extraction/ingestion runner using the existing
+  reference Miner, proposal writer, deterministic consolidation and actual local
+  PostgreSQL/pgvector. Persist query-free source maps, fixed non-secret profiles and
+  per-chunk schema/proposal rejection observations; preserve pending stages and
+  stop on first failure. Keep preflight and completed-prefix replay zero-provider,
+  distinguish partial ingestion from complete histories, and report Store provenance
+  separately from semantic truth, retrieval/QA quality and AML compliance.
+- Permit identical completed ingestion requests to revalidate/repair indexes even
+  while a later scope chunk is pending; keep changed-payload conflicts and new/
+  unfinished-write blocking intact. Classify conflict markers as separately
+  audited governance records, never owner facts. Preserve the live eighth-chunk
+  evidence-binding rejection and reproduce it from raw-output cache without
+  another provider call or weaker evidence rules.
 - Add an opt-in, bounded per-scope BM25 reference retrieval strategy with generic
   Unicode normalization/tokenization, complete-corpus pagination and filter/scope
   revalidation. Keep Store substring behavior and framework defaults unchanged;

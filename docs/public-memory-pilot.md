@@ -361,3 +361,49 @@ Next: compose bounded real extraction/derived-memory/graph and natural planning,
 then compare extracted memory, raw context and their combination under a frozen
 reader/evidence budget. Validate broader generalization without adding special
 rules for already opened questions.
+
+## Bounded real extraction and ingestion
+
+`benchmarks.public_memory_ingestion` composes the production extraction, proposal
+writes, deterministic consolidation and index-maintenance host with PostgreSQL
+and the same local BGE/pgvector profile. The
+[frozen ingestion plan](../benchmarks/reports/public-memory-ingestion-plan-2026-10-07.md)
+separates this stage from subsequent graph/Planner/search/reader measurements.
+Default execution is a zero-provider/database preflight; explicit `--live` is
+required for extraction. The input is the same complete-history manifest, not
+gold-seeded memories. An invocation-bound partial prefix is **not** a complete
+history or an opportunity to score partial evidence as a full benchmark.
+
+```powershell
+.\.venv\Scripts\python.exe -m benchmarks.public_memory_ingestion `
+  --dataset data\public-benchmarks\longmemeval_s_cleaned.json `
+  --manifest data\doppel\longmemeval-local-pilot-manifest-v1.json `
+  --output data\doppel\longmemeval-memory-ingestion-preflight-next.json `
+  --model deepseek-v4-flash --base-url https://api.deepseek.com
+```
+
+After configuring the diagnostic DSN and API key in process environment variables,
+add `--live --max-new-chunks 3`, a new report path, the existing local embedding
+cache directory and optionally `--api-key-env DEEPSEEK_API_KEY`. Keep the same
+`--run-dir` and fixed `--max-calls 147` when resuming. Completed chunks revalidate
+provenance/repair indexes without repeating extraction. Failed stage checkpoints
+and raw response caches remain for diagnosis; the first failed chunk stops the run.
+Do not change the model/output cap/policy in place or delete a checkpoint to retry.
+
+The host's audit exposes content-free per-chunk stage/analysis/proposal counts.
+Missing analyzer observations are explicit. Schema-valid drafts are not necessarily
+safe proposals; source-actor/evidence violations still fail. The benchmark host
+explicitly confirms attributed proposals after these gates; core defaults stay
+candidate and assistant claims stay agent_output. Actual Store record/evidence
+counts are audited separately from proposal counts and semantic correctness.
+No retrieval or QA metric is emitted by this runner, even after all 147 chunks.
+With `--live --max-new-chunks 0`, only completed chunks are revalidated, the
+structured model is cache-only, and no API key is read or required. Pending/new
+chunks are not attempted. This is a zero-paid-call restart check, not additional
+history ingestion.
+For a failed chunk whose provider JSON already exists, `--live --cache-only
+--max-new-chunks 1` may attempt it from that cache without reading a key or issuing
+an LLM request. Invalid/missing cache still fails, and evidence gates still apply.
+Store audits classify conflict markers separately as governance records; they
+are not owner facts. An audit failure preserves the earlier ingestion stop as a
+separate field instead of hiding the original failed stage.
