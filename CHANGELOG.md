@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Partition deterministic consolidation candidates by exact trusted actor,
+  authority and kind before both topic-keyed and unkeyed semantic grouping.
+  Retain runner source-compatibility checks and homogeneous merge/conflict/revision
+  behavior. Bump consolidator identity to v4: new host profiles/checkpoints must
+  bind the new version instead of silently resuming v3 journals. Preserve the
+  live cross-kind failure and reuse existing raw-output caches for regression.
 - Add explicit per-draft evidence quarantine to the batch Miner, preserving the
   default fail-batch behavior and old default fingerprints. Keep all source/subject
   gates and authority rules; persist closed rejection reasons/analysis ordinals and

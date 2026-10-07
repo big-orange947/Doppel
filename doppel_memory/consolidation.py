@@ -249,7 +249,7 @@ class DeterministicMemoryConsolidator:
     """Merge exact claims and require explicit revision evidence for correction."""
 
     name = "doppel.deterministic-memory-consolidator"
-    version = "3"
+    version = "4"
 
     def __init__(self, config: DeterministicConsolidatorConfig | None = None) -> None:
         self.config = config or DeterministicConsolidatorConfig()
@@ -261,14 +261,17 @@ class DeterministicMemoryConsolidator:
         )
         decisions: list[ConsolidationDecision] = []
         used: set[str] = set()
-        topic_groups: dict[tuple[str, str, str, str], list[MemoryRecord]] = defaultdict(
-            list
-        )
+        # Match the runner's trusted compatibility boundary before any candidate
+        # grouping. Semantic metadata cannot authorize cross-identity decisions.
+        topic_groups: dict[tuple[str, ...], list[MemoryRecord]] = defaultdict(list)
         for record in records:
             topic_key = _metadata_text(record, "topic_key")
             if topic_key:
                 topic_groups[
                     (
+                        record.actor,
+                        record.authority,
+                        record.kind,
                         _metadata_text(record, "subject"),
                         _metadata_text(record, "subject_id"),
                         _metadata_text(record, "personal_memory_type"),
@@ -380,9 +383,7 @@ class DeterministicMemoryConsolidator:
                     )
                     used.update(source_ids)
 
-        unkeyed: dict[tuple[str, str, str, str, str, str], list[MemoryRecord]] = (
-            defaultdict(list)
-        )
+        unkeyed: dict[tuple[str, ...], list[MemoryRecord]] = defaultdict(list)
         for record in records:
             if record.memory_id in used:
                 continue
@@ -392,6 +393,9 @@ class DeterministicMemoryConsolidator:
                 continue
             unkeyed[
                 (
+                    record.actor,
+                    record.authority,
+                    record.kind,
                     _metadata_text(record, "subject"),
                     _metadata_text(record, "subject_id"),
                     memory_type,
@@ -1289,8 +1293,7 @@ def _historical_revision(
     revisions = [
         record
         for record in records
-        if _metadata_text(record, "temporal_status")
-        == MemoryTemporalStatus.HISTORICAL
+        if _metadata_text(record, "temporal_status") == MemoryTemporalStatus.HISTORICAL
         and _metadata_text(record, "revision_kind") in {"correction", "retraction"}
     ]
     if not revisions:

@@ -445,3 +445,20 @@ remain, with one separately audited governance record. The old profile remains
 failed at chunk eight; the new profile has processed 8/147 chunks with zero new
 provider calls. Source checks do not verify semantic truth. This is still a partial
 opened diagnostic, not a new blind test, extraction-quality score or AML result.
+
+### Consolidation trusted-partition revision
+
+A later unchanged-profile continuation stopped at chunk 37 because the v3
+deterministic consolidator grouped two different trusted kinds into one conflict
+decision. The execution guard correctly refused it. V4 partitions both keyed and
+unkeyed groups by actor/authority/kind; no runner gate or analyzer prompt is relaxed.
+See the [v4 plan](../benchmarks/reports/public-memory-trusted-partition-plan-2026-10-07.md)
+and [regression report](../benchmarks/reports/public-memory-trusted-partition-result-2026-10-07.md).
+
+The old journals remain bound to v3. Use a new run directory
+`data/doppel/public-memory-ingestion-quarantine-v2`, the same quarantine option and
+two repeated `--read-only-cache-dir` options pointing to the original fail-batch
+and quarantine-v1 provider caches. Cache-only regression reprocesses all 37 saved
+responses with zero model calls, retaining the 392 raw events and 175 accepted
+proposals. Only after this regression should the unchanged remaining 110 chunks
+continue. Neither the saved prefix nor its source checks are a retrieval/QA score.

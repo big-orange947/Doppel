@@ -18,6 +18,7 @@ from benchmarks.public_memory_ingestion import (
     preflight_report,
 )
 from benchmarks.public_memory_pilot import build_manifest
+from doppel_memory.consolidation import DeterministicMemoryConsolidator
 from doppel_memory.openai_compatible import OpenAICompatibleStructuredOutputConfig
 from integrations.aml.contract import write_key
 from integrations.aml.ingestion import IngestionFailure
@@ -126,6 +127,32 @@ def test_quarantine_is_explicit_and_cannot_reuse_default_run_binding(
     with pytest.raises(ValueError, match="different plan"):
         _bind_json(path, quarantined)
     assert path.read_bytes() == original
+
+
+def test_changed_consolidator_identity_requires_new_run_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cases, manifest = fixture()
+    monkeypatch.setattr(DeterministicMemoryConsolidator, "version", "3")
+    old = build_ingestion_plan(
+        cases, manifest, config(), max_calls=4, evidence_error_policy="quarantine"
+    )
+    monkeypatch.setattr(DeterministicMemoryConsolidator, "version", "4")
+    new = build_ingestion_plan(
+        cases, manifest, config(), max_calls=4, evidence_error_policy="quarantine"
+    )
+    assert new["chunks"] == old["chunks"]
+    assert new["provider_config"] == old["provider_config"]
+    assert new["analyzer"] == old["analyzer"]
+    assert new["miner_config"] == old["miner_config"]
+    assert new["plan_fingerprint"] != old["plan_fingerprint"]
+    path = tmp_path / "plan.json"
+    _bind_json(path, old)
+    snapshot = path.read_bytes()
+    with pytest.raises(ValueError, match="different plan"):
+        _bind_json(path, new)
+    assert path.read_bytes() == snapshot
 
 
 class ScriptedHost:

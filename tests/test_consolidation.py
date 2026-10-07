@@ -337,12 +337,12 @@ async def test_historical_revision_retires_one_active_planned_slot(
     assert action.canonical_write.record is not None
     assert action.canonical_write.record.content == cancelled.content
     assert (await store.get(SCOPE, planned.memory_id)).state is MemoryState.SUPERSEDED
-    assert (
-        await store.get(SCOPE, cancelled.memory_id)
-    ).state is MemoryState.SUPERSEDED
+    assert (await store.get(SCOPE, cancelled.memory_id)).state is MemoryState.SUPERSEDED
 
 
-async def test_historical_retraction_does_not_guess_between_current_and_planned() -> None:
+async def test_historical_retraction_does_not_guess_between_current_and_planned() -> (
+    None
+):
     store = InMemoryStore()
     await _put(
         store,
@@ -526,6 +526,106 @@ class _DecisionConsolidator:
     async def consolidate(self, input: ConsolidationInput) -> ConsolidationAnalysis:
         del input
         return ConsolidationAnalysis.model_validate({"decisions": self.decisions})
+
+
+@pytest.mark.parametrize(
+    "attribute, foreign_value",
+    [
+        ("actor", "custom-source"),
+        ("authority", FactAuthority.PEER_STATEMENT),
+        ("kind", "custom-kind"),
+    ],
+)
+@pytest.mark.parametrize(
+    "mode, operation",
+    [
+        ("topic-merge", "merge"),
+        ("unkeyed-merge", "merge"),
+        ("conflict", "conflict"),
+        ("correction", "correct"),
+        ("historical-revision", "correct"),
+    ],
+)
+async def test_deterministic_groups_partition_trusted_source_identity(
+    attribute: str,
+    foreign_value: str,
+    mode: str,
+    operation: str,
+) -> None:
+    store = InMemoryStore()
+    topic = "" if mode == "unkeyed-merge" else "synthetic.slot"
+    first = _record("first", "Generic value A", day=1, topic_key=topic)
+    second = _record(
+        "second",
+        "Generic value A" if operation == "merge" else "Generic value B",
+        day=2,
+        topic_key=topic,
+        temporal_status="historical" if mode == "historical-revision" else "current",
+        revision_kind="correction" if operation == "correct" else "assertion",
+    )
+    foreign = _record("foreign", "Generic value A", day=3, topic_key=topic)
+    foreign = MemoryRecord.model_validate(
+        {**foreign.model_dump(), attribute: foreign_value}
+    )
+    await _put(store, first, second, foreign)
+    result = await ConsolidationRunner(store).run_once(
+        DeterministicMemoryConsolidator(),
+        SCOPE,
+        run_id="synthetic-trusted-partition",
+    )
+    assert result.committable_checkpoint is not None and not result.errors
+    assert len(result.actions) == 1
+    assert result.actions[0].operation == operation
+    assert {source.memory_id for source in result.plan.actions[0].sources} == {
+        "first",
+        "second",
+    }
+    assert await store.get(SCOPE, "foreign") == foreign
+    assert (
+        len(
+            (
+                await store.scan(
+                    SCOPE, filters=MemoryFilter(include_inactive=True), limit=20
+                )
+            ).records
+        )
+        == 4
+    )
+
+
+@pytest.mark.parametrize(
+    "attribute, foreign_value",
+    [
+        ("actor", "custom-source"),
+        ("authority", FactAuthority.PEER_STATEMENT),
+        ("kind", "custom-kind"),
+    ],
+)
+async def test_execution_guard_still_rejects_forced_cross_identity_group(
+    attribute: str,
+    foreign_value: str,
+) -> None:
+    store = InMemoryStore()
+    first = _record("first", "Generic value", day=1, topic_key="synthetic.slot")
+    foreign = _record("foreign", "Generic value", day=2, topic_key="synthetic.slot")
+    foreign = MemoryRecord.model_validate(
+        {**foreign.model_dump(), attribute: foreign_value}
+    )
+    await _put(store, first, foreign)
+    forced = _DecisionConsolidator(
+        [
+            {
+                "operation": "merge",
+                "source_memory_ids": ["first", "foreign"],
+                "canonical_source_memory_id": "first",
+                "explanation": "synthetic unsafe source group",
+            }
+        ]
+    )
+    with pytest.raises(ConsolidationPlanningError, match=f"trusted {attribute}"):
+        await ConsolidationRunner(store).plan_once(forced, SCOPE)
+    assert await store.get(SCOPE, "first") == first
+    assert await store.get(SCOPE, "foreign") == foreign
 
 
 async def test_unknown_and_overlapping_sources_are_rejected_before_writes() -> None:

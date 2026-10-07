@@ -64,6 +64,14 @@ part of the core package. The host must enforce one in-flight plan per exact sco
 Consolidators select existing memory IDs only; trusted scope, authority, lifecycle
 transitions, optimistic concurrency, and writes remain runner and Store responsibilities.
 
+DeterministicMemoryConsolidator v4 adds trusted actor/authority/kind partitions
+before its existing semantic grouping. Its public callable shape is unchanged,
+and runner compatibility gates remain in force. The component identity changes
+from v3 to v4 because candidate decisions can differ. Version-bound checkpoints
+and host journals require a separate profile or explicit migration; do not edit
+an older saved plan/version to make it pass new binding checks. No kind aliases or
+authority promotion are introduced.
+
 The v0.8.0 personal-query draft, plan, hit, count, result, planner, and engine types are
 provisional root APIs. They are additive beside the unchanged stable generic
 `Retriever`/`RecallResult` surface. Query planners never select read scopes, while an
