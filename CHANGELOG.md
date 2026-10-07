@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add an independent Judge v2 over the preserved Reader v1 answers: five orthogonal
+  dimensions (`answer_match`, `commitment`, `citation_support`, `citation_contradiction`,
+  `faithfulness`) with per-record citation judgments, verbatim quotes bound to one
+  record each, absence claims checked against the complete supplied context, and
+  row-level support derived by code so a no-claim answer is `not_applicable` and is
+  never counted as supported. The judge never sees profile names, original judge
+  labels, audit conclusions or the reader's abstention flag, and no reference-answer
+  phrase check decides answer presence or packing attribution. Lenient matching,
+  explicit-conclusion and strict-commitment counts are reported with their
+  denominators, six frozen synthetic controls gate the preserved-rows arm, and the
+  budget is capped at 24 new calls with a key-free cache-only replay.
 - Add a deterministic, zero-model audit of the preserved reader/judge rows: a packet
   builder bound to the live report, comparison artifact and dataset, plus a validator
   that re-verifies every auditor quote and every context presence/absence claim. The

@@ -1,0 +1,276 @@
+{
+  "controls_schema": "doppel.public-memory-judge-v2-controls.v1",
+  "frozen": true,
+  "frozen_date": "2026-10-07",
+  "rubric_version": "judge-v2-rubric-1",
+  "purpose": "Synthetic judge-v2 calibration rows with fixed expected labels; never benchmark data, never a quality score. Expectations follow the frozen rubric, not the audit labels.",
+  "controls": [
+    {
+      "control_id": "c1-grounded-refusal-restating-context",
+      "group": "C1",
+      "description": "The reference value is absent from the context; the answer restates one supplied fact and reports the absence. It makes factual claims, so support is judged per record and the absence check must verify against the full context.",
+      "question": "What was my previous frequent flyer status on the airline before I got the current status?",
+      "question_reference_time": "2023-06-02T00:00:00+00:00",
+      "reference_answer": "Premier Silver",
+      "candidate_answer": "The supplied items do not state your previous status. They show that on 2023-05-30 you said you had just reached Premier Gold status (mem-ctrl-c1-gold), and an earlier 2022-09-16 item asks about your status without answering it (mem-ctrl-c1-ask). No earlier status tier is recorded.",
+      "cited_memory_ids": ["mem-ctrl-c1-ask", "mem-ctrl-c1-gold"],
+      "context_items": [
+        {
+          "memory_id": "mem-ctrl-c1-ask",
+          "channel": "raw",
+          "role": "user",
+          "authority": "human_self",
+          "observed_at": "2022-09-16T17:22:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "Can you tell me what my current frequent flyer status is on the airline? I am not sure how many miles I need."
+        },
+        {
+          "memory_id": "mem-ctrl-c1-gold",
+          "channel": "raw",
+          "role": "user",
+          "authority": "human_self",
+          "observed_at": "2023-05-30T08:58:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "I do have an airline loyalty account and I just reached Premier Gold status."
+        }
+      ],
+      "expected": {
+        "answer_match": "incorrect",
+        "commitment": "refused_unavailable",
+        "citation_support": "supported",
+        "citation_contradiction": false,
+        "faithfulness": "grounded"
+      },
+      "expected_rationale": "Withholds the reference value while the context lacks it, so the match is incorrect and the refusal is unavailable, but the restated Gold fact and the 2022 question are supported by the cited records, no record contradicts the answer, and the absence claim is true for the full context."
+    },
+    {
+      "control_id": "c2-conditional-derivation",
+      "group": "C2",
+      "description": "Both operands are supplied; the answer states the derived value and hedges that it is not written verbatim. Lenient matching counts the conveyed value as correct.",
+      "question": "How much did I spend on each coffee mug for my coworkers?",
+      "question_reference_time": "2023-05-30T00:00:00+00:00",
+      "reference_answer": "$12",
+      "candidate_answer": "You spent $60 in total on five coffee mugs, so each mug worked out to about $12; the per-mug price is not stated directly (mem-ctrl-c2-total, mem-ctrl-c2-count).",
+      "cited_memory_ids": ["mem-ctrl-c2-total", "mem-ctrl-c2-count"],
+      "context_items": [
+        {
+          "memory_id": "mem-ctrl-c2-total",
+          "channel": "raw",
+          "role": "user",
+          "authority": "human_self",
+          "observed_at": "2023-05-27T22:31:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "Speaking of gifts, I once spent $60 on some coffee mugs for my coworkers."
+        },
+        {
+          "memory_id": "mem-ctrl-c2-count",
+          "channel": "raw",
+          "role": "user",
+          "authority": "human_self",
+          "observed_at": "2023-05-28T19:13:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "I purchased 5 coffee mugs with funny quotes, one for each of my coworkers."
+        }
+      ],
+      "expected": {
+        "answer_match": "correct",
+        "commitment": "hedged_derivation",
+        "citation_support": "supported",
+        "citation_contradiction": false,
+        "faithfulness": "grounded"
+      },
+      "expected_rationale": "The conveyed value matches the reference under the lenient rule, the hedge is a commitment label rather than a refusal, both cited records justify the premises, and nothing is contradicted."
+    },
+    {
+      "control_id": "c3-refusal-contradicting-cited-record",
+      "group": "C3",
+      "description": "The answer refuses on a premise that one of its own cited records contradicts.",
+      "question": "How much did I spend on each coffee mug for my coworkers?",
+      "question_reference_time": "2023-05-30T00:00:00+00:00",
+      "reference_answer": "$12",
+      "candidate_answer": "You mentioned spending $60 on coffee mugs, but the records do not say how many mugs you bought, so I cannot compute the per-mug price (mem-ctrl-c3-total, mem-ctrl-c3-list, mem-ctrl-c3-count).",
+      "cited_memory_ids": [
+        "mem-ctrl-c3-total",
+        "mem-ctrl-c3-list",
+        "mem-ctrl-c3-count"
+      ],
+      "context_items": [
+        {
+          "memory_id": "mem-ctrl-c3-total",
+          "channel": "raw",
+          "role": "user",
+          "authority": "human_self",
+          "observed_at": "2023-05-27T22:31:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "Speaking of gifts, I once spent $60 on some coffee mugs for my coworkers."
+        },
+        {
+          "memory_id": "mem-ctrl-c3-list",
+          "channel": "raw",
+          "role": "user",
+          "authority": "human_self",
+          "observed_at": "2023-05-27T22:31:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "My records show $60 on coffee mugs for my coworkers among other gift expenses."
+        },
+        {
+          "memory_id": "mem-ctrl-c3-count",
+          "channel": "raw",
+          "role": "user",
+          "authority": "human_self",
+          "observed_at": "2023-05-28T19:13:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "I purchased 5 coffee mugs with funny quotes, one for each of my coworkers."
+        }
+      ],
+      "expected": {
+        "answer_match": "incorrect",
+        "commitment": "refused_conflicting_premise",
+        "citation_support": "partially_supported",
+        "citation_contradiction": true,
+        "faithfulness": "partly_grounded"
+      },
+      "expected_rationale": "Two records support the spending claim while the third contradicts the no-count premise, so support is partially_supported with a contradiction, the refusal rests on a contradicted premise, and the answer is only partly faithful."
+    },
+    {
+      "control_id": "c4-no-record-without-factual-claims",
+      "group": "C4",
+      "description": "The answer asserts nothing about the person, only that the supplied items do not contain the requested information. Support must be not_applicable and must never count as supported.",
+      "question": "Can you remind me of the back-end programming languages you recommended I learn?",
+      "question_reference_time": "2023-06-01T00:00:00+00:00",
+      "reference_answer": "I recommended learning Ruby, Python, or PHP as a back-end programming language.",
+      "candidate_answer": "I do not have any record of a previous conversation about front-end and back-end development, and the supplied items contain no recommendation of back-end programming languages. The available items cover other topics only.",
+      "cited_memory_ids": [],
+      "context_items": [
+        {
+          "memory_id": "mem-ctrl-c4-topic-a",
+          "channel": "memory",
+          "role": "derived-owner-memory",
+          "authority": "human_self",
+          "observed_at": "2023-05-20T10:00:00+00:00",
+          "temporal_status": "current",
+          "valid_from": null,
+          "valid_to": null,
+          "text": "The owner plans to spend the next few days refining a freelance contract."
+        },
+        {
+          "memory_id": "mem-ctrl-c4-topic-b",
+          "channel": "memory",
+          "role": "derived-owner-memory",
+          "authority": "human_self",
+          "observed_at": "2023-05-21T10:00:00+00:00",
+          "temporal_status": "current",
+          "valid_from": null,
+          "valid_to": null,
+          "text": "The owner recently did some decluttering and wants tips on organizing what remains."
+        }
+      ],
+      "expected": {
+        "answer_match": "incorrect",
+        "commitment": "refused_unavailable",
+        "citation_support": "not_applicable",
+        "citation_contradiction": false,
+        "faithfulness": "grounded"
+      },
+      "expected_rationale": "The reference value is not conveyed, no factual claim about the person or the assistant is made (only absence reports about the supplied items), the absence claims hold for the full context, and support must therefore be not_applicable rather than supported or unsupported."
+    },
+    {
+      "control_id": "c5-assistant-recommendation-attribution",
+      "group": "C5",
+      "description": "A question about the assistant's own earlier recommendation, answered from agent_output records that keep their attribution.",
+      "question": "Can you remind me of the back-end programming languages you recommended I learn?",
+      "question_reference_time": "2023-06-01T00:00:00+00:00",
+      "reference_answer": "I recommended learning Ruby, Python, or PHP as a back-end programming language.",
+      "candidate_answer": "In our earlier conversation I recommended learning a back-end programming language such as Ruby, Python, or PHP (mem-ctrl-c5-advice).",
+      "cited_memory_ids": ["mem-ctrl-c5-advice"],
+      "context_items": [
+        {
+          "memory_id": "mem-ctrl-c5-advice",
+          "channel": "raw",
+          "role": "assistant",
+          "authority": "agent_output",
+          "observed_at": "2023-05-26T19:29:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "Learn a back-end programming language once you have the basics: such as Ruby, Python, or PHP."
+        },
+        {
+          "memory_id": "mem-ctrl-c5-unrelated",
+          "channel": "raw",
+          "role": "user",
+          "authority": "human_self",
+          "observed_at": "2023-05-26T19:28:00+00:00",
+          "temporal_status": null,
+          "valid_from": null,
+          "valid_to": null,
+          "text": "I want to become a full-stack developer but I am not sure where to start."
+        }
+      ],
+      "expected": {
+        "answer_match": "correct",
+        "commitment": "committed",
+        "citation_support": "supported",
+        "citation_contradiction": false,
+        "faithfulness": "grounded"
+      },
+      "expected_rationale": "The answer conveys the reference languages and cites the assistant record that states them; the record supports the claim, and the assistant attribution is not turned into an owner fact."
+    },
+    {
+      "control_id": "c6-temporal-previous-versus-current",
+      "group": "C6",
+      "description": "Two values are supplied with the same current label; correctness depends on ordering them by observation time.",
+      "question": "What was my previous status before the current one?",
+      "question_reference_time": "2023-06-02T00:00:00+00:00",
+      "reference_answer": "Premier Silver",
+      "candidate_answer": "Your previous status was Premier Silver: you reached 20,000 miles and became eligible for it in 2022, and you had just reached Premier Gold by 2023 (mem-ctrl-c6-silver, mem-ctrl-c6-gold).",
+      "cited_memory_ids": ["mem-ctrl-c6-silver", "mem-ctrl-c6-gold"],
+      "context_items": [
+        {
+          "memory_id": "mem-ctrl-c6-silver",
+          "channel": "memory",
+          "role": "derived-owner-memory",
+          "authority": "human_self",
+          "observed_at": "2022-09-16T17:22:00+00:00",
+          "temporal_status": "current",
+          "valid_from": null,
+          "valid_to": null,
+          "text": "The owner has 20,000 miles and is eligible for Premier Silver status."
+        },
+        {
+          "memory_id": "mem-ctrl-c6-gold",
+          "channel": "memory",
+          "role": "derived-owner-memory",
+          "authority": "human_self",
+          "observed_at": "2023-05-30T08:58:00+00:00",
+          "temporal_status": "current",
+          "valid_from": null,
+          "valid_to": null,
+          "text": "The owner has an airline loyalty account and just reached Premier Gold status."
+        }
+      ],
+      "expected": {
+        "answer_match": "correct",
+        "commitment": "committed",
+        "citation_support": "supported",
+        "citation_contradiction": false,
+        "faithfulness": "grounded"
+      },
+      "expected_rationale": "The previous value is stated and ordered by observation time rather than by the shared current label; both records support the dated claims."
+    }
+  ]
+}
