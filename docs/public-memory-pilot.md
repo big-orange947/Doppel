@@ -550,3 +550,21 @@ Add `--live --cache-only` to replay an existing run directory without a key. The
 runner refuses a different comparison hash, a manifest mismatch, an incomplete row
 set, an existing output path or a changed plan, and never re-retrieves, writes a
 Store or expands a source.
+
+### Independent audit of the reader/judge rows
+
+The [audit report](../benchmarks/reports/public-memory-answer-audit-2026-10-07.md) and
+`benchmarks.public_memory_answer_audit` re-read the preserved answers with **no model
+call**: the tool binds the live report, the comparison artifact and the dataset, and
+every auditor quote or context presence/absence claim is re-verified before it counts.
+The original judge is treated as evidence, not truth.
+
+Five of eighteen labels change. Rows 9–11 convey the correct derived value with a
+"not stated directly" caveat and were rejected while the near-identical row 8 was
+accepted; one row (7) refuses on a premise its own cited item contradicts; rows 0/4
+abstain because packing lost the reference value; rows 14/15 report a real channel gap
+and their support is `not_applicable` rather than true/false. Revised totals: 13/18
+answer correct, 13 supported + 1 partially + 4 not applicable, one contradiction and
+one abstention-flag inconsistency. The report also freezes the reader/judge v2 design,
+22 synthetic controls across eight groups and a 42-call cap for the next measured
+round. Nothing was re-retrieved, re-ingested or rewritten, and no v2 code was run.
