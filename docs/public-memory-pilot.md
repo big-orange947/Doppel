@@ -551,6 +551,24 @@ runner refuses a different comparison hash, a manifest mismatch, an incomplete r
 set, an existing output path or a changed plan, and never re-retrieves, writes a
 Store or expands a source.
 
+Also see the [Judge v2 plan](../benchmarks/reports/public-memory-judge-v2-plan-2026-10-07.md):
+`benchmarks.public_memory_answer_judge_v2` re-scores the preserved Reader v1 answers with
+five orthogonal dimensions, per-record citation judgments, verbatim quotes bound to one
+record each, absence claims checked against the complete supplied context, and row-level
+support derived by code so a no-claim answer is `not_applicable` and never counted as
+supported. The judge never sees profile names, original judge labels, audit conclusions
+or the reader's abstention flag, and no reference-answer phrase check decides answer
+presence.
+
+The [result](../benchmarks/reports/public-memory-judge-v2-result-2026-10-07.md) records
+the first real-model run: the six frozen controls consumed six calls, four matched all
+five dimensions, and the gate **failed** on two rubric ambiguities (the refusal taxonomy
+branch and the scope of "I have no record"). Per the frozen rule the preserved-rows arm
+was not executed; its calls are unspent and no rows-arm result exists. The proposed
+v2.1 derives the conflicting-premise escalation in code, closes the claims-scope
+definition and leaves the control expectations unchanged. Six controls cannot validate a
+judge, and a passed gate would not have proven it correct on the opened questions.
+
 ### Independent audit of the reader/judge rows
 
 The [audit report](../benchmarks/reports/public-memory-answer-audit-2026-10-07.md) and

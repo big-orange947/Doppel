@@ -12,7 +12,13 @@
   phrase check decides answer presence or packing attribution. Lenient matching,
   explicit-conclusion and strict-commitment counts are reported with their
   denominators, six frozen synthetic controls gate the preserved-rows arm, and the
-  budget is capped at 24 new calls with a key-free cache-only replay.
+  budget is capped at 24 new calls with a key-free cache-only replay. First real-model
+  run: the six controls consumed 6 calls and the gate **failed** on two rubric
+  ambiguities (the refusal taxonomy branch and the scope of "I have no record"), so the
+  preserved-rows arm was not executed and its 18 calls are unspent. Both mismatches are
+  diagnosed from the judge's own quoted reasons; the proposed v2.1 derives the
+  conflicting-premise escalation in code, closes the claims-scope definition and keeps
+  the frozen control expectations unchanged.
 - Add a deterministic, zero-model audit of the preserved reader/judge rows: a packet
   builder bound to the live report, comparison artifact and dataset, plus a validator
   that re-verifies every auditor quote and every context presence/absence claim. The
