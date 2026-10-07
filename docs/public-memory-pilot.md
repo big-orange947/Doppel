@@ -413,8 +413,9 @@ separate field instead of hiding the original failed stage.
 The default still fails the whole chunk on unsafe evidence. A separate opt-in
 `--evidence-error-policy quarantine` profile rejects only unsafe drafts and records
 their closed reason counts and schema-valid analysis-list indices. It never changes
-citations, subject identity or authority. Schema/provider/storage/index errors still
-fail; accepted proposals plus low-confidence/duplicate/evidence rejections must
+citations, subject identity or authority. Top-level schema/provider/storage/index
+errors still fail; existing per-draft schema rejection is unchanged. Accepted
+proposals plus low-confidence/duplicate/evidence rejections must
 reconcile with all schema-valid drafts. An all-rejected chunk preserves raw events
 and records zero accepted proposals, not "correct extraction" or "noise only".
 

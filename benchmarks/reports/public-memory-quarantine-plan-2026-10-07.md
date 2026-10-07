@@ -24,7 +24,8 @@ does not repair model understanding or constitute a retrieval/QA/AML score.
   and evidence-rejected drafts. An all-rejected batch retains raw source records
   and completes with zero accepted proposals and explicit rejections; it is not
   evidence that the source was noise or that the model understood it correctly.
-- Schema, provider, storage/index and maximum-draft failures still stop the run.
+- Top-level schema, provider, storage/index and maximum-draft failures still stop
+  the run. Existing reference-analyzer per-draft schema rejection is unchanged.
   Quarantine requires subject/source matching and durable rejection accounting.
 - First run: process only the eight previously returned provider responses using
   strict read-only parent cache access and cache-only mode. No key read, paid

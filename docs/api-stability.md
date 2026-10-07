@@ -51,7 +51,8 @@ option. The default `fail_batch` preserves the old behavior and configuration
 fingerprint. Explicit `quarantine` requires subject/source matching and records
 closed per-draft evidence rejection diagnostics in the next checkpoint; callers
 must persist that checkpoint to retain the observations. It never repairs citations
-or changes source authority. Schema/provider/storage failures remain hard failures.
+or changes source authority. Top-level schema/provider/storage failures remain hard
+failures; existing reference-analyzer per-draft schema rejection is unchanged.
 Changing this option changes the configuration fingerprint and requires a separate
 host journal or explicit migration; do not silently resume an old bound run.
 The online extractor has no quarantine option and still fails on unsafe evidence.
