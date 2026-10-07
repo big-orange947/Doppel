@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add a deterministic, zero-model audit of the preserved reader/judge rows: a packet
+  builder bound to the live report, comparison artifact and dataset, plus a validator
+  that re-verifies every auditor quote and every context presence/absence claim. The
+  revised reading separates answer correctness from faithfulness (answer versus its own
+  cited evidence), distinguishes hedged derivations from refusals, checks `abstained`
+  against the answer text, and marks citation support `not_applicable` when no factual
+  claim is made. Five of eighteen labels disagree with the original same-model judge, one
+  row contradicts its own cited item, and one abstention flag is inconsistent. The audit
+  changes no core algorithm, re-runs no retrieval and plans, without implementing, a
+  reader/judge v2 with synthetic controls and a bounded call cap.
 - Add a bounded unified reader and judge over the frozen opened raw/derived/combined
   retrieval rows. The reader receives only the question, its benchmark reference time
   and that row's packed context; the judge receives the reference answer and the cited
