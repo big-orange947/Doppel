@@ -471,6 +471,43 @@ tokens; the prior 37 outputs were reused without another extraction call.
 Zero-provider new-process replay of all 147 completed chunks preserved the exact
 audit, Store counts and provider ledger. This finishes ingestion of the opened
 pilot histories, not the full 500-case benchmark or a recall/answer-quality score.
-The next comparison is raw context versus extracted memory versus their combination
-with matched evidence/reader budgets; reserved groups and AML model migration stay
-separate from these opened diagnostics.
+This complete corpus enables the following raw/memory/combined retrieval comparison.
+Reader/token budgets, reserved groups and AML model migration remain separate stages.
+
+### Completed raw / memory / combined retrieval diagnostic
+
+The [frozen comparison plan](../benchmarks/reports/public-memory-comparison-plan-2026-10-07.md)
+and [actual result](../benchmarks/reports/public-memory-comparison-result-2026-10-07.md)
+reuse this completed namespace without reingestion or reindexing. Same BGE/pgvector
+profile, 80 candidates per route (combined shares the cap), at most 20 final items
+and 24,000 serialized UTF-8 bytes. Local BGE-reranker actually runs on authorized
+item text only; no answers/category/annotated evidence enter retrieval/reranking.
+
+For the three already opened questions and five annotated turns, raw and combined
+reranked outputs both cover 5/5 sources; owner-memory-only covers 4/5 citations.
+The missing source is a historical assistant recommendation, not an owner fact.
+Combined output uses 20.7% fewer JSON bytes than raw reranked output in this pilot,
+but no reader has verified equal answer quality or token use. Derived citations
+also do not prove that summaries preserved answer information. Two recalled airline
+status summaries both retain `current` labels: metadata truth/temporal QA remains
+unmeasured, even though the source-bearing text is retrieved.
+
+CLI requires the manifest, completed ingestion report, run directory and existing
+PG DSN environment variable. It preserves output files and fails on partial history,
+source/profile mismatches, stale vector entries or a changed Store snapshot:
+
+```powershell
+& D:\project\.doppel-eval-cu128\Scripts\python.exe -m benchmarks.public_memory_comparison `
+  --dataset data\public-benchmarks\longmemeval_s_cleaned.json `
+  --manifest data\doppel\longmemeval-local-pilot-manifest-v1.json `
+  --ingestion-report data\doppel\longmemeval-memory-trusted-partition-complete-replay-v1.json `
+  --run-dir data\doppel\public-memory-ingestion-quarantine-v2 `
+  --output data\doppel\longmemeval-memory-comparison-next.json `
+  --embedding-cache-dir C:\Users\freeze\AppData\Local\Temp\fastembed_cache `
+  --reranker-model-path D:\project\.doppel-eval-models\bge-reranker-v2-m3
+```
+
+This is an exhaustive small-corpus retrieval diagnostic, not the complete production
+query engine, a scalability/latency benchmark, answer-quality score or AML result.
+The next stage is a fixed reader/judge comparison on the packed outputs, with gold
+isolated to scoring and explicit token bounds, before extending unopened histories.

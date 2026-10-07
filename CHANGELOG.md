@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a fixed-budget, completed-public-history raw/derived/combined retrieval
+  diagnostic using existing authoritative PostgreSQL/pgvector records and optional
+  strict local reranking. Bind read-only source journals, check existing index
+  fingerprints, share combined candidate/context caps and revalidate final sources.
+  Report citation coverage separately from retained information and QA; preserve
+  assistant context as agent_output rather than owner facts. Three opened questions
+  cover five annotated sources, not a full benchmark or a default-strategy change.
 - Partition deterministic consolidation candidates by exact trusted actor,
   authority and kind before both topic-keyed and unkeyed semantic grouping.
   Retain runner source-compatibility checks and homogeneous merge/conflict/revision
