@@ -163,9 +163,9 @@ def build_plan(
         ),
         "provider_config": ingestion_plan["provider_config"],
         "miner_config": ingestion_plan["miner_config"],
-        "runtime_sources": ingestion_plan["execution_metadata"]
-        if "execution_metadata" in ingestion_plan
-        else parent.get("execution_metadata", {}).get("composition_source_sha256", {}),
+        "runtime_sources": parent_ingestion.get("execution_metadata", {}).get(
+            "composition_source_sha256", {}
+        ),
         "qa_calls": 0,
         "retrieval_executed": False,
         "plan_fingerprint": "",
