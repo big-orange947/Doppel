@@ -721,3 +721,26 @@ evaluation, and does not execute the production natural Planner or Graphiti.
 A separate key-free cache-only replay matches all thirty retrieval rows, model
 outputs/checks, request identities and summaries with zero new calls. Original
 parent artifacts, call ledgers and cumulative accounting remain unchanged.
+
+### Zero-provider rank-fit packing diagnostic
+
+The [packing plan](../benchmarks/reports/public-memory-packing-plan-2026-10-08.md)
+was frozen as `797c735` before the local execution. Its
+[result](../benchmarks/reports/public-memory-packing-result-2026-10-08.md)
+compares the unchanged prefix strategy against an opt-in whole-item fit scan.
+Both consume the same eighty-candidate reranker ordering and share final20/24KB
+caps, without text editing, source expansion or authority changes. All thirty
+original baseline rows reproduce exactly and every baseline item is preserved.
+
+Sixty retrieval rows complete with zero provider calls/tokens. Five contexts
+add ten items, but annotated-turn coverage does not improve: raw95%, memory80%,
+combined100% for both packers. This is a null coverage result, not a QA gain.
+The experiment remains opt-in; neither this harness's default nor the production
+query engine changes. Input hashes remain unchanged, 1,573 Store/source checks
+complete and the local models score2,400 pairs without truncation.
+
+Next, if tested, keep the Reader unchanged and reuse the twenty-five identical
+contexts from cache, with a separately frozen budget of at most five new Reader
+calls. Keep all thirty logical rows and separate reference-answer correctness
+from justified refusal. That answer experiment has not executed; this result
+does not alter earlier scores or open the reserved histories.

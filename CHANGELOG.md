@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
+  exceeding remaining byte capacity instead of ending the rank-prefix scan.
+  Preserve the original default, item text, authority, candidate80/item20/24KB
+  caps and all source checks. A frozen zero-provider sixty-row diagnostic exactly
+  reproduces the thirty original baseline rows and preserves every packed item.
+  Five contexts gain ten items, but annotated-turn coverage is unchanged at
+  95% raw / 80% memory / 100% combined. No QA gain or default promotion is claimed.
+  All source inputs remain unchanged; no paid/model-provider call executes.
 - Complete the frozen same-ten-history continuation and immediate three-channel
   diagnostic: 482/482 chunks, 5,037 raw turns, 1,858 active derived memories,
   zero failures across 7,450 provenance checks. Macro annotated-turn coverage in
