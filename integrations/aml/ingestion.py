@@ -398,6 +398,64 @@ class DurableTextualIngestor:
                         else "stage-execution-failed",
                     ) from None
 
+    async def revalidate_completed(
+        self, scope: MemoryScope, requests: Sequence[AddRequest]
+    ) -> int:
+        """Validate completed source payloads, reconcile indexes once for this scope.
+
+        An additive recovery path; ordinary ingest/replay semantics are unchanged.
+        Never extract, write proposals, or accept an unfinished/missing checkpoint.
+        """
+        if self._closed or self._component_identity() != self._bound_components:
+            raise IngestionFailure("host unavailable or components changed")
+        if not scope.is_user_scope or not requests:
+            raise IngestionFailure("nonempty exact-user completed requests required")
+        keys = set()
+        async with self._lock:
+            with self._exclusive():
+                for request in requests:
+                    snapshot = AddRequest.model_validate(
+                        request.model_dump(warnings=False)
+                    )
+                    key = write_key(scope, snapshot)
+                    if key in keys:
+                        raise IngestionFailure("duplicate completed request")
+                    keys.add(key)
+                    row = self._journal.execute(
+                        "SELECT * FROM writes WHERE key=?", (key,)
+                    ).fetchone()
+                    if (
+                        row is None
+                        or row["completion"] is None
+                        or row["events"] is None
+                        or row["payload"] != payload_fingerprint(snapshot)
+                        or row["scope"] != scope.scope_key
+                    ):
+                        raise IngestionFailure(
+                            "completed checkpoint identity missing or changed"
+                        )
+                    messages = self._messages(scope, snapshot)
+                    if len(messages) > self.miner.config.max_messages or not {
+                        message.actor for message in messages
+                    }.issubset(self.miner.config.allowed_source_actors):
+                        raise IngestionFailure(
+                            "completed source exceeds bound Miner policy"
+                        )
+                    completion = IngestionCompletion.model_validate_json(
+                        row["completion"]
+                    )
+                    if (
+                        completion.write_key != key
+                        or completion.scope_key != scope.scope_key
+                        or completion.payload_fingerprint
+                        != payload_fingerprint(snapshot)
+                        or completion.raw_event_count != len(messages)
+                    ):
+                        raise IngestionFailure("completed record identity mismatch")
+                    await self._events(scope, messages, key, row)
+                await self._indexes(scope)
+        return len(keys)
+
     def _messages(self, scope: MemoryScope, request: AddRequest) -> list[ChatMessage]:
         messages = []
         for identity, turn_index, message in zip(

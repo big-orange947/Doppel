@@ -189,6 +189,7 @@ async def ingest_histories(
     host: DurableTextualIngestor,
     max_new_chunks: int,
     before_ingest: Callable[[MemoryScope, AddRequest], None] | None = None,
+    replay_mode: Literal["per_chunk", "per_scope"] = "per_chunk",
 ) -> dict[str, Any]:
     """Stop at the first failure; later chunks cannot hide a failed predecessor."""
     if type(max_new_chunks) is not int or max_new_chunks < 0:
@@ -210,11 +211,52 @@ async def ingest_histories(
     ):
         raise ValueError("journal contains chunks outside the bound history plan")
     ordinals = {key: index + 1 for index, key in enumerate(planned_keys)}
+    revalidated = 0
+    if replay_mode not in {"per_chunk", "per_scope"}:
+        raise ValueError("unknown completed-prefix validation mode")
+    if replay_mode == "per_scope":
+        if completed_keys != set(planned_keys[: len(completed_keys)]):
+            raise ValueError(
+                "scope-batched recovery requires an exact completed prefix"
+            )
+        try:
+            for case in cases:
+                scope = memory_scope(manifest["run_namespace"], case.user_id)
+                requests = [
+                    c.request
+                    for c in case.ingestion_chunks(
+                        max_messages=manifest["max_messages"]
+                    )
+                    if write_key(scope, c.request) in completed_keys
+                ]
+                if requests:
+                    count = await host.revalidate_completed(scope, requests)
+                    if count != len(requests):
+                        raise ValueError("completed validation count mismatch")
+                    revalidated += count
+                    print(
+                        f"completed prefix: {revalidated}/{len(completed_keys)} source chunks validated",
+                        flush=True,
+                    )
+        except Exception:  # noqa: BLE001 - redacted host/index boundary
+            return {
+                "status": "failed",
+                "all_histories_ingested": False,
+                "planned_chunks": len(planned_keys),
+                "new_chunks_attempted": 0,
+                "new_chunks_completed": 0,
+                "completed_chunks_replayed": 0,
+                "completed_chunks_revalidated": revalidated,
+                "stopped": {"reason": "completed-prefix-validation-failed"},
+                "audit": host.audit_report(),
+            }
     for case in cases:
         scope = memory_scope(manifest["run_namespace"], case.user_id)
         for chunk in case.ingestion_chunks(max_messages=manifest["max_messages"]):
             key = write_key(scope, chunk.request)
             is_replay = key in completed_keys
+            if is_replay and replay_mode == "per_scope":
+                continue
             if not is_replay and attempted >= max_new_chunks:
                 stopped = {"reason": "invocation-chunk-bound", "write_key": key}
                 break
@@ -261,6 +303,7 @@ async def ingest_histories(
         "new_chunks_attempted": attempted,
         "new_chunks_completed": completed,
         "completed_chunks_replayed": replayed,
+        "completed_chunks_revalidated": revalidated,
         "stopped": stopped,
         "audit": audit,
     }
@@ -384,6 +427,7 @@ async def run_live(
     cache_only: bool = False,
     read_only_cache_dirs: Sequence[Path] = (),
     recovery_budget: tuple[str, int] | None = None,
+    continuation_budget: tuple[str, int] | None = None,
 ) -> dict[str, Any]:
     config = OpenAICompatibleStructuredOutputConfig.model_validate(
         plan["provider_config"]
@@ -401,6 +445,31 @@ async def run_live(
     _bind_json(run_dir / "plan.json", plan)
     budget_id = "extraction-v1:" + plan["plan_fingerprint"]
     budget_calls = plan["max_calls"]
+    if recovery_budget is not None and continuation_budget is not None:
+        raise ValueError("choose one separately bound budget")
+    if continuation_budget is not None:
+        identity, limit = continuation_budget
+        if (
+            not identity.startswith("continuation-v1:")
+            or len(identity) != len("continuation-v1:") + 64
+            or any(c not in "0123456789abcdef" for c in identity.split(":", 1)[1])
+            or type(limit) is not int
+            or not 1 <= limit <= plan["total_chunks"]
+            or max_new_chunks != limit
+        ):
+            raise ValueError(
+                "continuation requires a fingerprint and equal call/chunk cap"
+            )
+        _bind_json(
+            run_dir / "continuation-budget.json",
+            {
+                "budget_id": identity,
+                "max_calls": limit,
+                "plan_fingerprint": plan["plan_fingerprint"],
+                "replay_mode": "per_scope",
+            },
+        )
+        budget_id, budget_calls = identity, limit
     if recovery_budget is not None:
         identity, limit = recovery_budget
         if (
@@ -487,6 +556,7 @@ async def run_live(
             host=host,
             max_new_chunks=max_new_chunks,
             before_ingest=bind_chunk,
+            replay_mode="per_scope" if continuation_budget is not None else "per_chunk",
         )
         active = None
         record_audit = await audit_stored_records(cases, manifest, host)

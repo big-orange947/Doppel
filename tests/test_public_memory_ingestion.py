@@ -233,6 +233,43 @@ async def test_foreign_journal_fails_before_any_ingestion() -> None:
     assert not host.calls
 
 
+async def test_scope_batched_prefix_is_validated_before_new_ingestion() -> None:
+    cases, manifest = fixture()
+    host = ScriptedHost()
+    await ingest_histories(cases, manifest, host=host, max_new_chunks=2)
+    completed_calls = len(host.calls)
+    batches = []
+
+    async def revalidate(scope, requests):
+        batches.append(len(requests))
+        return len(requests)
+
+    host.revalidate_completed = revalidate
+    result = await ingest_histories(
+        cases, manifest, host=host, max_new_chunks=2, replay_mode="per_scope"
+    )
+    assert result["status"] == "complete"
+    assert result["completed_chunks_revalidated"] == 2
+    assert result["completed_chunks_replayed"] == 0
+    assert batches == [2] and len(host.calls) - completed_calls == 2
+
+
+async def test_scope_validation_failure_blocks_new_calls() -> None:
+    cases, manifest = fixture()
+    host = ScriptedHost()
+    await ingest_histories(cases, manifest, host=host, max_new_chunks=1)
+
+    async def fail(scope, requests):
+        raise RuntimeError("DO_NOT_EXPOSE")
+
+    host.revalidate_completed = fail
+    result = await ingest_histories(
+        cases, manifest, host=host, max_new_chunks=3, replay_mode="per_scope"
+    )
+    assert result["status"] == "failed" and result["new_chunks_attempted"] == 0
+    assert len(host.calls) == 1 and "DO_NOT_EXPOSE" not in str(result)
+
+
 def test_cli_preflight_never_opens_provider_or_database(
     tmp_path: Path, monkeypatch
 ) -> None:

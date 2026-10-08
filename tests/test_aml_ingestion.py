@@ -727,6 +727,47 @@ async def test_raw_store_deletion_is_not_silently_repaired_as_history(
         await store.close()
 
 
+async def test_scope_batched_completed_validation_reconciles_once(
+    tmp_path, monkeypatch
+):
+    store = SQLiteStore(str(tmp_path / "store.sqlite3"))
+    model, index = ScriptedModel(), MemoryIndex()
+    ingestor = host(tmp_path, store, model, index)
+    first, second = request(), request(request_id="chunk-2")
+    scope = memory_scope("local-test", first.user_id)
+    try:
+        await ingestor.ingest(scope, first)
+        await ingestor.ingest(scope, second)
+        calls = len(model.requests)
+        reconcile = ingestor._indexes
+        scopes = []
+
+        async def count_reconcile(value):
+            scopes.append(value.scope_key)
+            await reconcile(value)
+
+        monkeypatch.setattr(ingestor, "_indexes", count_reconcile)
+        index.entries.clear()
+        assert await ingestor.revalidate_completed(scope, [first, second]) == 2
+        assert scopes == [scope.scope_key] and index.entries
+        assert len(model.requests) == calls
+        with pytest.raises(IngestionFailure):
+            await ingestor.revalidate_completed(
+                scope, [request(request_id="not-completed")]
+            )
+        with pytest.raises(IngestionFailure):
+            await ingestor.revalidate_completed(scope, [first, first])
+        raw = await ingestor.resolve_event(scope, event_ids(scope, first)[0])
+        assert raw is not None
+        await store.forget(scope, raw.memory_id, hard=True)
+        with pytest.raises(IngestionFailure):
+            await ingestor.revalidate_completed(scope, [first, second])
+        assert len(model.requests) == calls
+    finally:
+        ingestor.close()
+        await store.close()
+
+
 async def test_journal_profile_and_file_identity_are_frozen(tmp_path: Path) -> None:
     store = SQLiteStore(str(tmp_path / "store.sqlite3"))
     model, index = ScriptedModel(), MemoryIndex()
