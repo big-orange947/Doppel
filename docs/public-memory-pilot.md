@@ -666,3 +666,23 @@ is no new recall/QA metric. The next stage is a separately bound, observable rec
 on the same selected histories, not another Judge-taxonomy calibration loop or a
 case-specific tweak. Old scores, failed gates, reserved data and `uv.lock` remain
 untouched. This is not a full LongMemEval, independent blind or AML result.
+
+### Explicit one-attempt recovery observation
+
+The [recovery plan](../benchmarks/reports/public-memory-recovery-observation-plan-2026-10-08.md)
+and [result](../benchmarks/reports/public-memory-recovery-observation-result-2026-10-08.md)
+preserve the original failure, clone its checkpoint into a fresh namespace, use a
+new one-call ledger and keep parent caches read-only. Closed error/HTTP/finish
+metadata is now available without retaining sensitive response or exception text;
+legacy failure details are not fabricated. Docker must be opened manually by the
+owner if unavailable, not auto-launched by these workflows.
+
+The unchanged request succeeds with 6,340 output tokens and 10,388 total tokens.
+232 prefix chunks are revalidated with no extra extraction, then pending chunk 233
+completes. Its 32 schema-valid contact-subject drafts are all quarantined because
+their evidence speakers are owner/agent. This is an attributed third-party coverage
+boundary, not proof that the claims are false; raw evidence is preserved. The
+observer stops with 233/482 chunks complete and 249 remaining. Aggregate accounting
+retains the original failed attempt: 234 calls and 1,218,411 reported tokens.
+No retrieval/Reader/Judge score exists. Continue only with a new remaining-work
+binding, then measure all three channels; do not score a selected completed prefix.

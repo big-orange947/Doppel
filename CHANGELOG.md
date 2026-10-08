@@ -8,6 +8,11 @@
   recovery observer with an unchanged request, fresh checkpoint snapshot, read-only
   parent caches, separate durable budget and original-plus-recovery accounting.
   Do not retry automatically or execute downstream scoring on partial histories.
+  One unchanged-request live observation completes pending chunk 233 using one
+  call and 10,388 tokens; original-plus-recovery total is 234 calls/1,218,411 tokens.
+  All 32 contact-subject drafts are quarantined by the current source-actor rules,
+  exposing a third-party coverage boundary rather than proving them false. Raw
+  source remains intact; 233/482 chunks complete, no new retrieval/QA score.
 - Freeze ten newly selected public LongMemEval-S history groups for a full-history
   raw/derived/combined reranked composition diagnostic, with old-history exclusion,
   question-type metadata sampling, real production ingestion and fixed shared
