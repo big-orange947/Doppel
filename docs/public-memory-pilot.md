@@ -778,3 +778,9 @@ binds that exact checkpoint, durable ledger and cache, and permits at most200
 additional extraction calls. It adds a tested continuation entrypoint with a
 separate persistent budget per frozen block. No answer/query calls are part of
 this stage.
+
+Block02 stopped after36 new completions and one `transport_error`; the failed
+attempt has no reported token usage. Its checkpoint remains intact. The
+[recovery plan](../benchmarks/reports/public-memory-expansion-50-block02-recovery-plan-2026-10-09.md)
+binds a single unchanged-request observation in a fresh checkpoint. The old
+journal/cache are read-only; repeated failure ends this recovery path.

@@ -20,6 +20,10 @@
   separate durable200-call budget per frozen block; no automatic retry or QA
   execution. Add focused tests for changed data, invalid prefixes and ledger
   mismatch. Freeze block02 at94/2,420 chunks before its live execution.
+- Preserve block02's transport failure after130 total completed chunks:36 new
+  successes and one failed attempt without token usage. Freeze one separate,
+  unchanged-request recovery observation with a fresh journal and read-only parent
+  artifacts; no automatic retry or downstream QA.
 - Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
   exceeding remaining byte capacity instead of ending the rank-prefix scan.
   Preserve the original default, item text, authority, candidate80/item20/24KB
