@@ -584,5 +584,35 @@ abstain because packing lost the reference value; rows 14/15 report a real chann
 and their support is `not_applicable` rather than true/false. Revised totals: 13/18
 answer correct, 13 supported + 1 partially + 4 not applicable, one contradiction and
 one abstention-flag inconsistency. The report also freezes the reader/judge v2 design,
-22 synthetic controls across eight groups and a 42-call cap for the next measured
-round. Nothing was re-retrieved, re-ingested or rewritten, and no v2 code was run.
+22 synthetic controls across eight groups and a proposed 42-call cap. At that audit
+stage nothing was re-retrieved, re-ingested or rewritten, and no v2 code was run.
+The subsequently frozen judge-only v2/v2.1 plans supersede that proposed next-round
+budget; the historical audit does not describe actual later calls.
+
+### Bounded Judge v2.1 revision: stopped at the failed gate
+
+The [v2.1 plan](../benchmarks/reports/public-memory-judge-v21-plan-2026-10-08.md)
+was committed before execution. Its
+[result](../benchmarks/reports/public-memory-judge-v21-result-2026-10-08.md)
+records six completed control requests, **four of six matching all frozen labels**,
+and a **failed gate**. C3 now meets the conflicting-premise commitment rule through
+host composition of model observations, with the original model label retained.
+C2 supplies the right derived answer but is classified `committed` instead of
+`hedged_derivation`; C4 still treats a scoped no-record report as a factual claim,
+giving `unsupported` rather than `not_applicable`. The diagnostic scope flag does
+not overwrite support. The controls and their expectations were not changed.
+
+Only six new calls and 12,469 provider-reported tokens were used out of the fixed
+30-attempt plan. The 18-row arm was blocked before provider/ledger creation, and
+the six citation-order stability cases were not run. A separate key-free
+`--live --cache-only` replay matched all model outputs, labels, metrics and gate
+with zero new calls. Execution completed; exit 1 represents the failed semantic
+gate, not an HTTP failure. No Reader, core algorithm, retrieval, reserved history,
+Store or index changed, and no new score exists for the 18 preserved answers.
+
+These are opened development controls, not independent judge validation. Text
+anchors prove where a quote appears, not that a semantic judgment is correct.
+This bounded round stops without another prompt revision to chase taxonomy labels.
+Further measurement needs a new plan that exposes disputed auxiliary categories
+without retroactively changing this failed gate, then returns to Reader/context
+quality and unopened-history coverage. This is not a full LongMemEval or AML result.

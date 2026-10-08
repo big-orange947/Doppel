@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a separately frozen Judge v2.1 harness with model/host commitment labels,
+  diagnostic-only claims-scope conflicts, strict normalized text anchoring,
+  request-bound plans and recomputed control gates before rows/stability execution.
+  Keep v2 code, control expectations and all Reader/retrieval artifacts unchanged.
+  Six live development controls consumed 6 calls and 12,469 reported tokens; the
+  gate **failed** on commitment and scoped-absence support classifications, so no
+  preserved-row or stability request was made. A key-free cache-only replay matched
+  all outputs, labels and metrics with zero new calls. Twenty new offline tests
+  validate the harness; no memory-quality, full benchmark or AML score is claimed.
 - Add an independent Judge v2 over the preserved Reader v1 answers: five orthogonal
   dimensions (`answer_match`, `commitment`, `citation_support`, `citation_contradiction`,
   `faithfulness`) with per-record citation judgments, verbatim quotes bound to one
