@@ -39,6 +39,10 @@
 - Preserve block04 after353 total completed chunks with22 successful block04
   calls and one transport failure. Freeze a separate one-call unchanged-request
   recovery, with the original report/checkpoint/cache retained and no QA calls.
+- The block04 recovery succeeds after353 source validations; chunk354 completes.
+  The Store has3,632 raw,1,461 derived and16 governance records, with5,467
+  provenance checks passing. The recovery uses4,403 tokens; two prior transport
+  failures still have unknown usage. Freeze block05 at a200-call cap.
 - Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
   exceeding remaining byte capacity instead of ending the rank-prefix scan.
   Preserve the original default, item text, authority, candidate80/item20/24KB

@@ -809,3 +809,10 @@ with5,460 provenance checks and zero failures. Its failure is retained with
 unknown token usage. A [separate recovery plan](../benchmarks/reports/public-memory-expansion-50-block04-recovery-plan-2026-10-09.md)
 binds one unchanged-request observation in a fresh checkpoint; no automatic
 retry loop or downstream scoring runs.
+
+The [recovery result](../benchmarks/reports/public-memory-expansion-50-block04-recovery-result-2026-10-09.md)
+replayed353 chunks and completed the failed chunk with one unchanged request.
+Progress is354/2,420 chunks, with5,467 provenance checks and zero failures. The
+recovery call used4,403 reported tokens; the two prior transport failures have
+unknown usage. The [block05 plan](../benchmarks/reports/public-memory-expansion-50-ingestion-block05-plan-2026-10-09.md)
+sets the next extraction cap at200 calls without retrieval or answer scoring.
