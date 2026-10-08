@@ -17,7 +17,7 @@ one separate observation for that exact unchanged request and stops if it fails.
   extraction configuration.
 - Parent checkpoint: `data/doppel/public-memory-expansion-50-block02-recovery-v1/ingestion`.
 - Fresh child checkpoint: `data/doppel/public-memory-expansion-50-block04-recovery-v1`.
-- Zero-call preflight report: `data/doppel/longmemeval-public-memory-expansion-50-block04-recovery-v1.json`.
+- Zero-call preflight report: `data/doppel/longmemeval-expansion-50-block04-recovery-v1.json`.
 - Live result path: `data/doppel/longmemeval-expansion-50-block04-recovery-live-v1.json`.
 
 The recovery runner clones the durable journal to the fresh child, reads the
