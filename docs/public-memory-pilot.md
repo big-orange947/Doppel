@@ -686,3 +686,38 @@ observer stops with 233/482 chunks complete and 249 remaining. Aggregate account
 retains the original failed attempt: 234 calls and 1,218,411 reported tokens.
 No retrieval/Reader/Judge score exists. Continue only with a new remaining-work
 binding, then measure all three channels; do not score a selected completed prefix.
+
+### Same ten histories: completed retrieval and QA diagnostic
+
+The [continuation plan](../benchmarks/reports/public-memory-continuation-10-plan-2026-10-08.md)
+was committed as `3be1764` before execution. Its
+[result](../benchmarks/reports/public-memory-continuation-10-result-2026-10-08.md)
+completes all 482 chunks and all ten histories, then immediately measures all
+thirty raw/derived/combined reranked rows. A generic completed-prefix operation
+revalidates the exact journal payloads and every source record before new
+extraction, reconciling the index once per scope instead of once per chunk.
+Normal ingestion/replay behavior remains unchanged. No semantic gate or
+case-specific exception was weakened.
+
+Macro annotated-source-turn coverage in packed contexts is 95% raw, 80% derived
+and 100% combined, with shared candidate/final-item/context-byte budgets. This
+is provenance coverage, not proof that summaries retained every answer-bearing
+fact. Source validation has zero failures across 7,450 checks. All thirty Reader
+outputs have legal citation IDs and valid structure, but semantics remain separate.
+
+Original auxiliary correctness labels are 7/10 raw, 8/9 derived (one quote-anchor
+failure), and 9/10 combined. **These are not validated accuracy estimates**:
+bounded inspection finds two answerable memory-only refusals and one combined
+refusal accepted as correct. The combined channel improves two actual answers
+over raw and preserves assistant information that the derived owner-fact channel
+cannot provide. Count aggregation, excessive refusal, language drift and a
+plan-versus-current-fact reference ambiguity remain open. Old outputs, scores and
+failed Judge calibration gates are unchanged; no new tuning follows this result.
+
+This continuation uses 307 new calls/1,560,223 reported tokens; the complete lineage
+including the original failed attempt and recovery is 541 calls/2,778,634 tokens.
+It is small public development, not full LongMemEval, independent blind or AML
+evaluation, and does not execute the production natural Planner or Graphiti.
+A separate key-free cache-only replay matches all thirty retrieval rows, model
+outputs/checks, request identities and summaries with zero new calls. Original
+parent artifacts, call ledgers and cumulative accounting remain unchanged.

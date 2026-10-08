@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Complete the frozen same-ten-history continuation and immediate three-channel
+  diagnostic: 482/482 chunks, 5,037 raw turns, 1,858 active derived memories,
+  zero failures across 7,450 provenance checks. Macro annotated-turn coverage in
+  packed raw/derived/combined contexts is 95%/80%/100%. All thirty Reader/Judge
+  rows complete, with provisional labels 7/10, 8/9 (one unscored), and 9/10.
+  Do not publish these as validated QA accuracy: bounded inspection finds two
+  memory-only and one combined answerable refusals incorrectly scored correct,
+  plus count/temporal interpretation and metadata-quote issues. Preserve scores,
+  failures, quarantined drafts and source artifacts; no post-result algorithm or
+  prompt tuning. New usage is 307 calls/1,560,223 tokens, with original failure
+  and recovery retained in the 541-call/2,778,634-token lineage. Not independent
+  blind, full LongMemEval, production Planner/Graphiti or AML performance.
+  A key-free cache-only replay matches every retrieval row, model output/check,
+  request identity and summary with zero new calls and unchanged ledgers/parents.
 - Preserve closed provider failure diagnostics (error code, HTTP status and finish
   reason) in durable pilot ledgers without recording response/exception content.
   Leave legacy failures explicitly unknown. Add an independently bound one-attempt
