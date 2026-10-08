@@ -1,0 +1,512 @@
+{
+  "manifest_fingerprint": "e7e7214f0160a69b90d9535a3d9c9696a8a1fcbef9e2ad20204f836551830fa7",
+  "source_sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+  "seed": 20261009,
+  "dataset_namespace": "longmemeval-s-cleaned-local-v1",
+  "run_namespace": "longmemeval-expansion-50-20261008-v1",
+  "diagnostic_count": 50,
+  "reserved_count": 10,
+  "excluded_history_groups": [
+    "02765a5f038d591f85deb4e96e86713a6822e2159d2780dd45a7a2b458aa8b01",
+    "0962da749a632f4ec86235e78a8dc05e96417567c1b9d87216888b737c07da60",
+    "0d15554e0dbf2f3c2358373d8c592644dd764d818849582d0299d6d264c93207",
+    "38c9c767fe6968b5a036943923010321bee73c37a3fd52de4b8ade34a7fb547d",
+    "39ab423e7d47bc3b0b2ac23ab954ebb71d4779f63f09ce1718063a62250caf27",
+    "4538177b002d73030de42fcbfe8dfce56dff28148ef3bf789442b71473c44680",
+    "46585f9716267a2c6a0bc476bc141ba7068d9b0e65e35c9097ed8dca4336ecad",
+    "4a09a957304eb2f53b9276dd7b6f85a9e63049f186fa5ff657df6f2f677b5475",
+    "758db332c618d7b3e8bbaff5818c3edfe6affc063629aee9b4618fffae12ca43",
+    "75df584597c11185761546326b6275b8077257ad049ecc92747f2901a53c5284",
+    "935192375a19b968fa30ab7ad2680d575bca3bbfcfe8b916840f1b3d0c34b091",
+    "a41937d5cb752325be2ba758202cb48678e7d6a2314b6927638010f66389ec63",
+    "a6289588e3dea68f1feb04d720c57d44b616b2ce223a41b53357cdf435012b2e",
+    "c71e6a95783460d51229172fa03f5412fa7acaf101583e4909d3470d12e3e278",
+    "cde3ad7203af5eb63afed28eab60d26bfb6d4914c0f088b5225440aa58796e27",
+    "e31e99bb53e3bc2eb20ac61cdfbabd8a20d80c10f32a1bde29823c66b1b63ea1",
+    "f21b8aaeb8e9595b06bd73715ecc539baada6c92967c26dae3ffa2a49fad0ef9",
+    "f80ad068defd080401f0eb19edb0891f79ab5ca223b7c98e90caa253a43b0f5a",
+    "fdf1600791be5a1490a50b9ce1d0b69998d6a2df31c4b3713455ccc8de2afc8c"
+  ],
+  "cases": [
+    {
+      "case_id": "ceb54acb",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "593a413420aea860202f73eab4adb73f4eeb4cbafe2e0e3a258621706c2cca61",
+      "raw_turn_count": 493,
+      "chunk_count": 50
+    },
+    {
+      "case_id": "3ba21379",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "b919894558475751b505588da15cbb4a6444fab766e2a2f4f4eb831691687898",
+      "raw_turn_count": 431,
+      "chunk_count": 44
+    },
+    {
+      "case_id": "21d02d0d",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "80f54940ccf42eeba411a7c32dc3e28da5ac36d9808ccd4d9091403a4382c44a",
+      "raw_turn_count": 497,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "38146c39",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "33830aa38db94b8c8fd29bdfa9c4d47f7a03128a044bdca5761b09b586e52c41",
+      "raw_turn_count": 538,
+      "chunk_count": 49
+    },
+    {
+      "case_id": "gpt4_d9af6064",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "d82cff732a03a553886d437b826f975f0e679cc20136955fa4ef6f3cb6af6868",
+      "raw_turn_count": 534,
+      "chunk_count": 52
+    },
+    {
+      "case_id": "d52b4f67",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "3e91676318c2ba20ff1ae8c21ab8f5c037b15393a0f0a2ccdc298f50ea27acdc",
+      "raw_turn_count": 479,
+      "chunk_count": 52
+    },
+    {
+      "case_id": "e8a79c70",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "9cf2d7d5d7a236adb985fa031362b3911fda867d99d0ae36a6667c77a833ef2e",
+      "raw_turn_count": 483,
+      "chunk_count": 45
+    },
+    {
+      "case_id": "0977f2af",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "faca5eccba3d2e67d6001b446b64de28bb006c92d6be86b79c88d60e8f2769fc",
+      "raw_turn_count": 484,
+      "chunk_count": 45
+    },
+    {
+      "case_id": "60036106",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "f964937fd5b062f1cb8e353f1e869cafaee330883c5c53d74d9e4f6e3df26384",
+      "raw_turn_count": 483,
+      "chunk_count": 45
+    },
+    {
+      "case_id": "0edc2aef",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "bcd79537e03bcce1d76f3254d7ef69ea7920f6687a12ef5b03b8e03f93baeebc",
+      "raw_turn_count": 475,
+      "chunk_count": 46
+    },
+    {
+      "case_id": "gpt4_4cd9eba1",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "6f484080769742588255435226bd6e7a711f3ae7b8b303ba832ed367c6bba586",
+      "raw_turn_count": 500,
+      "chunk_count": 45
+    },
+    {
+      "case_id": "58bf7951",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "8a3b84fe73ef61d1e642b02ba9a7fb40f7df430c00b6670247c704a8e400c2ff",
+      "raw_turn_count": 616,
+      "chunk_count": 59
+    },
+    {
+      "case_id": "e982271f",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "3ca791cadd005f0590e5d8cfd29a95b7b96634a1de219ea3c0a500dc0e7aa45d",
+      "raw_turn_count": 589,
+      "chunk_count": 56
+    },
+    {
+      "case_id": "eace081b",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "e130638912f1bfdc09f4df0e649d7ba5b3c0c2cf73083af4634517df4b717e25",
+      "raw_turn_count": 489,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "a4996e51",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "e0e9bb7f8fed08fd7317585e5517ad1cbbd23bf26eeb70edcb1baacdf79ba8e0",
+      "raw_turn_count": 512,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "54026fce",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "184f31ff8a704886d9657f59a5c536bc68fa5125a2a5a7f34be6736e44a4b336",
+      "raw_turn_count": 472,
+      "chunk_count": 49
+    },
+    {
+      "case_id": "gpt4_93159ced",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "67384b6afc7bfb82366800430fb3a64fd735d158c248370587bbc55d4d55d0d7",
+      "raw_turn_count": 444,
+      "chunk_count": 42
+    },
+    {
+      "case_id": "af8d2e46",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "b42b777853c554af8ea136627101dffb394c4ac493a03e37e6905b72523edbeb",
+      "raw_turn_count": 495,
+      "chunk_count": 50
+    },
+    {
+      "case_id": "488d3006",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "0bd50b26cf144b696b12d760b585202d514b9d0aa7fac7899d0a22b7af0a768d",
+      "raw_turn_count": 509,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "d7c942c3",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "e8ed8b3348d28af198a0b9e8ab770b4957beea40159ebb546d1da15ea29236d5",
+      "raw_turn_count": 520,
+      "chunk_count": 49
+    },
+    {
+      "case_id": "d905b33f",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "2caa7c9ebc47bdc858f811895c242fc40836494660a29995dd83e43588f0b515",
+      "raw_turn_count": 504,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "75f70248",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "7177afbbc4416ebd7a41ea455fe23b6efd237f3e8ba71d192094fde6c93c865e",
+      "raw_turn_count": 466,
+      "chunk_count": 43
+    },
+    {
+      "case_id": "gpt4_0b2f1d21",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "6f98db181a5f365b016f44264074d2ae43387865b38da46ffe717f082b7ce043",
+      "raw_turn_count": 497,
+      "chunk_count": 54
+    },
+    {
+      "case_id": "95bcc1c8",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "d51f953ac27039a79c1c9dca13641f4100e38c0ddd50088a6da94fafa30f3b16",
+      "raw_turn_count": 487,
+      "chunk_count": 46
+    },
+    {
+      "case_id": "8b9d4367",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "69150a456f843be6b5f86dede610980f374bf1d35edb8eb35f784969a47be5ac",
+      "raw_turn_count": 537,
+      "chunk_count": 53
+    },
+    {
+      "case_id": "0e4e4c46",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "b3524cf3d4e7d8f33c76c1ec8f8ca292bf8ea3fdc2ff140db6c7896b92793cb9",
+      "raw_turn_count": 481,
+      "chunk_count": 49
+    },
+    {
+      "case_id": "e831120c",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "0566f542ab018517a7bb179717595cfc5d61c62666308cf4e4aa5a19aa7f24fe",
+      "raw_turn_count": 481,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "32260d93",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "b370230c4b1664851839b199506878957b4b2cc6d2a0fb4a2b35b9fa076c341f",
+      "raw_turn_count": 524,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "c9f37c46",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "eaaf70d3a3a4abc9ec15b3be3e1c427c595f6e246254898f9f50fa142013217f",
+      "raw_turn_count": 511,
+      "chunk_count": 50
+    },
+    {
+      "case_id": "ec81a493",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "8f4d2a551f8a708c99c3eec64c48a3b9b072414625ad9b2fb17ae511c9eda905",
+      "raw_turn_count": 495,
+      "chunk_count": 51
+    },
+    {
+      "case_id": "89527b6b",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "9b2016e69a10d01eb309dea8c2d2fc60e505c9e312d83aa44ef3944c4292405c",
+      "raw_turn_count": 467,
+      "chunk_count": 45
+    },
+    {
+      "case_id": "603deb26",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "78f159c0c65d68dbdd98f02760ad97c85ab028d65456c58df9d86afd5ab64a8f",
+      "raw_turn_count": 472,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "7024f17c",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "fdc393cb668c5d72e65351a0a8a21142e11423da9ca2c0462722c92996462d9c",
+      "raw_turn_count": 483,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "b0479f84",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "5747575da406f5f3615c98e3769c05ffe8e8dd4bf267b5abbc249bd9ea2a1e71",
+      "raw_turn_count": 502,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "gpt4_6dc9b45b",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "3a6afe2ad0dca20ea26d54abdc37f28b3d7cd075177d20c61176f7c5927bcf4c",
+      "raw_turn_count": 565,
+      "chunk_count": 54
+    },
+    {
+      "case_id": "58ef2f1c",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "d7220f54e78098788354492b91394486476d44ee77353490458572792bddb567",
+      "raw_turn_count": 518,
+      "chunk_count": 50
+    },
+    {
+      "case_id": "dc439ea3",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "bd85488e15550eea5890b56880adfbac6368758de83a3b87ff569644fe95ae75",
+      "raw_turn_count": 476,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "618f13b2",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "3f62a094aedf465b5193447089bddb0488e6c20b97b7449df69227fb2b2af449",
+      "raw_turn_count": 506,
+      "chunk_count": 49
+    },
+    {
+      "case_id": "bf659f65",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "e74ca2a918138c4728729a93d9c02eee498fa178d6ba16dcd105f1bef3819f70",
+      "raw_turn_count": 516,
+      "chunk_count": 52
+    },
+    {
+      "case_id": "a89d7624",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "fffbe5d2b2c338ad636d1d890a2c0ce00c19822b47b0fd1a26432c5be633ae26",
+      "raw_turn_count": 496,
+      "chunk_count": 49
+    },
+    {
+      "case_id": "f0853d11",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "462eb250edc3b07ca923d33cfd1a1ab7c198e4b7b13fff5fe78dac0afda1504d",
+      "raw_turn_count": 500,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "29f2956b_abs",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "110f8cd4377892b2737ddcfceb215080b3fa9e69d1d203e54cf94d795c72561b",
+      "raw_turn_count": 494,
+      "chunk_count": 50
+    },
+    {
+      "case_id": "1de5cff2",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "256a71a1c9914f6b80cfef4b8e4cd55addb5d687da18d847b6dfa16eef976d39",
+      "raw_turn_count": 473,
+      "chunk_count": 45
+    },
+    {
+      "case_id": "b01defab",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "01ba44efb3d81cb2444312e839a939ef1767b947eec9e0f4b5a23c1c9fa7a41b",
+      "raw_turn_count": 503,
+      "chunk_count": 51
+    },
+    {
+      "case_id": "2b8f3739",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "14ca59876c0d5b419e32a9896d2b7878f18a146ac0009ed4465dc73ca60888a7",
+      "raw_turn_count": 491,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "06878be2",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "9104a4beb34e15856e5749cf584d712a7a570f0f6be39698fc867c4b5dd3a4fd",
+      "raw_turn_count": 443,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "b46e15ee",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "8936ce01776954899cc98e5fd34fe9311e9f7d25c1df4c76d4ace0e7ed184f0b",
+      "raw_turn_count": 457,
+      "chunk_count": 43
+    },
+    {
+      "case_id": "bc8a6e93",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "f1a73da2db5d05ec79988362a83716db50b4786859d9020bcf7c38778913aee0",
+      "raw_turn_count": 537,
+      "chunk_count": 49
+    },
+    {
+      "case_id": "1903aded",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "5f25288ca51047142f4808e86e220f3a9c0d3d1d9f53437becd976440a86f9b1",
+      "raw_turn_count": 486,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "dfde3500",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "88f0e7ee44dd8b26c296669dde2d54120590707e77347878155734295641b7f9",
+      "raw_turn_count": 480,
+      "chunk_count": 47
+    },
+    {
+      "case_id": "ef66a6e5",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "multi-session",
+      "history_group": "bf67d8ba3eaa3a8035c76d2f5ff84409d0a6866400eda6763067b78d333477ed",
+      "raw_turn_count": 445,
+      "chunk_count": 45
+    },
+    {
+      "case_id": "0a34ad58",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "a78a00b8273126b7577062c676f04db7e01ca8014a740ebdbaeceed49cbc7eb2",
+      "raw_turn_count": 485,
+      "chunk_count": 42
+    },
+    {
+      "case_id": "gpt4_1916e0ea",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "fd13558435194b8210facb35fe9791e944bd82b1d7cf602efcecc83822912319",
+      "raw_turn_count": 533,
+      "chunk_count": 56
+    },
+    {
+      "case_id": "4100d0a0",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-user",
+      "history_group": "6093bf7315509b1f9297cfeec376892290d8b69ce1704e702a719ad4b0d051dd",
+      "raw_turn_count": 523,
+      "chunk_count": 52
+    },
+    {
+      "case_id": "1568498a",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "a95e3bbb94eac028eeed4e90ea4a613bae38d41d85bb39fac19d7bae79128da0",
+      "raw_turn_count": 478,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "4d6b87c8",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "de3351be03aac85b922a204355c78f785818bfa950a1c3cbe1f63f060e40e9dc",
+      "raw_turn_count": 516,
+      "chunk_count": 52
+    },
+    {
+      "case_id": "d851d5ba",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "multi-session",
+      "history_group": "37c6a9d6b758f23e7beefd6960b2dcf00083cc8b3f50d04b470f7764dfc3bd6b",
+      "raw_turn_count": 533,
+      "chunk_count": 48
+    },
+    {
+      "case_id": "505af2f5",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "a560761995b9b55c8c7dc034ffed322f05255db456621eb97128f31f18fd6e70",
+      "raw_turn_count": 501,
+      "chunk_count": 53
+    },
+    {
+      "case_id": "gpt4_8279ba03",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "4ba0115c8dc37871522c608f0bf63b6fa98d16f6db7c8777cd4abcda5d93084d",
+      "raw_turn_count": 500,
+      "chunk_count": 44
+    },
+    {
+      "case_id": "577d4d32",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-user",
+      "history_group": "682200c07028fa049e99c78752fbf5019a390781b23f737f1ff3f2044eddffed",
+      "raw_turn_count": 487,
+      "chunk_count": 46
+    }
+  ]
+}
