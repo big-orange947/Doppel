@@ -29,6 +29,9 @@
   checks with zero failures. Extend the continuation runner to accept this
   cloned-checkpoint lineage while reconciling inherited records and local budgets.
   Current ingestion status:131/2,420 chunks, still no retrieval/QA result.
+- Freeze block03 from the successfully recovered131-chunk prefix, including its
+  130 inherited records and one local recovery call. Permit at most200 further
+  extraction attempts under plan `035d36f05bd2a03c5268ac858ceeac61450bf38b70a52bea569452d4bbc550d3`.
 - Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
   exceeding remaining byte capacity instead of ending the rank-prefix scan.
   Preserve the original default, item text, authority, candidate80/item20/24KB

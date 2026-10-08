@@ -791,3 +791,8 @@ completed the unchanged request on its one allowed attempt. The child validated
 and zero failures. It used6,815 reported tokens; the preceding transport failure
 has unknown usage. This remains ingestion only. The continuation entrypoint now
 reconciles inherited checkpoints and the child's separate ledger.
+
+The [block03 plan](../benchmarks/reports/public-memory-expansion-50-ingestion-block03-plan-2026-10-09.md)
+continues from the recovered131-chunk prefix, binding its130 inherited chunks
+separately from the one successful local recovery call. It authorizes up to200
+more extraction calls and no retrieval/answer calls.
