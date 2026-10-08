@@ -616,3 +616,25 @@ This bounded round stops without another prompt revision to chase taxonomy label
 Further measurement needs a new plan that exposes disputed auxiliary categories
 without retroactively changing this failed gate, then returns to Reader/context
 quality and unopened-history coverage. This is not a full LongMemEval or AML result.
+
+### Reader-v2-only development comparison
+
+The [Reader v2 plan](../benchmarks/reports/public-memory-reader-v2-plan-2026-10-08.md)
+and [actual result](../benchmarks/reports/public-memory-reader-v2-result-2026-10-08.md)
+return to Reader behavior without retrying the failed Judge gates. The new Reader
+receives exactly the same packed contexts and all generation settings as v1, with
+generic instructions for justified derivation, scoped absence, partial answers,
+effective versus observed time, source authority and question language. Its optional
+`derived` block names the input sources; legality is checked but semantic support
+and arithmetic are not automatically scored. Baseline answers and gold are not
+sent to the Reader. No retrieval, extraction, Store, index or reserved history runs.
+
+Eighteen outputs completed via sixteen new requests, using 66,772 reported tokens.
+A separate key-free cache-only replay matched outputs, derived blocks, checks and
+metrics with zero new calls. All eighteen are structurally valid, seven include
+derived blocks, and four keep abstained flags. These are not success counts:
+`answer_correct` and `citation_supported` remain null. Most English questions still
+receive Chinese answers, and one arithmetic row still withholds the requested
+per-item value; no prompt resampling or post-run repair was used. A source-bound
+semantic review and separately frozen unopened-history measurement remain future
+stages, not implied by this completed development run.

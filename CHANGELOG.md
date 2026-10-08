@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a separately frozen Reader-v2-only development comparison on the preserved
+  packed contexts, with generic derivation/absence/temporal/language instructions,
+  optional source-bearing derivations and structural-only checks. Bind v1 request
+  identity, baseline content and unchanged generation settings; preserve all old
+  scores and failed Judge gates. Eighteen rows completed through 16 new calls and
+  66,772 reported tokens; a key-free zero-call replay matched all outputs/checks.
+  Seven outputs contain derivation blocks, but semantic quality is not scored;
+  visible language drift and a persistent per-item refusal remain unresolved.
+  Twenty-three new offline tests validate the harness, not Reader intelligence.
 - Add a separately frozen Judge v2.1 harness with model/host commitment labels,
   diagnostic-only claims-scope conflicts, strict normalized text anchoring,
   request-bound plans and recomputed control gates before rows/stability execution.
