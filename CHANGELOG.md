@@ -36,6 +36,9 @@
   ingested. The cumulative Store has3,364 raw,1,375 derived and16 governance
   records;5,084 provenance checks pass. Two hundred extraction calls report
   992,534 tokens, with no retrieval or QA result. Freeze block04 at a200-call cap.
+- Preserve block04 after353 total completed chunks with22 successful block04
+  calls and one transport failure. Freeze a separate one-call unchanged-request
+  recovery, with the original report/checkpoint/cache retained and no QA calls.
 - Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
   exceeding remaining byte capacity instead of ending the rank-prefix scan.
   Preserve the original default, item text, authority, candidate80/item20/24KB

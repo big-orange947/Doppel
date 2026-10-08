@@ -803,3 +803,9 @@ started, six are complete. The Store audit reports5,084 provenance checks with
 zero failures; the pipeline has not run question retrieval or answer scoring.
 The [block04 plan](../benchmarks/reports/public-memory-expansion-50-ingestion-block04-plan-2026-10-09.md)
 freezes the next200-call boundary from the validated checkpoint.
+
+Block04 stopped after22 successful new extractions and one `transport_error`,
+with5,460 provenance checks and zero failures. Its failure is retained with
+unknown token usage. A [separate recovery plan](../benchmarks/reports/public-memory-expansion-50-block04-recovery-plan-2026-10-09.md)
+binds one unchanged-request observation in a fresh checkpoint; no automatic
+retry loop or downstream scoring runs.
