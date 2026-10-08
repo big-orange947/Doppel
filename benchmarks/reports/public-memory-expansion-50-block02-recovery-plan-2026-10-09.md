@@ -18,7 +18,8 @@ automatic retry loop or a fresh history selection.
 - New recovery budget: **one call / one chunk**, unchanged model, prompt and settings.
 - Parent journal and provider-cache inventory are hash-bound and read-only.
 - Fresh recovery checkpoint: `data/doppel/public-memory-expansion-50-block02-recovery-v1`.
-- Recovery report: `data/doppel/longmemeval-expansion-50-block02-recovery-v1.json`.
+- Zero-call preflight report: `data/doppel/longmemeval-expansion-50-block02-recovery-v1.json`.
+- Live recovery report: `data/doppel/longmemeval-expansion-50-block02-recovery-live-v1.json`.
 
 Recovery code clones the journal into a new checkpoint, reads the parent cache
 without writing to it, and independently records the one-call recovery budget.
@@ -42,7 +43,7 @@ D:/project/.doppel-eval-cu128/Scripts/python.exe -m benchmarks.public_memory_rec
   --parent-report-sha256 dab74cb127f73f8585f07b7928d630ac8d46c19f7484d0be10d7e71456b979da `
   --parent-dir data/doppel/public-memory-expansion-50-v1/ingestion `
   --run-dir data/doppel/public-memory-expansion-50-block02-recovery-v1 `
-  --output data/doppel/longmemeval-expansion-50-block02-recovery-v1.json `
+  --output data/doppel/longmemeval-expansion-50-block02-recovery-live-v1.json `
   --embedding-cache-dir C:/Users/freeze/AppData/Local/Temp/fastembed_cache --live
 ```
 
