@@ -15,6 +15,7 @@ from benchmarks.public_memory_runtime import (
     PilotStructuredModel,
 )
 from doppel_memory.intelligence import StructuredGenerationRequest
+from doppel_memory.openai_compatible import StructuredOutputProviderError
 
 REQUEST = StructuredGenerationRequest(
     instructions="Return structured data",
@@ -298,6 +299,57 @@ def test_unbound_usage_not_assigned_to_wrong_call(tmp_path: Path) -> None:
     with pytest.raises(PilotRuntimeError, match="no bound"):
         ledger.observe_usage({"total_tokens": 42})
     ledger.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "code,reason",
+    [("truncated", "length"), ("invalid_content_json", "stop"), ("SECRET", "SECRET")],
+)
+async def test_failure_diagnostics_are_closed_and_do_not_retry(
+    tmp_path: Path, code: str, reason: str
+) -> None:
+    ledger = ledger_at(tmp_path, calls=1)
+
+    class Failing(FakeModel):
+        async def generate(self, request: StructuredGenerationRequest) -> dict:
+            self.calls += 1
+            self.ledger.observe_usage(
+                {"input_tokens": 3, "output_tokens": 8192, "total_tokens": 8195}
+            )
+            raise StructuredOutputProviderError(
+                code, "SECRET_PROVIDER_TEXT", status_code=200, finish_reason=reason
+            )
+
+    provider = Failing(ledger)
+    with pytest.raises(PilotRuntimeError):
+        await wrap(tmp_path, ledger, provider).generate(REQUEST)
+    diagnostic = ledger.report()["failure_diagnostics"][0]
+    assert diagnostic["code"] == (
+        code if code != "SECRET" else "unknown_provider_failure"
+    )
+    assert diagnostic["finish_reason"] == (reason if reason != "SECRET" else None)
+    assert diagnostic["http_status"] == 200
+    assert ledger.report()["failed_calls_without_diagnostics"] == 0
+    assert ledger.report()["reported_tokens"]["total_tokens"] == 8195
+    assert provider.calls == 1
+    ledger.close()
+    assert b"SECRET" not in (tmp_path / "ledger.sqlite3").read_bytes()
+
+
+def test_legacy_failed_attempt_is_not_backfilled(tmp_path: Path) -> None:
+    ledger = ledger_at(tmp_path)
+    ledger.bind_model("fake", "1")
+    call = ledger.reserve(REQUEST)
+    # A legacy failed row has no classified diagnostic. Do not infer one from usage.
+    ledger._db.execute(
+        "UPDATE pilot_calls SET status='failed' WHERE call_id=?", (call,)
+    )
+    ledger.close()
+    restarted = ledger_at(tmp_path)
+    assert restarted.report()["failure_diagnostics"] == []
+    assert restarted.report()["failed_calls_without_diagnostics"] == 1
+    restarted.close()
 
 
 @pytest.mark.asyncio

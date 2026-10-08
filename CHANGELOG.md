@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Preserve closed provider failure diagnostics (error code, HTTP status and finish
+  reason) in durable pilot ledgers without recording response/exception content.
+  Leave legacy failures explicitly unknown. Add an independently bound one-attempt
+  recovery observer with an unchanged request, fresh checkpoint snapshot, read-only
+  parent caches, separate durable budget and original-plus-recovery accounting.
+  Do not retry automatically or execute downstream scoring on partial histories.
 - Freeze ten newly selected public LongMemEval-S history groups for a full-history
   raw/derived/combined reranked composition diagnostic, with old-history exclusion,
   question-type metadata sampling, real production ingestion and fixed shared

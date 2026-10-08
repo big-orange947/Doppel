@@ -63,7 +63,7 @@ async def test_json_schema_request_is_bounded_authenticated_and_parsed() -> None
                         "finish_reason": "stop",
                         "message": {"content": '{"city":"上海"}'},
                     }
-                ]
+                ],
             },
         )
 
@@ -170,6 +170,7 @@ async def test_json_object_fallback_places_schema_in_instructions() -> None:
         ("content_filter", {"content": "{}"}, "content_filtered", False),
         ("stop", {"refusal": "sensitive details"}, "refusal", False),
         ("tool_calls", {"content": "{}"}, "invalid_finish_reason", False),
+        ("SECRET_FINISH", {"content": "{}"}, "invalid_finish_reason", False),
         ("stop", {"content": "not json"}, "invalid_content_json", False),
         ("stop", {"content": "[]"}, "invalid_content_shape", False),
     ],
@@ -196,6 +197,11 @@ async def test_completion_failures_are_classified_without_content_leakage(
 
     assert captured.value.code == code
     assert captured.value.retryable is retryable
+    assert captured.value.finish_reason == (
+        finish_reason
+        if finish_reason in {"length", "content_filter", "stop", "tool_calls"}
+        else "other"
+    )
     assert captured.value.__cause__ is None
     assert "sensitive details" not in str(captured.value)
     assert "not json" not in str(captured.value)

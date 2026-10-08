@@ -30,12 +30,14 @@ class StructuredOutputProviderError(RuntimeError):
         status_code: int | None = None,
         retryable: bool = False,
         retry_after_seconds: float | None = None,
+        finish_reason: str | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.status_code = status_code
         self.retryable = retryable
         self.retry_after_seconds = retry_after_seconds
+        self.finish_reason = finish_reason
 
 
 class OpenAICompatibleStructuredOutputConfig(BaseModel):
@@ -216,7 +218,32 @@ class OpenAICompatibleStructuredOutputModel:
                 self._usage_observer(usage)
             except Exception:
                 logger.warning("structured-output usage observer failed", exc_info=True)
-        return _structured_content(envelope, status_code=response.status_code)
+        try:
+            return _structured_content(envelope, status_code=response.status_code)
+        except StructuredOutputProviderError as exc:
+            # Closed metadata only; never retain arbitrary provider text.
+            choices = envelope.get("choices") if isinstance(envelope, Mapping) else None
+            if (
+                isinstance(choices, list)
+                and choices
+                and isinstance(choices[0], Mapping)
+            ):
+                reason = choices[0].get("finish_reason")
+                if isinstance(reason, str) and reason.strip():
+                    reason = reason.strip().lower()
+                    exc.finish_reason = (
+                        reason
+                        if reason
+                        in {
+                            "stop",
+                            "length",
+                            "content_filter",
+                            "tool_calls",
+                            "function_call",
+                        }
+                        else "other"
+                    )
+            raise
 
     async def aclose(self) -> None:
         if self._owns_client:
@@ -343,13 +370,21 @@ def _normalized_usage(envelope: Any) -> dict[str, int] | None:
     details = raw.get("prompt_tokens_details")
     if not cached_input_tokens and isinstance(details, Mapping):
         value = details.get("cached_tokens")
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and value >= 0
+        ):
             cached_input_tokens = int(value)
     completion_details = raw.get("completion_tokens_details")
     reasoning_tokens = 0
     if isinstance(completion_details, Mapping):
         value = completion_details.get("reasoning_tokens")
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and value >= 0
+        ):
             reasoning_tokens = int(value)
     return {
         "input_tokens": input_tokens,

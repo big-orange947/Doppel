@@ -24,6 +24,7 @@ from doppel_memory.intelligence import (
     StructuredGenerationRequest,
     StructuredOutputModel,
 )
+from doppel_memory.openai_compatible import StructuredOutputProviderError
 
 _ACTIVE_CALL: ContextVar[tuple[object, int] | None] = ContextVar(
     "public_pilot_call", default=None
@@ -35,6 +36,32 @@ _TOKEN_FIELDS = {
     "cached_input_tokens",
     "cache_miss_input_tokens",
     "reasoning_tokens",
+}
+_FAILURE_CODES = {
+    "timeout",
+    "transport_error",
+    "response_too_large",
+    "authentication_error",
+    "rate_limited",
+    "http_error",
+    "invalid_response_json",
+    "invalid_response_shape",
+    "truncated",
+    "content_filtered",
+    "invalid_finish_reason",
+    "refusal",
+    "missing_content",
+    "invalid_content_json",
+    "invalid_content_shape",
+    "invalid_request",
+}
+_FINISH_REASONS = {
+    "stop",
+    "length",
+    "content_filter",
+    "tool_calls",
+    "function_call",
+    "other",
 }
 
 
@@ -86,6 +113,9 @@ class DurableCallLedger:
                 status TEXT NOT NULL, usage TEXT
             );
             CREATE INDEX IF NOT EXISTS pilot_calls_budget ON pilot_calls(budget_id);
+            CREATE TABLE IF NOT EXISTS pilot_failures (
+                call_id INTEGER PRIMARY KEY, metadata TEXT NOT NULL
+            );
         """)
         self.budget_id = budget_id
         self.max_calls = max_calls
@@ -182,13 +212,36 @@ class DurableCallLedger:
         if cursor.rowcount != 1:
             raise PilotRuntimeError("duplicate or unknown usage observation")
 
-    def finish(self, call_id: int, status: str) -> None:
+    def finish(
+        self,
+        call_id: int,
+        status: str,
+        *,
+        failure: StructuredOutputProviderError | None = None,
+    ) -> None:
         if status not in {"succeeded", "failed", "interrupted"}:
             raise ValueError("unsupported attempt status")
         self._db.execute(
             "UPDATE pilot_calls SET status=? WHERE call_id=? AND budget_id=?",
             (status, call_id, self.budget_id),
         )
+        if status == "failed":
+            code = failure.code if failure is not None else "unknown_provider_failure"
+            http_status = failure.status_code if failure is not None else None
+            finish_reason = failure.finish_reason if failure is not None else None
+            metadata = {
+                "code": code if code in _FAILURE_CODES else "unknown_provider_failure",
+                "http_status": http_status
+                if type(http_status) is int and 100 <= http_status <= 599
+                else None,
+                "finish_reason": finish_reason
+                if finish_reason in _FINISH_REASONS
+                else None,
+            }
+            self._db.execute(
+                "INSERT OR IGNORE INTO pilot_failures VALUES (?, ?)",
+                (call_id, _json(metadata)),
+            )
 
     def report(self) -> dict[str, Any]:
         rows = self._db.execute(
@@ -214,6 +267,15 @@ class DurableCallLedger:
                 for field, value in usage.items():
                     totals[field] = totals.get(field, 0) + value
         size = sum(row[0] for row in rows)
+        failures = [
+            {"call_id": call_id, "request_sha256": digest, **json.loads(metadata)}
+            for call_id, digest, metadata in self._db.execute(
+                "SELECT c.call_id, c.request_sha256, f.metadata FROM pilot_calls c "
+                "JOIN pilot_failures f USING(call_id) WHERE c.budget_id=? AND c.status='failed' "
+                "ORDER BY c.call_id",
+                (self.budget_id,),
+            )
+        ]
         return {
             "budget_id": self.budget_id,
             "attempts_reserved": len(rows),
@@ -229,6 +291,8 @@ class DurableCallLedger:
             "token_accounting_complete": complete_usage == len(rows),
             "token_hard_cap_enforced": False,
             "exact_billing_guaranteed": False,
+            "failure_diagnostics": failures,
+            "failed_calls_without_diagnostics": counts["failed"] - len(failures),
         }
 
     def close(self) -> None:
@@ -248,8 +312,12 @@ class _BudgetedModel:
         token = _ACTIVE_CALL.set((self.ledger, call_id))
         try:
             raw = await self.model.generate(request)
-        except Exception:  # noqa: BLE001 - never persist arbitrary provider error text
-            self.ledger.finish(call_id, "failed")
+        except Exception as exc:  # noqa: BLE001 - never persist arbitrary provider error text
+            self.ledger.finish(
+                call_id,
+                "failed",
+                failure=exc if isinstance(exc, StructuredOutputProviderError) else None,
+            )
             raise PilotRuntimeError(
                 "provider attempt failed; details not persisted"
             ) from None

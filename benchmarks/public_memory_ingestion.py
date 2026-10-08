@@ -383,6 +383,7 @@ async def run_live(
     embedding_cache_dir: Path | None,
     cache_only: bool = False,
     read_only_cache_dirs: Sequence[Path] = (),
+    recovery_budget: tuple[str, int] | None = None,
 ) -> dict[str, Any]:
     config = OpenAICompatibleStructuredOutputConfig.model_validate(
         plan["provider_config"]
@@ -398,10 +399,34 @@ async def run_live(
     ) != dict(plan):
         raise ValueError("live histories/configuration differ from the bound plan")
     _bind_json(run_dir / "plan.json", plan)
+    budget_id = "extraction-v1:" + plan["plan_fingerprint"]
+    budget_calls = plan["max_calls"]
+    if recovery_budget is not None:
+        identity, limit = recovery_budget
+        if (
+            not identity.startswith("recovery-observe-v1:")
+            or len(identity) != len("recovery-observe-v1:") + 64
+            or any(c not in "0123456789abcdef" for c in identity.split(":", 1)[1])
+            or type(limit) is not int
+            or limit != 1
+            or max_new_chunks != 1
+        ):
+            raise ValueError(
+                "recovery observation requires a fingerprint and one-call/one-chunk cap"
+            )
+        _bind_json(
+            run_dir / "recovery-budget.json",
+            {
+                "budget_id": identity,
+                "max_calls": limit,
+                "plan_fingerprint": plan["plan_fingerprint"],
+            },
+        )
+        budget_id, budget_calls = identity, limit
     ledger = DurableCallLedger(
         run_dir / "usage.sqlite3",
-        budget_id="extraction-v1:" + plan["plan_fingerprint"],
-        max_calls=plan["max_calls"],
+        budget_id=budget_id,
+        max_calls=budget_calls,
     )
     before_usage = ledger.report()
     before = before_usage["attempts_reserved"]
