@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Close the frozen same-Reader rank-fit packing comparison with five successful
+  new calls/30,759 reported tokens, zero Judge calls and twenty-five exact cached
+  outputs. All thirty rows are structurally valid; four answers change wording,
+  but no clear answer improvement is demonstrated and the writing-count refusal
+  remains. Key-free replay matches every output/check/request with zero new
+  calls and preserved parents. Keep the default unchanged; no accuracy score is
+  manufactured. Freeze fifty new public histories plus ten unexecuted reserved
+  groups, excluding all nineteen earlier selections; first bounded ingestion
+  completes94/94 of2,420 chunks (two full histories),924 raw records,393 derived
+  records and four conflict records, with zero failures across1,404 provenance
+  checks. Preserve one invalid and28 evidence-quarantined drafts. Extraction
+  uses94 calls/479,138 tokens; no new QA score,48 histories still unprocessed.
+  Ingestion is not new QA coverage.
 - Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
   exceeding remaining byte capacity instead of ending the rank-prefix scan.
   Preserve the original default, item text, authority, candidate80/item20/24KB

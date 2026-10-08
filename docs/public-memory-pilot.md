@@ -739,8 +739,36 @@ The experiment remains opt-in; neither this harness's default nor the production
 query engine changes. Input hashes remain unchanged, 1,573 Store/source checks
 complete and the local models score2,400 pairs without truncation.
 
-Next, if tested, keep the Reader unchanged and reuse the twenty-five identical
-contexts from cache, with a separately frozen budget of at most five new Reader
-calls. Keep all thirty logical rows and separate reference-answer correctness
-from justified refusal. That answer experiment has not executed; this result
-does not alter earlier scores or open the reserved histories.
+The subsequent [same-Reader plan](../benchmarks/reports/public-memory-packing-reader-plan-2026-10-08.md)
+was committed before execution; its
+[result](../benchmarks/reports/public-memory-packing-reader-result-2026-10-08.md)
+reuses twenty-five exact outputs and runs only the five changed requests. Five
+new calls consume30,759 tokens; thirty rows have legal citations/valid structure,
+four answer strings change, but there is no demonstrated answer benefit. The
+writing-count case still refuses a definite total. No new Judge or correctness
+score executes. A key-free replay matches all outputs/checks/request identities
+with zero new calls and unchanged parents. Default packing remains unchanged.
+
+### Fifty new histories: selection and bounded ingestion
+
+The [new plan](../benchmarks/reports/public-memory-expansion-50-ingestion-plan-2026-10-08.md)
+freezes fifty diagnostic histories and ten reserved histories, excluding all
+nineteen earlier selected groups. It contains24,891 raw turns and2,420 chunks;
+six type strata have8--9 questions each. Only one question is labeled no-answer,
+so this cannot support a reliable refusal rate. Shared session content also
+precludes an independent-blind claim. Do not reseed or replace cases after results.
+
+The first invocation permits only94 new chunks, representing two complete
+histories, in a fresh PG schema and durable namespace. Full fifty-question
+retrieval/Reader/scoring has not executed; its scoring harness requires a separate
+freeze. The old thirteen measured questions remain the actual completed QA
+coverage, not sixty-three. Reserved histories stay unopened.
+
+The [first block result](../benchmarks/reports/public-memory-expansion-50-ingestion-block01-result-2026-10-08.md)
+completes94/94 new chunks in two full histories, then stops at the invocation
+boundary. The Store has924 raw records,393 derived records and4 conflict records;
+1,404 provenance checks have zero failures. Of423 drafts, one is schema-invalid,
+28 fail attribution gates and one is low-confidence, leaving393 proposals.
+All94 calls succeed with479,138 reported tokens. Overall status remains partial:
+48 histories /2,326 chunks remain before fifty-question retrieval/QA. There is
+no new recall or answer-accuracy result yet.
