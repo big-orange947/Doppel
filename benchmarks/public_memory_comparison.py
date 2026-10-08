@@ -307,6 +307,38 @@ def pack_context(items: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return packed
 
 
+def pack_ranked_fit(
+    items: Sequence[Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Experimental whole-item rank scan; no query, gold, snippet or expansion.
+
+    Skip an item that cannot fit, not everything after it. The final-item/byte caps
+    remain identical to the frozen rank-prefix policy. Inputs must already be
+    authorized source-bound candidates; this function does not grant authority.
+    """
+    packed: list[dict[str, Any]] = []
+    skipped: list[int] = []
+    selected: list[int] = []
+    considered = 0
+    for rank, item in enumerate(items[:CANDIDATE_LIMIT], start=1):
+        if len(packed) == ITEM_LIMIT:
+            break
+        considered += 1
+        next_items = [*packed, dict(item)]
+        if len(encoded(next_items)) > CONTEXT_BYTE_LIMIT:
+            skipped.append(rank)
+            continue
+        packed = next_items
+        selected.append(rank)
+    return packed, {
+        "considered_candidates": considered,
+        "selected_rank_positions": selected,
+        "over_budget_rank_positions": skipped,
+        "text_modified": False,
+        "source_expansion_executed": False,
+    }
+
+
 def positions(
     items: Sequence[Mapping[str, Any]], sources: Mapping[tuple[str, str], SourceBinding]
 ) -> list[tuple[int, int]]:
@@ -329,11 +361,14 @@ async def run_comparison(
     embedding_cache_dir: Path | None,
     reranker: StrictContextReranker | None = None,
     profile_mode: Literal["paired", "reranked_only"] = "paired",
+    packing_experiment: bool = False,
 ) -> dict[str, Any]:
     if profile_mode not in {"paired", "reranked_only"} or (
         profile_mode == "reranked_only" and reranker is None
     ):
         raise ValueError("reranked-only mode requires the configured reranker")
+    if packing_experiment and profile_mode != "reranked_only":
+        raise ValueError("packing experiment requires reranked-only profiles")
     sources = load_bindings([r for r, _ in cases], manifest, ingestion_report, run_dir)
     store = PostgreSQLStore(dsn, schema=ingestion_report["postgres_schema"])
     provider = _LocalEmbeddingProvider(cache_dir=embedding_cache_dir)
@@ -420,7 +455,9 @@ async def run_comparison(
                 if reranker is not None:
                     reranked = list(
                         await reranker.rerank(
-                            runtime.query.query, candidates, limit=ITEM_LIMIT
+                            runtime.query.query,
+                            candidates,
+                            limit=CANDIDATE_LIMIT if packing_experiment else ITEM_LIMIT,
                         )
                     )
                     allowed = {c.memory_id for c in candidates}
@@ -437,8 +474,22 @@ async def run_comparison(
                             else None,
                         )
                     )
+                if packing_experiment:
+                    profiles = [
+                        entry
+                        for name, ranking, summary in profiles
+                        for entry in (
+                            (name, ranking, summary),
+                            (name + "_ranked_fit", ranking, summary),
+                        )
+                    ]
                 for name, ranking, summary in profiles:
-                    packed = pack_context([items[c.memory_id] for c in ranking])
+                    trace = None
+                    ranked_items = [items[c.memory_id] for c in ranking]
+                    if name.endswith("_ranked_fit"):
+                        packed, trace = pack_ranked_fit(ranked_items)
+                    else:
+                        packed = pack_context(ranked_items)
                     # Revalidate snapshots and every referenced raw source after ordering.
                     rechecks = set()
                     for item in packed:
@@ -450,37 +501,41 @@ async def run_comparison(
                     for key in rechecks:
                         if await store.get(scope, key) != records[key]:
                             raise ValueError("Store changed after ordering")
-                    rows.append(
-                        {
-                            "case_id": scoring.case_id,
-                            "profile": name,
-                            "candidate_count": len(candidates),
-                            "candidate_provenance_coverage": score_evidence(
-                                scoring,
-                                positions(
-                                    [items[c.memory_id] for c in candidates], sources
-                                ),
+                    row = {
+                        "case_id": scoring.case_id,
+                        "profile": name,
+                        "candidate_count": len(candidates),
+                        "candidate_provenance_coverage": score_evidence(
+                            scoring,
+                            positions(
+                                [items[c.memory_id] for c in candidates], sources
                             ),
-                            "rank_at_5_provenance_coverage": score_evidence(
-                                scoring,
-                                positions(
-                                    [items[c.memory_id] for c in ranking[:5]], sources
-                                ),
+                        ),
+                        "rank_at_5_provenance_coverage": score_evidence(
+                            scoring,
+                            positions(
+                                [items[c.memory_id] for c in ranking[:5]], sources
                             ),
-                            "packed_provenance_coverage": score_evidence(
-                                scoring, positions(packed, sources)
-                            ),
-                            "packed_item_count": len(packed),
-                            "packed_context_bytes": len(encoded(packed)),
-                            "packed_channel_counts": {
-                                ch: sum(i["channel"] == ch for i in packed)
-                                for ch in ("raw", "memory")
-                            },
-                            "store_revalidation_checks": len(rechecks),
-                            "rerank_summary": summary,
-                            "context": packed,
-                        }
-                    )
+                        ),
+                        "packed_provenance_coverage": score_evidence(
+                            scoring, positions(packed, sources)
+                        ),
+                        "packed_item_count": len(packed),
+                        "packed_context_bytes": len(encoded(packed)),
+                        "packed_channel_counts": {
+                            ch: sum(i["channel"] == ch for i in packed)
+                            for ch in ("raw", "memory")
+                        },
+                        "store_revalidation_checks": len(rechecks),
+                        "rerank_summary": summary,
+                        "context": packed,
+                    }
+                    if packing_experiment:
+                        row["packing_policy"] = (
+                            "ranked_fit" if trace is not None else "rank_prefix"
+                        )
+                        row["packing_trace"] = trace
+                    rows.append(row)
         after = _hash(
             {
                 key: value.model_dump(mode="json")

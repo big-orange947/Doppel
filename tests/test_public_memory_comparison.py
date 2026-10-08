@@ -276,6 +276,7 @@ async def test_inactive_memory_and_governance_not_claims(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("packing_experiment", [False, True])
 @pytest.mark.parametrize(
     "failure",
     [
@@ -289,7 +290,7 @@ async def test_inactive_memory_and_governance_not_claims(tmp_path: Path):
     ],
 )
 async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
-    tmp_path: Path, monkeypatch, failure: str
+    tmp_path: Path, monkeypatch, failure: str, packing_experiment: bool
 ):
     import benchmarks.public_memory_comparison as module
 
@@ -374,6 +375,8 @@ async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
                 dsn="synthetic",
                 embedding_cache_dir=None,
                 reranker=ranking,
+                profile_mode="reranked_only" if packing_experiment else "paired",
+                packing_experiment=packing_experiment,
             )
     else:
         result = await run_comparison(
@@ -384,8 +387,15 @@ async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
             dsn="synthetic",
             embedding_cache_dir=None,
             reranker=ranking,
+            profile_mode="reranked_only" if packing_experiment else "paired",
+            packing_experiment=packing_experiment,
         )
         assert len(result["rows"]) == 6 and result["record_or_index_writes"] == 0
+        if packing_experiment:
+            assert {r["packing_policy"] for r in result["rows"]} == {
+                "rank_prefix",
+                "ranked_fit",
+            }
         assert result["corpus_sha256_before"] == result["corpus_sha256_after"]
         assert (
             result["reader_executed"] is False
