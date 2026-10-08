@@ -277,7 +277,16 @@ async def test_inactive_memory_and_governance_not_claims(tmp_path: Path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "failure", ["none", "stale_index", "revoke", "invent", "duplicate"]
+    "failure",
+    [
+        "none",
+        "stale_index",
+        "revoke",
+        "invent",
+        "duplicate",
+        "inactive",
+        "inactive_stale",
+    ],
 )
 async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
     tmp_path: Path, monkeypatch, failure: str
@@ -288,6 +297,8 @@ async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
     raw = next(r for r in records.values() if r.actor == "owner")
     written = await store.put(derived(scope, raw.source_event_id))
     memory_id = written.memory_id
+    if failure in {"inactive", "inactive_stale"}:
+        await store.transition(scope, memory_id, MemoryState.EXPIRED)
     records = await inventory(store, [scope])
     prepared = prepare_case(sample(), dataset_namespace="synthetic")
     report["store_record_audit"].update(
@@ -306,6 +317,8 @@ async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
 
         async def inspect(self, scope, memory_id):
             record = records[memory_id]
+            if record.state == MemoryState.EXPIRED and failure == "inactive":
+                return None
             return IndexEntry(
                 memory_id=memory_id,
                 scope_key=scope.scope_key,
@@ -323,6 +336,7 @@ async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
                     scope=scope, memory_id=r.memory_id, fact="POISON", similarity=0.9
                 )
                 for r in records.values()
+                if r.state == MemoryState.CONFIRMED
             ]
 
     class Ranking:
@@ -350,7 +364,7 @@ async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
     monkeypatch.setattr(module, "PostgreSQLVectorIndex", lambda *a, **kw: Index())
     monkeypatch.setattr(module, "_LocalEmbeddingProvider", lambda **kw: Provider())
     monkeypatch.setattr(module, "execution_metadata", lambda: {"synthetic": True})
-    if failure != "none":
+    if failure not in {"none", "inactive"}:
         with pytest.raises(ValueError):
             await run_comparison(
                 [(runtime, prepared.scoring)],
@@ -378,7 +392,10 @@ async def test_composition_read_only_no_gold_and_post_ranking_revalidation(
             and result["qa_metrics_available"] is False
         )
         context = [i for row in result["rows"] for i in row["context"]]
-        assert any(i["memory_id"] == memory_id for i in context)
+        assert any(i["memory_id"] == memory_id for i in context) == (failure == "none")
+        if failure == "inactive":
+            assert result["corpus_counts"]["memory"] == 0
+            assert result["inventory_counts_including_inactive"]["memory"] == 1
         assert "POISON" not in json.dumps(context) and "GOLD_SECRET" not in json.dumps(
             context
         )

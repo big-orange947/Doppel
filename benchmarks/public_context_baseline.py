@@ -96,6 +96,8 @@ def select_diagnostic_cases(
         diagnostic_count=manifest["diagnostic_count"],
         reserved_count=manifest["reserved_count"],
         max_messages=manifest["max_messages"],
+        excluded_history_groups=manifest.get("excluded_history_groups", ()),
+        stratify_by_question_type=manifest.get("stratify_by_question_type", False),
     )
     if rebuilt != dict(manifest):
         raise ValueError("pilot selection differs from preregistered plan")

@@ -126,3 +126,69 @@ def test_duplicate_case_identity_is_not_counted_twice() -> None:
     source.append(deepcopy(source[0]))
     with pytest.raises(ValueError, match="duplicate"):
         manifest(source)
+
+
+def test_exclude_complete_prior_groups_including_reserved_and_aliases() -> None:
+    source = records()
+    prior = manifest(source, diagnostic_count=1, reserved_count=1)
+    excluded = [r["history_group"] for r in prior["cases"]]
+    twin = deepcopy(
+        next(r for r in source if r["question_id"] == prior["cases"][0]["case_id"])
+    )
+    twin["question_id"] = "alias-of-opened-history"
+    source.append(twin)
+    result = manifest(source, excluded_history_groups=excluded)
+    assert not set(excluded) & {r["history_group"] for r in result["cases"]}
+    assert result["eligible_history_group_count"] == 6
+    assert "alias-of-opened-history" not in {r["case_id"] for r in result["cases"]}
+
+
+def test_strata_use_public_type_but_not_gold_or_query() -> None:
+    source = records()
+    for index, raw in enumerate(source):
+        raw["question_type"] = [
+            "multi-session",
+            "knowledge-update",
+            "temporal-reasoning",
+        ][index % 3]
+    result = manifest(
+        source, diagnostic_count=3, reserved_count=2, stratify_by_question_type=True
+    )
+    assert len({r["sampling_stratum"] for r in result["cases"][:3]}) == 3
+    changed = deepcopy(source)
+    for raw in changed:
+        raw["answer"] = "DIFFERENT GOLD"
+        raw["question"] = "Different query"
+        raw["answer_session_ids"] = []
+        raw["haystack_sessions"][0][1]["has_answer"] = False
+    assert (
+        manifest(
+            changed,
+            diagnostic_count=3,
+            reserved_count=2,
+            stratify_by_question_type=True,
+        )
+        == result
+    )
+    assert (
+        manifest(
+            list(reversed(source)),
+            diagnostic_count=3,
+            reserved_count=2,
+            stratify_by_question_type=True,
+        )
+        == result
+    )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"excluded_history_groups": ["bad"]},
+        {"excluded_history_groups": ["f" * 64]},
+        {"stratify_by_question_type": 1},
+    ],
+)
+def test_invalid_extended_selection_fails(changes):
+    with pytest.raises(ValueError):
+        manifest(records(), **changes)

@@ -50,10 +50,22 @@ def build_manifest(
     diagnostic_count: int = 3,
     reserved_count: int = 3,
     max_messages: int = 20,
+    excluded_history_groups: Sequence[str] = (),
+    stratify_by_question_type: bool = False,
 ) -> dict[str, Any]:
-    """Selection depends on raw histories/IDs, never gold labels, category or answer."""
+    """Default selection is label-free; optional strata use public type, never gold."""
     if type(seed) is not int:
         raise ValueError("seed must be an integer")
+    if type(stratify_by_question_type) is not bool:
+        raise ValueError("stratification must be boolean")
+    excluded = sorted(set(excluded_history_groups))
+    if any(
+        not isinstance(group, str)
+        or len(group) != 64
+        or any(c not in "0123456789abcdef" for c in group)
+        for group in excluded
+    ):
+        raise ValueError("excluded histories must be SHA-256 group identities")
     if any(
         type(count) is not int or count < 1
         for count in (diagnostic_count, reserved_count)
@@ -71,19 +83,41 @@ def build_manifest(
             raise ValueError("duplicate sample identity")
         seen.add(case.runtime.user_id)
         groups[history_group(case)].append(case)
-    if diagnostic_count + reserved_count > len(groups):
+    if not set(excluded) <= set(groups):
+        raise ValueError("excluded group is not in the source snapshot")
+    eligible = {
+        group: members for group, members in groups.items() if group not in excluded
+    }
+    if diagnostic_count + reserved_count > len(eligible):
         raise ValueError("not enough distinct complete-history groups")
-    ordered = sorted(groups, key=lambda group: (_hash([seed, "group", group]), group))
-    rows = []
-    session_content_groups: dict[str, set[str]] = defaultdict(set)
-    for index, group in enumerate(ordered[: diagnostic_count + reserved_count]):
-        case = min(
-            groups[group],
+    ordered = sorted(eligible, key=lambda group: (_hash([seed, "group", group]), group))
+    representatives = {
+        group: min(
+            members,
             key=lambda item: (
                 _hash([seed, "case", item.scoring.case_id]),
                 item.scoring.case_id,
             ),
         )
+        for group, members in eligible.items()
+    }
+    if stratify_by_question_type:
+        pools: dict[str, list[str]] = defaultdict(list)
+        for group in ordered:
+            pools[representatives[group].scoring.category].append(group)
+        types = sorted(
+            pools, key=lambda category: (_hash([seed, "type", category]), category)
+        )
+        interleaved = []
+        while any(pools.values()):
+            for category in types:
+                if pools[category]:
+                    interleaved.append(pools[category].pop(0))
+        ordered = interleaved
+    rows = []
+    session_content_groups: dict[str, set[str]] = defaultdict(set)
+    for index, group in enumerate(ordered[: diagnostic_count + reserved_count]):
+        case = representatives[group]
         scope = memory_scope(run_namespace, case.runtime.user_id)
         chunks = case.runtime.ingestion_chunks(max_messages=max_messages)
         for session in case.runtime.sessions:
@@ -122,6 +156,8 @@ def build_manifest(
                 ],
             }
         )
+        if stratify_by_question_type:
+            rows[-1]["sampling_stratum"] = case.scoring.category
     overlap_count = sum(
         len(group_set) > 1 for group_set in session_content_groups.values()
     )
@@ -157,6 +193,18 @@ def build_manifest(
             "production-natural-planning-and-scoring-with-explicit-denominators",
         ],
     }
+    if excluded or stratify_by_question_type:
+        manifest.update(
+            excluded_history_groups=excluded,
+            eligible_history_group_count=len(eligible),
+            stratify_by_question_type=stratify_by_question_type,
+            selection_rule=(
+                "seeded-public-type-round-robin-one-case-per-complete-history-excluding-prior-groups-no-gold"
+                if stratify_by_question_type
+                else "seeded-complete-history-groups-excluding-prior-groups-no-label-selection"
+            ),
+            public_type_used_for_sampling_only=stratify_by_question_type,
+        )
     manifest["manifest_fingerprint"] = _hash(manifest)
     return manifest
 
@@ -173,6 +221,8 @@ def main() -> None:
     parser.add_argument("--diagnostic-count", type=int, default=3)
     parser.add_argument("--reserved-count", type=int, default=3)
     parser.add_argument("--max-messages", type=int, default=20)
+    parser.add_argument("--exclude-manifest", type=Path, action="append", default=[])
+    parser.add_argument("--stratify-by-question-type", action="store_true")
     args = parser.parse_args()
     if args.output.resolve() == args.dataset.resolve() or args.output.exists():
         raise FileExistsError(
@@ -184,6 +234,17 @@ def main() -> None:
         isinstance(item, dict) for item in records
     ):
         raise ValueError("dataset must contain an array of cases")
+    excluded = []
+    for path in args.exclude_manifest:
+        prior = json.loads(path.read_text(encoding="utf-8"))
+        payload = dict(prior)
+        fingerprint = payload.pop("manifest_fingerprint", None)
+        if (
+            fingerprint != _hash(payload)
+            or prior.get("source_sha256") != hashlib.sha256(data).hexdigest()
+        ):
+            raise ValueError("excluded manifest must match its fingerprint and source")
+        excluded.extend(row["history_group"] for row in prior["cases"])
     manifest = build_manifest(
         records,
         dataset_namespace=args.dataset_namespace,
@@ -193,6 +254,8 @@ def main() -> None:
         diagnostic_count=args.diagnostic_count,
         reserved_count=args.reserved_count,
         max_messages=args.max_messages,
+        excluded_history_groups=excluded,
+        stratify_by_question_type=args.stratify_by_question_type,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x", encoding="utf-8") as handle:

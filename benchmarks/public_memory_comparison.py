@@ -35,6 +35,7 @@ from benchmarks.public_longmemeval import RuntimeCase, ScoringCase
 from benchmarks.public_memory_pilot import _hash
 from doppel_memory.indexing import memory_index_fingerprint
 from doppel_memory.models import (
+    ACTIVE_MEMORY_STATES,
     Actor,
     FactAuthority,
     MemoryFilter,
@@ -327,7 +328,12 @@ async def run_comparison(
     dsn: str,
     embedding_cache_dir: Path | None,
     reranker: StrictContextReranker | None = None,
+    profile_mode: Literal["paired", "reranked_only"] = "paired",
 ) -> dict[str, Any]:
+    if profile_mode not in {"paired", "reranked_only"} or (
+        profile_mode == "reranked_only" and reranker is None
+    ):
+        raise ValueError("reranked-only mode requires the configured reranker")
     sources = load_bindings([r for r, _ in cases], manifest, ingestion_report, run_dir)
     store = PostgreSQLStore(dsn, schema=ingestion_report["postgres_schema"])
     provider = _LocalEmbeddingProvider(cache_dir=embedding_cache_dir)
@@ -355,10 +361,18 @@ async def run_comparison(
         counts = {
             "raw": sum(i["channel"] == "raw" for i in items.values()),
             "memory": sum(i["channel"] == "memory" for i in items.values()),
-            "governance": len(records) - len(items),
+            "governance": sum(
+                r.kind == "memory_conflict" and "memory-conflict" in r.tags
+                for r in records.values()
+            ),
+        }
+        inventory_counts = {
+            "raw": sum(r.extractor == "ingestor" for r in records.values()),
+            "memory": sum("personal-memory" in r.tags for r in records.values()),
+            "governance": counts["governance"],
         }
         audit = ingestion_report["store_record_audit"]
-        if counts != {
+        if inventory_counts != {
             "raw": audit["raw_records"],
             "memory": audit["derived_records_including_inactive"],
             "governance": audit["governance_records"],
@@ -367,6 +381,10 @@ async def run_comparison(
         # Verify existing entries only; never repair/index to make a profile pass.
         for record in records.values():
             entry = await index.inspect(record.scope, record.memory_id)
+            if record.state not in ACTIVE_MEMORY_STATES:
+                if entry is not None:
+                    raise ValueError("inactive record retained a vector entry")
+                continue
             if (
                 entry is None
                 or entry.fingerprint != memory_index_fingerprint(record)
@@ -387,13 +405,18 @@ async def run_comparison(
                 r.memory_id
                 for r in records.values()
                 if r.scope.scope_key == scope.scope_key
+                and r.state == MemoryState.CONFIRMED
             }:
                 raise ValueError("exhaustive small-corpus vector ordering incomplete")
             for channel in ("raw", "memory", "combined"):
                 candidates = select_candidates(ordered, items, scope, channel)
                 profiles: list[
                     tuple[str, list[RecallResult], dict[str, Any] | None]
-                ] = [(channel + "_vector", candidates, None)]
+                ] = (
+                    [(channel + "_vector", candidates, None)]
+                    if profile_mode == "paired"
+                    else []
+                )
                 if reranker is not None:
                     reranked = list(
                         await reranker.rerank(
@@ -481,6 +504,10 @@ async def run_comparison(
             "embedding": identity,
             "index_identity": index.identity,
             "corpus_counts": counts,
+            "inventory_counts_including_inactive": inventory_counts,
+            "nonconfirmed_record_count": sum(
+                r.state != MemoryState.CONFIRMED for r in records.values()
+            ),
             "corpus_sha256_before": before,
             "corpus_sha256_after": after,
             "budget": {
@@ -491,6 +518,7 @@ async def run_comparison(
             },
             "ordering": "complete-existing-pgvector-cosine-order/channel-filter-before-80-cap",
             "combined_policy": "single-shared-vector-order-and-shared-80-candidate-cap-no-channel-quota",
+            "profile_mode": profile_mode,
             "coverage_warning": "Derived provenance coverage is citation coverage, not retained answer information or semantic entailment. Raw and memory ranks use different item units. Unannotated valid evidence may exist.",
             "source_expansion_executed": False,
             "production_query_engine_executed": False,
@@ -523,6 +551,9 @@ def main() -> int:
     parser.add_argument("--embedding-cache-dir", type=Path)
     parser.add_argument("--reranker-model-path", type=Path)
     parser.add_argument("--reranker-device", default="cuda")
+    parser.add_argument(
+        "--profile-mode", choices=("paired", "reranked_only"), default="paired"
+    )
     args = parser.parse_args()
     if args.output.exists():
         parser.error("output exists; preserve the prior report")
@@ -555,6 +586,7 @@ def main() -> int:
                 dsn=dsn,
                 embedding_cache_dir=args.embedding_cache_dir,
                 reranker=ordering,
+                profile_mode=args.profile_mode,
             )
         )
     except Exception as error:  # noqa: BLE001 - sanitized diagnostic boundary
