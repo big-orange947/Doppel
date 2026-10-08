@@ -32,6 +32,10 @@
 - Freeze block03 from the successfully recovered131-chunk prefix, including its
   130 inherited records and one local recovery call. Permit at most200 further
   extraction attempts under plan `035d36f05bd2a03c5268ac858ceeac61450bf38b70a52bea569452d4bbc550d3`.
+- Complete block03:331/2,420 chunks, seven histories touched and six fully
+  ingested. The cumulative Store has3,364 raw,1,375 derived and16 governance
+  records;5,084 provenance checks pass. Two hundred extraction calls report
+  992,534 tokens, with no retrieval or QA result. Freeze block04 at a200-call cap.
 - Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
   exceeding remaining byte capacity instead of ending the rank-prefix scan.
   Preserve the original default, item text, authority, candidate80/item20/24KB

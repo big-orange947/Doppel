@@ -796,3 +796,10 @@ The [block03 plan](../benchmarks/reports/public-memory-expansion-50-ingestion-bl
 continues from the recovered131-chunk prefix, binding its130 inherited chunks
 separately from the one successful local recovery call. It authorizes up to200
 more extraction calls and no retrieval/answer calls.
+
+The [block03 result](../benchmarks/reports/public-memory-expansion-50-ingestion-block03-result-2026-10-09.md)
+reaches331/2,420 chunks after a successful200-call block. Seven histories have
+started, six are complete. The Store audit reports5,084 provenance checks with
+zero failures; the pipeline has not run question retrieval or answer scoring.
+The [block04 plan](../benchmarks/reports/public-memory-expansion-50-ingestion-block04-plan-2026-10-09.md)
+freezes the next200-call boundary from the validated checkpoint.
