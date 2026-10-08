@@ -39,7 +39,7 @@ Reproduction command:
 D:/project/.doppel-eval-cu128/Scripts/python.exe -m benchmarks.public_memory_recovery `
   --dataset data/public-benchmarks/longmemeval_s_cleaned.json `
   --manifest data/doppel/longmemeval-expansion-50-manifest-v1.json `
-  --parent-report data/doppel/longmemeval-expansion-50-block02-v1.json `
+  --parent-report data/doppel/longmemeval-expansion-50-ingestion-block02-v1.json `
   --parent-report-sha256 dab74cb127f73f8585f07b7928d630ac8d46c19f7484d0be10d7e71456b979da `
   --parent-dir data/doppel/public-memory-expansion-50-v1/ingestion `
   --run-dir data/doppel/public-memory-expansion-50-block02-recovery-v1 `
