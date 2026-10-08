@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Freeze ten newly selected public LongMemEval-S history groups for a full-history
+  raw/derived/combined reranked composition diagnostic, with old-history exclusion,
+  question-type metadata sampling, real production ingestion and fixed shared
+  candidate/context caps. Preserve old sampler defaults and align the harness's
+  inactive-index audit with existing lifecycle behavior; no core default change.
+  Live ingestion stops on extraction attempt 233: 232/482 chunks complete, four
+  full histories, 233 calls and 1,208,023 reported tokens. The failed call reaches
+  the 8,192 output-token cap; truncation is likely but finish metadata was not
+  retained. Preserve the failure/caches and zero downstream execution rather than
+  score a completed subset. Partial Store provenance audit has zero failures;
+  semantic correctness, retrieval/QA, blind evaluation and AML remain unmeasured.
 - Add a separately frozen Reader-v2-only development comparison on the preserved
   packed contexts, with generic derivation/absence/temporal/language instructions,
   optional source-bearing derivations and structural-only checks. Bind v1 request

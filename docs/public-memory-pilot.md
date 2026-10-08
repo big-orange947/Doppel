@@ -638,3 +638,31 @@ receive Chinese answers, and one arithmetic row still withholds the requested
 per-item value; no prompt resampling or post-run repair was used. A source-bound
 semantic review and separately frozen unopened-history measurement remain future
 stages, not implied by this completed development run.
+
+### Ten new histories: first live attempt stopped in extraction
+
+The [expansion plan](../benchmarks/reports/public-memory-expansion-10-plan-2026-10-08.md)
+was committed before paid execution as `e1fa179`. It selects ten new exact-history
+groups while excluding all six old pilot groups, keeps full histories, and plans
+three fixed-budget reranked channels: raw, derived and combined. This uses real
+production ingestion and local PostgreSQL/pgvector; it does not exercise the
+production natural Planner or Graphiti retrieval path. Question-type metadata is
+used only for sampling, not sent to extraction or the Reader.
+
+The [actual result](../benchmarks/reports/public-memory-expansion-10-result-2026-10-08.md)
+is **stopped**, not a completed performance comparison: 232 of 482 chunks complete,
+four whole histories and most of the fifth. Extraction attempt 233 failed after
+reporting 8,192 output tokens, exactly its cap. Truncation is the leading diagnosis,
+but the original finish reason and failed raw response were not retained; the
+report does not pretend to recover those missing observations. All 233 calls have
+usage, totaling 1,208,023 tokens. Successful outputs and the pending journal remain
+available; no automatic retry, prompt revision or subset scoring followed.
+
+The partial Store audit has zero provenance failures, but does not certify semantic
+accuracy. Forty-five drafts were quarantined by actor/evidence qualification and
+one draft failed schema validation; these observations are not hidden as zero loss.
+Retrieval, reranking, Reader and auxiliary Judge stages were not reached, so there
+is no new recall/QA metric. The next stage is a separately bound, observable recovery
+on the same selected histories, not another Judge-taxonomy calibration loop or a
+case-specific tweak. Old scores, failed gates, reserved data and `uv.lock` remain
+untouched. This is not a full LongMemEval, independent blind or AML result.
