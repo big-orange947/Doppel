@@ -24,6 +24,11 @@
   successes and one failed attempt without token usage. Freeze one separate,
   unchanged-request recovery observation with a fresh journal and read-only parent
   artifacts; no automatic retry or downstream QA.
+- The single recovery observation succeeds: 130 prior chunks replay and validate,
+  then chunk131 completes with6,815 tokens; Store provenance audit reaches2,003
+  checks with zero failures. Extend the continuation runner to accept this
+  cloned-checkpoint lineage while reconciling inherited records and local budgets.
+  Current ingestion status:131/2,420 chunks, still no retrieval/QA result.
 - Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
   exceeding remaining byte capacity instead of ending the rank-prefix scan.
   Preserve the original default, item text, authority, candidate80/item20/24KB

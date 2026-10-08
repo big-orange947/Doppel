@@ -19,6 +19,15 @@ from benchmarks.public_memory_recovery import file_sha
 from doppel_memory.openai_compatible import OpenAICompatibleStructuredOutputConfig
 
 
+def _ingestion_report(parent: dict[str, Any]) -> dict[str, Any]:
+    if parent.get("runner") == "doppel.public-memory-recovery-observation.v1":
+        nested = parent.get("ingestion")
+        if isinstance(nested, dict):
+            return nested
+        raise ValueError("recovery parent does not contain an ingestion report")
+    return parent
+
+
 def build_plan(
     dataset_path: Path,
     manifest_path: Path,
@@ -31,14 +40,34 @@ def build_plan(
     dataset_sha = hashlib.sha256(dataset_bytes).hexdigest()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     parent = json.loads(parent_report_path.read_text(encoding="utf-8"))
-    parent_ingestion = parent.get("audit")
-    source_plan = parent.get("plan")
+    if parent.get("runner") == "doppel.public-memory-recovery-observation.v1":
+        if (
+            parent.get("status") != "observed-success"
+            or parent.get("parent_artifacts_preserved") is not True
+            or not isinstance(parent.get("plan"), dict)
+        ):
+            raise ValueError("successful, preserved recovery observation required")
+        inherited_chunks = parent["plan"].get("completed_prefix_chunks")
+        parent_ingestion = _ingestion_report(parent)
+    elif parent.get("runner") == "doppel.public-memory-ingestion.v1":
+        inherited_chunks = parent.get("continuation", {}).get(
+            "parent_completed_chunks", 0
+        ) - parent.get("continuation", {}).get("prior_durable_attempts", 0)
+        parent_ingestion = _ingestion_report(parent)
+    else:
+        raise ValueError("known ingestion or recovery report required")
+    source_plan = (
+        parent_ingestion.get("plan") if isinstance(parent_ingestion, dict) else None
+    )
     if (
-        parent.get("status") != "partial"
-        or parent.get("runner") != "doppel.public-memory-ingestion.v1"
-        or not isinstance(parent_ingestion, dict)
+        not isinstance(parent_ingestion, dict)
+        or parent_ingestion.get("status") != "partial"
+        or parent_ingestion.get("runner") != "doppel.public-memory-ingestion.v1"
         or not isinstance(source_plan, dict)
-        or parent.get("store_record_audit", {}).get("provenance_failures") != 0
+        or parent_ingestion.get("store_record_audit", {}).get("provenance_failures")
+        != 0
+        or type(inherited_chunks) is not int
+        or inherited_chunks < 0
     ):
         raise ValueError("a partial, provenance-audited ingestion report is required")
     selected = select_diagnostic_cases(
@@ -58,7 +87,7 @@ def build_plan(
             "evidence_error_policy", "fail_batch"
         ),
     )
-    rows = parent_ingestion["chunks"]
+    rows = parent_ingestion["audit"]["chunks"]
     keys = [row["write_key"] for row in ingestion_plan["chunks"]]
     completed = [row["write_key"] for row in rows if row["completed"]]
     if (
@@ -68,11 +97,12 @@ def build_plan(
         or len(rows) != len(completed)
         or not completed
         or completed != keys[: len(completed)]
-        or parent.get("store_record_audit", {}).get("provenance_failures") != 0
+        or parent_ingestion.get("store_record_audit", {}).get("provenance_failures")
+        != 0
         or not 1 <= max_new_chunks <= len(keys) - len(completed)
     ):
         raise ValueError("source, completed prefix, audit or bounded call cap is invalid")
-    ledger = parent.get("usage_cumulative", {}).get("ledger", {})
+    ledger = parent_ingestion.get("usage_cumulative", {}).get("ledger", {})
     usage = run_dir / "ingestion" / "usage.sqlite3"
     cache_dir = run_dir / "ingestion" / "provider-cache"
     connection = sqlite3.connect(f"file:{usage.resolve().as_posix()}?mode=ro", uri=True)
@@ -83,9 +113,21 @@ def build_plan(
     finally:
         connection.close()
     statuses = [row[0] for row in attempts]
+    continuation = parent_ingestion.get("continuation", {})
+    prior_local_attempts = continuation.get("prior_durable_attempts", 0)
+    current_attempts = parent_ingestion.get("llm_calls_this_invocation")
     if (
-        len(attempts) != len(completed)
+        type(prior_local_attempts) is not int
+        or type(current_attempts) is not int
+        or prior_local_attempts < 0
+        or current_attempts < 0
+    ):
+        raise ValueError("parent report has invalid attempt counts")
+    expected_attempts = prior_local_attempts + current_attempts
+    if (
+        len(attempts) != expected_attempts
         or any(status != "succeeded" for status in statuses)
+        or len(completed) - len(attempts) != inherited_chunks
         or ledger.get("failed_calls_without_diagnostics") != 0
         or ledger.get("token_accounting_complete") is not True
     ):
@@ -98,6 +140,7 @@ def build_plan(
         "parent_report_sha256": file_sha(parent_report_path),
         "parent_plan_fingerprint": ingestion_plan["plan_fingerprint"],
         "parent_completed_chunks": len(completed),
+        "inherited_completed_chunks": inherited_chunks,
         "parent_checkpoint_inventory_sha256": checkpoint_inventory,
         "parent_cache_inventory_sha256": _hash(
             {
@@ -138,7 +181,13 @@ def _checkpoint_inventory(ingestion_dir: Path) -> str:
                 path.read_bytes()
             ).hexdigest()
             for path in sorted(ingestion_dir.rglob("*"))
-            if path.is_file() and "sqlite3" in path.name
+            if path.is_file()
+            and (
+                "sqlite3" in path.name
+                or path.name == "plan.json"
+                or path.name == "recovery-budget.json"
+                or path.name.startswith("continuation-budget-")
+            )
         }
     )
 
@@ -191,7 +240,7 @@ async def execute(
         != plan["parent_cache_inventory_sha256"]
     ):
         raise ValueError("checkpoint changed after continuation was planned")
-    parent_plan = original["plan"]
+    parent_plan = _ingestion_report(original)["plan"]
     report = await run_live(
         cases,
         manifest,

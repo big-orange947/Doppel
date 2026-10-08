@@ -784,3 +784,10 @@ attempt has no reported token usage. Its checkpoint remains intact. The
 [recovery plan](../benchmarks/reports/public-memory-expansion-50-block02-recovery-plan-2026-10-09.md)
 binds a single unchanged-request observation in a fresh checkpoint. The old
 journal/cache are read-only; repeated failure ends this recovery path.
+
+The [recovery result](../benchmarks/reports/public-memory-expansion-50-block02-recovery-result-2026-10-09.md)
+completed the unchanged request on its one allowed attempt. The child validated
+130 completed chunks and now has131/2,420 complete, with2,003 provenance checks
+and zero failures. It used6,815 reported tokens; the preceding transport failure
+has unknown usage. This remains ingestion only. The continuation entrypoint now
+reconciles inherited checkpoints and the child's separate ledger.

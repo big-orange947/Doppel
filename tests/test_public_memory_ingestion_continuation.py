@@ -9,7 +9,14 @@ import pytest
 from benchmarks import public_memory_ingestion_continuation as continuation
 
 
-def _fixture(tmp_path, monkeypatch, *, prefix=("k0", "k1"), cap=2):
+def _fixture(
+    tmp_path,
+    monkeypatch,
+    *,
+    prefix=("k0", "k1"),
+    cap=2,
+    recovered=False,
+):
     dataset = tmp_path / "dataset.json"
     dataset.write_text("[]", encoding="utf-8")
     dataset_sha = hashlib.sha256(dataset.read_bytes()).hexdigest()
@@ -26,9 +33,10 @@ def _fixture(tmp_path, monkeypatch, *, prefix=("k0", "k1"), cap=2):
     database.execute(
         "CREATE TABLE pilot_calls (call_id INTEGER PRIMARY KEY, status TEXT, usage TEXT)"
     )
+    local_attempts = len(prefix) - int(recovered)
     database.executemany(
         "INSERT INTO pilot_calls(status, usage) VALUES (?, '{}')",
-        [("succeeded",)] * len(prefix),
+        [("succeeded",)] * local_attempts,
     )
     database.commit()
     database.close()
@@ -41,7 +49,7 @@ def _fixture(tmp_path, monkeypatch, *, prefix=("k0", "k1"), cap=2):
         "miner_config": {},
         "chunks": chunks,
     }
-    parent = {
+    ingestion_report = {
         "runner": "doppel.public-memory-ingestion.v1",
         "status": "partial",
         "plan": source_plan,
@@ -53,12 +61,24 @@ def _fixture(tmp_path, monkeypatch, *, prefix=("k0", "k1"), cap=2):
         "store_record_audit": {"provenance_failures": 0},
         "usage_cumulative": {
             "ledger": {
-                "attempts_reserved": len(prefix),
+                "attempts_reserved": local_attempts,
                 "failed_calls_without_diagnostics": 0,
                 "token_accounting_complete": True,
             }
         },
+        "llm_calls_this_invocation": local_attempts,
     }
+    parent = (
+        {
+            "runner": "doppel.public-memory-recovery-observation.v1",
+            "status": "observed-success",
+            "plan": {"completed_prefix_chunks": int(recovered)},
+            "parent_artifacts_preserved": True,
+            "ingestion": ingestion_report,
+        }
+        if recovered
+        else ingestion_report
+    )
     parent_report = tmp_path / "parent.json"
     parent_report.write_text(json.dumps(parent), encoding="utf-8")
     monkeypatch.setattr(continuation, "select_diagnostic_cases", lambda *a, **k: [(object(), object())])
@@ -80,6 +100,30 @@ def test_freezes_exact_prefix_and_separate_call_cap(tmp_path, monkeypatch):
     assert plan["max_new_calls"] == 2
     assert plan["qa_calls"] == 0
     assert plan["plan_fingerprint"]
+
+
+def test_accepts_recovered_prefix_with_separate_local_ledger(tmp_path, monkeypatch):
+    plan, *_ = _fixture(tmp_path, monkeypatch, recovered=True)
+    assert plan["parent_completed_chunks"] == 2
+    assert plan["inherited_completed_chunks"] == 1
+    assert plan["prior_durable_attempts"] == 1
+
+
+def test_unwraps_ingestion_plan_from_recovery_observation(tmp_path, monkeypatch):
+    _, parent, *_ = _fixture(tmp_path, monkeypatch, recovered=True)
+    assert continuation._ingestion_report(parent) is parent["ingestion"]
+
+
+def test_rejects_recovery_parent_that_did_not_preserve_artifacts(tmp_path, monkeypatch):
+    _, parent, dataset, manifest, parent_report, run_dir = _fixture(
+        tmp_path, monkeypatch, recovered=True
+    )
+    parent["parent_artifacts_preserved"] = False
+    parent_report.write_text(json.dumps(parent), encoding="utf-8")
+    with pytest.raises(ValueError, match="preserved recovery"):
+        continuation.build_plan(
+            dataset, manifest, parent_report, run_dir, max_new_chunks=2
+        )
 
 
 @pytest.mark.parametrize(
