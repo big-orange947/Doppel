@@ -15,6 +15,11 @@
   checks. Preserve one invalid and28 evidence-quarantined drafts. Extraction
   uses94 calls/479,138 tokens; no new QA score,48 histories still unprocessed.
   Ingestion is not new QA coverage.
+- Add a source/checkpoint/ledger/cache-bound continuation runner for the fixed
+  fifty-history expansion. It validates the ordered completed prefix and uses a
+  separate durable200-call budget per frozen block; no automatic retry or QA
+  execution. Add focused tests for changed data, invalid prefixes and ledger
+  mismatch. Freeze block02 at94/2,420 chunks before its live execution.
 - Add an opt-in, shared-budget rank-fit packing experiment: skip whole candidates
   exceeding remaining byte capacity instead of ending the rank-prefix scan.
   Preserve the original default, item text, authority, candidate80/item20/24KB

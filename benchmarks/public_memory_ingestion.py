@@ -461,7 +461,7 @@ async def run_live(
                 "continuation requires a fingerprint and equal call/chunk cap"
             )
         _bind_json(
-            run_dir / "continuation-budget.json",
+            run_dir / f"continuation-budget-{identity.split(':', 1)[1]}.json",
             {
                 "budget_id": identity,
                 "max_calls": limit,

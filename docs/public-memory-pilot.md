@@ -772,3 +772,9 @@ boundary. The Store has924 raw records,393 derived records and4 conflict records
 All94 calls succeed with479,138 reported tokens. Overall status remains partial:
 48 histories /2,326 chunks remain before fifty-question retrieval/QA. There is
 no new recall or answer-accuracy result yet.
+
+The [second block plan](../benchmarks/reports/public-memory-expansion-50-ingestion-block02-plan-2026-10-08.md)
+binds that exact checkpoint, durable ledger and cache, and permits at most200
+additional extraction calls. It adds a tested continuation entrypoint with a
+separate persistent budget per frozen block. No answer/query calls are part of
+this stage.
