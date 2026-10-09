@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Complete real Graphiti projection of the first public diagnostic history:
+  210/210 post-authoring projections match Store metadata, 140 have rich relations,
+  70 only fallback, with 229 distinct rich edges/231 provenance links. Preserve the
+  byte-limited partial parent and explicitly budgeted continuation; all scope
+  authoring costs 868 successful calls/3,636,313 reported tokens including smoke.
+  A zero-call source probe verifies memory/path provenance under the API's actual
+  per-memory deduplication contract, preserving 25 original edge-selection
+  differences. Keep the other 49 scopes blocked and make no new natural-query,
+  answer-quality, publication or AML claim.
+
 - Add a durable, budgeted DeepSeek chat/completions bridge for real Graphiti
   authoring of committed memories. Three source-ordered live smoke projections
   complete in eight calls/19,515 reported tokens; exact resumption performs no new
