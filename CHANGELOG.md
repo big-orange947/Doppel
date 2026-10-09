@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Complete the first opened-history natural high-config QA diagnostic with a
+  preregistered V7 planner, existing pgvector, typed Graphiti/path discovery, local
+  CUDA reranking and a fixed role-preserving memory/raw/source context bridge.
+  The answer is reference-correct and citations are source-supported; graph paths
+  contribute nothing on this assistant-reply question, so no graph gain is claimed.
+  Preserve English-to-Chinese Reader drift and the frozen conservative incomplete-
+  query flag. Schema preparation plus QA costs 11 calls/46806 reported tokens;
+  checkpoint/content-cache replay adds zero calls, Store/indices are unchanged,
+  and other 49 graph histories remain blocked. Extend ontology capacity to 512
+  without changing hop, candidate or authority bounds; no benchmark special cases.
+
 - Complete real Graphiti projection of the first public diagnostic history:
   210/210 post-authoring projections match Store metadata, 140 have rich relations,
   70 only fallback, with 229 distinct rich edges/231 provenance links. Preserve the
