@@ -53,3 +53,26 @@ prompt tuning based on this question's answer or score.
 Read-only Store/graph snapshots before and after; report no record/index writes.
 Keep prior 50-question scores and all prior failed graph probes intact. Cache-only
 replay may verify request/answer stability, not substitute for a fresh benchmark.
+
+## Stage B frozen preflight (before live query)
+
+Plan fingerprint:
+`a242e442f01eb05a8690f476694461a68cce397d2bf071e10221fc49bc93a675`.
+Local preflight receipt SHA-256:
+`3d7016ee5f9c9d8193127ed884ad14f02e559a6f65aa58cc584fec86eb869b84`.
+Completed source-only schema receipt SHA-256:
+`ae33e0781738e435fc0f20ab37792ca77506f15e9960489fea869c4aa799692c`.
+
+Zero-call preflight rechecked all 210 graph projections and all 34760 active
+vector manifests against 34762 authoritative Store records. Store hash remains
+`11aab45f1bdfaebeea23bee822e53e5cdd94aef24f68bb020d90e9eda35e9cc3`.
+Vector manifest hash:
+`3b8258a1e97a2ffbfbbb3528175ad1db4ba8372e3834f1139740035fc4d434de`.
+Store connections enforce PostgreSQL `default_transaction_read_only=on`; vector
+initialization validates the existing identity/table rather than running DDL.
+Neo4j initialization does not create schema. All preflight snapshots unchanged.
+
+Live failure/interruption checkpoints are retained and forbid silent retries.
+Replay reuses the immutable production retrieval result (not a second GPU latency
+sample), and validates the three downstream content-addressed provider outputs.
+It does not claim fresh planner or graph execution during that replay.
