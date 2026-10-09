@@ -28,6 +28,11 @@ from benchmarks.public_memory_answer_comparison import (
     AnswerRow,
     _default_provider_factory,
 )
+from benchmarks.public_memory_clock_policy import (
+    POLICIES,
+    explicit_horizon,
+    observation_policy,
+)
 from benchmarks.public_memory_comparison import inventory, load_bindings
 from benchmarks.public_memory_expansion import (
     PrimaryOutput,
@@ -66,11 +71,20 @@ from doppel_memory.high_config import HighConfigRetrieval, HighConfigRetrievalRe
 from doppel_memory.query_path import ReferencePersonalMemoryRelationPathPlannerV7
 from doppel_memory.relation import RelationTypeDefinition
 
-RUNNER = "doppel.public-memory-consecutive-high-config-query.v1"
+RUNNER = "doppel.public-memory-consecutive-high-config-query.v2"
 
 
 def scope_plan(
-    binding, runtime, scope, schema, corpus, vectors, reranker, ordinal, batch
+    binding,
+    runtime,
+    scope,
+    schema,
+    corpus,
+    vectors,
+    reranker,
+    ordinal,
+    batch,
+    clock_policy="strict-reference-v1",
 ):
     if ordinal not in {2, 3}:
         raise ValueError("only fixed consecutive scopes 2 and 3 permitted")
@@ -81,8 +95,13 @@ def scope_plan(
         selection="preregistered-consecutive-ingestion-order-no-answer-selection",
         batch_plan_fingerprint=batch["plan_fingerprint"],
         execution_contract="doppel.high-config-execution-contract.v2",
+        observation_clock=observation_policy(runtime, clock_policy),
     )
-    for file in [Path(__file__), Path("benchmarks/high_config_execution_contract.py")]:
+    for file in [
+        Path(__file__),
+        Path("benchmarks/high_config_execution_contract.py"),
+        Path("benchmarks/public_memory_clock_policy.py"),
+    ]:
         plan["source_sha256"][file.name] = hashlib.sha256(file.read_bytes()).hexdigest()
     plan["plan_fingerprint"] = _hash(
         {k: v for k, v in plan.items() if k != "plan_fingerprint"}
@@ -94,6 +113,9 @@ async def query_and_answer(
     args, prepared, scope, records, sources, definitions, vector, client, reranker, plan
 ):
     runtime, scoring = prepared
+    clock = observation_policy(runtime, args.clock_policy)
+    if plan["observation_clock"] != clock:
+        raise ValueError("bound observation policy changed")
     ledgers, models = {}, {}
     report: dict[str, Any] = {"status": "failed"}
     args.run_dir.mkdir(parents=True, exist_ok=True)
@@ -156,6 +178,7 @@ async def query_and_answer(
                 runtime.query.query,
                 [scope],
                 now=runtime.query.reference_time,
+                observed_until=explicit_horizon(clock),
                 default_subject_id=scope.user_id,
                 trace_limit=100,
             )
@@ -174,7 +197,7 @@ async def query_and_answer(
         row = AnswerRow(
             0,
             scoring.case_id,
-            "personal-high-config-v1",
+            "personal-high-config-" + clock["policy"],
             runtime,
             scoring,
             tuple(context),
@@ -311,6 +334,7 @@ async def run(args):
     client = SimpleNamespace(driver=driver)
     report = {
         "runner": RUNNER,
+        "clock_policy": args.clock_policy,
         "status": "ready",
         "publication_ready": False,
         "judgments_independently_verified": False,
@@ -347,6 +371,7 @@ async def run(args):
             reranker,
             ordinal,
             batch,
+            args.clock_policy,
         )
         report.update(plan=plan, projection_count=len(checks))
         if args.live:
@@ -408,6 +433,9 @@ def main():
     ]:
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--scope-ordinal", type=int, choices=[2, 3], required=True)
+    parser.add_argument(
+        "--clock-policy", choices=POLICIES, default="strict-reference-v1"
+    )
     parser.add_argument("--frozen-preflight", type=Path)
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--cache-only", action="store_true")

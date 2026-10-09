@@ -36,6 +36,7 @@ from doppel_memory.query import (
     PersonalMemoryQueryPlanV2,
     PersonalMemoryQueryRequest,
     PersonalMemoryQueryResult,
+    _observation_cutoff,
     _query_memory_filter,
     _structural_rejection_reason,
 )
@@ -205,6 +206,7 @@ class HighConfigRetrieval:
         default_subject_id: str = "",
         allowed_subject_ids: Sequence[str] = (),
         trace_limit: int = 0,
+        observed_until: datetime | None = None,
     ) -> HighConfigRetrievalResult:
         capture = _CapturedPlanner(self.planner)
         plan = await self.engine.plan(
@@ -217,6 +219,7 @@ class HighConfigRetrieval:
             default_subject_id=default_subject_id,
             allowed_subject_ids=allowed_subject_ids,
             relation_type_definitions=self.definitions,
+            observed_until=observed_until,
         )
         if not isinstance(plan, PersonalMemoryQueryPlanV2):
             raise TypeError("high-config composition requires a bound V2 plan")
@@ -375,6 +378,7 @@ class HighConfigRetrieval:
         backing upgrades an indeterminate predicate count to an exact one.
         """
         allowed = {scope.scope_key: scope for scope in plan.scopes}
+        observation_clock = _observation_cutoff(plan)
 
         # Raw dialogue is useful evidence about what was said, including assistant
         # suggestions, but must not enter the factual owner-memory engine.
@@ -383,7 +387,9 @@ class HighConfigRetrieval:
             query,
             plan.scopes,
             filters=MemoryFilter(
-                states={MemoryState.CONFIRMED}, kinds={"event"}, time_to=plan.now
+                states={MemoryState.CONFIRMED},
+                kinds={"event"},
+                time_to=observation_clock,
             ),
             limit=self.raw_candidate_limit,
         ):
@@ -392,7 +398,7 @@ class HighConfigRetrieval:
             record = await self.store.get(allowed[item.scope.scope_key], item.memory_id)
             if (
                 record is not None
-                and self._raw_eligible(record, item.scope, plan.now)
+                and self._raw_eligible(record, item.scope, observation_clock)
                 and record.memory_id not in {r.memory_id for r in raw}
             ):
                 raw.append(record)
@@ -442,7 +448,7 @@ class HighConfigRetrieval:
                 if (
                     record is None
                     or record.source_event_id != event
-                    or not self._raw_eligible(record, memory.scope, plan.now)
+                    or not self._raw_eligible(record, memory.scope, observation_clock)
                     or record.actor != memory.actor
                     or record.authority != memory.authority
                 ):

@@ -40,6 +40,7 @@ from doppel_memory.query import (
     PersonalMemoryQueryOperation,
     PersonalMemoryQueryPlanningError,
     PersonalMemoryQueryPlanV2,
+    PersonalMemoryQueryPlanV3,
     PersonalMemoryQueryReadLimitError,
     PersonalMemoryQueryRequest,
     PersonalMemoryQueryTemporalView,
@@ -3507,6 +3508,202 @@ async def test_v2_plan_round_trip_is_integrity_bound() -> None:
     payload["search_text"] = "tampered"
     with pytest.raises(PersonalMemoryQueryPlanningError, match="plan_id"):
         await engine.execute(payload)
+
+
+class _ClockPlanner:
+    name, version = "tests.independent-clock", "1"
+
+    def __init__(self, **draft):
+        self.draft, self.requests = draft, []
+
+    async def plan(self, request):
+        self.requests.append(request)
+        return PersonalMemoryQueryDraftV2(**self.draft)
+
+
+@pytest.mark.parametrize("view", ["current", "as_of", "interval", "unbounded"])
+async def test_v3_observation_horizon_does_not_replace_valid_time(view):
+    from datetime import timedelta
+
+    horizon = NOW + timedelta(days=2)
+    store = _FilterIgnoringStore()
+    known = _record(
+        "later-learned",
+        "opaque",
+        memory_type="state",
+        temporal_status="current",
+        day=1,
+        valid_from=NOW - timedelta(days=1),
+        valid_to=NOW + timedelta(days=1),
+        state=MemoryState.CONFIRMED,
+    ).model_copy(update={"created_at": horizon})
+    unknown = known.model_copy(
+        update={
+            "memory_id": "after-horizon",
+            "created_at": horizon + timedelta(seconds=1),
+        }
+    )
+    await _put(store, known, unknown)
+    draft = {"temporal_view": view}
+    if view == "as_of":
+        draft["as_of"] = NOW
+    elif view == "interval":
+        draft.update(time_from=NOW, time_to=NOW + timedelta(hours=1))
+    engine = PersonalMemoryQueryEngine(store)
+    strict = await engine.query(_ClockPlanner(**draft), "opaque", [SCOPE], now=NOW)
+    assert not strict.hits
+    result = await engine.query(
+        _ClockPlanner(**draft),
+        "opaque",
+        [SCOPE],
+        now=NOW,
+        observed_until=horizon,
+        trace_limit=50,
+    )
+    assert isinstance(result.plan, PersonalMemoryQueryPlanV3)
+    assert result.plan.now == NOW and result.plan.observed_until == horizon
+    assert [hit.record.memory_id for hit in result.hits] == ["later-learned"]
+    assert any(
+        e.memory_id == "after-horizon" and e.reason == "not_yet_observed"
+        for e in result.trace.events
+    )
+
+
+async def test_v3_earlier_knowledge_horizon_is_valid_and_inclusive():
+    from datetime import timedelta
+
+    horizon = NOW - timedelta(days=1)
+    store = InMemoryStore()
+    record = _record(
+        "boundary",
+        "opaque",
+        memory_type="fact",
+        temporal_status="timeless",
+        day=1,
+        state=MemoryState.CONFIRMED,
+    ).model_copy(update={"created_at": horizon})
+    await _put(
+        store,
+        record,
+        record.model_copy(
+            update={
+                "memory_id": "late",
+                "created_at": NOW,
+            }
+        ),
+    )
+    result = await PersonalMemoryQueryEngine(store).query(
+        _ClockPlanner(),
+        "opaque",
+        [SCOPE],
+        now=NOW,
+        observed_until=horizon,
+    )
+    assert [h.record.memory_id for h in result.hits] == ["boundary"]
+
+
+async def test_v3_normalizes_timezone_and_integrity_binds_both_clocks():
+    from datetime import timedelta, timezone
+
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+    planner = _ClockPlanner()
+    plan = await engine.plan(
+        planner,
+        "opaque",
+        [SCOPE],
+        now=NOW,
+        observed_until=NOW.astimezone(timezone(timedelta(hours=8))),
+    )
+    assert plan.observed_until == NOW and plan.observed_until.tzinfo is UTC
+    assert "observed_until" not in planner.requests[0].model_dump()
+    payload = json.loads(plan.model_dump_json())
+    restored = PersonalMemoryQueryPlanV3.model_validate(payload)
+    assert (await engine.execute(payload)).plan == restored
+    for field in ["now", "observed_until"]:
+        changed = {**payload, field: (NOW + timedelta(seconds=1)).isoformat()}
+        with pytest.raises(PersonalMemoryQueryPlanningError, match="plan_id"):
+            await engine.execute(changed)
+
+
+async def test_naive_observation_horizon_rejected_before_planner():
+    planner = _ClockPlanner()
+    with pytest.raises(ValueError, match="timezone"):
+        await PersonalMemoryQueryEngine(InMemoryStore()).plan(
+            planner,
+            "opaque",
+            [SCOPE],
+            now=NOW,
+            observed_until=NOW.replace(tzinfo=None),
+        )
+    assert not planner.requests
+
+
+async def test_v1_draft_cannot_silently_ignore_explicit_observation_horizon():
+    with pytest.raises(PersonalMemoryQueryPlanningError, match="V2 planner draft"):
+        await PersonalMemoryQueryEngine(InMemoryStore()).plan(
+            _DraftPlanner(),
+            "opaque",
+            [SCOPE],
+            now=NOW,
+            observed_until=NOW,
+        )
+
+
+async def test_v1_v2_wire_shapes_unchanged_without_clock_override():
+    engine = PersonalMemoryQueryEngine(InMemoryStore())
+    for planner, version in [(_DraftPlanner(), 1), (_ClockPlanner(), 2)]:
+        plan = await engine.plan(planner, "opaque", [SCOPE], now=NOW)
+        assert plan.schema_version == version
+        assert "observed_until" not in plan.model_dump()
+        assert not isinstance(plan, PersonalMemoryQueryPlanV3)
+
+
+async def test_llm_cannot_bind_observation_horizon():
+    model = _StubStructuredModel(
+        {
+            "schema_version": 2,
+            "operation": "lookup",
+            "temporal_view": "unbounded",
+            "observed_until": "2099-01-01T00:00:00Z",
+        }
+    )
+    plan = await PersonalMemoryQueryEngine(InMemoryStore()).plan(
+        ReferencePersonalMemoryQueryPlannerV2(model),
+        "opaque",
+        [SCOPE],
+        now=NOW,
+        observed_until=NOW,
+    )
+    assert plan.observed_until == NOW
+    assert "observed_until" not in model.requests[0].output_schema["properties"]
+
+
+async def test_client_forwards_explicit_host_clock_without_changing_default():
+    from doppel_memory import DoppelClient
+
+    result = await DoppelClient(store=InMemoryStore()).query_personal_memory(
+        "opaque",
+        [SCOPE],
+        planner=_ClockPlanner(),
+        now=NOW,
+        observed_until=NOW,
+    )
+    assert isinstance(result.plan, PersonalMemoryQueryPlanV3)
+    assert result.plan.observed_until == NOW
+
+
+@pytest.mark.parametrize("offset,expected", [(1, False), (3, True)])
+async def test_future_asof_warning_uses_knowledge_horizon(offset, expected):
+    from datetime import timedelta
+
+    result = await PersonalMemoryQueryEngine(InMemoryStore()).query(
+        _ClockPlanner(temporal_view="as_of", as_of=NOW + timedelta(days=offset)),
+        "opaque",
+        [SCOPE],
+        now=NOW,
+        observed_until=NOW + timedelta(days=2),
+    )
+    assert any("future as_of" in warning for warning in result.warnings) is expected
 
 
 async def test_v1_plan_wire_shape_and_schema_remain_unchanged() -> None:

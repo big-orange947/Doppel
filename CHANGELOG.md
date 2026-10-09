@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add an explicitly host-bound observation horizon to provisional query plan V3,
+  independent from the question's reference/valid time. Preserve default V1/V2
+  wire shapes, planner schemas and scope boundaries; enforce the cutoff across
+  Store, stale graph candidates, raw dialogue and source backing. Document the
+  distinction between eligibility and historical version reconstruction.
+
 - Treat undurated episodes as point occurrences for interval queries, distinguish
   structured exact cardinality from relevance-qualified predicate counts, and
   keep raw/source evidence available for high-config count queries without

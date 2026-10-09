@@ -153,6 +153,7 @@
       "PersonalMemoryQueryOperation",
       "PersonalMemoryQueryPlan",
       "PersonalMemoryQueryPlanV2",
+      "PersonalMemoryQueryPlanV3",
       "PersonalMemoryQueryPlanner",
       "PersonalMemoryQueryPlannerV2",
       "PersonalMemoryQueryPlanningError",

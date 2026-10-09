@@ -381,6 +381,7 @@ class DoppelClient:
         relation_type_definitions: Sequence[RelationTypeDefinition] = (),
         required_relation_types: Sequence[str] = (),
         trace_limit: int = 0,
+        observed_until: datetime | None = None,
     ) -> PersonalMemoryQueryResult:
         """Return structured personal-memory evidence and safe aggregation."""
 
@@ -406,6 +407,7 @@ class DoppelClient:
             relation_type_definitions=relation_type_definitions,
             required_relation_types=required_relation_types,
             trace_limit=trace_limit,
+            observed_until=observed_until,
         )
 
     # ---------------------------------------------------------------- 高层 API

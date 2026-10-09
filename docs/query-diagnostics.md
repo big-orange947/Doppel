@@ -12,6 +12,47 @@ exports. `PersonalMemoryQueryResult.trace` is an additive optional wire field.
 Existing plans and ranking defaults remain unchanged. Consumers with strict result
 schemas should allow the new optional field.
 
+## Independent clocks (provisional plan V3)
+
+`PersonalMemoryQueryEngine.plan/query`, `DoppelClient.query_personal_memory`
+and `HighConfigRetrieval.query` accept an optional, timezone-aware
+`observed_until`. When supplied with an operation/time V2 planner draft, the
+host binds a `PersonalMemoryQueryPlanV3`. Planner drafts and model output schemas
+cannot grant this horizon; scopes and subject authorization remain unchanged.
+V1 drafts reject this option explicitly. Without the option, existing V1/V2
+wire shapes and IDs remain unchanged.
+
+- `now` is the question's calendar reference. Relative dates and `current`
+  validity, including graph `valid_at`, still use it.
+- `observed_until` is the latest observation allowed into the supplied evidence.
+  Store/index coarse filtering and final memory, graph-support, raw-dialogue
+  and source-backing checks use this inclusive cutoff.
+- `as_of`/interval coordinates are fact-validity coordinates, not observation
+  cutoffs. Later-learned evidence can describe an earlier valid state only when
+  the host deliberately permits that knowledge horizon.
+
+For ordinary causal replay, omit the option. For a complete provided-history
+diagnostic, a host can derive it uniformly from the provided source timestamps,
+without consulting questions' reference answers or evidence annotations:
+
+```python
+result = await engine.query(
+    v2_planner, question, authorized_scopes,
+    now=question_reference_time,
+    observed_until=provided_history_cutoff,
+)
+assert result.plan.schema_version == 3
+```
+
+Both clocks are normalized/integrity-bound in the plan (the observation cutoff
+is UTC); changing either invalidates `plan_id`. This is an eligibility boundary,
+not database time travel. A mutable record may have merged provenance or later
+revisions; `created_at` alone cannot reconstruct all historical versions.
+Administrative `updated_at` is not silently treated as the learning timestamp.
+Conflict-marker revision semantics are likewise not a full bitemporal ledger.
+Applications needing strict historical reconstruction must preserve source and
+revision history, not just change these arguments.
+
 ## Observed stages
 
 | Stage | What it records |

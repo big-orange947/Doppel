@@ -1022,6 +1022,24 @@ class PersonalMemoryQueryPlanV2(PersonalMemoryQueryPlan):
         return self
 
 
+class PersonalMemoryQueryPlanV3(PersonalMemoryQueryPlanV2):
+    """Host-bound knowledge horizon independent of the query's time reference.
+
+    V1/V2 serialization stays unchanged when no explicit horizon is requested.
+    Planner drafts never contain this permission; only the host can bind it.
+    """
+
+    schema_version: Literal[3] = 3
+    observed_until: datetime
+
+    @field_validator("observed_until")
+    @classmethod
+    def _normalize_observation_clock(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("observed_until must include a timezone")
+        return value.astimezone(UTC)
+
+
 class PersonalMemoryCandidateEvidence(BaseModel):
     """Explain how a candidate was discovered without judging the answer.
 
@@ -1133,7 +1151,9 @@ class PersonalMemoryQueryResult(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    plan: PersonalMemoryQueryPlanV2 | PersonalMemoryQueryPlan
+    plan: (
+        PersonalMemoryQueryPlanV3 | PersonalMemoryQueryPlanV2 | PersonalMemoryQueryPlan
+    )
     hits: list[PersonalMemoryQueryHit] = Field(default_factory=list)
     conflicts: list[PersonalMemoryConflictHit] = Field(default_factory=list)
     matched_record_count: int = Field(default=0, ge=0)
@@ -1198,8 +1218,15 @@ class PersonalMemoryQueryEngine:
         available_relation_types: Sequence[str] = (),
         relation_type_definitions: Sequence[RelationTypeDefinition] = (),
         required_relation_types: Sequence[str] = (),
-    ) -> PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2:
+        observed_until: datetime | None = None,
+    ) -> (
+        PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2 | PersonalMemoryQueryPlanV3
+    ):
         _require_identity(planner, "personal-memory query planner")
+        if observed_until is not None:
+            if observed_until.tzinfo is None:
+                raise ValueError("observed_until must include a timezone")
+            observed_until = observed_until.astimezone(UTC)
         bound_scopes = _bind_scopes(scopes)
         owner_id = bound_scopes[0].user_id
         request = PersonalMemoryQueryRequest(
@@ -1246,14 +1273,28 @@ class PersonalMemoryQueryEngine:
                     or draft.time_to is not None
                 ),
             )
-            plan_type: type[PersonalMemoryQueryPlanV2 | PersonalMemoryQueryPlan]
-            plan_type = PersonalMemoryQueryPlanV2
+            plan_type: type[
+                PersonalMemoryQueryPlanV3
+                | PersonalMemoryQueryPlanV2
+                | PersonalMemoryQueryPlan
+            ]
+            plan_type = (
+                PersonalMemoryQueryPlanV3
+                if observed_until is not None
+                else PersonalMemoryQueryPlanV2
+            )
             intent = _legacy_intent_projection(draft.operation, draft.temporal_view)
             v2_fields: dict[str, Any] = {
                 "operation": draft.operation,
                 "temporal_view": draft.temporal_view,
             }
+            if observed_until is not None:
+                v2_fields["observed_until"] = observed_until
         else:
+            if observed_until is not None:
+                raise PersonalMemoryQueryPlanningError(
+                    "an independent observation clock requires an operation/time V2 planner draft"
+                )
             temporal_statuses = _bind_temporal_statuses(
                 draft.intent,
                 draft.temporal_statuses,
@@ -1301,16 +1342,23 @@ class PersonalMemoryQueryEngine:
 
     async def execute(
         self,
-        plan: PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2,
+        plan: (
+            PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2 | PersonalMemoryQueryPlanV3
+        ),
         *,
         trace_limit: int = 0,
     ) -> PersonalMemoryQueryResult:
         validate_trace_limit(trace_limit)
+        is_v3 = isinstance(plan, PersonalMemoryQueryPlanV3) or (
+            isinstance(plan, Mapping) and plan.get("schema_version") == 3
+        )
         is_v2 = isinstance(plan, PersonalMemoryQueryPlanV2) or (
             isinstance(plan, Mapping) and plan.get("schema_version") == 2
         )
         bound = (
-            PersonalMemoryQueryPlanV2.model_validate(plan)
+            PersonalMemoryQueryPlanV3.model_validate(plan)
+            if is_v3
+            else PersonalMemoryQueryPlanV2.model_validate(plan)
             if is_v2
             else PersonalMemoryQueryPlan.model_validate(plan)
         )
@@ -1562,7 +1610,7 @@ class PersonalMemoryQueryEngine:
         ] = []
         if (
             bound.as_of is not None
-            and bound.as_of > bound.now
+            and bound.as_of > _observation_cutoff(bound)
             and MemoryTemporalStatus.PLANNED not in bound.temporal_statuses
         ):
             warnings.append(
@@ -1879,6 +1927,7 @@ class PersonalMemoryQueryEngine:
         relation_type_definitions: Sequence[RelationTypeDefinition] = (),
         required_relation_types: Sequence[str] = (),
         trace_limit: int = 0,
+        observed_until: datetime | None = None,
     ) -> PersonalMemoryQueryResult:
         validate_trace_limit(trace_limit)
         plan = await self.plan(
@@ -1893,6 +1942,7 @@ class PersonalMemoryQueryEngine:
             available_relation_types=available_relation_types,
             relation_type_definitions=relation_type_definitions,
             required_relation_types=required_relation_types,
+            observed_until=observed_until,
         )
         return await self.execute(plan, trace_limit=trace_limit)
 
@@ -2291,7 +2341,13 @@ class PersonalMemoryQueryEngine:
     def _validate_plan(
         self, plan: PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2
     ) -> None:
-        expected_schema = 2 if isinstance(plan, PersonalMemoryQueryPlanV2) else 1
+        expected_schema = (
+            3
+            if isinstance(plan, PersonalMemoryQueryPlanV3)
+            else 2
+            if isinstance(plan, PersonalMemoryQueryPlanV2)
+            else 1
+        )
         if plan.schema_version != expected_schema:
             raise PersonalMemoryQueryPlanningError("unsupported query plan schema")
         if plan.config_fingerprint != self.config.fingerprint:
@@ -2464,7 +2520,7 @@ def _structural_rejection_reason(
     # Observation time is independent of valid/event time. A historical query
     # may use a later-learned fact, but never a record not yet observed at the
     # caller's clock. Recheck here even when an index ignores coarse filters.
-    if record.created_at > plan.now:
+    if record.created_at > _observation_cutoff(plan):
         return "not_yet_observed"
     memory_type = _metadata_text(record, "personal_memory_type")
     if plan.memory_types and memory_type not in plan.memory_types:
@@ -2702,6 +2758,11 @@ def _query_temporal_view(
     )
 
 
+def _observation_cutoff(plan: PersonalMemoryQueryPlan) -> datetime:
+    """Trusted host horizon; legacy plans use their ordinary caller clock."""
+    return plan.observed_until if isinstance(plan, PersonalMemoryQueryPlanV3) else plan.now
+
+
 def _query_memory_filter(plan: PersonalMemoryQueryPlan) -> MemoryFilter:
     """Build the same coarse eligibility filter for every candidate path."""
 
@@ -2712,7 +2773,7 @@ def _query_memory_filter(plan: PersonalMemoryQueryPlan) -> MemoryFilter:
         tags={"personal-memory"},
         states=set(_visible_memory_states(plan)),
         exclude_authorities=excluded_authorities,
-        time_to=plan.now,
+        time_to=_observation_cutoff(plan),
     )
 
 

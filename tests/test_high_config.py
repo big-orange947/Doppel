@@ -242,6 +242,52 @@ async def test_current_time_sent_to_graph_and_stale_path_removed():
 
 
 @pytest.mark.asyncio
+async def test_independent_observation_clock_applies_to_all_evidence_channels():
+    from datetime import timedelta
+
+    reference = NOW - timedelta(days=2)
+    host, planner, index, store, mapping = await setup(temporal_view="current")
+    old = await store.get(SCOPE, "memory")
+    store._records["memory"] = old.model_copy(
+        update={
+            "metadata": {
+                **old.metadata,
+                "valid_from": reference.isoformat(),
+                "valid_to": (reference + timedelta(days=1)).isoformat(),
+            },
+        }
+    )
+    index.exploration = [path()]
+    strict = await host.query("camera", [SCOPE], now=reference)
+    assert not strict.base.hits and not strict.raw_dialogue
+    assert not strict.backing_sources and strict.rejected_paths == 1
+    result = await host.query("camera", [SCOPE], now=reference, observed_until=NOW)
+    assert result.base.plan.schema_version == 3
+    assert result.base.plan.now == reference and result.base.plan.observed_until == NOW
+    assert [h.record.memory_id for h in result.base.hits] == ["memory"]
+    assert result.hybrid.assembly.relation_paths
+    assert len(result.raw_dialogue) == 2 and result.source_failures == 0
+    assert [r.source_event_id for r in result.backing_sources] == ["user-event"]
+    assert (
+        next(c[1] for c in reversed(index.calls) if c[0] == "explore").valid_at
+        == reference
+    )
+    assert next(c[2] for c in reversed(index.calls) if c[0] == "vector").time_to == NOW
+    assert all(r.now == reference for r in planner.calls)
+    assert all("observed_until" not in r.model_dump() for r in planner.calls)
+    # A later source cannot bypass the horizon through the source resolver.
+    source = store._records[mapping["user-event"]]
+    store._records[source.memory_id] = source.model_copy(
+        update={
+            "created_at": NOW + timedelta(seconds=1),
+        }
+    )
+    checked = await host.query("camera", [SCOPE], now=reference, observed_until=NOW)
+    assert checked.source_failures == 1 and not checked.backing_sources
+    assert all(r.memory_id != source.memory_id for r in checked.raw_dialogue)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("view", ["current", "unbounded", "as_of"])
 async def test_future_observation_cannot_enter_via_graph_exploration(view):
     from datetime import timedelta
