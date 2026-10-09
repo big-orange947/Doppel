@@ -25,7 +25,7 @@ def sources():
             actor=Actor.OWNER,
             authority=FactAuthority.HUMAN_SELF,
             state=MemoryState.CONFIRMED,
-            tags={"personal-memory"},
+            tags=["personal-memory"],
             created_at=datetime(2024, 1, 1, tzinfo=UTC),
             metadata={
                 "subject": "owner",
