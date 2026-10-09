@@ -14,17 +14,31 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from benchmarks.evidence_rich_blind_diagnostic import local_credentials
+from benchmarks.public_context_baseline import execution_metadata
 from benchmarks.public_memory_comparison import inventory
 from benchmarks.public_memory_expansion import local_diagnostic_dsn, save
+from benchmarks.public_memory_graph_backfill import inspect_projection
 from benchmarks.public_memory_high_config_preflight import bound_scopes
 from benchmarks.public_memory_pilot import _hash
 from doppel_memory.graphiti_store import (
     GRAPHITI_FALLBACK_EDGE_NAME,
     GraphitiRelationIndex,
+    GraphitiSemanticIndex,
 )
 from doppel_memory.indexing import memory_index_fingerprint
 from doppel_memory.postgres_store import PostgreSQLStore
 from doppel_memory.relation import RelationPathQuery, RelationPathStep, RelationQuery
+
+
+def projection_summary(checks, distinct_rich_edges) -> dict:
+    return {
+        "projection_count": len(checks),
+        "complete_projection_count": sum(c["complete"] for c in checks),
+        "records_with_rich_edges": sum(c["rich_edges"] > 0 for c in checks),
+        "rich_edge_episode_links": sum(c["rich_edges"] for c in checks),
+        "distinct_rich_edges": distinct_rich_edges,
+        "projection_checks": checks,
+    }
 
 
 async def probe(index, driver, records, plan, scopes) -> dict:
@@ -150,10 +164,26 @@ async def run(args) -> dict:
         before = _hash({k: r.model_dump(mode="json") for k, r in records.items()})
         if before != plan["corpus_sha256"]:
             raise ValueError("probe corpus differs from backfill")
-        index = GraphitiRelationIndex(
-            store, graphiti_client=SimpleNamespace(driver=driver)
+        client = SimpleNamespace(driver=driver)
+        projection_index = GraphitiSemanticIndex(store, graphiti_client=client)
+        projection_checks = [
+            await inspect_projection(client, projection_index, records[t["memory_id"]])
+            for t in plan["records"]
+        ]
+        edge_counts, _, _ = await driver.execute_query(
+            "MATCH ()-[r:RELATES_TO]->() WHERE r.group_id IN $scopes "
+            "AND r.name <> $fallback AND any(ep IN coalesce(r.episodes,[]) WHERE ep IN $episodes) "
+            "RETURN count(DISTINCT r.uuid) AS edges",
+            scopes=list({t["scope_key"] for t in plan["records"]}),
+            episodes=[t["episode_id"] for t in plan["records"]],
+            fallback=GRAPHITI_FALLBACK_EDGE_NAME,
         )
+        index = GraphitiRelationIndex(store, graphiti_client=client)
         report = await probe(index, driver, records, plan, scopes)
+        report.update(projection_summary(projection_checks, edge_counts[0]["edges"]))
+        report["execution_metadata"] = execution_metadata()
+        if any(not c["complete"] for c in projection_checks):
+            report["status"] = "failed"
         after = await inventory(store, scopes)
         report["corpus_unchanged"] = before == _hash(
             {k: r.model_dump(mode="json") for k, r in after.items()}

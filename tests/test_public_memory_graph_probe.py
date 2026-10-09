@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("graphiti_core")
 
-from benchmarks.public_memory_graph_probe import probe
+from benchmarks.public_memory_graph_probe import probe, projection_summary
 from doppel_memory.indexing import memory_index_fingerprint
 from doppel_memory.models import Actor, MemoryRecord, MemoryScope
 
@@ -26,6 +26,25 @@ def fixture():
         "episode_id": "episode",
     }
     return record, other, {"records": [target]}
+
+
+def test_projection_link_count_is_not_a_distinct_edge_count():
+    checks = [
+        {"complete": True, "rich_edges": 2},
+        {"complete": True, "rich_edges": 2},
+        {"complete": True, "rich_edges": 0},
+    ]
+    result = projection_summary(checks, 2)
+    assert result["projection_count"] == result["complete_projection_count"] == 3
+    assert result["records_with_rich_edges"] == 2
+    assert result["rich_edge_episode_links"] == 4
+    assert result["distinct_rich_edges"] == 2
+
+
+def test_incomplete_projection_is_not_counted_as_complete():
+    result = projection_summary([{"complete": False, "rich_edges": 0}], 0)
+    assert result["projection_count"] == 1
+    assert result["complete_projection_count"] == 0
 
 
 class Driver:
