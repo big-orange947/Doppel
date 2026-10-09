@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Complete and key-free replay all fifty-question answer rows, then correct the
+  task-scoring boundary in one frozen reference-only regrading. All six generic
+  controls pass; provisional task accuracy is raw 35/50, owner-memory 28/50 and
+  combined 33/50, replacing inflated context-conditioned judgments. Preserve two
+  unanchored support observations and all old labels. Answer/scoring stages use
+  438 successful calls/1,712,474 reported tokens, with zero missing usage; retrieval
+  still has zero paid calls. Report source-coverage losses, temporal summary gaps,
+  arithmetic/language limitations and the weak personalized-advice Reader path.
 - Preserve the completed 150-row fifty-question QA run and zero-call exact replay.
   Spot inspection finds the primary Judge wrongly excuses answerable refusals
   because the supplied context lacks the reference answer. Freeze one bounded

@@ -835,3 +835,14 @@ source checks and 12,000 local reranker pairs complete, with zero truncation.
 The [QA plan](../benchmarks/reports/public-memory-expansion-50-quality-plan-2026-10-09.md)
 freezes five ten-question batches, the existing Reader v2/primary Judge, exact
 packed inputs and a durable cap of 300 new attempts. Its preflight uses zero calls.
+
+The [fifty-question QA result](../benchmarks/reports/public-memory-expansion-50-quality-result-2026-10-09.md)
+now completes all 150 answer rows and their key-free replay. Inspection catches
+the primary Judge excusing answerable refusals based on missing context. One
+separately frozen reference-only regrading passes six generic controls and scores
+all 150 original answers: raw 35/50, owner-memory 28/50 and combined 33/50. These
+same-model task labels remain provisional; earlier inflated rates are preserved
+but superseded. Two primary support-quote observations remain unanchored. All
+answers/checks/grades replay with zero new calls. Strong source coverage does not
+imply task completion; full Planner/Graphiti, unopened groups, competition models
+and complete LongMemEval remain to be evaluated.
