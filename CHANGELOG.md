@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Freeze separate high-config execution/coverage reporting without rewriting the
+  first query's legacy flags or grades. Complete the next consecutive history's
+  183 real graph projections and natural QA: reference-correct, 2/2 annotated
+  turns, four source-supported citations, and one consumed WORKS_ON path (already
+  base rank 1; no graph uplift claim). Preserve two future-observation candidates
+  rejected by source backing but admitted by the derived-memory gate; neither
+  reaches Reader, but execution remains degraded and the general temporal boundary
+  needs repair. Scope 2 costs 836 calls/3333334 tokens; exact checkpoint/cache replay
+  adds zero calls, Store/vectors/other graph scopes unchanged. Graph coverage is
+  2/50 histories, not a benchmark or AML accuracy claim.
+
 - Complete the first opened-history natural high-config QA diagnostic with a
   preregistered V7 planner, existing pgvector, typed Graphiti/path discovery, local
   CUDA reranking and a fixed role-preserving memory/raw/source context bridge.
