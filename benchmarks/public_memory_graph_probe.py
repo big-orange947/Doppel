@@ -181,8 +181,15 @@ async def run(args) -> dict:
         index = GraphitiRelationIndex(store, graphiti_client=client)
         report = await probe(index, driver, records, plan, scopes)
         report.update(projection_summary(projection_checks, edge_counts[0]["edges"]))
+        report["source_probe_coverage_complete"] = (
+            report["probe_count"] == report["rich_edge_episode_links"]
+            and report["probe_count"] > 0
+        )
         report["execution_metadata"] = execution_metadata()
-        if any(not c["complete"] for c in projection_checks):
+        if (
+            any(not c["complete"] for c in projection_checks)
+            or not report["source_probe_coverage_complete"]
+        ):
             report["status"] = "failed"
         after = await inventory(store, scopes)
         report["corpus_unchanged"] = before == _hash(
