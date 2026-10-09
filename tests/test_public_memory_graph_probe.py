@@ -79,6 +79,7 @@ class Index:
             memory_id=self.record.memory_id,
             scope=self.record.scope,
             edge_id="edge",
+            relation_type="OWNS",
             episode_ids=[] if self.defect == "provenance" else ["episode"],
         )
         if request.subject_id.endswith(":mismatch"):
@@ -114,6 +115,31 @@ async def test_source_probe_is_not_a_natural_query_or_accuracy_measurement():
     assert not report["natural_query_performance_measured"]
     assert not report["graph_fact_correctness_measured"]
     assert report["provider_calls"] == report["data_writes"] == 0
+
+
+@pytest.mark.asyncio
+async def test_relation_api_may_return_another_edge_for_the_same_source_memory():
+    class OtherRepresentative(Index):
+        async def search_relations(self, *args, **kwargs):
+            hits = await super().search_relations(*args, **kwargs)
+            for hit in hits:
+                hit.edge_id = "another-valid-edge"
+            return hits
+
+    record, other, plan = fixture()
+    report = await probe(
+        OtherRepresentative(record),
+        Driver(),
+        {"memory": record},
+        plan,
+        [record.scope, other],
+    )
+    assert report["status"] == "complete"
+    check = report["checks"][0]
+    assert check["relation_memory_returned_with_provenance"]
+    assert not check["relation_returned_with_provenance"]
+    assert check["representative_edge_ids"] == ["another-valid-edge"]
+    assert check["one_hop_path_returned_with_provenance"]
 
 
 @pytest.mark.asyncio

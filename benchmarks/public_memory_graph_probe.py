@@ -87,9 +87,21 @@ async def probe(index, driver, records, plan, scopes) -> dict:
             )
             other = next(s for s in scopes if s.scope_key != record.scope.scope_key)
             cross = await index.search_relations(query, [other], limit=100)
+            representatives = [
+                h
+                for h in hits
+                if h.memory_id == record.memory_id
+                and h.scope == record.scope
+                and target["episode_id"] in h.episode_ids
+                and h.relation_type.upper() == row["relation_type"].upper()
+            ]
             check = {
                 "memory_id": record.memory_id,
                 "edge_id": row["edge_id"],
+                "relation_memory_returned_with_provenance": bool(representatives),
+                "representative_edge_ids": [h.edge_id for h in representatives],
+                # Observation only: the public relation API deduplicates by memory,
+                # not edge. Retain this older strict criterion without gating on it.
                 "relation_returned_with_provenance": any(
                     h.memory_id == record.memory_id
                     and h.edge_id == row["edge_id"]
@@ -113,17 +125,22 @@ async def probe(index, driver, records, plan, scopes) -> dict:
                 ),
             }
             check["ok"] = all(
-                value
-                for key, value in check.items()
-                if key not in {"memory_id", "edge_id"}
+                check[key]
+                for key in (
+                    "relation_memory_returned_with_provenance",
+                    "one_hop_path_returned_with_provenance",
+                    "wrong_subject_rejected",
+                    "cross_scope_safe",
+                )
             )
             checks.append(check)
     return {
-        "runner": "doppel.public-memory-graph-source-probe.v1",
+        "runner": "doppel.public-memory-graph-source-probe.v2",
         "status": "complete" if checks and all(c["ok"] for c in checks) else "failed",
         "probe_count": len(checks),
         "checks": checks,
         "query_origin": "stored-edge-source-anchor-and-type",
+        "relation_api_contract": "one-representative-edge-per-source-memory",
         "one_hop_only": True,
         "natural_query_performance_measured": False,
         "graph_fact_correctness_measured": False,
