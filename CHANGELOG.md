@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Complete the fourth source-order real graph and natural highest-config query:
+  219 projections, 256 rich edges, 931 requests/3882514 reported tokens including
+  schema and QA. Preserve the failed personalized-advice refusal despite 1/1
+  annotated evidence in context, citation/task judge disagreement, unrelated
+  governance warnings and two relation-extraction losses. Empty-key replay adds
+  zero requests; Store/vectors/other scopes remain unchanged. This is development
+  evidence, not a graph-uplift, full LongMemEval or AML claim.
+
 - Stop treating all topic-less current/as-of memories as one conflicting slot.
   Keep eligible candidates, explicit governance conflicts and keyed ambiguity;
   report missing slot identity and unassessed semantic compatibility instead of
