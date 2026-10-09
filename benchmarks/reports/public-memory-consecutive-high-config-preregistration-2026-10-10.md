@@ -77,3 +77,23 @@ attribute an improvement to Graphiti without actual graph contribution evidence.
 Do not tune prompts or algorithms between these fixed questions based on outcomes.
 Language drift, unsupported/contradictory answers, source coverage and new execution
 status are all reported independently. No warm-GPU latency experiment this round.
+
+## Scope 2 schema preflight, before paid definition authoring
+
+Scope 2 real graph projection completed 183/183 targets with 824 successful
+requests / 3279857 reported tokens, zero failed or missing-usage calls. Store,
+vector manifests and all other diagnostic graph scopes are unchanged. Settled
+graph receipt SHA-256:
+`6b49b45b088862a6bbd813c81fe86085142ae6faf02418f940e62ea20291c892`.
+
+The completed graph has 260 distinct rich edges and 152 relation types (261
+edge/Episode provenance links, not 261 distinct edges). The separate schema plan
+is frozen at fingerprint
+`252649d123899a47d25ab4d32bca4f39cef112bb3a7c8742b98b8cc997498626`;
+preflight receipt SHA-256
+`f09fb889c326ad247329d3fc8066262c59a4759daff53f9fd9c312ac1957b36d`.
+Seven single-attempt requests at most, 4096 output tokens each, 100000 canonical
+request bytes each / 700000 total. Each sees type names only. Preserve definition
+failures, source snapshots and all graph data; never use a question to repair or
+select a definition. The final natural query still requires its own frozen
+preflight binding the completed definitions before its five paid stages.
