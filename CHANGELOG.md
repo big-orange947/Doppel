@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Complete the third fixed real-graph history (222 projections) and preserve a
+  failed natural count answer: reported exact cardinality coincidentally matches
+  gold but includes an unrelated episode; missing validity and absent raw/source
+  channels hide a second event. Record 930 calls/3879064 tokens and zero-call
+  replay with unchanged Store/vectors/other scopes, without a graph uplift claim.
+
 - Enforce the caller's observation clock in personal-memory candidate filtering
   and final structural qualification, including stale semantic/graph candidates.
   Keep observation time independent from historical validity and administrative
