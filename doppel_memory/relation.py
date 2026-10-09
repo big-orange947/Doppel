@@ -216,7 +216,9 @@ class RelationPathExploreQuery(BaseModel):
 
     query_text: str
     entity_mentions: list[str] = Field(min_length=1)
-    allowed_relation_types: list[str] = Field(min_length=1, max_length=128)
+    # Free-form graph extraction can produce more than 128 types even within one
+    # personal history. This is an ontology bound, not a hop/candidate budget.
+    allowed_relation_types: list[str] = Field(min_length=1, max_length=512)
     preferred_terminal_relation_types: list[str] = Field(
         default_factory=list, max_length=16
     )
