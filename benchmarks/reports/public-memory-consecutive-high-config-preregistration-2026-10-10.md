@@ -97,3 +97,21 @@ request bytes each / 700000 total. Each sees type names only. Preserve definitio
 failures, source snapshots and all graph data; never use a question to repair or
 select a definition. The final natural query still requires its own frozen
 preflight binding the completed definitions before its five paid stages.
+
+## Scope 2 natural query preflight, before paid query execution
+
+All 152 definitions are complete, source graph unchanged. Completed schema receipt
+SHA-256: `d030ceedbc5ae2baa397349306a43d495a3927f2f971c55ed1a0e28285089a54`.
+The query's zero-call preflight rechecks all 183 current graph projections and all
+34760 active vector manifests. All before/after snapshots match.
+
+Exact query plan fingerprint:
+`4a98037dddd548c573630deac8159c796c35a6b16e18a071f7c0a2230f00a4cf`.
+Preflight receipt SHA-256:
+`47fd8a0723583d8a7386853b3b907fbaa560c2015995fd09f14598b5296088c6`.
+Use the already-committed consecutive-scope runner in `8b0123d`; no query-specific
+prompt, algorithm, schema definition or packing change. Stage ceilings remain
+2 planner + 1 Reader + 1 reference-only task judge + 1 citation judge. Reader input
+excludes reference answers and scoring positions. Cache-only replay reuses the
+immutable retrieval checkpoint and validates the three downstream output caches;
+it is not another fresh planner/graph execution or GPU latency sample.
