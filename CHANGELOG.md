@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Correct the public raw/owner-memory comparison harness to validate legitimate
+  assistant-derived records before excluding them from its owner-memory channel.
+  Report that exclusion count and retain assistant raw context with agent_output
+  attribution. Invalid identities, authority and source bindings still fail.
+  Freeze the fifty-history, six-profile retrieval comparison after complete
+  ingestion, with unchanged local models and candidate/context budgets.
 - Close the frozen same-Reader rank-fit packing comparison with five successful
   new calls/30,759 reported tokens, zero Judge calls and twenty-five exact cached
   outputs. All thirty rows are structurally valid; four answers change wording,

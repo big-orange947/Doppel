@@ -215,11 +215,16 @@ def context_item(
         channel, text, role, events = "raw", source.text, source.role, [event]
     elif "personal-memory" in record.tags:
         evidence = record.metadata.get("evidence")
+        expected_subject_id = (
+            record.scope.user_id
+            if record.actor == Actor.OWNER
+            else record.scope.agent_id
+        )
         if (
-            record.actor != Actor.OWNER
-            or record.authority != FactAuthority.HUMAN_SELF
-            or record.metadata.get("subject") != "owner"
-            or record.metadata.get("subject_id") != record.scope.user_id
+            record.actor not in {Actor.OWNER, Actor.AGENT}
+            or record.authority != FactAuthority.of(record.actor)
+            or record.metadata.get("subject") != record.actor
+            or record.metadata.get("subject_id") != expected_subject_id
             or record.metadata.get("source_scope_key") != scope
             or not isinstance(evidence, list)
             or not evidence
@@ -243,6 +248,11 @@ def context_item(
             if raw.actor != record.actor or raw.authority != record.authority:
                 raise ValueError("derived evidence authority invalid")
             events.append(event)
+        # This comparison's memory channel is owner-only. Legitimate assistant
+        # derivatives are audited above, then excluded; their raw sources remain
+        # available with agent_output attribution in raw/combined profiles.
+        if record.actor == Actor.AGENT:
+            return None
         channel, text, role = "memory", record.content, "derived-owner-memory"
     else:
         # Governance markers are not claims or raw dialogue.
@@ -560,6 +570,16 @@ async def run_comparison(
             "index_identity": index.identity,
             "corpus_counts": counts,
             "inventory_counts_including_inactive": inventory_counts,
+            "context_policy": {
+                "memory_channel": "confirmed-owner-human_self-derived-records",
+                "raw_channel": "confirmed-user-and-assistant-source-records",
+                "validated_derived_agent_records_excluded": sum(
+                    r.state == MemoryState.CONFIRMED
+                    and "personal-memory" in r.tags
+                    and r.actor == Actor.AGENT
+                    for r in records.values()
+                ),
+            },
             "nonconfirmed_record_count": sum(
                 r.state != MemoryState.CONFIRMED for r in records.values()
             ),

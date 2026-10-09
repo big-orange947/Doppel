@@ -816,3 +816,13 @@ Progress is354/2,420 chunks, with5,467 provenance checks and zero failures. The
 recovery call used4,403 reported tokens; the two prior transport failures have
 unknown usage. The [block05 plan](../benchmarks/reports/public-memory-expansion-50-ingestion-block05-plan-2026-10-09.md)
 sets the next extraction cap at200 calls without retrieval or answer scoring.
+
+The [final ingestion result](../benchmarks/reports/public-memory-expansion-50-ingestion-complete-2026-10-09.md)
+now completes all fifty histories and 2,420 chunks. The Store contains 24,891 raw,
+9,746 derived (including inactive) and 125 governance records; all 37,454 source
+checks pass. The [retrieval plan](../benchmarks/reports/public-memory-expansion-50-retrieval-plan-2026-10-09.md)
+freezes six raw/owner-memory/combined profiles using the existing vector index,
+local reranker and unchanged 80-candidate/20-item/24KB prefix budgets. A first
+attempt produced no rows because the harness assumed every derivative was an
+owner record; legitimate agent derivatives are now source-validated and explicitly
+counted as excluded from the owner-memory channel. All fifty cases remain selected.

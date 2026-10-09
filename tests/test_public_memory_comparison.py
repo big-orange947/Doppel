@@ -196,6 +196,50 @@ async def test_derived_identity_and_source_gates(tmp_path: Path, mutation: str):
         await store.close()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutation",
+    ["none", "subject", "subject_id", "authority", "owner_evidence", "cross_scope"],
+)
+async def test_agent_derivative_is_validated_before_owner_channel_exclusion(
+    tmp_path: Path, mutation: str
+):
+    store, _, _, _, scope, bindings, records = await fixture(tmp_path)
+    try:
+        raw = next(r for r in records.values() if r.actor == Actor.AGENT)
+        memory = derived(scope, raw.source_event_id)
+        memory.actor = Actor.AGENT
+        memory.authority = FactAuthority.AGENT_OUTPUT
+        memory.metadata.update(subject="agent", subject_id=scope.agent_id)
+        if mutation == "subject":
+            memory.metadata["subject"] = "owner"
+        elif mutation == "subject_id":
+            memory.metadata["subject_id"] = scope.user_id
+        elif mutation == "authority":
+            memory.authority = FactAuthority.HUMAN_SELF
+        elif mutation == "owner_evidence":
+            owner = next(r for r in records.values() if r.actor == Actor.OWNER)
+            memory.metadata["evidence"] = [{"evidence_id": owner.source_event_id}]
+        elif mutation == "cross_scope":
+            records[raw.memory_id] = raw.model_copy(
+                update={"scope": MemoryScope(user_id="other", agent_id="host")}
+            )
+        if mutation != "none":
+            with pytest.raises(ValueError):
+                context_item(memory, records, bindings)
+        else:
+            before = memory.model_dump(mode="json")
+            assert context_item(memory, records, bindings) is None
+            assert memory.model_dump(mode="json") == before
+            raw_item = context_item(raw, records, bindings)
+            assert raw_item is not None
+            assert raw_item["channel"] == "raw"
+            assert raw_item["role"] == "assistant"
+            assert raw_item["authority"] == "agent_output"
+    finally:
+        await store.close()
+
+
 def candidate_fixture():
     scope = MemoryScope(user_id="u", agent_id="a")
     candidates = [
