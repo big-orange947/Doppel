@@ -59,6 +59,22 @@ def test_unknown_warning_requires_review():
     assert output["unclassified_warnings"] == ["future_unknown_condition"]
 
 
+@pytest.mark.parametrize(
+    "warning",
+    [
+        "current/as-of candidates lack topic identity; conflict status unassessed",
+        "multiple current/as-of assertions in topic opaque-slot; semantic compatibility unassessed",
+    ],
+)
+def test_ambiguity_metadata_limit_is_not_quietly_whitelisted(warning):
+    r = result()
+    r["warnings"] = [warning]
+    output = assess_execution(r)
+    assert output["execution_status"] == "review_required"
+    assert output["unclassified_warnings"] == [warning]
+    assert not output["publication_acceptance_granted"]
+
+
 def test_bounded_source_coverage_not_claimed_exhaustive():
     r = result()
     r["warnings"] = ["source_backing_limit_reached"]

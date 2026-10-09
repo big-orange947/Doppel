@@ -100,6 +100,14 @@ No additional Store/index/LLM calls are made to populate a trace.
 
 ## Evaluation
 
+Current/as-of ambiguity is not a semantic contradiction classifier. Multiple
+different assertions in a named topic remain ambiguous evidence, not a proven
+conflict. Topic-less assertions are not automatically treated as one shared slot:
+the engine preserves them and warns that conflict status is unassessed. Explicit
+open governance conflict markers remain independently surfaced in `conflicts`.
+No records are dropped by this warning distinction. Evaluation still requires
+review for these semantic/metadata limitations rather than declaring a pass.
+
 The retrieval ablation runner accepts `--query-trace-limit 200`, placing the optional
 trace in each successfully executed case. Failed source drafts remain failures, not
 empty successful retrievals. Trace-on/off comparisons must ignore diagnostic fields

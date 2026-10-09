@@ -71,7 +71,33 @@ from doppel_memory.high_config import HighConfigRetrieval, HighConfigRetrievalRe
 from doppel_memory.query_path import ReferencePersonalMemoryRelationPathPlannerV7
 from doppel_memory.relation import RelationTypeDefinition
 
-RUNNER = "doppel.public-memory-consecutive-high-config-query.v2"
+RUNNER = "doppel.public-memory-consecutive-high-config-query.v3"
+
+
+def source_target(batch, ordinal):
+    """Only a source-only frozen graph envelope can authorize a query scope."""
+    if type(ordinal) is not int or not 2 <= ordinal <= 50:
+        raise ValueError("invalid diagnostic scope ordinal")
+    runner = batch.get("runner")
+    if runner == "doppel.public-memory-consecutive-graph-batch.v1":
+        if ordinal not in {2, 3}:
+            raise ValueError("scope not in original fixed graph batch")
+    elif runner == "doppel.public-memory-next-source-history-graph.v1":
+        if (
+            type(batch.get("previous_scope_ordinal")) is not int
+            or batch.get("target_scope_ordinal") != batch["previous_scope_ordinal"] + 1
+            or ordinal != batch["target_scope_ordinal"]
+            or len(batch.get("scope_plans", [])) != 1
+        ):
+            raise ValueError("scope not bound to consecutive source-only envelope")
+    else:
+        raise ValueError("unknown source graph envelope")
+    targets = [
+        p for p in batch.get("scope_plans", []) if p.get("scope_ordinal") == ordinal
+    ]
+    if len(targets) != 1:
+        raise ValueError("one exact source scope plan required")
+    return targets[0]
 
 
 def scope_plan(
@@ -86,8 +112,7 @@ def scope_plan(
     batch,
     clock_policy="strict-reference-v1",
 ):
-    if ordinal not in {2, 3}:
-        raise ValueError("only fixed consecutive scopes 2 and 3 permitted")
+    source_target(batch, ordinal)
     plan = build_plan(binding, runtime, scope, schema, corpus, vectors, reranker)
     plan.update(
         runner=RUNNER,
@@ -273,7 +298,7 @@ async def run(args):
     ordinal = args.scope_ordinal
     scope, prepared = scopes[ordinal - 1], cases[ordinal - 1]
     batch = backfill["plan"]
-    target = batch["scope_plans"][ordinal - 2]
+    target = source_target(batch, ordinal)
     for plan in [batch, target, schema["plan"]]:
         if (
             _hash({k: v for k, v in plan.items() if k != "plan_fingerprint"})
@@ -432,7 +457,7 @@ def main():
         "output",
     ]:
         parser.add_argument("--" + name, type=Path, required=True)
-    parser.add_argument("--scope-ordinal", type=int, choices=[2, 3], required=True)
+    parser.add_argument("--scope-ordinal", type=int, required=True)
     parser.add_argument(
         "--clock-policy", choices=POLICIES, default="strict-reference-v1"
     )

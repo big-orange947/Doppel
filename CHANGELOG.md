@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Stop treating all topic-less current/as-of memories as one conflicting slot.
+  Keep eligible candidates, explicit governance conflicts and keyed ambiguity;
+  report missing slot identity and unassessed semantic compatibility instead of
+  claiming a contradiction from different wording alone. Unknown warnings remain
+  review-required in the evaluation contract.
+
 - Add an explicitly host-bound observation horizon to provisional query plan V3,
   independent from the question's reference/valid time. Preserve default V1/V2
   wire shapes, planner schemas and scope boundaries; enforce the cutoff across

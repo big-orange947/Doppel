@@ -2926,11 +2926,19 @@ def _detect_ambiguity(
         )
         groups[key].add(_normalize_text(record.content))
     warnings = [
-        f"unresolved current/as-of conflict in topic {key[3] or '<unkeyed>'}"
+        f"multiple current/as-of assertions in topic {key[3]}; semantic compatibility unassessed"
         for key, contents in groups.items()
-        if len(contents) > 1
+        if key[3] and len(contents) > 1
     ]
-    return bool(warnings), warnings
+    ambiguous = bool(warnings)
+    if any(not key[3] and len(contents) > 1 for key, contents in groups.items()):
+        # Absence of a slot identity does not mean all traits/facts assert the
+        # same slot. Preserve all eligible evidence, and expose the metadata
+        # limitation without inventing a contradiction or resolving one.
+        warnings.append(
+            "current/as-of candidates lack topic identity; conflict status unassessed"
+        )
+    return ambiguous, warnings
 
 
 def _count_result(

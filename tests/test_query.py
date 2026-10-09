@@ -3521,6 +3521,82 @@ class _ClockPlanner:
         return PersonalMemoryQueryDraftV2(**self.draft)
 
 
+@pytest.mark.parametrize("view", ["current", "as_of"])
+@pytest.mark.parametrize(
+    "topics,ambiguous",
+    [
+        (["", ""], False),
+        (["opaque-slot", "opaque-slot"], True),
+        (["slot-a", "slot-b"], False),
+    ],
+)
+async def test_missing_topic_identity_does_not_invent_a_conflicting_slot(
+    view, topics, ambiguous
+):
+    store = InMemoryStore()
+    await _put(
+        store,
+        *[
+            _record(
+                f"assertion-{i}",
+                f"opaque assertion {i}",
+                memory_type="fact",
+                temporal_status="current",
+                topic_key=topic,
+                day=i + 1,
+                state=MemoryState.CONFIRMED,
+            )
+            for i, topic in enumerate(topics)
+        ],
+    )
+    draft = {"temporal_view": view}
+    if view == "as_of":
+        draft["as_of"] = NOW
+    result = await PersonalMemoryQueryEngine(store).query(
+        _ClockPlanner(**draft),
+        "opaque",
+        [SCOPE],
+        now=NOW,
+    )
+    assert len(result.hits) == 2 and result.ambiguous is ambiguous
+    assert not result.conflicts
+    assert not any("unresolved" in w for w in result.warnings)
+    if topics == ["", ""]:
+        assert result.warnings == [
+            "current/as-of candidates lack topic identity; conflict status unassessed"
+        ]
+    elif ambiguous:
+        assert "semantic compatibility unassessed" in result.warnings[0]
+    else:
+        assert not result.warnings
+
+
+async def test_duplicate_wording_in_one_slot_is_not_automatically_ambiguous():
+    store = InMemoryStore()
+    record = _record(
+        "a",
+        "Opaque statement",
+        memory_type="fact",
+        temporal_status="current",
+        topic_key="opaque-slot",
+        day=1,
+        state=MemoryState.CONFIRMED,
+    )
+    await _put(
+        store,
+        record,
+        record.model_copy(update={"memory_id": "b", "content": "opaque statement"}),
+    )
+    result = await PersonalMemoryQueryEngine(store).query(
+        _ClockPlanner(temporal_view="current"),
+        "opaque",
+        [SCOPE],
+        now=NOW,
+    )
+    assert len(result.hits) == 2
+    assert not result.ambiguous and not result.warnings
+
+
 @pytest.mark.parametrize("view", ["current", "as_of", "interval", "unbounded"])
 async def test_v3_observation_horizon_does_not_replace_valid_time(view):
     from datetime import timedelta
