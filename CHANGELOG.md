@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Treat undurated episodes as point occurrences for interval queries, distinguish
+  structured exact cardinality from relevance-qualified predicate counts, and
+  keep raw/source evidence available for high-config count queries without
+  upgrading bounded evidence to exhaustive aggregation. Preserve the failed
+  third question, old dataset expectations and all source/index data; freeze an
+  explicit new development replay instead of counting accidental numeric matches.
+
 - Complete the third fixed real-graph history (222 projections) and preserve a
   failed natural count answer: reported exact cardinality coincidentally matches
   gold but includes an unrelated episode; missing validity and absent raw/source

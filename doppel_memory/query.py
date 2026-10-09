@@ -2507,7 +2507,14 @@ def _structural_rejection_reason(
             return "missing_validity"
     if plan.time_from is not None or plan.time_to is not None:
         interval_start = valid_from or effective_at
-        interval_end = valid_to or (effective_at if valid_from is None else None)
+        # An episode without an explicit duration is a point occurrence, not an
+        # indefinitely continuing state. Observation time remains a fallback only
+        # when the extractor supplies no event/valid-time coordinate.
+        interval_end = valid_to or (
+            interval_start
+            if memory_type == PersonalMemoryType.EPISODE or valid_from is None
+            else None
+        )
         if plan.time_to is not None and interval_start > plan.time_to:
             return "outside_time_interval"
         if (
@@ -2870,6 +2877,22 @@ def _count_result(
 ) -> PersonalMemoryCountResult:
     if _query_operation(plan) != PersonalMemoryQueryOperation.COUNT:
         return PersonalMemoryCountResult(status=PersonalMemoryCountStatus.NOT_REQUESTED)
+    if (
+        plan.search_text
+        or plan.entity_mentions
+        or plan.relation_hints
+        or plan.candidate_relation_types
+    ):
+        # Similarity qualifies retrieval candidates, not membership in an exact
+        # natural-language predicate. A complete scan does not close that gap.
+        return PersonalMemoryCountResult(
+            status=PersonalMemoryCountStatus.INDETERMINATE,
+            observed_records=len(records),
+            distinct_event_keys=sorted(
+                {key for record in records if (key := _metadata_text(record, "event_key"))}
+            ),
+            reason="relevance-qualified candidates do not certify an exact predicate count",
+        )
     if not records:
         return PersonalMemoryCountResult(
             status=PersonalMemoryCountStatus.EXACT,

@@ -181,7 +181,9 @@ async def test_personal_query_quality_reports_lexical_gaps_without_hiding_them()
         "latency_ms",
     }
     assert result["metrics"]["intent_error_count"] == 0
-    assert result["metrics"]["count_error_count"] == 0
+    # Keep the old dataset expectation intact: a natural-language predicate is
+    # now conservatively indeterminate, so this baseline exposes one count miss.
+    assert result["metrics"]["count_error_count"] == 1
     assert result["metrics"]["ambiguity_error_count"] == 0
     assert result["metrics"]["scope_leakage_count"] == 0
     assert result["metrics"]["missing_hit_count"] <= 3

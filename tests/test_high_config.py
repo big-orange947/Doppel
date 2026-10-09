@@ -337,6 +337,66 @@ async def test_count_preserves_engine_count_without_top_k_graph():
     assert result.hybrid is None
     assert result.graph_exploration_searches == result.graph_path_searches == 0
     assert not any(call[0] in {"path", "explore"} for call in index.calls)
+    assert {r.actor for r in result.raw_dialogue} == {Actor.OWNER, Actor.AGENT}
+
+
+@pytest.mark.asyncio
+async def test_count_keeps_raw_evidence_when_event_validity_is_missing():
+    host, _, index, store, _ = await setup(
+        operation="count",
+        temporal_view="interval",
+        time_from=datetime(2026, 1, 1, tzinfo=UTC),
+        time_to=datetime(2026, 1, 31, tzinfo=UTC),
+    )
+    old = await store.get(SCOPE, "memory")
+    store._records["memory"] = old.model_copy(
+        update={
+            "metadata": {
+                **old.metadata,
+                "personal_memory_type": "episode",
+                "temporal_status": "historical",
+                "event_key": "opaque-episode",
+            },
+        }
+    )
+    result = await host.query("camera", [SCOPE], now=NOW)
+    assert not result.base.hits  # observed in October, event time unknown
+    assert result.base.count.status == "indeterminate"
+    assert result.base.count.value is None
+    assert result.raw_dialogue
+    assert result.source_failures == 0
+    assert result.hybrid is None
+    assert not any(call[0] in {"path", "explore"} for call in index.calls)
+
+
+@pytest.mark.asyncio
+async def test_count_source_backing_is_separate_from_cardinality():
+    host, _, _, store, _ = await setup(
+        operation="count", search_text="", entity_mentions=[]
+    )
+    old = await store.get(SCOPE, "memory")
+    store._records["memory"] = old.model_copy(
+        update={
+            "metadata": {
+                **old.metadata,
+                "personal_memory_type": "episode",
+                "event_key": "opaque-event",
+            },
+        }
+    )
+    result = await host.query("Count structurally selected events", [SCOPE], now=NOW)
+    assert result.base.count.status == "exact" and result.base.count.value == 1
+    assert [r.source_event_id for r in result.backing_sources] == ["user-event"]
+    assert result.raw_dialogue
+    assert result.hybrid is None
+
+
+@pytest.mark.asyncio
+async def test_count_raw_evidence_does_not_weaken_scope_isolation():
+    host, _, index, _, _ = await setup(operation="count")
+    index.foreign_raw = True
+    with pytest.raises(MemoryIsolationError):
+        await host.query("camera", [SCOPE], now=NOW)
 
 
 @pytest.mark.asyncio

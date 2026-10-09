@@ -234,7 +234,11 @@ async def test_query_observation_cutoff_is_independent_of_valid_time(draft) -> N
     )
     await _put(store, observed, future)
     result = await PersonalMemoryQueryEngine(store).query(
-        _DraftPlanner(search_text="sensor", temporal_statuses=["current"], **draft),
+        _DraftPlanner(
+            search_text="" if draft["intent"] == "count" else "sensor",
+            temporal_statuses=["current"],
+            **draft,
+        ),
         "sensor",
         [SCOPE],
         now=NOW,
@@ -332,6 +336,108 @@ async def test_planned_event_known_now_is_not_a_future_observation():
         now=NOW,
     )
     assert [hit.record.memory_id for hit in result.hits] == ["plan"]
+
+
+@pytest.mark.parametrize(
+    "kind,end,expected",
+    [
+        ("episode", None, False),
+        ("state", None, True),
+        ("episode", datetime(2026, 6, 1, tzinfo=UTC), True),
+        ("state", datetime(2026, 1, 31, tzinfo=UTC), False),
+    ],
+)
+async def test_interval_distinguishes_point_episode_and_explicit_duration(
+    kind, end, expected
+):
+    store = InMemoryStore()
+    record = _record(
+        "event",
+        "sensor",
+        memory_type=kind,
+        temporal_status="historical",
+        day=1,
+        valid_from=datetime(2026, 1, 10, tzinfo=UTC),
+        valid_to=end,
+        state=MemoryState.CONFIRMED,
+    )
+    await _put(store, record)
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="history",
+            time_from="2026-05-01T00:00:00Z",
+            time_to="2026-05-31T23:59:59Z",
+        ),
+        "sensor",
+        [SCOPE],
+        now=NOW,
+    )
+    assert bool(result.hits) is expected
+
+
+@pytest.mark.parametrize("has_record", [False, True])
+async def test_free_text_count_does_not_certify_predicate_membership(has_record):
+    store = InMemoryStore()
+    if has_record:
+        await _put(
+            store,
+            _record(
+                "event",
+                "sensor",
+                memory_type="episode",
+                temporal_status="historical",
+                event_key="opaque-event-id",
+                day=1,
+                state=MemoryState.CONFIRMED,
+            ),
+        )
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(intent="count", memory_types=["episode"], search_text="sensor"),
+        "sensor",
+        [SCOPE],
+        now=NOW,
+    )
+    assert result.complete
+    assert result.count.status == PersonalMemoryCountStatus.INDETERMINATE
+    assert result.count.value is None
+    assert result.count.observed_records == int(has_record)
+    assert "predicate" in result.count.reason
+
+
+async def test_structured_count_still_deduplicates_a_complete_set():
+    store = InMemoryStore()
+    await _put(
+        store,
+        *[
+            _record(
+                name,
+                "sensor",
+                memory_type="episode",
+                temporal_status="historical",
+                event_key=key,
+                day=1,
+                topic_key="opaque.slot",
+                state=MemoryState.CONFIRMED,
+            )
+            for name, key in [
+                ("first", "opaque-a"),
+                ("repeat", "opaque-a"),
+                ("second", "opaque-b"),
+            ]
+        ],
+    )
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="count", memory_types=["episode"], topic_keys=["opaque.slot"]
+        ),
+        "Count this explicitly selected set",
+        [SCOPE],
+        now=NOW,
+    )
+    assert result.complete
+    assert result.count.status == PersonalMemoryCountStatus.EXACT
+    assert result.count.value == 2
+    assert result.count.observed_records == 3
 
 
 async def test_current_residence_excludes_planned_and_historical_records() -> None:
@@ -1045,8 +1151,9 @@ async def test_episode_count_deduplicates_only_explicit_stable_event_keys() -> N
     )
 
     assert result.matched_record_count == 3
-    assert result.count.status == PersonalMemoryCountStatus.EXACT
-    assert result.count.value == 2
+    assert result.count.status == PersonalMemoryCountStatus.INDETERMINATE
+    assert result.count.value is None
+    assert result.count.observed_records == 3
     assert result.count.distinct_event_keys == [
         "trip:2025-05:beijing",
         "trip:2026-03:chengdu",
@@ -1075,8 +1182,8 @@ async def test_episode_count_abstains_when_any_event_identity_is_missing() -> No
     )
 
     result = await PersonalMemoryQueryEngine(store).query(
-        DeterministicPersonalMemoryQueryPlanner(),
-        "我一共旅行了几次？",
+        _DraftPlanner(intent="count", memory_types=["episode"]),
+        "Count the structurally selected episodes",
         [SCOPE],
         now=NOW,
     )
@@ -2839,8 +2946,8 @@ async def test_exact_count_never_depends_on_bounded_semantic_top_k() -> None:
     result = await PersonalMemoryQueryEngine(
         store, semantic_index=semantic_index
     ).query(
-        DeterministicPersonalMemoryQueryPlanner(),
-        "我参加公开活动几次？",
+        _DraftPlanner(intent="count", memory_types=["episode"]),
+        "Count the structurally selected episodes",
         [SCOPE],
         now=NOW,
     )
@@ -3271,7 +3378,7 @@ async def test_v2_count_can_apply_current_time_gate_independently() -> None:
             return PersonalMemoryQueryDraftV2(
                 operation="count",
                 temporal_view="current",
-                search_text="相机维修",
+                search_text="",
                 memory_types=["episode"],
             )
 
@@ -3394,8 +3501,8 @@ async def test_v2_plan_round_trip_is_integrity_bound() -> None:
     result = await engine.execute(restored)
 
     assert result.plan == restored
-    assert result.count.status == PersonalMemoryCountStatus.EXACT
-    assert result.count.value == 0
+    assert result.count.status == PersonalMemoryCountStatus.INDETERMINATE
+    assert result.count.value is None
 
     payload["search_text"] = "tampered"
     with pytest.raises(PersonalMemoryQueryPlanningError, match="plan_id"):

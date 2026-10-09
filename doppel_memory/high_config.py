@@ -233,7 +233,9 @@ class HighConfigRetrieval:
             warnings.append("memory_reranker_degraded")
         # A top-k graph branch must never manufacture or replace an exact count.
         if plan.operation == "count":
-            return result.model_copy(update={"warnings": warnings})
+            return await self._evidence_channels(
+                result, plan, query, [hit.record for hit in base.hits], warnings
+            )
 
         # Use the host-bound, calendar-grounded plan, not the model's raw dates/ID.
         grounded = draft.model_copy(
@@ -343,6 +345,37 @@ class HighConfigRetrieval:
         if hybrid.path_reranking.status == "fallback":
             warnings.append("path_reranker_degraded")
 
+        result = result.model_copy(
+            update={
+                "hybrid": hybrid,
+                "rejected_paths": len(unique) - len(qualified),
+                "graph_path_searches": len(routes.routes),
+                "graph_exploration_searches": int(bool(plan.entity_mentions)),
+            }
+        )
+        return await self._evidence_channels(
+            result,
+            plan,
+            query,
+            [item.record for item in hybrid.assembly.candidates],
+            warnings,
+        )
+
+    async def _evidence_channels(
+        self,
+        result: HighConfigRetrievalResult,
+        plan: PersonalMemoryQueryPlanV2,
+        query: str,
+        memories: Sequence[MemoryRecord],
+        warnings: list[str],
+    ) -> HighConfigRetrievalResult:
+        """Supply bounded raw/source evidence without altering aggregation.
+
+        Count queries need source evidence too. Neither raw top-k nor source
+        backing upgrades an indeterminate predicate count to an exact one.
+        """
+        allowed = {scope.scope_key: scope for scope in plan.scopes}
+
         # Raw dialogue is useful evidence about what was said, including assistant
         # suggestions, but must not enter the factual owner-memory engine.
         raw = []
@@ -386,8 +419,8 @@ class HighConfigRetrieval:
         backing: dict[str, MemoryRecord] = {}
         failures = 0
         truncated = False
-        for item in hybrid.assembly.candidates:
-            evidence = item.record.metadata.get("evidence", [])
+        for memory in memories:
+            evidence = memory.metadata.get("evidence", [])
             if not isinstance(evidence, list) or not evidence:
                 failures += 1
                 continue
@@ -400,20 +433,18 @@ class HighConfigRetrieval:
                 if not isinstance(event, str) or not event:
                     failures += 1
                     continue
-                resolved = await self.source_resolver.resolve_event(
-                    item.record.scope, event
-                )
+                resolved = await self.source_resolver.resolve_event(memory.scope, event)
                 record = (
-                    await self.store.get(item.record.scope, resolved.memory_id)
+                    await self.store.get(memory.scope, resolved.memory_id)
                     if resolved
                     else None
                 )
                 if (
                     record is None
                     or record.source_event_id != event
-                    or not self._raw_eligible(record, item.record.scope, plan.now)
-                    or record.actor != item.record.actor
-                    or record.authority != item.record.authority
+                    or not self._raw_eligible(record, memory.scope, plan.now)
+                    or record.actor != memory.actor
+                    or record.authority != memory.authority
                 ):
                     failures += 1
                     continue
@@ -429,14 +460,10 @@ class HighConfigRetrieval:
             warnings.append("source_backing_limit_reached")
         return result.model_copy(
             update={
-                "hybrid": hybrid,
                 "raw_dialogue": raw_records,
                 "backing_sources": list(backing.values()),
                 "warnings": warnings,
                 "source_failures": failures,
-                "rejected_paths": len(unique) - len(qualified),
-                "graph_path_searches": len(routes.routes),
-                "graph_exploration_searches": int(bool(plan.entity_mentions)),
             }
         )
 
