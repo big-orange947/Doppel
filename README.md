@@ -204,6 +204,13 @@ exact scope → time → Edge → Episode → memory_id → Store revalidation
 也不会静默改变 v1/v2 Planner。详见
 [关系路径实测报告](benchmarks/reports/personal-relation-path-live-2026-09-19.md)。
 
+需要统一接入高资源路径时，可显式使用
+`doppel_memory.high_config.HighConfigRetrieval`：它连接生产查询引擎、自然语言路径规划、
+图证据装配、原始对话召回和派生记忆的原文回溯。原始助手发言保留 `agent_output` 归属，
+不会被提升为主人事实；返回的是分通道结构化证据，回答与上下文预算仍由接入方管理。
+该入口处于实验阶段，不改变默认 API；调用前需要完成当前语料的图索引与来源覆盖审计，
+不能仅凭 Neo4j 运行正常就视为图检索已就绪。
+
 最高配置下可以显式选择经过 V8 消融验证的 `evidence_rich_v1` 组合策略。它依次执行整条路径的
 文本重排、同一路径家族的完整两跳提升，以及权威 Store 回源装配；不会改变图探索成员，也不会判断
 候选是否足以回答问题：

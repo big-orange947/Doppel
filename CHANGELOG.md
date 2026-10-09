@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add an opt-in high-resource retrieval composition using the production query
+  engine, natural path planning, evidence-rich graph assembly, separately attributed
+  raw dialogue and Store-backed original citations. Keep the stable default unchanged.
+  A live read-only audit finds all fifty diagnostic scopes lack Graphiti Episodes,
+  despite complete existing vector coverage; do not relabel the vector ablation as
+  a full-system score. No new QA result or paid call is claimed by this step.
+
 - Complete and key-free replay all fifty-question answer rows, then correct the
   task-scoring boundary in one frozen reference-only regrading. All six generic
   controls pass; provisional task accuracy is raw 35/50, owner-memory 28/50 and
