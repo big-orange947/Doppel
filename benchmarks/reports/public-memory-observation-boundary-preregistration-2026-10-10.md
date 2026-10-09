@@ -60,3 +60,23 @@ questions based on results, or claim graph uplift from base-overlapping paths.
 Do not launch all 50 graph histories or all 500 questions merely to spend balance;
 representative completed highest-config diagnostics and honest error attribution
 come first. Reserved histories and warm GPU latency experiments stay untouched.
+
+## Third-history schema freeze before authoring
+
+Ordinal 3 completed 222/222 projections with 918 successful provider attempts /
+3838977 reported tokens. Store, vectors and all other diagnostic graph scopes
+remain unchanged. Its settled receipt SHA-256 is
+`6d06c111431c0e400ce85376723fc66c00a3f211faf6a7e0ed94555bcafb4efc`.
+150 projections have rich edges and 72 only fallback. There are 237 distinct rich
+edges / 238 per-projection edge/Episode links, with 149 distinct type names.
+One Graphiti missing-target diagnostic for PREFERS remains an extraction-loss
+observation, not evidence that every relation is successfully represented.
+
+Freeze schema preflight `public-memory-consecutive-schema-03-preflight-v1.json`:
+plan `759680cd5f62111c2b86a01505be723ad9164f168454b6ff0e699197e7be70e9`,
+file SHA-256 `9f89146c7e8f9735349ed3ba598a851b6c6352db4500eae91307c2ff1795e601`.
+At most seven single-attempt requests, 4096 output tokens, 100000 canonical bytes
+each / 700000 total. Only the 149 source type names enter those requests, in
+unchanged 24-name batches. No questions, entity facts, answers or scoring positions.
+Definitions remain fallible. After completion, freeze the exact natural-query plan
+against the repaired implementation, before its five possible paid calls.
