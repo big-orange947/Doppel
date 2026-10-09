@@ -80,3 +80,22 @@ each / 700000 total. Only the 149 source type names enter those requests, in
 unchanged 24-name batches. No questions, entity facts, answers or scoring positions.
 Definitions remain fallible. After completion, freeze the exact natural-query plan
 against the repaired implementation, before its five possible paid calls.
+
+## Third-history natural-query freeze
+
+All 149 definitions completed in seven successful requests / 13728 reported
+tokens, graph snapshot unchanged. Schema receipt file SHA-256:
+`34e78d94d3d74e5dbeec0f6d116273619d42604f19fe2ea97c206d28d71c74b0`.
+The new zero-call query preflight revalidates 222 projections, the complete
+unchanged Store corpus and all active vector manifests. Exact query plan:
+`313ca903ec203fe6af048799d2995c5688c5ee443490b1d2a4075e1922740b88`;
+preflight file SHA-256:
+`3bafa443f8b9b467f40a665996b9bac5049aeccc4ba86b1400305c8913621af5`.
+
+Run directory is `public-memory-consecutive-query-03-observation-v1`, never an
+old retrieval checkpoint. Keep the same five stage ceilings, local BGE/CUDA,
+natural V7 planner, evidence-rich V8 assembly, whole-item packing, Reader v2 and
+separate judges as the repaired first-two regressions. No algorithm or prompt
+change based on those answers. Strict caller-clock qualification is unchanged;
+do not switch to a complete-provided-history policy mid-run. Reserved histories
+and publication claims remain excluded.
