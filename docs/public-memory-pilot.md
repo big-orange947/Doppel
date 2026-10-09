@@ -826,3 +826,12 @@ local reranker and unchanged 80-candidate/20-item/24KB prefix budgets. A first
 attempt produced no rows because the harness assumed every derivative was an
 owner record; legitimate agent derivatives are now source-validated and explicitly
 counted as excluded from the owner-memory channel. All fifty cases remain selected.
+
+The [retrieval result](../benchmarks/reports/public-memory-expansion-50-retrieval-result-2026-10-09.md)
+completes 300 rows with zero paid calls: packed annotated-turn macro coverage is
+92.18% raw reranked, 79.25% owner-memory reranked and 93.20% combined reranked,
+over 49 questions with annotated evidence. Store snapshots match; 8,269 packed
+source checks and 12,000 local reranker pairs complete, with zero truncation.
+The [QA plan](../benchmarks/reports/public-memory-expansion-50-quality-plan-2026-10-09.md)
+freezes five ten-question batches, the existing Reader v2/primary Judge, exact
+packed inputs and a durable cap of 300 new attempts. Its preflight uses zero calls.

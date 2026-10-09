@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Complete all 300 fifty-history retrieval rows with zero paid calls and unchanged
+  Store snapshots. Packed annotated-turn macro coverage is 92.18% raw reranked,
+  79.25% owner-memory reranked and 93.20% combined reranked (49 annotated questions,
+  77 turns); no answer-accuracy claim. Freeze 150 QA rows in five fixed batches
+  using the unchanged Reader v2/primary-Judge protocol and 300 durable attempt cap.
 - Correct the public raw/owner-memory comparison harness to validate legitimate
   assistant-derived records before excluding them from its owner-memory channel.
   Report that exclusion count and retain assistant raw context with agent_output
