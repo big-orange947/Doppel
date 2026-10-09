@@ -199,6 +199,141 @@ class _FilterIgnoringStore(InMemoryStore):
         return await super().scan(scope, filters=None, cursor=cursor, limit=limit)
 
 
+@pytest.mark.parametrize(
+    "draft",
+    [
+        {"intent": "lookup"},
+        {"intent": "current"},
+        {"intent": "history"},
+        {"intent": "lookup", "as_of": "2026-02-01T00:00:00Z"},
+        {"intent": "history", "time_to": "2026-12-31T00:00:00Z"},
+        {"intent": "count"},
+    ],
+)
+async def test_query_observation_cutoff_is_independent_of_valid_time(draft) -> None:
+    from datetime import timedelta
+
+    store = _FilterIgnoringStore()
+    observed = _record(
+        "observed",
+        "sensor",
+        memory_type="episode",
+        temporal_status="current",
+        day=1,
+        event_key="observed",
+        valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+        state=MemoryState.CONFIRMED,
+    ).model_copy(update={"created_at": NOW, "updated_at": NOW + timedelta(days=20)})
+    future = observed.model_copy(
+        deep=True,
+        update={
+            "memory_id": "future",
+            "created_at": NOW + timedelta(microseconds=1),
+            "metadata": {**observed.metadata, "event_key": "future"},
+        },
+    )
+    await _put(store, observed, future)
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(search_text="sensor", temporal_statuses=["current"], **draft),
+        "sensor",
+        [SCOPE],
+        now=NOW,
+        trace_limit=100,
+    )
+    assert [hit.record.memory_id for hit in result.hits] == ["observed"]
+    if draft["intent"] == "count":
+        assert result.count is not None and result.count.value == 1
+    assert result.trace is not None
+    assert any(
+        e.memory_id == "future" and e.reason == "not_yet_observed"
+        for e in result.trace.events
+    )
+
+
+async def test_observation_cutoff_rechecks_stale_semantic_and_relation_candidates():
+    from datetime import timedelta
+
+    store = _FilterIgnoringStore()
+    future = _record(
+        "future",
+        "sensor",
+        memory_type="fact",
+        temporal_status="timeless",
+        day=1,
+        state=MemoryState.CONFIRMED,
+    ).model_copy(update={"created_at": NOW + timedelta(seconds=1)})
+    await _put(store, future)
+
+    class Index:
+        async def search(self, query, scopes, *, filters=None, limit=10):
+            assert filters.time_to == NOW
+            return [
+                RecallResult(
+                    fact="sensor", memory_id="future", scope=SCOPE, similarity=1.0
+                )
+            ]
+
+    relation = _RelationIndex(
+        [
+            RelationCandidate(
+                scope=SCOPE,
+                memory_id="future",
+                source="graphiti_relation",
+                score=1.0,
+                relation_type="MEASURED_BY",
+                match_kind="lexical",
+                edge_id="edge-future",
+                episode_ids=["ep-future"],
+            )
+        ]
+    )
+    result = await PersonalMemoryQueryEngine(
+        store,
+        semantic_index=Index(),
+        relation_index=relation,
+    ).query(
+        _DraftPlanner(
+            search_text="sensor",
+            entity_mentions=["sensor"],
+            relation_hints=["measured"],
+        ),
+        "sensor",
+        [SCOPE],
+        now=NOW,
+        trace_limit=100,
+    )
+    assert not result.hits
+    assert relation.calls[0][2].time_to == NOW
+    assert result.trace is not None
+    assert any(
+        e.memory_id == "future" and e.reason == "not_yet_observed"
+        for e in result.trace.events
+    )
+
+
+async def test_planned_event_known_now_is_not_a_future_observation():
+    record = _record(
+        "plan",
+        "sensor",
+        memory_type="episode",
+        temporal_status="planned",
+        day=1,
+        valid_from=datetime(2027, 1, 1, tzinfo=UTC),
+        state=MemoryState.CONFIRMED,
+    )
+    store = InMemoryStore()
+    await _put(store, record)
+    result = await PersonalMemoryQueryEngine(store).query(
+        _DraftPlanner(
+            intent="lookup", search_text="sensor", temporal_statuses=["planned"]
+        ),
+        "sensor",
+        [SCOPE],
+        now=NOW,
+    )
+    assert [hit.record.memory_id for hit in result.hits] == ["plan"]
+
+
 async def test_current_residence_excludes_planned_and_historical_records() -> None:
     store = InMemoryStore()
     await _put(

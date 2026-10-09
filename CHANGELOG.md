@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Enforce the caller's observation clock in personal-memory candidate filtering
+  and final structural qualification, including stale semantic/graph candidates.
+  Keep observation time independent from historical validity and administrative
+  update time. Freeze new development regressions for the first two opened
+  high-config queries without rewriting earlier scores, caches or receipts.
+
 - Freeze separate high-config execution/coverage reporting without rewriting the
   first query's legacy flags or grades. Complete the next consecutive history's
   183 real graph projections and natural QA: reference-correct, 2/2 annotated

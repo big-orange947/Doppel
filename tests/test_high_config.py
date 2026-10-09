@@ -242,6 +242,33 @@ async def test_current_time_sent_to_graph_and_stale_path_removed():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("view", ["current", "unbounded", "as_of"])
+async def test_future_observation_cannot_enter_via_graph_exploration(view):
+    from datetime import timedelta
+
+    updates = {"temporal_view": view}
+    if view == "as_of":
+        updates["as_of"] = datetime(2026, 1, 1, tzinfo=UTC)
+    host, _, index, store, _ = await setup(**updates)
+    old = await store.get(SCOPE, "memory")
+    store._records["memory"] = old.model_copy(
+        update={
+            "created_at": NOW + timedelta(seconds=1),
+            "metadata": {**old.metadata, "valid_from": "2025-01-01T00:00:00Z"},
+        }
+    )
+    # A stale graph deliberately ignores the coarse observed-time filter.
+    index.exploration = [path()]
+    result = await host.query("camera", [SCOPE], now=NOW)
+    assert not result.base.hits
+    assert result.rejected_paths == 1
+    assert not result.hybrid.assembly.candidates
+    assert not result.hybrid.promoted_path_hits
+    assert not result.backing_sources
+    assert result.source_failures == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("channel", ["raw", "path"])
 async def test_cross_scope_candidates_fail_closed(channel):
     host, _, index, _, _ = await setup()

@@ -2461,6 +2461,11 @@ def _structural_rejection_reason(
         return "subject_mismatch"
     if _metadata_text(record, "subject_id") != plan.subject_id.lower():
         return "subject_id_mismatch"
+    # Observation time is independent of valid/event time. A historical query
+    # may use a later-learned fact, but never a record not yet observed at the
+    # caller's clock. Recheck here even when an index ignores coarse filters.
+    if record.created_at > plan.now:
+        return "not_yet_observed"
     memory_type = _metadata_text(record, "personal_memory_type")
     if plan.memory_types and memory_type not in plan.memory_types:
         return "memory_type_mismatch"
@@ -2700,6 +2705,7 @@ def _query_memory_filter(plan: PersonalMemoryQueryPlan) -> MemoryFilter:
         tags={"personal-memory"},
         states=set(_visible_memory_states(plan)),
         exclude_authorities=excluded_authorities,
+        time_to=plan.now,
     )
 
 
