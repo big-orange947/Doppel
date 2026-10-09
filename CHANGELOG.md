@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a durable, budgeted DeepSeek chat/completions bridge for real Graphiti
+  authoring of committed memories. Three source-ordered live smoke projections
+  complete in eight calls/19,515 reported tokens; exact resumption performs no new
+  calls or writes. A zero-call production relation/one-hop probe verifies both
+  rich edges and scope/subject provenance checks. These are integration checks,
+  not natural-query scores; preserve the Store/vectors and freeze a separate
+  complete first-history backfill before highest-configuration QA.
+
 - Add an opt-in high-resource retrieval composition using the production query
   engine, natural path planning, evidence-rich graph assembly, separately attributed
   raw dialogue and Store-backed original citations. Keep the stable default unchanged.
