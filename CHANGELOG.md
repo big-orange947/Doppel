@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve the completed 150-row fifty-question QA run and zero-call exact replay.
+  Spot inspection finds the primary Judge wrongly excuses answerable refusals
+  because the supplied context lacks the reference answer. Freeze one bounded
+  reference-only task-accuracy regrading, with six generic controls and a separate
+  156-attempt cap; keep all original answers, labels and support observations.
 - Complete all 300 fifty-history retrieval rows with zero paid calls and unchanged
   Store snapshots. Packed annotated-turn macro coverage is 92.18% raw reranked,
   79.25% owner-memory reranked and 93.20% combined reranked (49 annotated questions,
