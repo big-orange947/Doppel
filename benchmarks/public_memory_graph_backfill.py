@@ -27,7 +27,11 @@ from benchmarks.public_memory_expansion import config, local_diagnostic_dsn, sav
 from benchmarks.public_memory_high_config_preflight import bound_scopes
 from benchmarks.public_memory_ingestion import _bind_json
 from benchmarks.public_memory_pilot import _hash
-from benchmarks.public_memory_runtime import DurableCallLedger, PilotStructuredModel
+from benchmarks.public_memory_runtime import (
+    DurableCallLedger,
+    PilotRuntimeError,
+    PilotStructuredModel,
+)
 from doppel_memory.graphiti_store import (
     GRAPHITI_FALLBACK_EDGE_NAME,
     GRAPHITI_PROJECTION_VERSION,
@@ -40,7 +44,9 @@ from doppel_memory.models import Actor, FactAuthority, MemoryRecord, MemoryState
 from doppel_memory.postgres_store import PostgreSQLStore
 
 
-def build_plan(records, scopes, ingestion, *, max_records: int, max_calls: int) -> dict:
+def build_plan(
+    records, scopes, ingestion, *, max_records: int, max_calls: int, parent=None
+) -> dict:
     if not 1 <= max_records <= 10_000 or not 1 <= max_calls <= 100_000:
         raise ValueError("invalid graph backfill bounds")
     if (
@@ -78,6 +84,17 @@ def build_plan(records, scopes, ingestion, *, max_records: int, max_calls: int) 
     selected = eligible[:max_records]
     if not selected:
         raise ValueError("no eligible graph records")
+    if parent and (
+        parent["corpus_sha256"]
+        != _hash({k: r.model_dump(mode="json") for k, r in records.items()})
+        or parent["postgres_schema"] != ingestion["postgres_schema"]
+        or parent["target_fingerprints"]
+        != [memory_index_fingerprint(r) for r in selected]
+        or max_calls > parent["remaining_attempts"]
+    ):
+        raise ValueError(
+            "continuation must retain exact sources and remaining attempt ceiling"
+        )
     value = {
         "runner": "doppel.public-memory-graph-backfill.v1",
         "ingestion_plan_fingerprint": ingestion["plan"]["plan_fingerprint"],
@@ -116,8 +133,91 @@ def build_plan(records, scopes, ingestion, *, max_records: int, max_calls: int) 
             )
         },
     }
+    if parent:
+        value["parent"] = parent
     value["plan_fingerprint"] = _hash(value)
     return value
+
+
+def parent_binding(report_path: Path, run_dir: Path) -> dict:
+    """Bind an immutable parent receipt/cache; never reopen its writable ledger."""
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    plan = report["plan"]
+    payload = {k: v for k, v in plan.items() if k != "plan_fingerprint"}
+    usage = report["usage"]["ledger"]
+    if (
+        report["status"] not in {"partial", "complete"}
+        or "parent" in plan
+        or _hash(payload) != plan["plan_fingerprint"]
+        or json.loads((run_dir / "plan.json").read_text(encoding="utf-8")) != plan
+        or usage["budget_id"] != plan["plan_fingerprint"]
+        or usage["attempt_status_counts"]["reserved"]
+        or not report["corpus_unchanged"]
+    ):
+        raise ValueError("settled matching parent graph run required")
+    with sqlite3.connect(
+        (run_dir / "provider.sqlite3").resolve().as_uri() + "?mode=ro", uri=True
+    ) as db:
+        count, size = db.execute(
+            "SELECT count(*),coalesce(sum(request_bytes),0) FROM pilot_calls WHERE budget_id=?",
+            (plan["plan_fingerprint"],),
+        ).fetchone()
+        states = dict(
+            db.execute(
+                "SELECT status,count(*) FROM pilot_calls WHERE budget_id=? GROUP BY status",
+                (plan["plan_fingerprint"],),
+            ).fetchall()
+        )
+    if (
+        count != usage["attempts_reserved"]
+        or size != usage["canonical_request_bytes"]
+        or any(states.get(s, 0) != n for s, n in usage["attempt_status_counts"].items())
+    ):
+        raise ValueError("parent ledger changed since receipt")
+    cache = run_dir / "cache"
+    files = sorted(cache.rglob("*.json"))
+    if not files:
+        raise ValueError("parent cache unavailable")
+    return {
+        "plan_fingerprint": plan["plan_fingerprint"],
+        "receipt_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+        "cache_sha256": _hash(
+            {
+                p.relative_to(cache).as_posix(): hashlib.sha256(
+                    p.read_bytes()
+                ).hexdigest()
+                for p in files
+            }
+        ),
+        "cache_entry_count": len(files),
+        "corpus_sha256": plan["corpus_sha256"],
+        "postgres_schema": plan["postgres_schema"],
+        "target_fingerprints": [r["fingerprint"] for r in plan["records"]],
+        "attempts_spent": count,
+        "remaining_attempts": plan["max_calls"] - count,
+        "max_calls": plan["max_calls"],
+        "usage": usage,
+    }
+
+
+def failure_details(error: Exception) -> dict:
+    """Preserve chain types and allowlisted budget reasons, never exception text."""
+    budget_codes = {
+        "per-call canonical request byte budget exhausted": "per_request_bytes",
+        "total canonical request byte budget exhausted": "total_request_bytes",
+        "durable provider attempt budget exhausted": "attempts",
+    }
+    chain = []
+    seen = set()
+    budget_reason = None
+    current = error
+    while current is not None and id(current) not in seen and len(chain) < 8:
+        seen.add(id(current))
+        chain.append(type(current).__name__)
+        if isinstance(current, PilotRuntimeError):
+            budget_reason = budget_codes.get(str(current), budget_reason)
+        current = current.__cause__ or current.__context__
+    return {"failure_chain_types": chain, "budget_stop_reason": budget_reason}
 
 
 @contextmanager
@@ -194,7 +294,9 @@ async def inspect_projection(graph, index, record: MemoryRecord) -> dict:
     }
 
 
-async def execute(store, records, plan, *, run_dir, api_key, cache_dir) -> dict:
+async def execute(
+    store, records, plan, *, run_dir, api_key, cache_dir, parent_cache=None
+) -> dict:
     from graphiti_core import Graphiti
 
     os.environ["GRAPHITI_TELEMETRY_ENABLED"] = "false"
@@ -212,7 +314,12 @@ async def execute(store, records, plan, *, run_dir, api_key, cache_dir) -> dict:
         api_key=api_key,
         usage_observer=ledger.observe_usage,
     )
-    model = PilotStructuredModel(transport, ledger=ledger, cache_dir=run_dir / "cache")
+    model = PilotStructuredModel(
+        transport,
+        ledger=ledger,
+        cache_dir=run_dir / "cache",
+        read_only_cache_dirs=[parent_cache] if parent_cache else (),
+    )
     llm = DurableGraphitiLLMClient(model, output_cap=8192)
     provider = _LocalEmbeddingProvider(cache_dir=cache_dir)
     if {
@@ -239,6 +346,7 @@ async def execute(store, records, plan, *, run_dir, api_key, cache_dir) -> dict:
     )
     checks = []
     failure = None
+    details = {"failure_chain_types": [], "budget_stop_reason": None}
     repairs = 0
     writes = 0
     try:
@@ -287,6 +395,7 @@ async def execute(store, records, plan, *, run_dir, api_key, cache_dir) -> dict:
             )
     except Exception as error:  # noqa: BLE001 - never persist provider/credential text
         failure = type(error).__name__
+        details = failure_details(error)
     finally:
         await graph.close()
         journal.close()
@@ -295,6 +404,7 @@ async def execute(store, records, plan, *, run_dir, api_key, cache_dir) -> dict:
     return {
         "status": "complete" if failure is None else "partial",
         "failure_type": failure,
+        **details,
         "completed_records": len(checks),
         "checks": checks,
         "rich_edges": sum(c["rich_edges"] for c in checks),
@@ -320,12 +430,22 @@ async def run(args) -> dict:
     )
     try:
         records = await inventory(store, scopes)
+        parent_run = getattr(args, "parent_run_dir", None)
+        parent_report = getattr(args, "parent_report", None)
+        if bool(parent_run) != bool(parent_report):
+            raise ValueError("parent run and receipt must be supplied together")
+        if parent_run and parent_run.resolve() == args.run_dir.resolve():
+            raise ValueError("continuation requires a new run directory")
+        parent = None
+        if parent_run is not None and parent_report is not None:
+            parent = parent_binding(parent_report, parent_run)
         plan = build_plan(
             records,
             scopes,
             ingestion,
             max_records=args.max_records,
             max_calls=args.max_calls,
+            parent=parent,
         )
         report = {
             "runner": plan["runner"],
@@ -357,8 +477,41 @@ async def run(args) -> dict:
                         run_dir=args.run_dir,
                         api_key=key,
                         cache_dir=args.embedding_cache_dir,
+                        parent_cache=parent_run / "cache" if parent_run else None,
                     )
                 )
+                if parent:
+                    assert parent_report is not None and parent_run is not None
+                    if parent_binding(parent_report, parent_run) != parent:
+                        raise ValueError(
+                            "parent receipt/ledger/cache changed during continuation"
+                        )
+                    report["parent_unchanged"] = True
+                    old_usage = parent["usage"]
+                    new_usage = report["usage"]["ledger"]
+                    report["aggregate_usage"] = {
+                        "budget_ids": [old_usage["budget_id"], new_usage["budget_id"]],
+                        "attempts_reserved": old_usage["attempts_reserved"]
+                        + new_usage["attempts_reserved"],
+                        "root_attempt_ceiling": parent["max_calls"],
+                        "within_root_attempt_ceiling": old_usage["attempts_reserved"]
+                        + new_usage["attempts_reserved"]
+                        <= parent["max_calls"],
+                        "reported_tokens": {
+                            k: (old_usage["reported_tokens"] or {}).get(k, 0)
+                            + (new_usage["reported_tokens"] or {}).get(k, 0)
+                            for k in set(old_usage["reported_tokens"] or {})
+                            | set(new_usage["reported_tokens"] or {})
+                        },
+                        "calls_without_usage": old_usage["calls_without_usage"]
+                        + new_usage["calls_without_usage"],
+                        "canonical_request_bytes": old_usage["canonical_request_bytes"]
+                        + new_usage["canonical_request_bytes"],
+                        "token_accounting_complete": old_usage[
+                            "token_accounting_complete"
+                        ]
+                        and new_usage["token_accounting_complete"],
+                    }
         after = await inventory(store, scopes)
         report["corpus_unchanged"] = (
             _hash({k: r.model_dump(mode="json") for k, r in after.items()})
@@ -376,6 +529,8 @@ def main() -> int:
     for name in ("manifest", "ingestion-report", "run-dir", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--frozen-preflight", type=Path)
+    parser.add_argument("--parent-report", type=Path)
+    parser.add_argument("--parent-run-dir", type=Path)
     parser.add_argument("--embedding-cache-dir", type=Path)
     parser.add_argument("--max-records", type=int, default=3)
     parser.add_argument("--max-calls", type=int, default=48)
