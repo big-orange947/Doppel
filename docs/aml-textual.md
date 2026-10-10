@@ -171,7 +171,15 @@ serialization with scripted candidates, not a live neural retrieval benchmark.
 They establish transport correctness, not reduced speaker-error rates, AML
 compatibility smoke acceptance, production hosting or a competition score.
 See [the implementation report](../benchmarks/reports/aml-attributed-evidence-export-2026-10-10.md)
-for scope, overhead and the next diagnostic experiment.
+for scope and transport overhead. The subsequent
+[paired representation result](../benchmarks/reports/aml-evidence-representation-result-2026-10-10.md)
+completes 18 local DeepSeek Reader responses on nine opened synthetic controls:
+speaker inversion remains in both arms. Labels survive transport but do not
+guarantee the model interprets attribution correctly. Measured input-token
+overhead is 8.10%; language observations and manual rubric judgments are not a
+retrieval gain, an independent evaluation or the platform's Answer performance.
+No default promotion follows. Return to bounded recall-only/lazy-analysis
+diagnosis rather than extend this local Reader policy loop.
 
 ## Next implementation gates
 
@@ -266,4 +274,8 @@ Before spending: verify legitimate account/model access, count API calls/tokens
 and memory/graph/storage expansion on a bounded pilot, project scale with a safety
 margin, and stop for user direction if the projected total exceeds the ceiling.
 Do not disable useful retrieval or create scenario shortcuts merely to force the
-estimate under budget. The present work has spent **zero on providers and hosting**.
+estimate under budget. The initial offline contracts and evidence exporter used
+zero provider/hosting spend. Subsequent local Reader diagnostics do use separately
+authorized DeepSeek calls; their usage is recorded in the linked result reports,
+not an official-model or Full-evaluation cost estimate. No hosting purchase or
+official evaluation run is recorded by this integration.

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Complete the frozen attributed-content contrast: 18 Reader calls and exact
+  key-removed cache replay. Both representations retain speaker inversion;
+  original rubrics 7/9 vs 8/9 are opened, non-independent control observations,
+  not a semantic fix or retrieval/AML score. Report language, abstention and
+  measured 8.10% input-token overhead separately; no default promotion.
+
 - Freeze an opened nine-control evidence representation diagnostic: unchanged
   structured-role/authority baseline versus actual attributed Search content,
   common decoding instructions/schema, 18 Reader attempts and no Judge. Bind
