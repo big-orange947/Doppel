@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Complete the eight-case S-derived oracle diagnostic: ordinary tasks 5/6 and
+  refusal controls 2/2, 16 calls/62217 tokens, 16-hit zero-call replay. Retain
+  personalized-advice refusal, count wording ambiguity and language drift;
+  subsequent observed balance debit 0.06 CNY is not exclusive billing proof.
+  No new graph/miner work or official/blind/AML score claim.
+
 - Add a small, explicitly S-derived oracle Reader diagnostic with preserved source
   dates/roles, protected reserved cases, separate caches, at most 16 calls and a
   fail-closed observed-balance stop. No new graph/miner/index work; distinguish
