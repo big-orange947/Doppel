@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add opt-in bounded raw source-window composition: host-owned source links,
+  exact-anchor scope and authoritative Store reload, observation/role checks,
+  visible timeout/rejection accounting. Preserve default retrieval, owner facts,
+  graph paths and aggregation; assistant replies remain agent-output evidence.
+  Freeze a paired opened-scope diagnostic separately from original receipts.
+
+- Retain eighth task failure despite 2/2 annotated evidence: Instant Pot mentioned
+  but acquisition order refused. Record invalid chronology in citation-judge
+  rationale separately; do not silently repair the task label. Empty-key replay
+  is identical with zero new calls; source-only graph/schema costs remain separate.
+
 - Preserve seventh highest-config QA failure: the required original assistant
   reply is stored but vector rank 210, outside the 80-candidate raw pool; turn
   coverage 0/1 despite session coverage 1/1. Separate candidate discovery from
