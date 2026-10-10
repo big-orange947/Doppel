@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Persist bounded, allowlisted Graphiti missing-endpoint extraction-loss telemetry
+  in future authoring receipts, with per-record context and overflow counts; no
+  raw log, credential or provider exception retention. Bind instrumentation hashes
+  without altering extraction/retrieval behavior or rewriting earlier receipts.
+
 - Add a zero-provider-call descriptive path-contribution audit of immutable query
   receipts. Separate path-supported from path-added, packed and cited memories;
   validate identities/ranks without reading gold or changing scores. Explicitly

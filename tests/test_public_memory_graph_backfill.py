@@ -60,6 +60,7 @@ def test_plan_uses_source_order_no_question_or_gold():
     records, scopes, ingestion = fixture()
     before = deepcopy(records)
     plan = build_plan(records, scopes, ingestion, max_records=3, max_calls=48)
+    assert "benchmarks/public_memory_graph_warnings.py" in plan["implementation_sha256"]
     assert [r["memory_id"] for r in plan["records"]] == [
         "memory-0",
         "memory-2",

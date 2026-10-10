@@ -24,6 +24,7 @@ from benchmarks.personal_retrieval_ablation import _LocalEmbeddingProvider
 from benchmarks.public_context_baseline import execution_metadata
 from benchmarks.public_memory_comparison import inventory
 from benchmarks.public_memory_expansion import config, local_diagnostic_dsn, save
+from benchmarks.public_memory_graph_warnings import GraphExtractionWarnings
 from benchmarks.public_memory_high_config_preflight import bound_scopes
 from benchmarks.public_memory_ingestion import _bind_json
 from benchmarks.public_memory_pilot import _hash
@@ -129,6 +130,7 @@ def build_plan(
             for p in (
                 Path(__file__),
                 Path(__file__).with_name("graphiti_runtime.py"),
+                Path(__file__).with_name("public_memory_graph_warnings.py"),
                 Path(__file__).parents[1] / "doppel_memory/graphiti_store.py",
             )
         },
@@ -349,6 +351,7 @@ async def execute(
     details = {"failure_chain_types": [], "budget_stop_reason": None}
     repairs = 0
     writes = 0
+    extraction_warnings = GraphExtractionWarnings()
     try:
         for target in plan["records"]:
             record = records[target["memory_id"]]
@@ -379,7 +382,13 @@ async def execute(
                     "INSERT OR REPLACE INTO entries VALUES (?,?,?)",
                     (record.memory_id, target["fingerprint"], "started"),
                 )
-                await index.index_record(record)
+                with (
+                    extraction_warnings.capture(),
+                    extraction_warnings.indexing(
+                        record.scope.scope_key, record.memory_id
+                    ),
+                ):
+                    await index.index_record(record)
                 writes += 1
             check = await inspect_projection(graph, index, record)
             if not check["complete"]:
@@ -411,6 +420,7 @@ async def execute(
         "index_writes_this_invocation": writes,
         "incomplete_owned_slot_repairs": repairs,
         "usage": usage,
+        "extraction_warnings": extraction_warnings.report(),
         "successful_graph_data_retained": True,
         "full_corpus_graph_coverage_certified": len(plan["records"])
         == plan["eligible_records"]
