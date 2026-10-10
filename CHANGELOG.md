@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Complete fifth/sixth source-order highest-config QA: both answers correct with
+  2/2 and 1/1 annotated evidence, legal citations and zero-request empty-key replay.
+  Preserve fifth-run language drift, governance review warning and shared-owner
+  graph noise; sixth graph paths contribute no final evidence. Six prepared graphs
+  are not six passed questions or an independent LongMemEval/AML score. Record
+  graph-preparation cost separately from QA and retain prior failed answers.
+
 - Complete the fourth source-order real graph and natural highest-config query:
   219 projections, 256 rich edges, 931 requests/3882514 reported tokens including
   schema and QA. Preserve the failed personalized-advice refusal despite 1/1
