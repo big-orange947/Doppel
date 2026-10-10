@@ -846,3 +846,12 @@ but superseded. Two primary support-quote observations remain unanchored. All
 answers/checks/grades replay with zero new calls. Strong source coverage does not
 imply task completion; full Planner/Graphiti, unopened groups, competition models
 and complete LongMemEval remain to be evaluated.
+
+The [low-cost S-derived oracle diagnostic](../benchmarks/reports/public-memory-oracle-cost-result-2026-10-10.md)
+and [paired response-policy diagnosis](../benchmarks/reports/public-memory-response-policy-result-2026-10-10.md)
+reuse opened cases without new graph work. The paired policies each receive 6/7
+task labels in both S-raw and full-session oracle contexts. Generic new-advice
+instructions fix the preference refusal but also expose an oracle count regression,
+S judge inconsistency and plan-to-experience overstatement. The candidate stays
+benchmark-only, not a new core/default or a claimed retrieval improvement. These
+small, unequal-budget diagnostics are not pooled with highest-config/AML scores.

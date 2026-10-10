@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Complete the frozen response-policy paired diagnostic (28 rows, 56 calls):
+  generic grounded advice resolves the opened preference refusal in both contexts,
+  but oracle counting regresses, S counting exposes judge inconsistency, and one
+  suggestion overstates planned experimentation as experience. Preserve original
+  labels; retain the candidate benchmark-only with no default/core changes.
+  Empty-key replay matches all rows with zero new calls; no new graph work.
+
 - Freeze a small paired Reader response-policy diagnosis on seven opened cases:
   exact old S raw contexts and S-derived oracle sessions, fresh Reader V2 versus
   generic grounded-advice instructions. No domain special cases, new graph work,
