@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Freeze a small paired Reader response-policy diagnosis on seven opened cases:
+  exact old S raw contexts and S-derived oracle sessions, fresh Reader V2 versus
+  generic grounded-advice instructions. No domain special cases, new graph work,
+  core/default changes or official/blind/AML scoring; 56-attempt ceiling and
+  durable cache/ledger/failure preservation with empty-key replay checks.
+
 - Complete the eight-case S-derived oracle diagnostic: ordinary tasks 5/6 and
   refusal controls 2/2, 16 calls/62217 tokens, 16-hit zero-call replay. Retain
   personalized-advice refusal, count wording ambiguity and language drift;
