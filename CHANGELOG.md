@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add an opt-in, read-only transient memory view over exact-scope candidate
+  proposals: original source observations, separate explicit effective bounds and
+  unapplied existing-consolidator advice. No date invention, newest-wins, source
+  removal, Store/model calls or default-policy changes. Freeze a four-Reader-call
+  contrast over 16 unchanged cached proposals; not a complete timeline or score.
+
 - Complete the six-call two-case query-time proposal diagnosis and key-removed
   replay: one temporal Reader answer becomes coherent; update answer already
   succeeds. Candidate path costs 2.20x direct tokens on these windows. Preserve

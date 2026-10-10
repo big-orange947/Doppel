@@ -235,6 +235,13 @@ from doppel_memory.style import (
     StyleQualityEvaluator,
     StyleQualityReport,
 )
+from doppel_memory.transient import (
+    TransientEvidence,
+    TransientMemoryClaim,
+    TransientMemoryView,
+    TransientMemoryViewBuilder,
+    TransientViewError,
+)
 from doppel_memory.vector import (
     CompositeSemanticIndex,
     EmbeddingProvider,
@@ -460,6 +467,11 @@ __all__ = [
     "StyleQualityEvaluator",
     "StyleQualityReport",
     "TemporalSemanticIndex",
+    "TransientEvidence",
+    "TransientMemoryClaim",
+    "TransientMemoryView",
+    "TransientMemoryViewBuilder",
+    "TransientViewError",
     "VectorBackfillResult",
     "VectorIndexConfig",
     "VectorIndexFailure",
