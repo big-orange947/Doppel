@@ -26,8 +26,10 @@ The next local implementation adds a durable host ingestion journal around the
 existing Miner, proposal writer, consolidation and index maintenance. Real SQLite
 restart/process-death tests use fake model/index outputs; this is not a live
 provider/vector/graph validation. Ingestion stage completion is **not** an AML
-searchable receipt. Provider accounting, actual retrieval composition, attributed
-assistant-context evidence and HTTP hosting remain pending. See the pilot document
+searchable receipt. Provider accounting, complete production retrieval composition
+and HTTP hosting remain pending. Attributed historical retrieval and an opt-in
+Search evidence projection now exist locally; neither is a deployed AML backend.
+See the pilot document
 for fixed complete-history selection, temporal policy and fingerprint compatibility.
 
 Doppel remains a personal memory/context core. The integration adapts a transport
@@ -100,6 +102,76 @@ files needing formatting with the installed tool (a HEAD-only sample also fails)
 they are not reformatted as part of this integration. The existing
 Graphiti Pydantic deprecation warning remains; skipped service-dependent tests are
 not claimed as live backend verification.
+
+## Attributed Search content (2026-10-10)
+
+`integrations/aml/evidence.py` adds the experimental
+`AttributedEvidenceExporter`. The [official API guide](https://agentmemoryleaderboard.ai/api-guide)
+states that `content` is passed to Answer and undeclared fields such as `metadata`
+are ignored. Attribution is therefore encoded **inside** `SearchItem.content`,
+not only in internal objects or extra response fields. Outer Search fields remain
+`id`, `content`, optional `score` and `created_at`.
+
+Content is a compact JSON string with format `doppel.attributed-evidence.v1`:
+
+- Historical dialogue contains the original text, transport role, host-bound actor,
+  speaker label, source authority, observation time, event/message IDs, source
+  session and turn index. `agent` is labelled `historical_assistant`, not the
+  current answering model. Unresolved actors remain unresolved even for `role=user`.
+- Extracted memory contains the stored interpretation, subject and subject ID,
+  source actor/authority, lifecycle state, memory type, temporal status, observation
+  and validity times, plus **all** linked original sources. A confirmed lifecycle
+  state is not a certification of truth; a planned status is not completed conduct.
+- JSON escaping preserves the original source string losslessly, including
+  whitespace, newlines and Unicode. It avoids structural header spoofing; it does
+  **not** guarantee that an LLM will resist prompt injection or interpret roles
+  correctly. Source text is never paraphrased or pronoun-rewritten.
+
+Historical retrieval has an opt-in production-composition entrypoint:
+
+```python
+# retriever: AttributedContextRetriever with a real Store and exact-scope resolver
+hits = await retriever.search_evidence(scope, query, limit=top_k)
+# Return these ScopedEvidence items from the host's AMLBackend.search.
+# TextualBoundary.search preserves their ranked SearchItem values.
+```
+
+For already authorized and temporally filtered personal-memory query hits:
+
+```python
+from integrations.aml.evidence import AttributedEvidenceExporter
+
+exporter = AttributedEvidenceExporter(store, resolve_event=resolve_event)
+hits = await exporter.memories(scope, personal_query_result.hits)
+```
+
+The exporter does not discover candidates, merge channels, choose scope privileges,
+answer questions or judge answer support. It preserves supplied order and scores.
+Both routes reload the authoritative Store and resolve original event/message IDs;
+changed, revoked, missing, incorrectly attributed or out-of-scope sources fail the
+batch with a redacted error instead of silently returning changed evidence. A final
+snapshot check catches changes during asynchronous resolution, but is **not** a
+cross-record transaction or protection against every subsequent race.
+
+The memory route currently requires original sources in the **same exact scope**,
+matching stored source actor/authority and complete miner provenance. Promoted
+cross-scope memories, heterogeneous-source summaries, manually entered notes and
+attachment-only sources need a separate explicit authorization/provenance policy;
+they are not guessed or silently downgraded by this integration. The existing
+snippet API, personal query engine, retrieval ranking and default SDK are unchanged.
+
+Zero-paid checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_aml_evidence.py tests/test_aml_contract.py tests/test_public_context_baseline.py tests/test_public_context_rerank.py -q
+```
+
+These tests cover real temporary SQLite sources through retrieval and boundary
+serialization with scripted candidates, not a live neural retrieval benchmark.
+They establish transport correctness, not reduced speaker-error rates, AML
+compatibility smoke acceptance, production hosting or a competition score.
+See [the implementation report](../benchmarks/reports/aml-attributed-evidence-export-2026-10-10.md)
+for scope, overhead and the next diagnostic experiment.
 
 ## Next implementation gates
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add opt-in attributed AML Search content for historical dialogue and extracted
+  personal-memory hits: explicit host-bound speaker/actor, subject, source
+  authority and separate observation/validity times, with lossless original
+  sources inside the declared content field. Preserve ranking and query policy;
+  revalidate exact-scope Store snapshots/provenance at export and fail invalid
+  batches without guessing identities. Offline SQLite/boundary tests only; no
+  deployed backend, Reader fix, retrieval-uplift or AML-score claim.
+
 - Freeze and test generic grounded Reader V2 instructions on nine unrelated
   controls: 18 responses complete, but candidate semantic gate fails (7/9 vs
   baseline 8/9). Preserve speaker inversion, language drift/regression and one

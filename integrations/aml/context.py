@@ -11,7 +11,7 @@ import math
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -28,6 +28,9 @@ from doppel_memory.models import (
 )
 from doppel_memory.retriever import Reranker, RetrievalStrategy
 from doppel_memory.store import MemoryStore
+
+if TYPE_CHECKING:
+    from integrations.aml.contract import ScopedEvidence
 
 EventResolver = Callable[[MemoryScope, str], Awaitable[MemoryRecord | None]]
 
@@ -73,6 +76,22 @@ class AttributedContextRetriever:
         self.store, self.strategy = store, strategy
         self.resolve_event, self.reranker = resolve_event, reranker
         self.candidate_multiplier = candidate_multiplier
+
+    async def search_evidence(
+        self, scope: MemoryScope, query: str, *, limit: int = 10
+    ) -> list[ScopedEvidence]:
+        """Opt-in AML projection, preserving search order and source attribution.
+
+        Labels are placed inside content, not ignored extra metadata fields.
+        The normal snippet API and retrieval/reranking policy remain unchanged.
+        """
+        from integrations.aml.evidence import AttributedEvidenceExporter
+
+        bound_scope = scope.model_copy(deep=True)
+        result = await self.search(bound_scope, query, limit=limit)
+        return await AttributedEvidenceExporter(
+            self.store, resolve_event=self.resolve_event
+        ).historical(bound_scope, result.snippets)
 
     async def search(
         self, scope: MemoryScope, query: str, *, limit: int = 10
