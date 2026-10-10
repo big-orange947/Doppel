@@ -1,0 +1,70 @@
+{
+  "schema": "doppel.reader-grounded-policy-controls.v1",
+  "question_reference_time": "2026-09-01T00:00:00Z",
+  "publication_ready": false,
+  "cases": [
+    {
+      "id": "policy-control-01",
+      "question": "Have I already collected the parcel?",
+      "items": [{"role": "user", "text": "I intend to collect the parcel on August 15."}],
+      "rubric": "A past planned date does not establish completion. Report that collection is not established, rather than saying the parcel has been collected. Acknowledge the plan if useful."
+    },
+    {
+      "id": "policy-control-02",
+      "question": "Suggest a preparation plan for my upcoming course.",
+      "items": [{"role": "user", "text": "I am planning to begin a pottery course next month. I need options reachable by bus."}],
+      "rubric": "Generate useful new preparation advice using the bus constraint. Describe course attendance as planned/upcoming, not prior experience. Do not refuse because that proposed advice is absent from history."
+    },
+    {
+      "id": "policy-control-03",
+      "question": "Did I collect the parcel, and when?",
+      "items": [
+        {"role": "user", "text": "I plan to collect the parcel on August 15."},
+        {"role": "user", "observed_at": "2026-08-18T00:00:00Z", "text": "I collected the parcel on August 17, two days later than planned."}
+      ],
+      "rubric": "Report collection on August 17. Do not substitute the planned date, and do not remain uncertain about completion in the face of explicit completion evidence."
+    },
+    {
+      "id": "policy-control-04",
+      "question": "How many workshop sessions were disrupted by power outages?",
+      "items": [
+        {"role": "user", "text": "The building lost power, so Wednesday's workshop was postponed."},
+        {"role": "user", "text": "Another outage forced us to cancel Friday's workshop."}
+      ],
+      "rubric": "Infer two distinct disrupted sessions. Postponement and cancellation both satisfy disruption, and lost power/outage are ordinary paraphrases. Cite both inputs and record a count derivation."
+    },
+    {
+      "id": "policy-control-05",
+      "question": "Was my missed music lesson caused by the bus disruption?",
+      "items": [{"role": "user", "text": "Bus services were disrupted on Tuesday. I also missed a music lesson on Thursday. I never explained why I missed it."}],
+      "rubric": "Do not invent a causal link from co-occurrence. State that the cause is not established by the supplied information. Distinguish this case from explicitly linked circumstances."
+    },
+    {
+      "id": "policy-control-06",
+      "question": "How much liquid remained in the tank immediately after this transfer?",
+      "items": [{"role": "user", "text": "The tank contained 28 litres. I pumped 7 litres from it into an empty jug, with no other inflows or outflows."}],
+      "rubric": "Derive 21 litres by subtraction, cite the source, and include a difference derivation. Do not refuse because the result is not stated verbatim."
+    },
+    {
+      "id": "policy-control-07",
+      "question": "Have I finished submitting the application?",
+      "items": [
+        {"role": "user", "text": "I have not submitted the application yet."},
+        {"role": "assistant", "text": "Your application has already been submitted successfully."}
+      ],
+      "rubric": "Do not upgrade the assistant's assertion into an owner fact. Preserve the owner's not-submitted statement and make the assistant-only contradiction visible rather than silently treating it as completion."
+    },
+    {
+      "id": "policy-control-08",
+      "question": "你上次建议我尝试什么运动？",
+      "items": [{"role": "assistant", "text": "I suggested trying rowing on a stationary machine."}],
+      "rubric": "Answer in Chinese that the earlier assistant suggested stationary rowing. Cite assistant evidence without claiming the owner already performed that exercise. Do not discard the assistant evidence merely because of its role."
+    },
+    {
+      "id": "policy-control-09",
+      "question": "Which colour of notebook do I prefer?",
+      "items": [{"role": "user", "text": "我更喜欢蓝色封面的笔记本。"}],
+      "rubric": "Answer in English with blue, citing the owner source. Do not change the answer language to Chinese because the source is Chinese."
+    }
+  ]
+}
