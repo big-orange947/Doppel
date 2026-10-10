@@ -64,6 +64,16 @@ part of the core package. The host must enforce one in-flight plan per exact sco
 Consolidators select existing memory IDs only; trusted scope, authority, lifecycle
 transitions, optimistic concurrency, and writes remain runner and Store responsibilities.
 
+The additive transient view evidence/claim/view models, builder and error are
+provisional root APIs. Their explicit, bounded build operation accepts authorized
+exact-scope candidate proposals and exposes original observations versus supplied
+effective bounds. It calls the existing pure consolidator for advisory decisions
+only, without applying state changes or accessing a Store/model. Default reference
+availability is strict; a later observation horizon must be explicit and is not
+causal replay. Unknown effective dates remain unknown. These types do not replace
+Store revalidation or host authorization, and do not change ingestion/query defaults.
+See [the transient view contract](transient-memory-view.md).
+
 DeterministicMemoryConsolidator v4 adds trusted actor/authority/kind partitions
 before its existing semantic grouping. Its public callable shape is unchanged,
 and runner compatibility gates remain in force. The component identity changes

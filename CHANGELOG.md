@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Complete the frozen transient-view Reader contrast: four calls, exact key-removed
+  replay, no new extraction. Both fresh arms answer the two opened cases; preserve
+  the null task-success result, retrospective-time caveat, advisory conflict and
+  19.16% input-token overhead. Register additive provisional API/field snapshots;
+  no default promotion, effective-date invention or recall/AML-score claim.
+
 - Add an opt-in, read-only transient memory view over exact-scope candidate
   proposals: original source observations, separate explicit effective bounds and
   unapplied existing-consolidator advice. No date invention, newest-wins, source

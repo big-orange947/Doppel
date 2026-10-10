@@ -26,6 +26,9 @@ unique evidence IDs, original message/event/sender/actor/observation bindings,
 subject identity, authority and the proposal's observation clock. A foreign,
 confirmed, inconsistent or unresolved-source proposal fails the entire view.
 Default bounds are 500 messages/100 claims; exceeding a bound fails, not truncates.
+The source text projection is normalized `ChatMessage.text`. Original structured
+parts, attachments and raw transport payloads remain host responsibilities; this
+utility is not a multimedia resolver or a lossless transport exporter.
 
 ```python
 from doppel_memory import (
@@ -91,3 +94,7 @@ persistent governance still goes through its existing policies and audited runne
 The initial cache-derived diagnosis and its paid Reader contrast are recorded in
 [the experiment plan](../benchmarks/reports/public-memory-transient-view-plan-2026-10-10.md).
 Two opened cases cannot establish a general accuracy, recall or AML benefit.
+The [initial result](../benchmarks/reports/public-memory-transient-view-result-2026-10-10.md)
+finds no additional task success (both arms answer both cases), but preserves
+retrospective-time caveats and original evidence despite advisory conflict. The
+index adds 19.16% Reader input tokens on these cases; it is not a promoted default.

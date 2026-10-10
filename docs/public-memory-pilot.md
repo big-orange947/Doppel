@@ -907,3 +907,15 @@ reuse generic governance/time capabilities with source clocks preserved, followe
 by a modest preregistered temporal/update expansion. Do not resume costly S-wide
 eager analysis or continue this local Reader-policy loop. Public SDK defaults and
 persistent personal-memory analysis remain unchanged.
+
+The [read-only transient view](transient-memory-view.md) now exposes original
+source observation spans versus unknown/explicit effective intervals and reuses
+the existing consolidator for unapplied advice. The
+[fresh four-call contrast](../benchmarks/reports/public-memory-transient-view-result-2026-10-10.md)
+reuses all 16 cached proposals without extraction: both fresh arms answer both
+opened cases, so no additional task success is shown. One retrospective observation
+caveat becomes explicit; an advisory slot conflict does not force refusal. All
+claims/raw sources remain available, none is promoted or retired. Input tokens
+increase 19.16%; key-removed replay matches all views/rows with zero new calls.
+Do not keep tuning these two cases. Expand a modest preregistered diagnostic
+cohort next; persistent analysis, recall ranking and default policies are unchanged.
