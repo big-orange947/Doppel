@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add an explicitly diagnostic DeepSeek Flash regrade using the pinned
+  LongMemEval prompts on the same 28 old answers, with a separate frozen plan,
+  budget/cache, actual returned model tracking and no official-score claim.
+  Preserve the GPT-4o entrypoint, its preflight and all previous labels.
+
 - Add a content-pinned, MIT-attributed LongMemEval official-protocol regrading
   entrypoint for 28 unchanged opened answers: exact GPT-4o snapshot/prompt/settings,
   separate strict verdict validity, durable 28-attempt cap, immutable receipts,
