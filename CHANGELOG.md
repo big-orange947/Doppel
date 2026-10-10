@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Freeze and test generic grounded Reader V2 instructions on nine unrelated
+  controls: 18 responses complete, but candidate semantic gate fails (7/9 vs
+  baseline 8/9). Preserve speaker inversion, language drift/regression and one
+  abstention-flag inconsistency. Block paired QA/default promotion; exact key-free
+  replay succeeds. No new graph/retrieval or core algorithm changes.
+
 - Complete DeepSeek Flash regrading with pinned LongMemEval prompts: 28 clean
   verdicts, 7,298 reported tokens, no old-label changes (four correlated arms
   each 6/7). Key-removed replay is identical with zero new calls. Preserve count

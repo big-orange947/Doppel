@@ -873,3 +873,12 @@ official prompts, **not the official GPT-4o model**; same-family judge agreement
 does not establish correctness or resolve the known count/safety ambiguity.
 Official grading remains available but deferred. Next work is generic Reader
 policy controls, not further repeated judging or eager S graph expansion.
+
+The [grounded Reader V2 controls](../benchmarks/reports/grounded-reader-v2-controls-result-2026-10-10.md)
+complete 18 fresh outputs but reject the candidate: manual frozen-rubric results
+7/9 candidate vs 8/9 baseline, with speaker inversion, language drift and an
+abstention-flag issue retained. Quote anchoring verifies review provenance, not
+independent semantic correctness. Paired QA is blocked before paid calls; no
+default is promoted. Full regression now passes 1,658 tests plus three subtests,
+with 33 skipped. Next reference-Reader work should try an explicit language and
+speaker output contract, not more domain-specific rules or repeated long prompts.
