@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Preserve seventh highest-config QA failure: the required original assistant
+  reply is stored but vector rank 210, outside the 80-candidate raw pool; turn
+  coverage 0/1 despite session coverage 1/1. Separate candidate discovery from
+  reasonable supplied-context refusal and citation/task judge disagreement.
+  Zero-call replay and post-run vector diagnostics do not revise the old score.
+
 - Persist bounded, allowlisted Graphiti missing-endpoint extraction-loss telemetry
   in future authoring receipts, with per-record context and overflow counts; no
   raw log, credential or provider exception retention. Bind instrumentation hashes
