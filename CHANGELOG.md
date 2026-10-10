@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a small, explicitly S-derived oracle Reader diagnostic with preserved source
+  dates/roles, protected reserved cases, separate caches, at most 16 calls and a
+  fail-closed observed-balance stop. No new graph/miner/index work; distinguish
+  Reader diagnosis from retrieval/official LongMemEval/AML scores and record
+  upstream oracle/S clock differences and provider-alias version drift.
+
 - Add opt-in bounded raw source-window composition: host-owned source links,
   exact-anchor scope and authoritative Store reload, observation/role checks,
   visible timeout/rejection accounting. Preserve default retrieval, owner facts,
