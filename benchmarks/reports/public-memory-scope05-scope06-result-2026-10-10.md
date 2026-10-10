@@ -90,8 +90,9 @@ serialization. Not a fresh natural-planner/GPU or model-stability measurement.
 - Sixth replay: `data/doppel/public-memory-next-query-scope06-replay-v1.json`, SHA-256
   `b0c590c639f108518bd628f85a9699057ba4b9395fe4b2c290a90bc9e2ddc1f0`.
 
-No new production changes in this round. Ruff passes; full regression rerun is
-recorded separately after completion. User-modified `uv.lock` remains unstaged.
+No new production changes in this round. Full regression rerun: **1501 passed,
+33 skipped, three subtests passed**, one existing Graphiti/Pydantic deprecation
+warning, 169.14 seconds. Ruff passes. User-modified `uv.lock` remains unstaged.
 Next development targets remain generic Reader task/inference behavior, language
 following, governance relevance and graph incremental value; any changed profile
 needs independent controls and a new freeze, not rules for these opened questions.
