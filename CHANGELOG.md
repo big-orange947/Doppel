@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a zero-provider-call descriptive path-contribution audit of immutable query
+  receipts. Separate path-supported from path-added, packed and cited memories;
+  validate identities/ranks without reading gold or changing scores. Explicitly
+  distinguish the graph-capable base branch from a pure-vector baseline and do
+  not infer graph uplift or answer correctness from path participation.
+
 - Complete fifth/sixth source-order highest-config QA: both answers correct with
   2/2 and 1/1 annotated evidence, legal citations and zero-request empty-key replay.
   Preserve fifth-run language drift, governance review warning and shared-owner
