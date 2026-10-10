@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Freeze a two-case query-time proposal diagnosis using the real reference
+  analyzer/miner gates over unchanged saved raw retrieval contexts. Preserve all
+  source evidence, candidate status and quarantine accounting; cap analyzer/Reader
+  attempts at 2/4 with zero Judge or graph/Store writes. Explicit supplied-history
+  clock policy is not causal replay. No SDK/default changes or accuracy claim.
+
 - Complete the frozen attributed-content contrast: 18 Reader calls and exact
   key-removed cache replay. Both representations retain speaker inversion;
   original rubrics 7/9 vs 8/9 are opened, non-independent control observations,
