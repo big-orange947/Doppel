@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Freeze an opened nine-control evidence representation diagnostic: unchanged
+  structured-role/authority baseline versus actual attributed Search content,
+  common decoding instructions/schema, 18 Reader attempts and no Judge. Bind
+  source/config/request hashes, budget/cache/failure receipts and returned model
+  metadata; preserve old controls/answers and disclose serialization/length
+  confounds. No core algorithm change or AML score claim.
+
 - Add opt-in attributed AML Search content for historical dialogue and extracted
   personal-memory hits: explicit host-bound speaker/actor, subject, source
   authority and separate observation/validity times, with lossless original
