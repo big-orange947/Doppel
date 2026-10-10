@@ -864,3 +864,12 @@ with no new Reader, graph or retrieval work. Live scoring awaits an appropriate
 channel/key and is capped at 28 attempted requests, with no automatic retry.
 Prior labels remain untouched. Official grading of DeepSeek-generated opened
 answers is neither an AML-compliant run nor an independent/full LongMemEval score.
+
+The user opted to keep DeepSeek Flash. The separately frozen
+[DeepSeek prompt regrade](../benchmarks/reports/public-memory-deepseek-prompt-regrade-result-2026-10-10.md)
+completed all 28 unchanged answers: four arms each 6/7, zero old-label changes,
+7,298 reported tokens, and identical key-removed zero-call replay. This reuses
+official prompts, **not the official GPT-4o model**; same-family judge agreement
+does not establish correctness or resolve the known count/safety ambiguity.
+Official grading remains available but deferred. Next work is generic Reader
+policy controls, not further repeated judging or eager S graph expansion.

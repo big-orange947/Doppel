@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Complete DeepSeek Flash regrading with pinned LongMemEval prompts: 28 clean
+  verdicts, 7,298 reported tokens, no old-label changes (four correlated arms
+  each 6/7). Key-removed replay is identical with zero new calls. Preserve count
+  ambiguity, plan-to-experience safety and language caveats; no official GPT-4o,
+  independent-model, retrieval-uplift or AML claim.
+
 - Add an explicitly diagnostic DeepSeek Flash regrade using the pinned
   LongMemEval prompts on the same 28 old answers, with a separate frozen plan,
   budget/cache, actual returned model tracking and no official-score claim.
