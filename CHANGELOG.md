@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a content-pinned, MIT-attributed LongMemEval official-protocol regrading
+  entrypoint for 28 unchanged opened answers: exact GPT-4o snapshot/prompt/settings,
+  separate strict verdict validity, durable 28-attempt cap, immutable receipts,
+  key-free cache replay and redacted failure accounting. Export four original-ID
+  hypothesis files and seven references without new Reader/retrieval/graph calls.
+  Offline preflight only so far; no live official labels or AML score claim.
+
 - Complete the frozen response-policy paired diagnostic (28 rows, 56 calls):
   generic grounded advice resolves the opened preference refusal in both contexts,
   but oracle counting regresses, S counting exposes judge inconsistency, and one

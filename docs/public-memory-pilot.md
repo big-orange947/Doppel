@@ -855,3 +855,12 @@ instructions fix the preference refusal but also expose an oracle count regressi
 S judge inconsistency and plan-to-experience overstatement. The candidate stays
 benchmark-only, not a new core/default or a claimed retrieval improvement. These
 small, unequal-budget diagnostics are not pooled with highest-config/AML scores.
+
+The [official-protocol regrade plan](../benchmarks/reports/public-memory-official-regrade-plan-2026-10-10.md)
+now freezes grading of the same 28 unchanged answers with the content-pinned
+LongMemEval prompt and `gpt-4o-2024-08-06`. Four seven-question hypothesis files
+retain original IDs; source/gold go only to scoring. Free exports/preflight pass,
+with no new Reader, graph or retrieval work. Live scoring awaits an appropriate
+channel/key and is capped at 28 attempted requests, with no automatic retry.
+Prior labels remain untouched. Official grading of DeepSeek-generated opened
+answers is neither an AML-compliant run nor an independent/full LongMemEval score.
