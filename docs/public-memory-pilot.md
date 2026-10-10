@@ -882,3 +882,28 @@ independent semantic correctness. Paired QA is blocked before paid calls; no
 default is promoted. Full regression now passes 1,658 tests plus three subtests,
 with 33 skipped. Next reference-Reader work should try an explicit language and
 speaker output contract, not more domain-specific rules or repeated long prompts.
+
+### Bounded query-time analysis, not more Reader policy tuning
+
+The [attributed-content contrast](../benchmarks/reports/aml-evidence-representation-result-2026-10-10.md)
+preserves source labels through the actual AML content exporter but does not fix
+the local Reader's speaker inversion. No candidate/default promotion follows.
+
+The subsequent [query-time proposal plan](../benchmarks/reports/public-memory-lazy-proposal-plan-2026-10-10.md)
+and [result](../benchmarks/reports/public-memory-lazy-proposal-result-2026-10-10.md)
+reuse the already-opened first temporal/update questions' exact saved S raw
+contexts. Two existing reference-analyzer/miner calls create 16 candidate proposals;
+four Reader outputs complete, with zero new graph/retrieval/Store/Judge work.
+One temporal answer becomes coherent and reference-matching; the update baseline
+was already correct. All four answers still drift into Chinese. Candidate path
+tokens are 29,412 vs direct 13,374 (2.20x), not an unqualified low-cost quality gain.
+Key-removed replay matches all rows/diagnostics with zero new calls.
+
+No effective interval is extracted, and old/new project values both remain
+`current`: the missing downstream temporary temporal interpretation is visible,
+not silently solved by the analyzer. This route augments raw evidence and does
+not claim a complete governed timeline or causal/as-of replay. Next work should
+reuse generic governance/time capabilities with source clocks preserved, followed
+by a modest preregistered temporal/update expansion. Do not resume costly S-wide
+eager analysis or continue this local Reader-policy loop. Public SDK defaults and
+persistent personal-memory analysis remain unchanged.

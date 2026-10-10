@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Complete the six-call two-case query-time proposal diagnosis and key-removed
+  replay: one temporal Reader answer becomes coherent; update answer already
+  succeeds. Candidate path costs 2.20x direct tokens on these windows. Preserve
+  language drift, null effective bounds and both old/new current proposals;
+  no complete temporal-view, recall, official-score or default-promotion claim.
+
 - Freeze a two-case query-time proposal diagnosis using the real reference
   analyzer/miner gates over unchanged saved raw retrieval contexts. Preserve all
   source evidence, candidate status and quarantine accounting; cap analyzer/Reader
