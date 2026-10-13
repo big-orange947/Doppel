@@ -1,0 +1,36 @@
+{
+  "schema": "doppel.analyzer-atomicity-controls.v1",
+  "cases": [
+    {"id":"atomic-control-01","rubric":"Retain blue bicycle color and 32 mm tyre width as separate independently updatable property drafts, each bound only to its own supporting source, with distinct property topic keys. Both are assertions. No property omitted or compound replacement slot.",
+     "messages":[
+       {"id":"a01-x","actor":"owner","at":"2026-02-01T12:00:00Z","text":"My everyday bicycle is blue."},
+       {"id":"a01-y","actor":"owner","at":"2026-02-03T12:00:00Z","text":"The tyres on my everyday bicycle are 32 mm wide."}]},
+    {"id":"atomic-control-02","rubric":"One dishwasher brand assertion (Lark) binds both exact duplicate source messages. No duplicate property drafts or revision markers.",
+     "messages":[
+       {"id":"a02-x","actor":"owner","at":"2026-02-01T12:00:00Z","text":"My dishwasher is made by Lark."},
+       {"id":"a02-y","actor":"owner","at":"2026-02-03T12:00:00Z","text":"My dishwasher is made by Lark."}]},
+    {"id":"atomic-control-03","rubric":"Retain tram and ferry commute assertions separately with their own evidence, same commute-mode topic slot, no invented correction/retraction, newest-wins or effective dates.",
+     "messages":[
+       {"id":"a03-x","actor":"owner","at":"2026-02-01T12:00:00Z","text":"My usual commute is by tram."},
+       {"id":"a03-y","actor":"owner","at":"2026-02-03T12:00:00Z","text":"My usual commute is by ferry."}]},
+    {"id":"atomic-control-04","rubric":"Owner's single negative library-card statement is an assertion, not correction or retraction. Preserve non-ownership and its sole source; no invented prior positive claim or effective dates.",
+     "messages":[
+       {"id":"a04-x","actor":"owner","at":"2026-02-01T12:00:00Z","text":"I do not have a library card."}]},
+    {"id":"atomic-control-05","rubric":"Keep the original three-year-old laptop assertion unchanged with source x, and the explicit two-year correction with source y only. Same age slot, correction only on newer draft. No invented effective interval or retraction of the source-bound original.",
+     "messages":[
+       {"id":"a05-x","actor":"owner","at":"2026-02-01T12:00:00Z","text":"My laptop is three years old."},
+       {"id":"a05-y","actor":"owner","at":"2026-02-03T12:00:00Z","text":"I need to correct my earlier statement: my laptop is two years old, not three."}]},
+    {"id":"atomic-control-06","rubric":"Retain the owner's never-bought-telescope statement as an owner assertion, human_self authority and owner-only evidence. Agent's buying claim is not an owner fact; agent disagreement alone does not create a prior owner assertion or owner revision.",
+     "messages":[
+       {"id":"a06-x","actor":"agent","at":"2026-02-01T12:00:00Z","text":"You bought a telescope last week."},
+       {"id":"a06-y","actor":"owner","at":"2026-02-03T12:00:00Z","text":"I have never bought a telescope."}]},
+    {"id":"atomic-control-07","rubric":"Same explicitly identified picnic occurrence: one episode retains riverbank location and Nia attendance with both sources, not two occurrences. No unsupported extra details. Any event key must identify this one occurrence, not a plan or person-property.",
+     "messages":[
+       {"id":"a07-x","actor":"owner","at":"2026-02-02T12:00:00Z","text":"On February 1, 2026 I had a picnic at the riverbank."},
+       {"id":"a07-y","actor":"owner","at":"2026-02-03T12:00:00Z","text":"About that February 1, 2026 riverbank picnic: Nia joined me."}]},
+    {"id":"atomic-control-08","rubric":"Two distinct completed Cedar Gallery visits, January 10 and January 24, 2026, remain separate episodes with their respective sources; no shared event key, duplicate merge or current/plan promotion. No observation dates substituted for visit dates.",
+     "messages":[
+       {"id":"a08-x","actor":"owner","at":"2026-02-01T12:00:00Z","text":"I visited Cedar Gallery on January 10, 2026."},
+       {"id":"a08-y","actor":"owner","at":"2026-02-03T12:00:00Z","text":"I visited Cedar Gallery again on January 24, 2026."}]}
+  ]
+}

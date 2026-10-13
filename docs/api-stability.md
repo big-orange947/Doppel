@@ -60,6 +60,14 @@ separate rather than meeting the fixture's single-enrichment requirement. Do not
 change defaults, resume old runs under V9, or infer guaranteed revision semantics
 from this small non-independent diagnosis.
 
+`ReferencePersonalMemoryAnalyzerV10` is another explicit provisional candidate,
+using the [prospective property-atomic contract](memory-atomicity.md). V8/V9 prompt
+bytes and defaults stay unchanged. V10 separates independently mutable properties
+and asks for source-explicit revisions rather than inferring them from negation.
+It shares existing schema, gates and diagnostics; these instructions are not a
+hard semantic validator. Use a new model-bound checkpoint/cache identity. New
+controls do not retroactively pass V9's failed gate or authorize default promotion.
+
 `PersonalMemoryMinerConfig.evidence_error_policy` is an additive provisional batch
 option. The default `fail_batch` preserves the old behavior and configuration
 fingerprint. Explicit `quarantine` requires subject/source matching and records

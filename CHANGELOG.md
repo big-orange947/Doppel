@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Define a prospective property-atomic memory contract and opt-in Reference V10
+  candidate: independently updatable properties, supported same-occurrence episode
+  enrichment and source-explicit revisions. Keep V8/V9 instruction bytes, old
+  fixtures/results and defaults unchanged. Freeze eight new V9/V10 controls with
+  no old task-cohort execution, Store writes, Reader/Judge or promotion permission.
+
 - Complete frozen analyzer preservation controls: 16 calls and exact key-removed
   replay; non-independent rubric passes V8 4/8 vs opt-in V9 7/8, all-eight gate
   still false. Preserve compatible-attribute split failure, unverified revision

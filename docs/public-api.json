@@ -173,6 +173,7 @@
       "PersonalMemoryType",
       "ReferencePersonalMemoryAnalyzer",
       "ReferencePersonalMemoryAnalyzerV9",
+      "ReferencePersonalMemoryAnalyzerV10",
       "ReferencePersonalMemoryQueryPlanner",
       "ReferencePersonalMemoryQueryPlannerV2",
       "ReferenceMemoryConsolidator",

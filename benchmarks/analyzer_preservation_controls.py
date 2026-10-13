@@ -43,8 +43,8 @@ DEFAULT_CONTROLS = (
 MAX_BYTES = 100_000
 
 
-def contexts(dataset):
-    if dataset.get("schema") != RUNNER or len(dataset["cases"]) != 8:
+def contexts(dataset, *, runner=RUNNER):
+    if dataset.get("schema") != runner or len(dataset["cases"]) != 8:
         raise ValueError("eight frozen controls required")
     result = {}
     for case in dataset["cases"]:
@@ -75,7 +75,7 @@ def contexts(dataset):
         ):
             raise ValueError("explicit unique owner/agent source bindings required")
         result[case["id"]] = BatchTaskContext(
-            run_id=RUNNER + ":" + case["id"],
+            run_id=runner + ":" + case["id"],
             scope=scope,
             window=HistoryWindow(start=messages[0].at, end=messages[-1].at),
             checkpoint=BatchCheckpoint(),
@@ -85,23 +85,27 @@ def contexts(dataset):
     return result
 
 
-async def prepare(dataset_bytes):
+async def prepare(dataset_bytes, *, runner=RUNNER, profiles=None, source_files=()):
+    profiles = PROFILES if profiles is None else profiles
+    if len(profiles) != 2:
+        raise ValueError("two paired profiles required")
     dataset = json.loads(dataset_bytes)
-    bound = contexts(dataset)
+    bound = contexts(dataset, runner=runner)
     requests = {}
     for identity, context in bound.items():
-        for profile, cls in PROFILES.items():
+        for profile, cls in profiles.items():
             probe = ProbeModel()
             await PersonalMemoryMiner(
                 cls(probe), miner_config(len(context.history.source))
             ).propose(context)
             requests[identity, profile] = probe.request
-        a, b = [requests[identity, p] for p in PROFILES]
+        a, b = [requests[identity, p] for p in profiles]
         if a.input != b.input or a.output_schema != b.output_schema:
             raise ValueError("only instructions/analyzer identity may change")
     root = Path(__file__).resolve().parents[1]
     files = [
         Path(__file__),
+        *source_files,
         *[
             root / p
             for p in (
@@ -117,14 +121,14 @@ async def prepare(dataset_bytes):
     order = [
         [identity, p]
         for n, identity in enumerate(bound)
-        for p in (tuple(PROFILES) if n % 2 == 0 else tuple(PROFILES)[::-1])
+        for p in (tuple(profiles) if n % 2 == 0 else tuple(profiles)[::-1])
     ]
     plan = {
-        "runner": RUNNER,
+        "runner": runner,
         "controls_sha256": hashlib.sha256(dataset_bytes).hexdigest(),
         "execution_order": order,
         "provider_config": config(2048).model_dump(mode="json"),
-        "analyzer_versions": {p: cls.version for p, cls in PROFILES.items()},
+        "analyzer_versions": {p: cls.version for p, cls in profiles.items()},
         "request_sha256": {
             c + ":" + p: _hash(requests[c, p].model_dump(mode="json")) for c, p in order
         },
@@ -155,7 +159,12 @@ async def prepare(dataset_bytes):
     return bound, requests, plan
 
 
-async def execute(args, bound, plan, *, provider_factory=None, balance_reader=balance):
+async def execute(
+    args, bound, plan, *, provider_factory=None, balance_reader=balance, profiles=None
+):
+    profiles = PROFILES if profiles is None else profiles
+    if plan["analyzer_versions"] != {p: cls.version for p, cls in profiles.items()}:
+        raise ValueError("frozen analyzer profiles mismatch")
     key = "" if args.cache_only else os.environ.get("DEEPSEEK_API_KEY", "").strip()
     if not key and not args.cache_only:
         raise ValueError("DEEPSEEK_API_KEY missing")
@@ -203,7 +212,7 @@ async def execute(args, bound, plan, *, provider_factory=None, balance_reader=ba
                     args.run_dir / "receipts" / (identity + "-" + profile + ".json"),
                     plan["request_sha256"][identity + ":" + profile],
                 )
-                analyzer = PROFILES[profile](
+                analyzer = profiles[profile](
                     receipt_model,
                     diagnostics_observer=lambda d, sink=diagnostics: sink.append(
                         d.model_dump(mode="json")

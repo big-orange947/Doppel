@@ -322,6 +322,29 @@ REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V9 = REFERENCE_PERSONAL_MEMORY_INSTRUCTIO
 )
 
 
+REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V10 = (
+    REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V9
+    + """\
+Atomicity contract: a mutable fact, state, preference or relationship draft describes
+one independently updatable property of one subject. Different properties of the same
+entity remain separate, with property-specific topic keys when justified and only
+their own supporting evidence. Compatible enrichment merges repeated descriptions of
+the SAME property and value, not unrelated attributes. Preserve all useful properties.
+For episodes, compatible details may enrich one occurrence only when supplied evidence
+establishes the same real-world event; different occurrences remain separate. Never
+invent an event identity to force a merge. These rules do not require storing noise.
+Revision is a speech act, not a value polarity or an automatic comparison outcome.
+A negative assertion, changed value, or disagreement with a historical agent is not
+by itself a correction or retraction of the subject's prior assertion. Use assertion
+unless the bound evidence explicitly corrects or withdraws that subject's prior claim
+or commitment. An explicit revision may identify the prior claim within its own source;
+do not require inventing a missing source. Keep earlier source assertions unchanged.
+Do not mix evidence for an original assertion into a new revision merely to track its
+target. Actual target resolution and lifecycle decisions belong to audited governance.
+"""
+)
+
+
 class PersonalMemoryAnalysisDiagnostics(BaseModel):
     """Content-free, per-response schema accounting, not a quality score.
 
@@ -440,6 +463,17 @@ class ReferencePersonalMemoryAnalyzerV9(ReferencePersonalMemoryAnalyzer):
 
     version = "9"
     _instructions = REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V9
+
+
+class ReferencePersonalMemoryAnalyzerV10(ReferencePersonalMemoryAnalyzer):
+    """Opt-in property-atomic extraction and source-explicit revision candidate.
+
+    No new schema, semantic validator or automatic lifecycle action. V8 remains
+    default; V9 and its failed frozen control gate remain unchanged.
+    """
+
+    version = "10"
+    _instructions = REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V10
 
 
 class PersonalMemoryExtractorConfig(BaseModel):
