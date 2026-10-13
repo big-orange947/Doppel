@@ -976,3 +976,13 @@ and separate binding. Docker/CUDA/models are ready but the new corpus is empty.
 The first committed source supplement permits 49 attempts for the first history,
 with no graph/QA calls or default/algorithm tuning. Report progress and failures
 without mistaking source preparation for answer accuracy or a full-500 score.
+
+The [first fresh source result](../benchmarks/reports/public-memory-fresh-high-config-50-stage01-result-2026-10-13.md)
+now completes the first new history: 49/49 chunks, 474 original messages, 216
+personal memories and six conflict records, with 747 source checks/zero failures.
+Eleven drafts are quarantined (nine mixed-actor, one unknown evidence, one subject
+mismatch), not semantically repaired. Source/vector inventory is current at 696/696.
+Forty-nine calls use 247,047 tokens; key-removed journal replay makes zero calls
+and reproduces audits. Overall progress is 1/50 source histories, not a scored
+question. Continue the frozen new-cohort materialization/graph/QA stages, not another
+prompt-control loop; old scores/reserved groups remain unchanged.

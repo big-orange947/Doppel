@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Begin the frozen fresh 50-case assessment with one complete source history:
+  49 calls, 247,047 tokens, 474 original messages / 216 memories / six conflicts,
+  747 provenance checks and current 696-entry vector inventory. Preserve eleven
+  quarantined drafts and exact zero-key journal replay. Graph/QA not yet executed;
+  do not present ingestion completion as new answer accuracy.
+
 - Freeze a prospective 50-question LongMemEval-S cohort outside 80 prior/opened/
   reserved history groups, with seven public strata and ten new reserved groups.
   Pin production high-config vs raw-vector-reranked profiles, source-only ingestion,
