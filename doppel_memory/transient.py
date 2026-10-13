@@ -84,6 +84,88 @@ class TransientMemoryView(BaseModel):
     semantic_evidence_verified: Literal[False] = False
 
 
+class TransientEventGroup(BaseModel):
+    """Read-only episode details, not a canonical memory or verified occurrence."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    group_id: str
+    scope_key: str
+    event_key: str
+    actor: str
+    authority: FactAuthority
+    subject: str
+    subject_id: str
+    claims: tuple[TransientMemoryClaim, ...]
+    identity_basis: Literal["shared_declared_event_key", "single_unkeyed_claim"]
+    temporal_metadata_consistent: bool
+    semantic_identity_verified: Literal[False] = False
+    consolidation_applied: Literal[False] = False
+
+
+def group_transient_events(
+    view: TransientMemoryView, *, max_claims: int = 100
+) -> tuple[TransientEventGroup, ...]:
+    """Group already source-bound episode claims without deleting any detail.
+
+    Call with a builder-produced authorized view. Model validation is NOT host
+    authorization or source revalidation. Shared declared keys are advisory;
+    temporal disagreements remain visible and no exact count is asserted.
+    Non-episode claims remain available in the original view.
+    """
+    bound = TransientMemoryView.model_validate(view)
+    if type(max_claims) is not int or max_claims < 1:
+        raise ValueError("event grouping limit must be a positive integer")
+    if len(bound.claims) > max_claims:
+        raise TransientViewError("event grouping claim limit exceeded")
+    if len({c.claim_id for c in bound.claims}) != len(bound.claims):
+        raise TransientViewError("duplicate claim identity in event grouping")
+    groups: dict[tuple[str, ...], list[TransientMemoryClaim]] = {}
+    for claim in bound.claims:
+        if claim.memory_type != PersonalMemoryType.EPISODE:
+            continue
+        key = claim.event_key.strip().lower()
+        namespace = (
+            bound.scope_key,
+            claim.actor,
+            claim.authority.value,
+            claim.subject,
+            claim.subject_id,
+            "declared" if key else "unkeyed",
+            key or claim.claim_id,
+        )
+        groups.setdefault(namespace, []).append(claim)
+    result = []
+    for namespace, claims in sorted(groups.items()):
+        claims.sort(key=lambda c: c.claim_id)
+        anchor = claims[0]
+        identity = hashlib.sha256(
+            json.dumps(namespace, separators=(",", ":")).encode()
+        ).hexdigest()
+        result.append(
+            TransientEventGroup(
+                group_id="transient-event-" + identity,
+                scope_key=bound.scope_key,
+                event_key=anchor.event_key.strip().lower(),
+                actor=anchor.actor,
+                authority=anchor.authority,
+                subject=anchor.subject,
+                subject_id=anchor.subject_id,
+                claims=tuple(claims),
+                identity_basis="shared_declared_event_key"
+                if anchor.event_key.strip()
+                else "single_unkeyed_claim",
+                temporal_metadata_consistent=len(
+                    {
+                        (c.temporal_status, c.revision_kind, c.valid_from, c.valid_to)
+                        for c in claims
+                    }
+                )
+                == 1,
+            )
+        )
+    return tuple(result)
+
+
 def _time(value: datetime | str | None, *, optional: bool = False) -> datetime | None:
     if value is None and optional:
         return None

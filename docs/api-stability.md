@@ -68,6 +68,27 @@ It shares existing schema, gates and diagnostics; these instructions are not a
 hard semantic validator. Use a new model-bound checkpoint/cache identity. New
 controls do not retroactively pass V9's failed gate or authorize default promotion.
 
+`TransientEventGroup` and `group_transient_events` are additive provisional root
+APIs for [non-destructive episode grouping](transient-memory-view.md). Existing
+`TransientMemoryView` wire fields do not change. Source-bound claim details are
+retained; declared key identity remains advisory, not a grant of scope access.
+
+Episode consolidation now distinguishes grouping from destructive `merge`.
+Reference and deterministic consolidator identities advance from V4 to V5. Episode
+merges require matching non-empty event keys, identical stripped content and matching
+temporal status/revision/effective-bound metadata. Different details stay active;
+exact duplicate snapshots may merge with source references preserved. Other memory
+types keep their existing merge/correction/conflict policy. Effective bounds are
+compared conservatively as stored metadata, not repaired or inferred.
+
+Use new version-bound checkpoints/journals/caches for V5, rather than silently
+resuming V4 cycles. Old exact-safe plans may still replay; execution revalidates
+episode-merge safety before writing even for an integrity-valid old plan. An unsafe
+old plan fails without further writes or transitions. Previously completed unsafe
+merges are **not** automatically restored by this change; inspect their original
+sources separately. This safety gate does not restrict ordinary recall candidates
+or require a Reader to refuse.
+
 `PersonalMemoryMinerConfig.evidence_error_policy` is an additive provisional batch
 option. The default `fail_batch` preserves the old behavior and configuration
 fingerprint. Explicit `quarantine` requires subject/source matching and records

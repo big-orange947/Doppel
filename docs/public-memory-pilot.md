@@ -954,3 +954,13 @@ date-bound/type variability and temporal denial caveats. V8 remains default and
 both old/new gates remain false. Input overhead 19.75%, 24,887 tokens total; exact
 16-hit zero-key replay. Next inspect event-level grouping/count/detail retention
 without model calls rather than looping on prompts or rerunning old task cases.
+
+The [zero-model event audit](../benchmarks/reports/event-consolidation-audit-result-2026-10-13.md)
+confirms distinct-key counting already avoids duplicate detail records, but catches
+destructive custom merges that keep only one sentence and deterministic merges that
+ignored occurrence keys/bounds under a shared topic. Episode consolidation now
+requires identical declared-identity/content/temporal snapshots (consolidator V5),
+including execution-time validation of legacy plans. Complementary details remain
+active. Optional read-only grouping retains all eight actual saved episode claims
+and sources, with declared identity still advisory. Neither failed analyzer rubric
+is rescored; no new extraction/Reader/Judge or external database calls occur.

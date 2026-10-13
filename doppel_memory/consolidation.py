@@ -148,6 +148,12 @@ Conflict sources remain active. Current and planned claims may coexist and must 
 replace one another. Do not generate replacement scope, authority, state, IDs,
 or deletion actions. Do not generate replacement content. Do not merge separate episodes merely
 because they are similar. Do not infer that a plan happened or expire temporary state.
+Episode merges require one identical non-empty event_key, identical content (apart
+from surrounding whitespace), temporal status, revision marker and effective bounds.
+Different details of the same event remain separate: this protocol selects an existing
+sentence and cannot safely synthesize an enriched replacement. Keep those details for
+read-only event grouping instead of superseding them. Missing identity is not proof of
+the same occurrence.
 An explicitly newer historical correction or retraction may correct one active
 current or planned slot with the same topic_key; it retires the cancelled active
 value but preserves unrelated historical records.
@@ -159,7 +165,7 @@ class ReferenceMemoryConsolidator:
     """Schema-constrained semantic consolidator using a host-owned model provider."""
 
     name = "doppel.reference-memory-consolidator"
-    version = "4"
+    version = "5"
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -188,6 +194,7 @@ class ReferenceMemoryConsolidator:
                                 "personal_memory_type", ""
                             ),
                             "topic_key": record.metadata.get("topic_key", ""),
+                            "event_key": record.metadata.get("event_key", ""),
                             "revision_kind": record.metadata.get(
                                 "revision_kind", "assertion"
                             ),
@@ -249,7 +256,7 @@ class DeterministicMemoryConsolidator:
     """Merge exact claims and require explicit revision evidence for correction."""
 
     name = "doppel.deterministic-memory-consolidator"
-    version = "4"
+    version = "5"
 
     def __init__(self, config: DeterministicConsolidatorConfig | None = None) -> None:
         self.config = config or DeterministicConsolidatorConfig()
@@ -307,16 +314,23 @@ class DeterministicMemoryConsolidator:
             ]
             if len(available_group) < 2:
                 continue
-            content_groups: dict[tuple[str, str], list[MemoryRecord]] = defaultdict(
+            content_groups: dict[tuple[str, ...], list[MemoryRecord]] = defaultdict(
                 list
             )
             for record in available_group:
-                content_groups[
-                    (
+                if (
+                    _metadata_text(record, "personal_memory_type")
+                    == PersonalMemoryType.EPISODE
+                ):
+                    signature = _episode_merge_signature(record)
+                    if signature is None:
+                        continue
+                else:
+                    signature = (
                         _normalize_content(record.content),
                         _metadata_text(record, "temporal_status"),
                     )
-                ].append(record)
+                content_groups[signature].append(record)
             memory_type = _metadata_text(available_group[0], "personal_memory_type")
             temporal_groups: dict[str, list[MemoryRecord]] = defaultdict(list)
             for record in available_group:
@@ -389,8 +403,15 @@ class DeterministicMemoryConsolidator:
                 continue
             memory_type = _metadata_text(record, "personal_memory_type")
             topic_key = _metadata_text(record, "topic_key")
-            if memory_type == PersonalMemoryType.EPISODE and not topic_key:
-                continue
+            if memory_type == PersonalMemoryType.EPISODE:
+                signature = _episode_merge_signature(record)
+                if signature is None:
+                    continue
+            else:
+                signature = (
+                    _metadata_text(record, "temporal_status"),
+                    _normalize_content(record.content),
+                )
             unkeyed[
                 (
                     record.actor,
@@ -400,8 +421,7 @@ class DeterministicMemoryConsolidator:
                     _metadata_text(record, "subject_id"),
                     memory_type,
                     topic_key,
-                    _metadata_text(record, "temporal_status"),
-                    _normalize_content(record.content),
+                    *signature,
                 )
             ].append(record)
         for group in unkeyed.values():
@@ -821,6 +841,7 @@ class ConsolidationRunner:
         for key in ("subject", "subject_id", "personal_memory_type"):
             if len({_metadata_text(record, key) for record in sources}) != 1:
                 raise ConsolidationPlanningError(f"source memories disagree on {key}")
+        _validate_episode_merge(decision.operation, sources)
         topic_keys = {_metadata_text(record, "topic_key") for record in sources}
         nonempty_topics = topic_keys.difference({""})
         if len(nonempty_topics) > 1:
@@ -985,6 +1006,21 @@ class ConsolidationRunner:
                         "source_validate",
                         "MemoryFingerprintConflict",
                         f"source memory fingerprint changed: {source.memory_id}",
+                        plan.consolidator,
+                    )
+                )
+        if not errors:
+            # Recheck destructive episode semantics even for plans produced by
+            # older runners. This gate also permits replay of already-applied
+            # safe exact merges; it does not require sources to remain active.
+            try:
+                _validate_episode_merge(action.operation, list(current.values()))
+            except ConsolidationPlanningError:
+                errors.append(
+                    _error(
+                        "decision_validate",
+                        "UnsafeEpisodeMerge",
+                        "episode merge no longer satisfies identity/content/time gates",
                         plan.consolidator,
                     )
                 )
@@ -1342,6 +1378,42 @@ def _effective_time(record: MemoryRecord) -> datetime:
 def _normalize_content(content: str) -> str:
     normalized = unicodedata.normalize("NFKC", content).lower().strip()
     return re.sub(r"[\s，。！？；：、,.!?;:]+", "", normalized)
+
+
+def _episode_merge_signature(record: MemoryRecord) -> tuple[str, ...] | None:
+    key = _metadata_text(record, "event_key")
+    if not key:
+        return None
+    # Do not remove internal punctuation: decimal amounts and identifiers can
+    # change meaning. No semantic equality or event identity is inferred here.
+    return (
+        key,
+        record.content.strip(),
+        _metadata_text(record, "temporal_status"),
+        _metadata_text(record, "revision_kind"),
+        _metadata_text(record, "valid_from"),
+        _metadata_text(record, "valid_to"),
+    )
+
+
+def _validate_episode_merge(operation: str, sources: Sequence[MemoryRecord]) -> None:
+    if operation != ConsolidationOperation.MERGE or not any(
+        _metadata_text(record, "personal_memory_type") == PersonalMemoryType.EPISODE
+        for record in sources
+    ):
+        return
+    signatures = {_episode_merge_signature(record) for record in sources}
+    if (
+        any(
+            _metadata_text(record, "personal_memory_type") != PersonalMemoryType.EPISODE
+            for record in sources
+        )
+        or None in signatures
+        or len(signatures) != 1
+    ):
+        raise ConsolidationPlanningError(
+            "episode merge requires identical non-empty event identity, content and temporal metadata"
+        )
 
 
 def _metadata_text(record: MemoryRecord, key: str) -> str:

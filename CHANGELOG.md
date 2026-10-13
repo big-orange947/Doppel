@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Separate non-destructive transient episode grouping from persistent merging.
+  Add provisional `TransientEventGroup`/`group_transient_events`, preserving all
+  per-detail claims and sources, with advisory declared identity and temporal
+  disagreement flags. No default Reader/schema migration or analyzer-score rewrite.
+- Tighten episode consolidation to identical declared-identity/content/temporal
+  snapshots, with execution-time checks for legacy plans. Bump reference and
+  deterministic consolidator versions to 5; expose event keys to the reference
+  model. Keep complementary details active and block merging distinct occurrences
+  or unequal effective bounds. Non-episode policy and normal recall are unchanged.
+
 - Complete prospective atomicity controls with 16 calls and exact empty-key replay:
   non-independent V9 6/8 vs opt-in V10 7/8, one source-explicit revision improvement.
   Same-occurrence episode enrichment still fails; retain date/type/temporal-denial

@@ -238,11 +238,13 @@ from doppel_memory.style import (
     StyleQualityReport,
 )
 from doppel_memory.transient import (
+    TransientEventGroup,
     TransientEvidence,
     TransientMemoryClaim,
     TransientMemoryView,
     TransientMemoryViewBuilder,
     TransientViewError,
+    group_transient_events,
 )
 from doppel_memory.vector import (
     CompositeSemanticIndex,
@@ -471,6 +473,7 @@ __all__ = [
     "StyleQualityEvaluator",
     "StyleQualityReport",
     "TemporalSemanticIndex",
+    "TransientEventGroup",
     "TransientEvidence",
     "TransientMemoryClaim",
     "TransientMemoryView",
@@ -487,6 +490,7 @@ __all__ = [
     "audit_batch_task",
     "audit_history_reader",
     "audit_store",
+    "group_transient_events",
     "memory_index_fingerprint",
     "resolve_content",
 ]

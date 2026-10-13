@@ -98,3 +98,40 @@ The [initial result](../benchmarks/reports/public-memory-transient-view-result-2
 finds no additional task success (both arms answer both cases), but preserves
 retrospective-time caveats and original evidence despite advisory conflict. The
 index adds 19.16% Reader input tokens on these cases; it is not a promoted default.
+
+## Optional non-destructive event grouping
+
+`group_transient_events(view)` returns `TransientEventGroup` objects for episode
+claims in an already authorized, builder-produced view. It makes no model calls,
+retrieval, Store writes or lifecycle decisions. The original view stays unchanged;
+non-episode claims remain there. Each group retains complete per-detail claim
+objects, including their separate evidence, observation/effective times and flags.
+No synthesized summary or canonical sentence replaces those details.
+
+```python
+from doppel_memory import group_transient_events
+
+groups = group_transient_events(view)
+for group in groups:
+    for detail in group.claims:
+        print(detail.content, [e.evidence_id for e in detail.evidence])
+```
+
+Grouping partitions by exact view scope, actor, authority, subject and subject ID.
+A shared non-empty declared event key groups details, following existing lowercased
+event-key conventions; it does **not** verify that the key correctly identifies one
+occurrence. Unkeyed claims stay separate, even if their text is similar. The utility
+does not choose names, resolve aliases, infer missing identity or assert an exact
+real-world event count. `semantic_identity_verified=False` and
+`consolidation_applied=False` make this explicit. Group IDs are stable within that
+namespace; input claim order does not change the result.
+
+`temporal_metadata_consistent` reports only equality of supplied temporal statuses,
+revision markers and effective bounds. Missing bounds may agree without being known.
+Disagreement stays visible; no newest-wins or interval union. The default limit is
+100 input claims; exceeding it, duplicate claim IDs or invalid limits fail instead
+of truncating. Manually constructing a valid view does not authorize its content:
+host authorization/source revalidation still precedes this utility.
+
+This is an additive explicit projection, not new default Reader input or a repair of
+the failed analyzer-enrichment controls. Their frozen 7/8 results stay unchanged.

@@ -215,6 +215,7 @@
       "StructuredOutputProviderError",
       "TemporalSemanticIndex",
       "TransientEvidence",
+      "TransientEventGroup",
       "TransientMemoryClaim",
       "TransientMemoryView",
       "TransientMemoryViewBuilder",
@@ -227,6 +228,7 @@
       "audit_batch_task",
       "audit_history_reader",
       "audit_store",
+      "group_transient_events",
       "memory_index_fingerprint",
       "resolve_content"
     ]

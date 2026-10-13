@@ -11,6 +11,20 @@ import doppel_memory as doppel
 ROOT = Path(__file__).resolve().parents[1]
 
 MODEL_FIELDS = {
+    "TransientEventGroup": (
+        "group_id",
+        "scope_key",
+        "event_key",
+        "actor",
+        "authority",
+        "subject",
+        "subject_id",
+        "claims",
+        "identity_basis",
+        "temporal_metadata_consistent",
+        "semantic_identity_verified",
+        "consolidation_applied",
+    ),
     "TransientEvidence": (
         "evidence_id",
         "actor",
