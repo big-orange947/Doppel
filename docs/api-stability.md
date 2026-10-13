@@ -54,6 +54,11 @@ semantic-coverage guarantee. Schema, parsing, diagnostics and authority gates ar
 shared. Use a new version-bound checkpoint/cache/journal identity for V9; do not
 rewrite or resume an old bound V8 run as if the analyzer were unchanged. Existing
 one-argument V8 construction and optional diagnostics callback remain valid.
+The [first frozen control result](../benchmarks/reports/analyzer-preservation-controls-result-2026-10-13.md)
+is 7/8 for V9, not a passed promotion gate. Different property claims remain
+separate rather than meeting the fixture's single-enrichment requirement. Do not
+change defaults, resume old runs under V9, or infer guaranteed revision semantics
+from this small non-independent diagnosis.
 
 `PersonalMemoryMinerConfig.evidence_error_policy` is an additive provisional batch
 option. The default `fail_batch` preserves the old behavior and configuration

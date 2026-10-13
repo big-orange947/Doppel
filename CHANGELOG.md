@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Complete frozen analyzer preservation controls: 16 calls and exact key-removed
+  replay; non-independent rubric passes V8 4/8 vs opt-in V9 7/8, all-eight gate
+  still false. Preserve compatible-attribute split failure, unverified revision
+  markers and time-precision caveat. Post-hoc pure consolidation shows two V8
+  correction vs V9 conflict suggestions without writes; no default promotion or
+  claim the original task omission is fixed.
+
 - Add an explicit Reference analyzer V9 candidate for compatible-only enrichment
   and separate incompatible source assertions. Keep V8 instruction bytes/default
   unchanged; share schema/parser/authority gates and require fresh version-bound

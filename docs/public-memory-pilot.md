@@ -931,3 +931,15 @@ conflict in the proposals. Sixty-three candidate proposals all lack effective
 bounds; index input overhead is 30.54%. Key-removed 15-hit replay matches every row,
 view and checkpoint. Next prioritize generic extraction-preservation controls and
 versioned analyzer work, not repeated tuning of these cases or default promotion.
+
+The [V8/V9 preservation controls](../benchmarks/reports/analyzer-preservation-controls-result-2026-10-13.md)
+now run 16 extraction calls on eight unrelated synthetic controls with no task
+Reader/Judge or old-cohort execution. V8 prompt/default stays byte-identical;
+V9 is explicit opt-in. Manual frozen-rubric passes 4/8 vs 7/8; the candidate's
+all-eight gate remains false. Two unmarked changes no longer receive invented
+correction markers in V9, with different advisory downstream behavior, but both
+models split two compatible coat attributes rather than producing one enriched
+draft. No information loss is demonstrated by that split. Preserve the failure,
+unverified negative-statement revision markers and date precision caveats; settle
+generic atomic-slot semantics prospectively instead of forcing a format or
+rewriting this rubric. No default promotion or original shoe-omission fix claim.
