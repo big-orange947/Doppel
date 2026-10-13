@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Complete prospective atomicity controls with 16 calls and exact empty-key replay:
+  non-independent V9 6/8 vs opt-in V10 7/8, one source-explicit revision improvement.
+  Same-occurrence episode enrichment still fails; retain date/type/temporal-denial
+  caveats. No default promotion, old-gate rewrite or old task-cohort execution.
+
 - Define a prospective property-atomic memory contract and opt-in Reference V10
   candidate: independently updatable properties, supported same-occurrence episode
   enrichment and source-explicit revisions. Keep V8/V9 instruction bytes, old

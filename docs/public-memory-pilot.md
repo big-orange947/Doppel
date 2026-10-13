@@ -943,3 +943,14 @@ draft. No information loss is demonstrated by that split. Preserve the failure,
 unverified negative-statement revision markers and date precision caveats; settle
 generic atomic-slot semantics prospectively instead of forcing a format or
 rewriting this rubric. No default promotion or original shoe-omission fix claim.
+
+The [new atomicity controls](../benchmarks/reports/analyzer-atomicity-controls-result-2026-10-13.md)
+freeze a prospective independent-property contract without editing the old coat
+fixture. Sixteen new analyzer calls produce V9 6/8 versus opt-in V10 7/8 under
+new rubrics: agent disagreement no longer becomes an owner retraction, but both
+arms fail same-occurrence episode enrichment. No facts are shown lost there;
+details survive in separate episode drafts with one event key. Keep the failure,
+date-bound/type variability and temporal denial caveats. V8 remains default and
+both old/new gates remain false. Input overhead 19.75%, 24,887 tokens total; exact
+16-hit zero-key replay. Next inspect event-level grouping/count/detail retention
+without model calls rather than looping on prompts or rerunning old task cases.
