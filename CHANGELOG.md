@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Complete the fixed five-case transient cohort: 15 calls and exact key-removed
+  replay. Non-independent coherent task completions 3/5 plain vs 4/5 indexed;
+  one temporal reasoning gain, faithful unresolved count conflict still fails
+  unique-answer task. Preserve missing six-count extraction, unknown bounds and
+  30.54% input overhead. No core/default/official-score changes.
+
 - Freeze a five-case source-order transient-view expansion (2 temporal, 2 update,
   1 no-answer), excluding prior view cases/reserved IDs and validating unchanged
   saved retrieval/QA bindings. Shared bounded analysis, paired fixed Readers,

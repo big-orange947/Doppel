@@ -919,3 +919,15 @@ claims/raw sources remain available, none is promoted or retired. Input tokens
 increase 19.16%; key-removed replay matches all views/rows with zero new calls.
 Do not keep tuning these two cases. Expand a modest preregistered diagnostic
 cohort next; persistent analysis, recall ranking and default policies are unchanged.
+
+The [five-case source-order expansion](../benchmarks/reports/public-memory-transient-cohort-result-2026-10-13.md)
+now completes 5 shared analyses and 10 Readers, without new retrieval or graph.
+Manual non-independent coherent task completions are 3/5 plain versus 4/5 indexed:
+one calendar-time reasoning correction, no incremental update/refusal success.
+A unique-count reference task remains unresolved because raw statements conflict;
+preserve faithful uncertainty separately from task completion. Its analyzer also
+omits the six-count assertion despite source availability, leaving no advisory
+conflict in the proposals. Sixty-three candidate proposals all lack effective
+bounds; index input overhead is 30.54%. Key-removed 15-hit replay matches every row,
+view and checkpoint. Next prioritize generic extraction-preservation controls and
+versioned analyzer work, not repeated tuning of these cases or default promotion.
