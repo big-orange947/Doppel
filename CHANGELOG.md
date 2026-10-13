@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Freeze a prospective 50-question LongMemEval-S cohort outside 80 prior/opened/
+  reserved history groups, with seven public strata and ten new reserved groups.
+  Pin production high-config vs raw-vector-reranked profiles, source-only ingestion,
+  identical Reader/scorer/context caps and per-stage accounting; no mid-cohort tuning.
+  Add a 49-attempt first-history ingestion supplement with cache-only replay safety.
+  New corpus is not yet graph/QA-ready; no fresh quality or full-500/AML score claimed.
+
 - Separate non-destructive transient episode grouping from persistent merging.
   Add provisional `TransientEventGroup`/`group_transient_events`, preserving all
   per-detail claims and sources, with advisory declared identity and temporal

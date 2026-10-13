@@ -1,0 +1,591 @@
+{
+  "source_sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+  "dataset_namespace": "longmemeval-s-cleaned-local-v1",
+  "run_namespace": "longmemeval-fresh-high-config-20261013-v1",
+  "seed": 20261013,
+  "max_messages": 20,
+  "selection_rule": "seeded-public-type-round-robin-one-case-per-complete-history-excluding-prior-groups-no-gold",
+  "sampling_projection": "public-type-and-public-abs-id/no-question-gold-or-turn-labels.v1",
+  "excluded_history_groups": [
+    "01ba44efb3d81cb2444312e839a939ef1767b947eec9e0f4b5a23c1c9fa7a41b",
+    "02765a5f038d591f85deb4e96e86713a6822e2159d2780dd45a7a2b458aa8b01",
+    "0344cf9dbdc265ac9d17c3e6f15ecbdcae02725952f25742be87c1a5adbda6b4",
+    "0566f542ab018517a7bb179717595cfc5d61c62666308cf4e4aa5a19aa7f24fe",
+    "0962da749a632f4ec86235e78a8dc05e96417567c1b9d87216888b737c07da60",
+    "0bd50b26cf144b696b12d760b585202d514b9d0aa7fac7899d0a22b7af0a768d",
+    "0d15554e0dbf2f3c2358373d8c592644dd764d818849582d0299d6d264c93207",
+    "110f8cd4377892b2737ddcfceb215080b3fa9e69d1d203e54cf94d795c72561b",
+    "14ca59876c0d5b419e32a9896d2b7878f18a146ac0009ed4465dc73ca60888a7",
+    "184f31ff8a704886d9657f59a5c536bc68fa5125a2a5a7f34be6736e44a4b336",
+    "256a71a1c9914f6b80cfef4b8e4cd55addb5d687da18d847b6dfa16eef976d39",
+    "2caa7c9ebc47bdc858f811895c242fc40836494660a29995dd83e43588f0b515",
+    "33830aa38db94b8c8fd29bdfa9c4d47f7a03128a044bdca5761b09b586e52c41",
+    "37c6a9d6b758f23e7beefd6960b2dcf00083cc8b3f50d04b470f7764dfc3bd6b",
+    "38c9c767fe6968b5a036943923010321bee73c37a3fd52de4b8ade34a7fb547d",
+    "39ab423e7d47bc3b0b2ac23ab954ebb71d4779f63f09ce1718063a62250caf27",
+    "3a6afe2ad0dca20ea26d54abdc37f28b3d7cd075177d20c61176f7c5927bcf4c",
+    "3ca791cadd005f0590e5d8cfd29a95b7b96634a1de219ea3c0a500dc0e7aa45d",
+    "3e91676318c2ba20ff1ae8c21ab8f5c037b15393a0f0a2ccdc298f50ea27acdc",
+    "3f62a094aedf465b5193447089bddb0488e6c20b97b7449df69227fb2b2af449",
+    "4538177b002d73030de42fcbfe8dfce56dff28148ef3bf789442b71473c44680",
+    "462eb250edc3b07ca923d33cfd1a1ab7c198e4b7b13fff5fe78dac0afda1504d",
+    "46585f9716267a2c6a0bc476bc141ba7068d9b0e65e35c9097ed8dca4336ecad",
+    "4a09a957304eb2f53b9276dd7b6f85a9e63049f186fa5ff657df6f2f677b5475",
+    "4ba0115c8dc37871522c608f0bf63b6fa98d16f6db7c8777cd4abcda5d93084d",
+    "5747575da406f5f3615c98e3769c05ffe8e8dd4bf267b5abbc249bd9ea2a1e71",
+    "593a413420aea860202f73eab4adb73f4eeb4cbafe2e0e3a258621706c2cca61",
+    "5f25288ca51047142f4808e86e220f3a9c0d3d1d9f53437becd976440a86f9b1",
+    "6093bf7315509b1f9297cfeec376892290d8b69ce1704e702a719ad4b0d051dd",
+    "67384b6afc7bfb82366800430fb3a64fd735d158c248370587bbc55d4d55d0d7",
+    "682200c07028fa049e99c78752fbf5019a390781b23f737f1ff3f2044eddffed",
+    "69150a456f843be6b5f86dede610980f374bf1d35edb8eb35f784969a47be5ac",
+    "6f484080769742588255435226bd6e7a711f3ae7b8b303ba832ed367c6bba586",
+    "6f98db181a5f365b016f44264074d2ae43387865b38da46ffe717f082b7ce043",
+    "7177afbbc4416ebd7a41ea455fe23b6efd237f3e8ba71d192094fde6c93c865e",
+    "758db332c618d7b3e8bbaff5818c3edfe6affc063629aee9b4618fffae12ca43",
+    "75df584597c11185761546326b6275b8077257ad049ecc92747f2901a53c5284",
+    "78f159c0c65d68dbdd98f02760ad97c85ab028d65456c58df9d86afd5ab64a8f",
+    "80f54940ccf42eeba411a7c32dc3e28da5ac36d9808ccd4d9091403a4382c44a",
+    "88f0e7ee44dd8b26c296669dde2d54120590707e77347878155734295641b7f9",
+    "8936ce01776954899cc98e5fd34fe9311e9f7d25c1df4c76d4ace0e7ed184f0b",
+    "8a3b84fe73ef61d1e642b02ba9a7fb40f7df430c00b6670247c704a8e400c2ff",
+    "8f4d2a551f8a708c99c3eec64c48a3b9b072414625ad9b2fb17ae511c9eda905",
+    "9104a4beb34e15856e5749cf584d712a7a570f0f6be39698fc867c4b5dd3a4fd",
+    "935192375a19b968fa30ab7ad2680d575bca3bbfcfe8b916840f1b3d0c34b091",
+    "9b2016e69a10d01eb309dea8c2d2fc60e505c9e312d83aa44ef3944c4292405c",
+    "9cf2d7d5d7a236adb985fa031362b3911fda867d99d0ae36a6667c77a833ef2e",
+    "a41937d5cb752325be2ba758202cb48678e7d6a2314b6927638010f66389ec63",
+    "a560761995b9b55c8c7dc034ffed322f05255db456621eb97128f31f18fd6e70",
+    "a6289588e3dea68f1feb04d720c57d44b616b2ce223a41b53357cdf435012b2e",
+    "a78a00b8273126b7577062c676f04db7e01ca8014a740ebdbaeceed49cbc7eb2",
+    "a95e3bbb94eac028eeed4e90ea4a613bae38d41d85bb39fac19d7bae79128da0",
+    "b3524cf3d4e7d8f33c76c1ec8f8ca292bf8ea3fdc2ff140db6c7896b92793cb9",
+    "b370230c4b1664851839b199506878957b4b2cc6d2a0fb4a2b35b9fa076c341f",
+    "b42b777853c554af8ea136627101dffb394c4ac493a03e37e6905b72523edbeb",
+    "b919894558475751b505588da15cbb4a6444fab766e2a2f4f4eb831691687898",
+    "bcd79537e03bcce1d76f3254d7ef69ea7920f6687a12ef5b03b8e03f93baeebc",
+    "bd85488e15550eea5890b56880adfbac6368758de83a3b87ff569644fe95ae75",
+    "bf67d8ba3eaa3a8035c76d2f5ff84409d0a6866400eda6763067b78d333477ed",
+    "c71e6a95783460d51229172fa03f5412fa7acaf101583e4909d3470d12e3e278",
+    "cde3ad7203af5eb63afed28eab60d26bfb6d4914c0f088b5225440aa58796e27",
+    "d51f953ac27039a79c1c9dca13641f4100e38c0ddd50088a6da94fafa30f3b16",
+    "d7220f54e78098788354492b91394486476d44ee77353490458572792bddb567",
+    "d82cff732a03a553886d437b826f975f0e679cc20136955fa4ef6f3cb6af6868",
+    "de3351be03aac85b922a204355c78f785818bfa950a1c3cbe1f63f060e40e9dc",
+    "e0e9bb7f8fed08fd7317585e5517ad1cbbd23bf26eeb70edcb1baacdf79ba8e0",
+    "e130638912f1bfdc09f4df0e649d7ba5b3c0c2cf73083af4634517df4b717e25",
+    "e31e99bb53e3bc2eb20ac61cdfbabd8a20d80c10f32a1bde29823c66b1b63ea1",
+    "e74ca2a918138c4728729a93d9c02eee498fa178d6ba16dcd105f1bef3819f70",
+    "e8ed8b3348d28af198a0b9e8ab770b4957beea40159ebb546d1da15ea29236d5",
+    "eaaf70d3a3a4abc9ec15b3be3e1c427c595f6e246254898f9f50fa142013217f",
+    "f1a73da2db5d05ec79988362a83716db50b4786859d9020bcf7c38778913aee0",
+    "f21b8aaeb8e9595b06bd73715ecc539baada6c92967c26dae3ffa2a49fad0ef9",
+    "f80ad068defd080401f0eb19edb0891f79ab5ca223b7c98e90caa253a43b0f5a",
+    "f964937fd5b062f1cb8e353f1e869cafaee330883c5c53d74d9e4f6e3df26384",
+    "faca5eccba3d2e67d6001b446b64de28bb006c92d6be86b79c88d60e8f2769fc",
+    "fd13558435194b8210facb35fe9791e944bd82b1d7cf602efcecc83822912319",
+    "fdc393cb668c5d72e65351a0a8a21142e11423da9ca2c0462722c92996462d9c",
+    "fdf1600791be5a1490a50b9ce1d0b69998d6a2df31c4b3713455ccc8de2afc8c",
+    "fffbe5d2b2c338ad636d1d890a2c0ce00c19822b47b0fd1a26432c5be633ae26"
+  ],
+  "diagnostic_count": 50,
+  "reserved_count": 10,
+  "manifest_fingerprint": "e57c3157a2e885579d328bdcd262dc10869dfde9d63a98ce69d42d543382731d",
+  "runner": "doppel.public-memory-fresh-high-config-cohort.v1",
+  "plan_fingerprint": "cda3fbe324af2f63c60453faa87d4b66db0f68b1b9b77386bc4b09fbf27a5e5a",
+  "input_bindings": {
+    "dataset": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+    "prior_manifests": [
+      "9b21d2c2ca29dd562e1f0152f5df8a637f7cdee94343832d60cd90b215d686eb",
+      "a238e4b647987ef3867d034a497136ecfa25ea36bdc774f11f84796ce6ac1d3a",
+      "28dc31edbcfc119d5f952d9f0ab3ceeaa123a5e9a5bfef70f82f9febbc120721"
+    ],
+    "opened_observations": [
+      "e0f6636bcf6d82e01fa98e6a6366c900f14fdfdc75b4d348f2cf81179a214165"
+    ]
+  },
+  "independently_blind": false,
+  "quality_metrics_available": false,
+  "cases": [
+    {
+      "case_id": "15745da0",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "3952d4eb220139e611a6751720ec7a7cd95a50bf594e959d013666f8c67155f2",
+      "chunk_count": 49,
+      "raw_turn_count": 474
+    },
+    {
+      "case_id": "gpt4_d31cdae3",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "cbf2b56783e96ecfd9f622cc671f39654fcb77bdfda480a04a8f90e29a75619c",
+      "chunk_count": 50,
+      "raw_turn_count": 480
+    },
+    {
+      "case_id": "b6019101",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "e732877c302c031e23e2f836a0286b6f3dbb7fd39f738bfdae074ec846454af9",
+      "chunk_count": 50,
+      "raw_turn_count": 510
+    },
+    {
+      "case_id": "7e00a6cb",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "735c5df6547dcdff3e88bb4bf86703104d02fae6333c045683d04a608e5eb079",
+      "chunk_count": 63,
+      "raw_turn_count": 564
+    },
+    {
+      "case_id": "d23cf73b",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "3ae0b36bf344a2c6fc2e412b7f26f5cc9eb0a45ca3ad77e9c313d15282c68e85",
+      "chunk_count": 51,
+      "raw_turn_count": 512
+    },
+    {
+      "case_id": "95228167",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "61d6c70a03c435854965d93d489e79aee451254ba1d6ac2adeff5882a92e2ba6",
+      "chunk_count": 50,
+      "raw_turn_count": 507
+    },
+    {
+      "case_id": "bc8a6e93_abs",
+      "partition": "diagnostic",
+      "sampling_stratum": "public-no-answer-id",
+      "history_group": "b6807be24238a835a9e71406fd8dc75a38c3d8f8e8b1439c255d06468f01add9",
+      "chunk_count": 47,
+      "raw_turn_count": 493
+    },
+    {
+      "case_id": "19b5f2b3",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "42314078f41a8ac2749e8abe1768e057d29512a12df131d7fc217f99c98c120a",
+      "chunk_count": 43,
+      "raw_turn_count": 482
+    },
+    {
+      "case_id": "gpt4_fa19884c",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "04421bfb01116ca3c7506e01b4290001df8a3225da85b568537caf0b55ccaf80",
+      "chunk_count": 47,
+      "raw_turn_count": 507
+    },
+    {
+      "case_id": "5a4f22c0",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "021003a9c772fd8f370529afacec59051067dc9f4723e282aedc484e014f46c4",
+      "chunk_count": 49,
+      "raw_turn_count": 487
+    },
+    {
+      "case_id": "4c36ccef",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "fb5a2bf64719153e39accc33367e2899090eb53ece5b625e230259ad6c336fb5",
+      "chunk_count": 51,
+      "raw_turn_count": 521
+    },
+    {
+      "case_id": "00ca467f",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "aba3b169e33b9f77ed16f87cae7afec744cb948eda67c71145dd42b096b03e39",
+      "chunk_count": 47,
+      "raw_turn_count": 486
+    },
+    {
+      "case_id": "75832dbd",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "04051b30170bb12d457dd6fcdbf3598e1d0afcfee128ab0232700e2cfce95666",
+      "chunk_count": 49,
+      "raw_turn_count": 474
+    },
+    {
+      "case_id": "gpt4_c27434e8_abs",
+      "partition": "diagnostic",
+      "sampling_stratum": "public-no-answer-id",
+      "history_group": "2e725d0ae94555c2cc54dbd09c4cb9a0c7e8d3ab5b1261a3fd37bda87e48cbe1",
+      "chunk_count": 48,
+      "raw_turn_count": 482
+    },
+    {
+      "case_id": "29f2956b",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "6e8e29fdd50ea45b6bd9714a9c0e069feebf8623630157e87fb4fcb780c242f6",
+      "chunk_count": 49,
+      "raw_turn_count": 496
+    },
+    {
+      "case_id": "gpt4_e414231e",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "e1862f21e75746f9054bed2bca1def45a472fc09ef821a66500c3db417e44a5c",
+      "chunk_count": 47,
+      "raw_turn_count": 507
+    },
+    {
+      "case_id": "945e3d21",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "800387730151a24405f90c7c209803ea0cccbe4609321c77f006760690eb33c2",
+      "chunk_count": 49,
+      "raw_turn_count": 489
+    },
+    {
+      "case_id": "b759caee",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "349efbb474b39b490a0a94f2e3a15e7289a308c2596b0905006c686fc0fa5b88",
+      "chunk_count": 54,
+      "raw_turn_count": 516
+    },
+    {
+      "case_id": "5a7937c8",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "b2475b73c86de563d85176bec6ef651b44045abb974629d2836d313dfd171594",
+      "chunk_count": 42,
+      "raw_turn_count": 419
+    },
+    {
+      "case_id": "1d4e3b97",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "5d8843d8491d15641ac8f0945fe5f14c93b7d6cb28f89069d382031cde6d18b2",
+      "chunk_count": 46,
+      "raw_turn_count": 474
+    },
+    {
+      "case_id": "6456829e_abs",
+      "partition": "diagnostic",
+      "sampling_stratum": "public-no-answer-id",
+      "history_group": "74d1c3539abbf2ab09cab1bbd80941787941c356790148649a18eafe498ca177",
+      "chunk_count": 53,
+      "raw_turn_count": 494
+    },
+    {
+      "case_id": "c14c00dd",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "e6ede647c864bbeabe855657935c2885970f7e921a8ac7392923fc80b7e840a1",
+      "chunk_count": 51,
+      "raw_turn_count": 492
+    },
+    {
+      "case_id": "gpt4_f49edff3",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "e31d6105b17c178786b82dd7255b91012423f232916219f0c84c6adc227df1ec",
+      "chunk_count": 48,
+      "raw_turn_count": 498
+    },
+    {
+      "case_id": "26bdc477",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "7c8ff6c2870f6c48e43384e21ed3f3a20f0dab8d34d4a276ca6267977176c0fa",
+      "chunk_count": 49,
+      "raw_turn_count": 498
+    },
+    {
+      "case_id": "778164c6",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "961bf8b817b3a5776a173e4712b51907fa1236cc12130a9179a5a924995308f0",
+      "chunk_count": 53,
+      "raw_turn_count": 542
+    },
+    {
+      "case_id": "4f54b7c9",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "4799ee9d065edbf8463404013ba8adccb249052de8437793d4d8409841b11040",
+      "chunk_count": 45,
+      "raw_turn_count": 491
+    },
+    {
+      "case_id": "8a2466db",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "62a10cc1c85867634b8805179eaeae2eaddcf6820bebf101e6ec2f1c7e934fc4",
+      "chunk_count": 50,
+      "raw_turn_count": 508
+    },
+    {
+      "case_id": "gpt4_70e84552_abs",
+      "partition": "diagnostic",
+      "sampling_stratum": "public-no-answer-id",
+      "history_group": "8d6bd65c6a9df618bcad0e02e42813dab5fded36a86f225fdd2576365dfa9ecc",
+      "chunk_count": 52,
+      "raw_turn_count": 520
+    },
+    {
+      "case_id": "a82c026e",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "90f8ec2f5dabf4af0eb19166d3e6a6fc71c698ec91ae7ee3c413e35e4aee7787",
+      "chunk_count": 47,
+      "raw_turn_count": 476
+    },
+    {
+      "case_id": "gpt4_b5700ca0",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "0dcbbcb3a9d88faf559f521e31d2e3b1e9ba9c457f28fda1a9ae920a7d132779",
+      "chunk_count": 50,
+      "raw_turn_count": 500
+    },
+    {
+      "case_id": "89941a93",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "edc33c4945588059bb81e497060d2a79c14d72739369279bb4e448ef20d84c56",
+      "chunk_count": 52,
+      "raw_turn_count": 528
+    },
+    {
+      "case_id": "e9327a54",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "87364ea68467338ee185fd7f6305dc9458fb1e35011579c4dbdb859c5e10860c",
+      "chunk_count": 52,
+      "raw_turn_count": 533
+    },
+    {
+      "case_id": "a346bb18",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "3fc5622a7c9607759524092f152c6ff80f7de3b8887f204311a59c1e2eb1a21e",
+      "chunk_count": 49,
+      "raw_turn_count": 478
+    },
+    {
+      "case_id": "d24813b1",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "ad5c211e91759997387aa8f0fed147c328e0c3774aba8f1a63e0bf6763c78e83",
+      "chunk_count": 44,
+      "raw_turn_count": 485
+    },
+    {
+      "case_id": "edced276_abs",
+      "partition": "diagnostic",
+      "sampling_stratum": "public-no-answer-id",
+      "history_group": "ba82c6fa2981b2053f0b4760e14af1360d3aa8c1db6aaef68e44d1e5f147cde6",
+      "chunk_count": 51,
+      "raw_turn_count": 544
+    },
+    {
+      "case_id": "51a45a95",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "ca1b290343b489c79dfcd1f078ac528f65555f468c33527617eba0b14dbe1692",
+      "chunk_count": 51,
+      "raw_turn_count": 529
+    },
+    {
+      "case_id": "gpt4_ec93e27f",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "a6e44983ae35636c63393a10da1189b8a27c1f18d37305d61987edd37308631d",
+      "chunk_count": 48,
+      "raw_turn_count": 516
+    },
+    {
+      "case_id": "2133c1b5",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "9d106620b28ea1805d25fd4860d5ab0b13f4049620448cb2d9fda7401c17e817",
+      "chunk_count": 52,
+      "raw_turn_count": 523
+    },
+    {
+      "case_id": "8752c811",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "4b216aa37ade0c5f69e33449603070112333e389ea00d12238d2ee57162b65e7",
+      "chunk_count": 56,
+      "raw_turn_count": 493
+    },
+    {
+      "case_id": "gpt4_2f8be40d",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "02ffcdb9bc48ec471e6608253f241ec23e1967602cc94ecc521a9503a6aa9a14",
+      "chunk_count": 46,
+      "raw_turn_count": 474
+    },
+    {
+      "case_id": "d6233ab6",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "d255882509af8db9c8758e77c3eb6ec9b888b3c00f4a4d0638caa59d39c2e6ea",
+      "chunk_count": 44,
+      "raw_turn_count": 437
+    },
+    {
+      "case_id": "a96c20ee_abs",
+      "partition": "diagnostic",
+      "sampling_stratum": "public-no-answer-id",
+      "history_group": "f9ca746633fc6b2043e90e8d4e6fa2fc0a33ecd2b0eae4434181dc24be81f708",
+      "chunk_count": 53,
+      "raw_turn_count": 535
+    },
+    {
+      "case_id": "f4f1d8a4",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "9edc98af72087145811e10e6fdb30e2a21567af969215f17e1c08065f1fbb2aa",
+      "chunk_count": 55,
+      "raw_turn_count": 585
+    },
+    {
+      "case_id": "gpt4_7abb270c",
+      "partition": "diagnostic",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "758b5ee81787307208bff7a2839acc1d1549c7d466538f84821e158e88fe81a0",
+      "chunk_count": 48,
+      "raw_turn_count": 467
+    },
+    {
+      "case_id": "6a27ffc2",
+      "partition": "diagnostic",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "e789a2f7a7123cd31e03433cf1bf329047201417ab075a5996c848722c3a4ab9",
+      "chunk_count": 51,
+      "raw_turn_count": 493
+    },
+    {
+      "case_id": "58470ed2",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "6a1bf11b83e8f8e64d468b58a17b3c2e0f0cdbf5ea6d53ba3d542da9c72752c7",
+      "chunk_count": 51,
+      "raw_turn_count": 471
+    },
+    {
+      "case_id": "b3c15d39",
+      "partition": "diagnostic",
+      "sampling_stratum": "multi-session",
+      "history_group": "1e6d710513c358318ed04026740dc950899d0b226deffd88365c1a765b19a97b",
+      "chunk_count": 51,
+      "raw_turn_count": 502
+    },
+    {
+      "case_id": "afdc33df",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "d76919d55d4b9fe2e2bec0761f42d3ed0b582eb7299a66330a55839b260c63ea",
+      "chunk_count": 46,
+      "raw_turn_count": 502
+    },
+    {
+      "case_id": "2311e44b_abs",
+      "partition": "diagnostic",
+      "sampling_stratum": "public-no-answer-id",
+      "history_group": "5768bdcd98d6038c5049a9d776c672af520adb27d63b9e0ffa49124eac5ea5b9",
+      "chunk_count": 49,
+      "raw_turn_count": 494
+    },
+    {
+      "case_id": "001be529",
+      "partition": "diagnostic",
+      "sampling_stratum": "single-session-user",
+      "history_group": "f0d3cf64eedde67e0849dcaa3f4643d4d60853e75f013fad6163f4c6e755cdaf",
+      "chunk_count": 51,
+      "raw_turn_count": 514
+    },
+    {
+      "case_id": "a3045048",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "4fd7f6a9e930f2b8b8de805328599cb30c2d53a4418bb51d77f83f2b71fd78f2",
+      "chunk_count": 57,
+      "raw_turn_count": 584
+    },
+    {
+      "case_id": "4b24c848",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "7b15a77bbc1bf357740f866bea9f8ec032a64c5ea39f772a45ac091c49015b53",
+      "chunk_count": 51,
+      "raw_turn_count": 514
+    },
+    {
+      "case_id": "65240037",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "84e08d541746ef1894dda5a5189e18df0c54b7942a6ef7c8b3517805ade6ebc9",
+      "chunk_count": 52,
+      "raw_turn_count": 489
+    },
+    {
+      "case_id": "a96c20ee",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "multi-session",
+      "history_group": "42f4be4f9935260b52c12c57bb751ca73bc0e98266bdce4776de971b66e6d144",
+      "chunk_count": 51,
+      "raw_turn_count": 489
+    },
+    {
+      "case_id": "35a27287",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-preference",
+      "history_group": "db00a85c3cb9dd09262500769d54c0d96e6de44eb112d41670815599175d3098",
+      "chunk_count": 51,
+      "raw_turn_count": 519
+    },
+    {
+      "case_id": "ba358f49_abs",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "public-no-answer-id",
+      "history_group": "950b56d217f05410a219ef39eac00bec5c667f1a61f49e3a740b79d38c027f77",
+      "chunk_count": 48,
+      "raw_turn_count": 477
+    },
+    {
+      "case_id": "7527f7e2",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-user",
+      "history_group": "552105cb7d10bcf05e98b6114786a4161bb13b3fe6602d8dc1afef4169e24cbc",
+      "chunk_count": 46,
+      "raw_turn_count": 490
+    },
+    {
+      "case_id": "gpt4_1d4ab0c9",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "temporal-reasoning",
+      "history_group": "2c81e0b78282deb8fdced92c14dbe9f4c558f5060a5e4dac84a852f8ae52ce65",
+      "chunk_count": 53,
+      "raw_turn_count": 483
+    },
+    {
+      "case_id": "e493bb7c",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "knowledge-update",
+      "history_group": "c2166749989737b21322b1579b73c53c3241ac08bf879cd5596696e3103aace0",
+      "chunk_count": 51,
+      "raw_turn_count": 506
+    },
+    {
+      "case_id": "6222b6eb",
+      "partition": "reserved-not-run",
+      "sampling_stratum": "single-session-assistant",
+      "history_group": "990aa474fcd4d858b5a2ac88763c24ce88efa4327d7c91771a0c65e8181e1b0d",
+      "chunk_count": 46,
+      "raw_turn_count": 497
+    }
+  ]
+}

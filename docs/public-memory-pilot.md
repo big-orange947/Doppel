@@ -964,3 +964,15 @@ including execution-time validation of legacy plans. Complementary details remai
 active. Optional read-only grouping retains all eight actual saved episode claims
 and sources, with declared identity still advisory. Neither failed analyzer rubric
 is rescored; no new extraction/Reader/Judge or external database calls occur.
+
+The [prospective highest-config cohort](../benchmarks/reports/public-memory-fresh-high-config-50-plan-2026-10-13.md)
+now freezes 50 previously unused questions plus ten new reserved histories, excluding
+80 prior/opened/reserved groups. Selection uses public type/ID and complete source
+histories, with question/gold/evidence annotations removed. Two profiles only:
+production full high-config and raw-vector-reranked baseline, fixed Reader/judges/
+context caps. There are 25,002 source messages / 2,479 ingestion chunks, and at
+most 400 later QA calls; graph/type-schema budgets require actual source inventories
+and separate binding. Docker/CUDA/models are ready but the new corpus is empty.
+The first committed source supplement permits 49 attempts for the first history,
+with no graph/QA calls or default/algorithm tuning. Report progress and failures
+without mistaking source preparation for answer accuracy or a full-500 score.
