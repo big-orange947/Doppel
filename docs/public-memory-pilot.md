@@ -21,6 +21,15 @@ and [unchanged paired query execution supplement](../benchmarks/reports/public-m
 No core/prompt revision, analyzer candidate promotion, answer-conditioned graph
 selection or new live control campaign is part of these operational adapters.
 
+The first selected question now completed in both profiles: both provisional
+task grades correct, its single annotated turn covered, citations legal and
+anchored. The full profile really executed graph paths/exploration. Both answers
+used Chinese for an English question; full execution is still `review_required`
+for two retained open-conflict warnings. Exact empty-key checkpoint replay made
+zero new calls. See [first paired result](../benchmarks/reports/public-memory-fresh-high-config-scope01-result-2026-10-13.md).
+This is one of fifty scored questions, not an aggregate accuracy or graph-uplift
+claim. The fixed cohort/configuration remains unchanged.
+
 ## First completed step: offline LongMemEval projection
 
 `benchmarks/public_longmemeval.py` prepares the

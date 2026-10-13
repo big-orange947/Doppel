@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Complete the first fresh high-config/raw-baseline question pair: both provisional
+  task grades correct, sole annotated evidence covered, legal anchored citations,
+  eight QA calls / 52,251 tokens and exact zero-key checkpoint replay. Real graph
+  path/exploration participated; no marginal accuracy gain proven. Retain English
+  question/Chinese answer defect, two open-conflict execution-review warnings and
+  one graph missing-endpoint warning; no clean acceptance or fifty-case score.
+
 - Continue the frozen prospective cohort to three complete source histories:
   149/2,479 chunks, 1,464 original turns, 586 derived records, eleven governance
   markers, 2,211 provenance checks with zero failures, and exact empty-key replay.
