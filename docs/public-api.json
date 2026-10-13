@@ -172,6 +172,7 @@
       "PersonalMemoryRevisionKind",
       "PersonalMemoryType",
       "ReferencePersonalMemoryAnalyzer",
+      "ReferencePersonalMemoryAnalyzerV9",
       "ReferencePersonalMemoryQueryPlanner",
       "ReferencePersonalMemoryQueryPlannerV2",
       "ReferenceMemoryConsolidator",

@@ -1,0 +1,36 @@
+{
+  "schema": "doppel.analyzer-preservation-controls.v1",
+  "cases": [
+    {"id":"preserve-control-01","rubric":"Preserve both studio rental budget assertions (240 and 180) as separate owner drafts with their own sources. No automatic newest-wins, averaging, or correction marker; no explicit revision is supplied.",
+     "messages":[
+       {"id":"p01-a","actor":"owner","at":"2026-01-01T12:00:00Z","text":"My monthly studio rental budget is 240 yuan."},
+       {"id":"p01-b","actor":"owner","at":"2026-01-03T12:00:00Z","text":"My monthly studio rental budget is 180 yuan."}]},
+    {"id":"preserve-control-02","rubric":"Preserve Dvorak and Colemak preferences as separate source-bound owner drafts. Do not merge into a single supposedly compatible preference or silently discard a value.",
+     "messages":[
+       {"id":"p02-a","actor":"owner","at":"2026-01-01T12:00:00Z","text":"My preferred keyboard layout is Dvorak."},
+       {"id":"p02-b","actor":"owner","at":"2026-01-03T12:00:00Z","text":"My preferred keyboard layout is Colemak."}]},
+    {"id":"preserve-control-03","rubric":"Retain the earlier annual billing assertion and the monthly correction as distinct claims with original sources. Mark correction on the newer statement, not the older one; do not invent an effective endpoint.",
+     "messages":[
+       {"id":"p03-a","actor":"owner","at":"2026-01-01T12:00:00Z","text":"My journal subscription is billed annually."},
+       {"id":"p03-b","actor":"owner","at":"2026-01-03T12:00:00Z","text":"Correction: my journal subscription is billed monthly. My earlier statement that it is annual was wrong."}]},
+    {"id":"preserve-control-04","rubric":"Preserve the pottery-course intention and its later cancellation as source-bound plan information. No completed-attendance episode, event key for a plan, or promotion of intent into fact.",
+     "messages":[
+       {"id":"p04-a","actor":"owner","at":"2026-01-01T12:00:00Z","text":"I plan to take a pottery course in February 2027."},
+       {"id":"p04-b","actor":"owner","at":"2026-01-03T12:00:00Z","text":"I cancelled my pottery-course registration and have not attended the course."}]},
+    {"id":"preserve-control-05","rubric":"Preserve Redpine Studio employment and explicit March 1 to April 30, 2025 period. Do not make June 2, 2026 observation into employment start/end/current validity; no invented period beyond the source.",
+     "messages":[
+       {"id":"p05-a","actor":"owner","at":"2026-06-02T12:00:00Z","text":"I worked at Redpine Studio from March 1 to April 30, 2025."}]},
+    {"id":"preserve-control-06","rubric":"Compatible enrichment: preserve green and waterproof coat facts in one owner draft bound to both sources, without contradictory values or unsupported details.",
+     "messages":[
+       {"id":"p06-a","actor":"owner","at":"2026-01-01T12:00:00Z","text":"My winter coat is green."},
+       {"id":"p06-b","actor":"owner","at":"2026-01-03T12:00:00Z","text":"My winter coat is waterproof."}]},
+    {"id":"preserve-control-07","rubric":"Exact duplicate: one unscented-soap preference draft with both evidence IDs, not two overlapping duplicate memories.",
+     "messages":[
+       {"id":"p07-a","actor":"owner","at":"2026-01-01T12:00:00Z","text":"I prefer unscented soap."},
+       {"id":"p07-b","actor":"owner","at":"2026-01-03T12:00:00Z","text":"I prefer unscented soap."}]},
+    {"id":"preserve-control-08","rubric":"Retain owner's not-renewed membership claim. Agent's renewal assertion must not be persisted as an owner fact; if represented, its agent source/authority remains separate. Do not merge owner and agent evidence into one owner draft.",
+     "messages":[
+       {"id":"p08-a","actor":"agent","at":"2026-01-01T12:00:00Z","text":"You have already renewed your museum membership."},
+       {"id":"p08-b","actor":"owner","at":"2026-01-03T12:00:00Z","text":"I have not renewed my museum membership."}]}
+  ]
+}

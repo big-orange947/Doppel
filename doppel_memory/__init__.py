@@ -109,6 +109,7 @@ from doppel_memory.intelligence import (
     PersonalMemoryRevisionKind,
     PersonalMemoryType,
     ReferencePersonalMemoryAnalyzer,
+    ReferencePersonalMemoryAnalyzerV9,
     StructuredGenerationRequest,
     StructuredOutputModel,
 )
@@ -424,6 +425,7 @@ __all__ = [
     "RecallResult",
     "ReferenceMemoryConsolidator",
     "ReferencePersonalMemoryAnalyzer",
+    "ReferencePersonalMemoryAnalyzerV9",
     "ReferencePersonalMemoryQueryPlanner",
     "ReferencePersonalMemoryQueryPlannerV2",
     "RelationCandidate",

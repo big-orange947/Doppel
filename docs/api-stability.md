@@ -46,6 +46,15 @@ stable `MemoryProcessor`/`MemoryProposal` surface and the existing provisional b
 surface;
 the model boundary never receives Store access or authority to select write scopes.
 
+`ReferencePersonalMemoryAnalyzerV9` is an additive provisional opt-in candidate.
+V8 `ReferencePersonalMemoryAnalyzer` keeps its existing prompt bytes, model-bound
+version and default role. V9 narrows enrichment to compatible claims and asks to
+retain incompatible source assertions before consolidation; it is not a hard
+semantic-coverage guarantee. Schema, parsing, diagnostics and authority gates are
+shared. Use a new version-bound checkpoint/cache/journal identity for V9; do not
+rewrite or resume an old bound V8 run as if the analyzer were unchanged. Existing
+one-argument V8 construction and optional diagnostics callback remain valid.
+
 `PersonalMemoryMinerConfig.evidence_error_policy` is an additive provisional batch
 option. The default `fail_batch` preserves the old behavior and configuration
 fingerprint. Explicit `quarantine` requires subject/source matching and records

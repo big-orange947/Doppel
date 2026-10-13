@@ -304,6 +304,24 @@ that is a separate audited stage.
 """
 
 
+REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V9 = REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS.replace(
+    "When multiple supplied messages\n"
+    "describe the same entity or compatible claim, emit one enriched memory and bind every\n"
+    "supporting evidence_id instead of emitting overlapping single-evidence duplicates.",
+    "Merge only equivalent or mutually compatible claims, binding every actual\n"
+    "supporting evidence_id. Sharing an entity alone does not justify merging.\n"
+    "Preserve incompatible values, negations, modalities and effective periods as\n"
+    "separate drafts with their own evidence IDs. Preserve earlier assertions even\n"
+    "when a newer assertion differs or explicitly revises them; mark an explicit\n"
+    "revision only on the evidence that states it. Do not silently select newest,\n"
+    "average conflicting values, or discard an assertion to make a coherent summary.\n"
+    "Do not bind a source merely because it mentions the entity: it must support\n"
+    "the particular claim. Keep compatible enrichment and exact duplicates merged.\n"
+    "Before returning, check that useful distinct source assertions have not been\n"
+    "lost during enrichment. This does not require storing conversational noise.",
+)
+
+
 class PersonalMemoryAnalysisDiagnostics(BaseModel):
     """Content-free, per-response schema accounting, not a quality score.
 
@@ -325,6 +343,7 @@ class ReferencePersonalMemoryAnalyzer:
 
     name = "doppel.reference-personal-memory-analyzer"
     version = "8"
+    _instructions = REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS
 
     def __init__(
         self,
@@ -359,7 +378,7 @@ class ReferencePersonalMemoryAnalyzer:
         }
         raw = await self.model.generate(
             StructuredGenerationRequest(
-                instructions=REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS,
+                instructions=self._instructions,
                 input=payload,
                 output_schema=PersonalMemoryAnalysis.model_json_schema(),
             )
@@ -410,6 +429,17 @@ class ReferencePersonalMemoryAnalyzer:
                 # Observability must not change proposals or expose callback text.
                 logger.warning("personal-memory diagnostics observer failed")
         return PersonalMemoryAnalysis(memories=accepted)
+
+
+class ReferencePersonalMemoryAnalyzerV9(ReferencePersonalMemoryAnalyzer):
+    """Opt-in compatible-only enrichment candidate; V8 remains the default.
+
+    Same schema, evidence gates and diagnostics. Stronger instructions are not a
+    hard guarantee of semantic coverage; use a new version-bound batch/cache.
+    """
+
+    version = "9"
+    _instructions = REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V9
 
 
 class PersonalMemoryExtractorConfig(BaseModel):

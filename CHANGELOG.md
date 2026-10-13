@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add an explicit Reference analyzer V9 candidate for compatible-only enrichment
+  and separate incompatible source assertions. Keep V8 instruction bytes/default
+  unchanged; share schema/parser/authority gates and require fresh version-bound
+  state. Freeze eight unrelated extraction controls, 16 attempts, no old task
+  cases/Reader/Judge. No semantic guarantee or default promotion.
+
 - Complete the fixed five-case transient cohort: 15 calls and exact key-removed
   replay. Non-independent coherent task completions 3/5 plain vs 4/5 indexed;
   one temporal reasoning gain, faithful unresolved count conflict still fails
