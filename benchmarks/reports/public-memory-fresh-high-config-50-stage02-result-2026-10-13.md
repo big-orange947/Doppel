@@ -31,7 +31,11 @@ Host policy marked 2,061 records confirmed. This means durable configured pipeli
 acceptance, **not** independent semantic truth adjudication. Owner and historical
 assistant actors/authorities remain distinct. Quarantined source-evidence drafts
 are not silently upgraded or counted as independently verified semantic errors;
-the corresponding raw messages remain available.
+the corresponding raw messages remain available. Across these three histories,
+615 drafts passed schema validation, zero failed it, and 29 were quarantined by
+source-evidence gates: 16 mixed actors, 12 subject/source mismatches, one unknown
+evidence ID. Schema validation and these authority gates do not prove the semantic
+accuracy of the remaining drafts.
 
 Provider balance was observed as 4.07 → 3.73 CNY during the source block. This is
 not an exclusive, settled invoice. The bounded source stage did not invoke any
@@ -41,8 +45,9 @@ prior report and vector schema were retained. `uv.lock` was not edited or staged
 Separate cache-only replay passes an empty provider key and zero new-chunk budget.
 It completed source revalidation of all 149 journal operations with zero new
 model calls and zero new chunks. This is completed-operation replay, not 149
-provider-cache hits. Its audit and Store inventory are compared with the live
-receipt before reporting reproducibility.
+provider-cache hits. Its audit and Store inventory are exactly equal to the live
+receipt. Replay SHA-256:
+`f942f776e44ee7ab9381ba352c650860a754cdd8238a7d8c0f700f390574e30e`.
 
 Local receipts (ignored, no source histories or API keys committed):
 

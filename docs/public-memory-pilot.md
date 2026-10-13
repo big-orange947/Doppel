@@ -5,6 +5,22 @@ existing local `bge-reranker-v2-m3`; defer text-embedding-v4 until initial pipel
 defects are found. This is a development diagnostic, not a compliant AML academic
 model profile, external leaderboard score or release gate.
 
+## Current prospective run: source preparation is not answer accuracy
+
+The frozen 2026-10-13 fifty-case cohort remains distinct from the earlier opened
+vector-only questions. Three histories (149/2,479 chunks, 1,464 raw messages) are
+now fully ingested, source-audited and empty-key replayed. These are not three
+answered questions. Highest-config Graphiti projection proceeds on each closed
+source scope without waiting for all fifty histories; scope-local completion
+never becomes a whole-cohort completion claim. Original query/gold fields are
+withheld until that scope's graph/schema gates pass.
+
+See [source continuation result](../benchmarks/reports/public-memory-fresh-high-config-50-stage02-result-2026-10-13.md),
+[first scope graph plan](../benchmarks/reports/public-memory-fresh-high-config-50-graph01-plan-2026-10-13.md)
+and [unchanged paired query execution supplement](../benchmarks/reports/public-memory-fresh-query-adapter-2026-10-13.md).
+No core/prompt revision, analyzer candidate promotion, answer-conditioned graph
+selection or new live control campaign is part of these operational adapters.
+
 ## First completed step: offline LongMemEval projection
 
 `benchmarks/public_longmemeval.py` prepares the

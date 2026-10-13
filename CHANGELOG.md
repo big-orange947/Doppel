@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Continue the frozen prospective cohort to three complete source histories:
+  149/2,479 chunks, 1,464 original turns, 586 derived records, eleven governance
+  markers, 2,211 provenance checks with zero failures, and exact empty-key replay.
+  Add bounded source continuation, honest closed-scope graph projection and two
+  unchanged high-config/raw-baseline query adapters. Preserve all fifty-case
+  bindings/defaults; no source-only answer accuracy or official-score claim.
+
 - Begin the frozen fresh 50-case assessment with one complete source history:
   49 calls, 247,047 tokens, 474 original messages / 216 memories / six conflicts,
   747 provenance checks and current 696-entry vector inventory. Preserve eleven
