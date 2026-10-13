@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Freeze a five-case source-order transient-view expansion (2 temporal, 2 update,
+  1 no-answer), excluding prior view cases/reserved IDs and validating unchanged
+  saved retrieval/QA bindings. Shared bounded analysis, paired fixed Readers,
+  5/10 attempt caps and no Judge/core/default changes. Not a blind or AML score.
+
 - Complete the frozen transient-view Reader contrast: four calls, exact key-removed
   replay, no new extraction. Both fresh arms answer the two opened cases; preserve
   the null task-success result, retrospective-time caveat, advisory conflict and
