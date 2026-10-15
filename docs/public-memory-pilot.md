@@ -7,6 +7,17 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest 2026-10-15: scope 04 graph recovered within its original attempt ceiling,
+all 162 projections complete and no deletions/slot repairs. Fourth paired question
+correct in **both** profiles with explicitly attributed historical assistant
+evidence, legal supported citations and exact empty-key replay. Full really runs
+paths/exploration with clean execution, but raw also succeeds: no causal graph
+uplift. Four provisional paired questions are scored (full 4/4, raw 3/4, still
+third-question judge-sensitive); the first ten source histories are ready.
+See [fourth paired result and current caveats](../benchmarks/reports/public-memory-fresh-high-config-scope04-result-2026-10-15.md).
+
+Earlier same-day checkpoint, before authorized graph recovery:
+
 2026-10-15 checkpoint: **ten** fixed histories / 499 chunks / 5,016 raw messages
 are source-complete, with 7,494 provenance checks and zero failures. Original
 network failure remains recorded; an explicitly approved identical-request

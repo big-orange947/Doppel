@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Complete the fourth prospective high-config/raw pair after explicitly approved
+  graph recovery: both correct with original assistant evidence, legal supported
+  citations, English answers, eight QA calls / 47,516 tokens and exact empty-key
+  replay. Full graph path/exploration participates with clean execution, but raw
+  also succeeds: no marginal graph-uplift claim. Current provisional task counts
+  4/4 vs 3/4 remain small-sample and third-question judge-sensitive.
+
 - Complete the fixed first-ten source prefix: 499 chunks / 5,016 raw messages,
   7,494 provenance checks with zero failures. Preserve one transport failure and
   its missing usage across an explicitly approved identical-request recovery;
