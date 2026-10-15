@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Complete the fixed first-ten source prefix: 499 chunks / 5,016 raw messages,
+  7,494 provenance checks with zero failures. Preserve one transport failure and
+  its missing usage across an explicitly approved identical-request recovery;
+  no core/prompt/model changes. Fourth graph scope stops at 126/162 on a separate
+  transport failure; no new question score or partial-graph QA claim. Full suite:
+  1,852 passed / 33 skipped / three subtests passed.
+
 - Complete the first fresh high-config/raw-baseline question pair: both provisional
   task grades correct, sole annotated evidence covered, legal anchored citations,
   eight QA calls / 52,251 tokens and exact zero-key checkpoint replay. Real graph

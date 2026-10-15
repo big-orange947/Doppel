@@ -7,6 +7,18 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+2026-10-15 checkpoint: **ten** fixed histories / 499 chunks / 5,016 raw messages
+are source-complete, with 7,494 provenance checks and zero failures. Original
+network failure remains recorded; an explicitly approved identical-request
+recovery plus 119-chunk continuation completed the prefix without tuning. Fourth
+scope graph stopped at 126/162 on a separate transport error, with no QA on the
+partial projection. Three paired questions are scored (provisional task judge:
+full 3/3, raw 2/3; the third raw grade conflicts with the citation judge's own
+correctness field). No stable graph-uplift claim or fifty-case score is granted.
+See [checkpoint and failure accounting](../benchmarks/reports/public-memory-fresh-high-config-stage04-result-2026-10-15.md).
+
+Earlier source-preparation checkpoint (superseded by the counts above):
+
 The frozen 2026-10-13 fifty-case cohort remains distinct from the earlier opened
 vector-only questions. Three histories (149/2,479 chunks, 1,464 raw messages) are
 now fully ingested, source-audited and empty-key replayed. These are not three
