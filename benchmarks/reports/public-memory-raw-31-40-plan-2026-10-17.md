@@ -37,3 +37,19 @@ Report all three profiles' candidate/top5/top20 and packed coverage, full-questi
 coverage, role/provenance checks and accounting. Do not tune on outcomes. This
 does not measure QA correctness, negative-case abstention, graph value, extracted
 memory intelligence, official LongMemEval/AML performance or release acceptance.
+
+## Entry-point name correction during execution
+
+The new wrapper initially used the already-tracked name
+`public_memory_continuation.py`, temporarily replacing a historical wrapper in
+commit18bbb1b. The old wrapper and its tests were restored exactly from a87187d;
+the new wrapper/test now use `public_memory_raw_continuation.py` and
+`test_public_memory_raw_continuation.py`. No database or historical receipt was
+changed by this correction. The running Python process keeps its originally
+loaded code; there is no repeat evaluation, model change or budget restart.
+
+The moved wrapper's exact SHA-256 still matches the frozen preflight:
+`5db1ed4fe853d57148acd09af1ace0874dcb1466fb82117816362cda81abb232`.
+The recorded execution commit18bbb1b preserves that code at its original path;
+new invocations should use the separate raw-continuation entry point and a new
+explicit plan/output, never silently retry the retained attempt.

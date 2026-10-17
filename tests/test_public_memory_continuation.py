@@ -1,109 +1,140 @@
-from __future__ import annotations
+"""Same-sample continuation gates and costs, with no live models/databases."""
 
 from copy import deepcopy
-from types import SimpleNamespace
 
 import pytest
 
-from benchmarks import public_memory_continuation as runner
-from benchmarks.public_context_baseline import RawHistoryHost
-from benchmarks.public_memory_pilot import _hash, build_manifest
-from doppel_memory.in_memory_store import InMemoryStore
-from integrations.aml.contract import memory_scope
-from tests.test_public_memory_fresh_cohort import SHA, dataset
+from benchmarks import public_memory_continuation as continuation
+from tests.test_public_memory_expansion import setup
 
 
-def bound():
-    raw = dataset()
-    parent = build_manifest(
-        raw,
-        dataset_namespace="synthetic",
-        run_namespace="parent",
-        source_sha256=SHA,
-        diagnostic_count=40,
-        reserved_count=2,
+def parent_fixture():
+    cases, manifest, plan, _ = setup()
+    parent = {
+        "status": "observed-success",
+        "parent_artifacts_preserved": True,
+        "aggregate_calls": 11,
+        "aggregate_reported_tokens": 100,
+        "ingestion": {
+            "plan": plan["ingestion_plan"],
+            "audit": {
+                "chunks": [
+                    {"write_key": c["write_key"], "completed": True}
+                    for c in plan["ingestion_plan"]["chunks"][:2]
+                ]
+            },
+            "store_record_audit": {"provenance_failures": 0},
+        },
+    }
+    return cases, manifest, parent
+
+
+def build(cases, manifest, parent):
+    return continuation.build_plan(
+        cases,
+        manifest,
+        parent,
+        parent_report_sha="a" * 64,
+        journal_sha="b" * 64,
+        cache_inventories=[{"one": "c" * 64}],
+        reranker_identity={"name": "fake-local"},
     )
-    return raw, parent
 
 
-def test_exact_next_ten_with_no_opened_or_reserved_groups():
-    raw, parent = bound()
-    cases, manifest = runner.prepare(raw, parent, SHA)
-    selected = [c for c in parent["cases"] if c["partition"] == "diagnostic"]
-    assert [c["case_id"] for c in manifest["cases"]] == [
-        c["case_id"] for c in selected[30:40]
-    ]
-    assert len(cases) == 10
-    assert [c["ordinal"] for c in manifest["cases"]] == list(range(31, 41))
-    assert "PRIVATE GOLD" not in str(manifest) and "has_answer" not in str(manifest)
-    plan = runner.make_plan(manifest, SimpleNamespace(report=dict))
-    assert len(plan["profiles"]) == 3 and plan["policies"] == ["prefix", "ranked_fit"]
-    assert plan["candidate_window"] == 80 and plan["output_limit"] == 20
-    assert (
-        plan["context_byte_limit"] == 24000
-        and plan["llm_calls"] == plan["graph_calls"] == 0
-    )
+def test_budget_same_histories_and_generation_settings():
+    cases, manifest, parent = parent_fixture()
+    plan = build(cases, manifest, parent)
+    assert plan["remaining_chunks"] == plan["ingestion_plan"]["total_chunks"] - 2
+    assert plan["max_total_calls"] == plan["remaining_chunks"] + 60
+    assert plan["max_reader_calls"] == plan["max_judge_calls"] == 30
+    assert plan["ingestion_plan"] == parent["ingestion"]["plan"]
+    assert plan["generation_settings_changed"] is False
 
 
 @pytest.mark.parametrize(
-    "mutation", ["source", "payload", "count", "opened_overlap", "fingerprint"]
+    "mutation", ["failed", "changed-parent", "unfinished", "gap", "provenance"]
 )
-def test_source_selection_and_overlap_must_match_frozen_manifest(mutation):
-    raw, original = bound()
-    parent = deepcopy(original)
-    selected = [c for c in parent["cases"] if c["partition"] == "diagnostic"]
-    source = SHA
-    if mutation == "source":
-        source = "b" * 64
-    elif mutation == "payload":
-        selected[30]["history_payload_sha256"] = "changed"
-    elif mutation == "count":
-        selected[30]["raw_turn_count"] += 1
-    elif mutation == "opened_overlap":
-        selected[30].update(selected[0])
+def test_incompatible_parent_rejected(mutation):
+    cases, manifest, parent = parent_fixture()
+    if mutation == "failed":
+        parent["status"] = "failed"
+    elif mutation == "changed-parent":
+        parent["parent_artifacts_preserved"] = False
+    elif mutation == "unfinished":
+        parent["ingestion"]["audit"]["chunks"][0]["completed"] = False
+    elif mutation == "gap":
+        parent["ingestion"]["audit"]["chunks"][0]["write_key"] = "wrong"
     else:
-        parent["cases"].reverse()
-    if mutation not in {"source", "fingerprint"}:
-        parent["manifest_fingerprint"] = _hash(
-            {k: v for k, v in parent.items() if k != "manifest_fingerprint"}
-        )
+        parent["ingestion"]["store_record_audit"]["provenance_failures"] = 1
     with pytest.raises(ValueError):
-        runner.prepare(raw, parent, source)
+        build(cases, manifest, parent)
+
+
+def test_all_costs_and_unknown_usage_remain_visible():
+    plan = {"parent_calls": 234, "parent_reported_tokens": 1218411}
+    ledger = {
+        "attempts_reserved": 2,
+        "token_accounting_complete": True,
+        "reported_tokens": {"total_tokens": 20},
+    }
+    ingestion = {"usage_cumulative": {"ledger": ledger}}
+    answers = {
+        "usage": {
+            "reader": {"ledger": deepcopy(ledger)},
+            "judge": {"ledger": deepcopy(ledger)},
+        }
+    }
+    assert continuation.aggregate_usage(plan, ingestion, answers) == {
+        "calls_including_parents": 240,
+        "reported_tokens_including_parents": 1218471,
+    }
+    answers["usage"]["judge"]["ledger"]["token_accounting_complete"] = False
+    assert (
+        continuation.aggregate_usage(plan, ingestion, answers)[
+            "reported_tokens_including_parents"
+        ]
+        is None
+    )
 
 
 @pytest.mark.asyncio
-async def test_contexts_bound_to_real_raw_ingestion_without_labels_or_text_changes():
-    raw, parent = bound()
-    cases, manifest = runner.prepare(raw, parent, SHA)
-    runtime, _ = cases[0]
-    store = InMemoryStore()
-    host = RawHistoryHost(store)
-    scope = memory_scope(manifest["run_namespace"], runtime.user_id)
-    records = await host.ingest(runtime, scope, max_messages=manifest["max_messages"])
-    items = runner.bound_items(
-        runtime, manifest, scope, host, {r.memory_id: r for r in records}
-    )
-    assert len(items) == len(records)
-    assert all(
-        item["role"] == "user" and item["channel"] == "raw" for item in items.values()
-    )
-    assert "PRIVATE GOLD" not in str(items)
-    changed = records[0].model_copy(update={"content": "changed"})
-    with pytest.raises(ValueError):
-        runner.bound_items(runtime, manifest, scope, host, {changed.memory_id: changed})
+async def test_failed_ingestion_never_runs_retrieval_or_answers(tmp_path, monkeypatch):
+    cases, manifest, parent = parent_fixture()
+    plan = build(cases, manifest, parent)
+    monkeypatch.setattr(continuation, "clone_journal", lambda *args: None)
 
+    async def ingest(*args, **kwargs):
+        assert kwargs["continuation_budget"][1] == plan["remaining_chunks"]
+        return {
+            "status": "failed",
+            "all_histories_ingested": False,
+            "usage_cumulative": {
+                "ledger": {
+                    "attempts_reserved": 1,
+                    "token_accounting_complete": False,
+                    "reported_tokens": None,
+                }
+            },
+        }
 
-@pytest.mark.asyncio
-async def test_execution_refuses_unfrozen_or_previously_started_work(tmp_path):
-    raw, parent = bound()
-    cases, manifest = runner.prepare(raw, parent, SHA)
-    reranker = SimpleNamespace(report=dict)
-    plan = runner.make_plan(manifest, reranker)
-    args = SimpleNamespace(frozen_preflight=None, run_dir=tmp_path)
-    with pytest.raises(ValueError, match="frozen"):
-        await runner.execute(args, cases, manifest, plan, reranker)
-    frozen = tmp_path / "frozen.json"
-    runner.save(frozen, {"plan": plan})
-    args.frozen_preflight = frozen
-    with pytest.raises(ValueError, match="silent second"):
-        await runner.execute(args, cases, manifest, plan, reranker)
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("downstream executed")
+
+    monkeypatch.setattr(continuation, "run_live", ingest)
+    monkeypatch.setattr(continuation, "run_comparison", forbidden)
+    monkeypatch.setattr(continuation, "run_answers", forbidden)
+    result = await continuation.run(
+        cases,
+        manifest,
+        plan,
+        run_dir=tmp_path / "run",
+        parent_dir=tmp_path / "parent",
+        cache_dirs=[],
+        dsn="NOT_PERSISTED",
+        api_key="NOT_PERSISTED",
+        embedding_cache_dir=None,
+        reranker=None,
+    )
+    assert result["stage"] == "ingestion" and not result["answers_executed"]
+    assert result["usage"]["calls_including_parents"] == 12
+    assert "NOT_PERSISTED" not in str(result)
