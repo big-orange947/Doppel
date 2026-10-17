@@ -6,7 +6,7 @@ Parent manifest remains unchanged; validate every selected history group, turn
 count, chunk count and source payload hash before queries. Full S histories,
 not evidence-only oracle inputs. Same original source SHA-256 as prior runs.
 
--20 histories /9,883 original messages, all original roles/time/source positions.
+- 20 histories /9,883 original messages, all original roles/time/source positions.
 - Public strata: assistant3, multi-session3, preference3, no-answer3, user3,
   temporal3, knowledge-update2. Exact history grouping is not independence from
   shared filler sessions, model pretraining or public benchmark exposure.

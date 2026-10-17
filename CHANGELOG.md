@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Complete the separately frozen zero-LLM raw retrieval expansion at ordinals
+  11–30: twenty full S histories / 9,883 messages / eight profiles / 160 rows.
+  On seventeen answerable questions, vector-reranked covers25/27 labelled turns
+  at20; BM25/vector-reranked covers27/27 but trails at5 (18/27 vs20/27).
+  BM25-only reranking ties the hybrid; separate three unanswerable cases with
+  related-history annotations instead of claiming answer evidence or abstention.
+  No graph/extraction/QA calls, core/default changes or answer-accuracy claim.
+  Full suite:1,876 passed /33 skipped /three subtests passed.
+
 - Decouple a separately frozen non-graph follow-up from graph readiness: fixed
   ordinals06–10, production BM25/RRF plus local vector/reranking vs unchanged raw
   baseline, thirty successful calls / 135,024 tokens, zero graph/source writes.

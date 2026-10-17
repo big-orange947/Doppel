@@ -7,6 +7,16 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+2026-10-17 latest: a separately frozen **raw retrieval-only** expansion on original
+ordinals11–30 completed twenty full S histories /9,883 messages /eight profiles.
+Seventeen answerable questions have27 labelled turns: vector-reranked finds25/27
+at20 and BM25/vector-reranked27/27, but at5 the latter trails18/27 vs20/27.
+BM25-only reranking ties the hybrid. Three unanswerable questions with related
+history annotations are reported separately, not counted as answer support.
+Zero paid LLM/provider tokens/graph calls; no Reader, judge, extracted memory or
+context-packing measurement. No independent/full500/AML or100% QA claim.
+See [twenty-history result, denominator and limits](../benchmarks/reports/public-memory-raw-retrieval-11-30-result-2026-10-17.md).
+
 2026-10-17: full-history graph authoring is **paused at the user's request**.
 Scope06 retains103 completed/one started projection; graph07 never started. Graph
 code/data and previous receipts are preserved. Earlier high-config assessment
