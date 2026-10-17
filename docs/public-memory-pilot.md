@@ -7,6 +7,14 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest bounded comparison: existing skip-to-fit packing improves hybrid-reranked
+answer-support coverage23/27 →26/27 and fully covered questions14/17 →16/17 under
+the identical24,000-byte/top20 budget. All old prefix contexts reproduce exactly;
+all sources remain unchanged. No new model calls or scenario-specific rules.
+Keep the remaining missed turn and validate on untouched continuation before
+claiming generalization; do not continue tuning the opened twenty questions.
+See [fixed-budget comparison and decision](../benchmarks/reports/public-memory-packing-fit-11-30-2026-10-17.md).
+
 Latest follow-up: the unchanged24,000-byte context budget reduces hybrid-reranked
 evidence27/27 to23/27, while vector-reranked and unreranked BM25/vector retain25/27.
 All160 saved rankings were source-bound and packed without new retrieval/models;

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Complete the fixed-budget skip-to-fit diagnostic on160 existing raw rows:
+  hybrid-reranked packed evidence23/27 →26/27, fully covered questions14/17 →16/17.
+  Reproduce every old prefix row exactly, preserve all prefix items and unchanged
+  source snapshots; same top20/input/byte budget, no provider/model/graph calls.
+  Keep this an explicit experimental option, not a changed production default
+  or independent QA/AML result. Thirty-six targeted tests pass.
+
 - Audit unchanged24,000-byte prefix packing on all160 saved raw retrieval rows,
   with read-only source validation and byte-identical second-run reproduction.
   Hybrid-reranked answerable evidence drops27/27 to23/27; vector-reranked and
