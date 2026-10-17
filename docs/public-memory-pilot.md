@@ -7,6 +7,13 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest prospective continuation31–40 is complete:5103 raw messages, three arms,
+no paid-provider calls. On nine answerable questions /15 labelled turns,
+hybrid-reranked retrieves14/15 at20 but packs10/15 under either24KB policy;
+vector-reranked packs11/15 with skip-to-fit. The opened20-question26/27 fit score
+does not generalize uniformly. No post-result tuning or default promotion.
+See [new ten-history result and evidence-granularity decision](../benchmarks/reports/public-memory-raw-31-40-result-2026-10-17.md).
+
 Latest bounded comparison: existing skip-to-fit packing improves hybrid-reranked
 answer-support coverage23/27 →26/27 and fully covered questions14/17 →16/17 under
 the identical24,000-byte/top20 budget. All old prefix contexts reproduce exactly;

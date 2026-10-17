@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Complete untouched prospective raw ordinals31–40 (5103 messages), three
+  non-graph retrieval arms and paired24KB packers with zero paid-provider calls.
+  Hybrid-reranked finds14/15 labelled turns in final20 but packs10/15; vector
+  reranked packs11/15 with skip-to-fit. Preserve non-generalization of prior26/27
+  result; identify whole-message granularity/budget loss, not a graph deficit.
+  Keep historical continuation entry point intact under a separate raw wrapper.
+  Full suite:1905 passed /33 skipped /three subtests passed.
+
 - Complete the fixed-budget skip-to-fit diagnostic on160 existing raw rows:
   hybrid-reranked packed evidence23/27 →26/27, fully covered questions14/17 →16/17.
   Reproduce every old prefix row exactly, preserve all prefix items and unchanged
