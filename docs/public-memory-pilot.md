@@ -7,6 +7,24 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+2026-10-17: full-history graph authoring is **paused at the user's request**.
+Scope06 retains103 completed/one started projection; graph07 never started. Graph
+code/data and previous receipts are preserved. Earlier high-config assessment
+ends at five paired questions, not ten, with no proven stable graph uplift.
+
+A separately frozen non-graph follow-up on fixed ordinals06–10 is complete:
+raw baseline and production BM25/vector/mixed-memory reranking both score4/5,
+find all six answerable labelled turns/sessions, and correctly abstain on the
+single unanswerable case. Shared preference-task failure is Reader over-abstention
+despite relevant evidence, not demonstrated missing retrieval. Citation judge
+mistakenly calls that task refusal correct; preserve both labels. Thirty successful
+calls / 135,024 tokens, no graph/source calls, unchanged source/Store/vectors,
+exact empty-key replay with zero new attempts. Existing source preparation is
+excluded from marginal cost; no full-fresh-corpus cost or independent score claim.
+See [non-graph result and limits](../benchmarks/reports/public-memory-nograph-06-10-result-2026-10-17.md).
+
+Historical high-config checkpoint (not the current non-graph protocol):
+
 Latest 2026-10-15: scope 04 graph recovered within its original attempt ceiling,
 all 162 projections complete and no deletions/slot repairs. Fourth paired question
 correct in **both** profiles with explicitly attributed historical assistant

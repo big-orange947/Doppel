@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Decouple a separately frozen non-graph follow-up from graph readiness: fixed
+  ordinals06–10, production BM25/RRF plus local vector/reranking vs unchanged raw
+  baseline, thirty successful calls / 135,024 tokens, zero graph/source writes.
+  Both provisional task scores4/5 and labelled evidence6/6; preserve the shared
+  personalization over-abstention and citation-judge/task mismatch. Exact empty-key
+  replay has30 hits/zero new attempts. Graph code/data and paused scope06 remain;
+  no core/default/prompt/model change or mixed-protocol high-config score claim.
+
 - Complete the fourth prospective high-config/raw pair after explicitly approved
   graph recovery: both correct with original assistant evidence, legal supported
   citations, English answers, eight QA calls / 47,516 tokens and exact empty-key

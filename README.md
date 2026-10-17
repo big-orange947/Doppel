@@ -124,8 +124,13 @@ Doppel 支持从轻量到高配置的渐进部署：
 | 最小配置 | SQLite + 词法检索 | 本地开发、小规模机器人、协议验证 |
 | 服务端配置 | PostgreSQL Store | 多进程、共享连接池、服务端部署 |
 | 语义增强 | PostgreSQL + pgvector | 中文语义改写、近义表达和高召回候选发现 |
-| 时间/关系增强 | Neo4j + Graphiti relation index | 实体关系、时点状态、类型化关系检索 |
-| 最高质量 | PostgreSQL + pgvector + Graphiti + Planner/Reranker | 长期个人 Agent 的混合候选召回与关系约束 |
+| 非图混合配置 | PostgreSQL + pgvector + BM25 / Reranker | 词法与语义互补，再对候选进行重排 |
+| 可选关系增强 | Neo4j + Graphiti relation index | 实体关系、类型化关系与图路径检索 |
+| 完整图配置（实验性） | PostgreSQL + pgvector + Graphiti + Planner/Reranker | 用于验证关系约束和多跳任务是否带来额外收益 |
+
+建议先建立非图检索基线，再按任务需要启用图增强。Graphiti 的全量关系抽取可能带来显著的
+模型调用与准备成本；配置更复杂并不保证回答更准确。时间字段、有效区间、作用域和来源证据
+不依赖 Graphiti 才能使用。内置 BM25 是有读取上限的参考扫描实现，并非大规模持久化全文索引。
 
 向量和图始终只是**派生候选索引**。命中的 memory ID 必须重新加载权威 Store，并重新检查 scope、
 subject、authority、生命周期、时间和 provenance。
