@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Audit unchanged24,000-byte prefix packing on all160 saved raw retrieval rows,
+  with read-only source validation and byte-identical second-run reproduction.
+  Hybrid-reranked answerable evidence drops27/27 to23/27; vector-reranked and
+  unreranked BM25/vector retain25/27. Separate retrieval from packed-context
+  coverage; no changed defaults, paid/model/graph execution or QA-score claim.
+  Full suite:1,890 passed /33 skipped /three subtests passed.
+
 - Complete the separately frozen zero-LLM raw retrieval expansion at ordinals
   11–30: twenty full S histories / 9,883 messages / eight profiles / 160 rows.
   On seventeen answerable questions, vector-reranked covers25/27 labelled turns

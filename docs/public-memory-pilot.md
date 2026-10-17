@@ -7,6 +7,14 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest follow-up: the unchanged24,000-byte context budget reduces hybrid-reranked
+evidence27/27 to23/27, while vector-reranked and unreranked BM25/vector retain25/27.
+All160 saved rankings were source-bound and packed without new retrieval/models;
+twenty read-only inventory hashes stay unchanged and a second run reproduces the
+entire JSON byte for byte. No QA/default changes. The next issue is budget-aware
+evidence handoff, not missing candidate evidence or justification for more graphs.
+See [packing result and limits](../benchmarks/reports/public-memory-raw-packing-11-30-result-2026-10-17.md).
+
 2026-10-17 latest: a separately frozen **raw retrieval-only** expansion on original
 ordinals11–30 completed twenty full S histories /9,883 messages /eight profiles.
 Seventeen answerable questions have27 labelled turns: vector-reranked finds25/27
