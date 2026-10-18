@@ -2,11 +2,13 @@
 
 ## Unreleased
 
-- Freeze an opened-eight paired structured-memory diagnostic: identical raw
-  contexts and Reader, real V10 analyzer/miner/transient view and V2 query engine
-  in an ephemeral candidate Store. No production/default/retrieval/graph changes,
-  no global exact counts from a retrieved subset. Up to48 calls;9 new offline
-  tests and185 targeted tests pass. Results not yet available at plan freeze.
+- Complete frozen opened-eight paired structured-memory diagnosis: raw6/8,
+  structured6/8, one gain/one regression, no net uplift or default promotion.
+  Real V10 analyzer/miner/transient view and V2 query engine scan64 candidates;
+  preserve missing typed event times, reported-count/type mismatch and elapsed-
+  duration/cardinality mismatch.48 calls/227719 tokens, no graph/source writes;
+  key-free replay byte-identical.9 new tests; full2098 passed/33 skipped/three
+  subtests. No production/default/retrieval changes; counts remain subset-limited.
 
 - Finish one uniform logical50-question affordable QA baseline:37/50 (74%),
   positives30/43, negatives7/7. Fixed remaining20 score15/20; original30 unchanged.

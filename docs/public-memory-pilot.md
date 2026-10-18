@@ -7,6 +7,18 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+The frozen opened-eight structured-memory counterfactual is complete: raw6/8,
+structured6/8, one gain/one regression. Existing V10/miner/transient/Planner V2/
+QueryEngine were actually exercised in an ephemeral candidate Store, not merely
+mentioned in a prompt.64 candidates have no typed effective bounds; December
+events described in January are rejected by interval filtering, elapsed-day
+queries become event counts and reported totals are mis-gated as episodes.
+Raw fallback remains unchanged; no net advantage or default promotion claimed.
+48 calls/227719 tokens, no graph/source writes; key-free replay byte-identical;
+full2098 tests pass. Next repair is generic event-time/quantity semantics, not
+more eager graph extraction or question-specific rules. See the
+[paired result and concrete traces](../benchmarks/reports/public-memory-structured-pair-result-2026-10-18.md).
+
 Uniform logical50 baseline is complete: **37/50 (74%)**, positives30/43 (69.8%),
 negatives7/7. The fixed complement scores15/20, merged with unchanged22/30,
 never best-arm substitution. Raw-only BM25/vector/BGE/24KB whole-message context
