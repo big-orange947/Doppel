@@ -57,8 +57,8 @@ SETTINGS = TopKSelectionConfig(timeout_seconds=300)
 PRIOR_FAILURE = Path("data/doppel/listwise-diagnostic-live-v1.json")
 
 
-def preview_request(query, scope, snippets):
-    return ReferenceTopKSelector(NoGenerate(), SETTINGS).build_request(
+def preview_request(query, scope, snippets, selector_type=ReferenceTopKSelector):
+    return selector_type(NoGenerate(), SETTINGS).build_request(
         query,
         [
             RecallResult(
@@ -78,7 +78,9 @@ def preview_request(query, scope, snippets):
     )
 
 
-async def prepared_pool(store, index, runtime, scoring, manifest, data):
+async def prepared_pool(
+    store, index, runtime, scoring, manifest, data, selector_type=ReferenceTopKSelector
+):
     scope, host, pool, certificate = await get_pool(
         store, index, runtime, scoring, manifest, data["parent"], data["pool_parent"]
     )
@@ -90,7 +92,9 @@ async def prepared_pool(store, index, runtime, scoring, manifest, data):
         raise ValueError(
             "selection preflight requires the entire authorized source pool"
         )
-    request = preview_request(runtime.query.query, scope, validated.snippets)
+    request = preview_request(
+        runtime.query.query, scope, validated.snippets, selector_type
+    )
     certificate = {
         **certificate,
         "source_request_sha256": _request_sha256(request),
@@ -163,7 +167,17 @@ def make_plan(hashes, certificates, schema):
     return {**value, "plan_fingerprint": _hash(value)}
 
 
-async def execute(args, data, manifest, selected, baselines, plan, store, index):
+async def execute(
+    args,
+    data,
+    manifest,
+    selected,
+    baselines,
+    plan,
+    store,
+    index,
+    selector_type=ReferenceTopKSelector,
+):
     if not os.environ.get("DEEPSEEK_API_KEY", "").strip():
         raise ValueError("provider key absent")
     save(args.run_dir / "attempt.json", {"plan": plan})
@@ -192,7 +206,7 @@ async def execute(args, data, manifest, selected, baselines, plan, store, index)
                 cache_dir=args.run_dir / name,
             )
         audited = AuditedRankModel(models["selector"], args.run_dir)
-        selector = ReferenceTopKSelector(audited, SETTINGS)
+        selector = selector_type(audited, SETTINGS)
         reader = _StageExecutor(
             models["reader"], ledgers["reader"], ReaderV2Output, cache_only=False
         )
@@ -202,7 +216,7 @@ async def execute(args, data, manifest, selected, baselines, plan, store, index)
         for i, (runtime, scoring) in enumerate(selected):
             case, stage = scoring.case_id, "source-preflight"
             scope, host, pool, certificate = await prepared_pool(
-                store, index, runtime, scoring, manifest, data
+                store, index, runtime, scoring, manifest, data, selector_type
             )
             if certificate != plan["certificates"][i]:
                 raise ValueError("preflight certificate changed")
@@ -237,7 +251,7 @@ async def execute(args, data, manifest, selected, baselines, plan, store, index)
             packed, trace = pack_ranked_fit([passage_item(p) for p in result.passages])
             entry = {
                 "case_id": case,
-                "profile": PROFILE,
+                "profile": plan["profile"],
                 "context": packed,
                 "context_bytes": len(encoded(packed)),
                 "context_sha256": hashlib.sha256(encoded(packed)).hexdigest(),
@@ -258,7 +272,7 @@ async def execute(args, data, manifest, selected, baselines, plan, store, index)
             }
             save(args.run_dir / f"context-{i}.json", entry)
             stage = "reader"
-            row = AnswerRow(i, case, PROFILE, runtime, scoring, tuple(packed))
+            row = AnswerRow(i, case, plan["profile"], runtime, scoring, tuple(packed))
             output, record = await reader.execute(reader_request(row), i)
             entry.update(
                 reader=record,

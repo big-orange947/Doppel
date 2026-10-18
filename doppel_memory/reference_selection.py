@@ -120,6 +120,18 @@ class ReferenceTopKSelector:
             output_schema=schema,
         )
 
+    def _validate_selected(
+        self, selected: list[str], expected: list[str], count: int
+    ) -> None:
+        if (
+            len(selected) != count
+            or len(set(selected)) != count
+            or not set(selected) <= set(expected)
+        ):
+            raise ValueError(
+                "selection must contain exactly the requested unique candidate IDs"
+            )
+
     async def rerank(
         self, query: str, candidates: Sequence[RecallResult], *, limit: int
     ) -> Sequence[RecallResult]:
@@ -149,14 +161,7 @@ class ReferenceTopKSelector:
         if isinstance(raw, BaseModel):
             raw = raw.model_dump(mode="json")
         selected = TopKSelectionOutput.model_validate(raw).selected_ids
-        if (
-            len(selected) != count
-            or len(set(selected)) != count
-            or not set(selected) <= set(expected)
-        ):
-            raise ValueError(
-                "selection must contain exactly the requested unique candidate IDs"
-            )
+        self._validate_selected(selected, expected, count)
         by_id = dict(zip(expected, bound, strict=True))
         chosen = set(selected)
         self.last_selection = TopKSelectionSummary(
