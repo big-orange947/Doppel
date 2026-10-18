@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Complete fixed fresh ordinals41-45 with2517 raw messages, two non-graph profiles
+  and actual paired QA: BGE3/5 vs bounded LLM3/5 (answerable2/4 each, negative1/1).
+  Full annotated-turn text retention3/11→9/11 and packed bytes118299→27298, but
+  recommendation refusal and initial-pool omissions still prevent a QA gain.
+  Preserve all results;30 new calls/183243 tokens, no retries or default promotion.
+  Full2031 tests pass/33 skipped/three subtests; next inspect scoped pre-selection
+  original-message neighborhoods, not more opened-example prompt/judge tuning.
+
 - Add opt-in exact-k and bounded up-to-k evidence selectors with opaque IDs,
   immutable originals, metadata and strict subset/uniqueness/maximum checks.
   Preserve exact-k failure (8/20; one call/19378 tokens). Bounded remaining-two

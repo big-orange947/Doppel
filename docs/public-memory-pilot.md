@@ -7,6 +7,16 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest prospective ordinals41-45 complete:five full S histories/2517 messages,
+paired BGE/LLM QA **3/5 vs3/5**, answerable2/4 each and predeclared negative1/1.
+Full annotated-turn text retained3/11→9/11; packed bytes118299→27298, not a net
+provider-cost saving or proven QA gain. Preference evidence is recovered but the
+Reader still refuses a recommendation; the temporal pool misses two owner turns
+next to retrieved replies. Keep labels/defaults unchanged. Thirty calls/183243
+tokens, zero retries;2031 tests pass. Next evaluate bounded authorized source
+neighborhoods before selection, not post-selection padding or new graph authoring.
+See [five-case results, source audit and actual costs](../benchmarks/reports/public-memory-prospective-selection-41-45-result-2026-10-18.md).
+
 Latest bounded up-to20 selection completes the remaining two opened cases:
 transport correct, wedding count refusal incorrect, **1/2 vs reused baseline1/2**.
 All three reference wedding owner statements now survive selection and packing,
