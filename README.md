@@ -474,6 +474,7 @@ Doppel 提供 scope、证据和检索材料，但不接管：
 | [查询诊断](docs/query-diagnostics.md) | trace 与召回调试 |
 | [个人记忆重排](docs/personal-memory-reranking.md) | host-supplied reranker |
 | [原文片段返回](docs/attributed-passages.md) | 可选的无损长消息分块、片段位置与来源复核 |
+| [来源感知重排](docs/source-aware-reranking.md) | 显式元数据输入与实验性来源多样性，默认不改变召回策略 |
 | [API 稳定性](docs/api-stability.md) | stable / provisional / experimental |
 | [Benchmark 指南](benchmarks/README.md) | 数据集、运行方式、门禁和报告 |
 | [变更记录](CHANGELOG.md) | 版本演进与迁移说明 |

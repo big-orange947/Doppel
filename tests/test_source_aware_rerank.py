@@ -107,7 +107,9 @@ async def test_source_mmr_defers_duplicate_but_keeps_all_roles_eligible():
         }
     )
     provider = Provider((1.0, 0.99, 0.9))
-    result = await SourceAwareReranker(provider).rerank("generic", original, limit=3)
+    result = await SourceAwareReranker(
+        provider, SourceAwareRerankConfig(diversity_weight=0.15)
+    ).rerank("generic", original, limit=3)
     assert [c.memory_id for c in result] == [
         original[0].memory_id,
         original[2].memory_id,
@@ -122,14 +124,18 @@ async def test_text_mmr_can_diversify_distinct_sources_without_role_quotas():
     for c in original:
         c.actor, c.authority = "agent", FactAuthority.AGENT_OUTPUT
     original[0].raw_text = original[1].raw_text = "same repeated source language"
-    result = await SourceAwareReranker(Provider((1.0, 0.99, 0.9))).rerank(
-        "generic", original, limit=3
-    )
+    result = await SourceAwareReranker(
+        Provider((1.0, 0.99, 0.9)), SourceAwareRerankConfig(diversity_weight=0.15)
+    ).rerank("generic", original, limit=3)
     assert [c.memory_id for c in result] == [
         original[0].memory_id,
         original[2].memory_id,
         original[1].memory_id,
     ]
+
+
+def test_diversity_is_disabled_unless_explicitly_requested():
+    assert SourceAwareRerankConfig().diversity_weight == 0.0
 
 
 @pytest.mark.parametrize(

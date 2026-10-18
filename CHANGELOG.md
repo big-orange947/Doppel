@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an opt-in source-aware Reranker adapter with metadata formatting and bounded
+  source/token MMR, preserving candidate identity/authority and explicit failures.
+  Frozen BGE comparison has no proven gain: reused content-only2/3 vs candidate1/3
+  provisional task grades; preserve Reader uncertainty and irrelevant-material
+  diversification. Disable diversity by default, keep experimental0.15 receipts.
+  Six new DeepSeek calls /28402 tokens; no graph/source writes or new judge tuning.
+  Full1964 passed/33 skipped/three subtests; final safety-default31 targeted pass.
+
 - Add opt-in lossless source spans and guarded attributed passage retrieval:
   original offsets/hash/speaker/authority/time, bounded round-robin candidates,
   optional reranking and post-ordering source revocation checks; defaults unchanged.

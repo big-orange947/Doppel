@@ -7,6 +7,14 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest source-aware ablation did not demonstrate a gain: exact reused passage
+baseline2/3 vs metadata+MMR1/3 provisional grades. More owner passages include
+irrelevant topics; transport has useful evidence but a conservative Reader
+conclusion. Keep grade sensitivity and retrieval/Reader attribution separate.
+Six new calls /28402 tokens, no retries, old baseline spend preserved. New adapter
+remains experimental, diversity default disabled; no expansion to fresh questions
+or tuning on these cases. See [source-aware result and next decision](../benchmarks/reports/public-memory-source-aware-result-2026-10-18.md).
+
 2026-10-18 latest: optional source-bound passage handoff is implemented. A fixed
 three-opened-case whole-message/passage QA comparison yields2/3 vs2/3, not a proven
 accuracy gain. Source-window omission and assistant-heavy text-only fragment

@@ -22,7 +22,7 @@ from doppel_memory.personal_rerank import (
 class SourceAwareRerankConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
     include_metadata: bool = True
-    diversity_weight: float = Field(default=0.15, ge=0, le=1, allow_inf_nan=False)
+    diversity_weight: float = Field(default=0.0, ge=0, le=1, allow_inf_nan=False)
     max_candidates: int = Field(default=80, ge=1, le=1000)
     max_input_chars: int = Field(default=1_000_000, ge=1, le=10_000_000)
     timeout_seconds: float = Field(default=300, gt=0, le=300, allow_inf_nan=False)

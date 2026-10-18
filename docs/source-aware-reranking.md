@@ -14,7 +14,7 @@ reranker = SourceAwareReranker(
     provider=my_scorer,  # PersonalMemoryReranker 协议，返回不透明 ID 的 0..1 分数
     config=SourceAwareRerankConfig(
         include_metadata=True,
-        diversity_weight=0.15,
+        diversity_weight=0.0,  # 默认关闭；实验性多样性必须显式选择权重
         max_candidates=80,
     ),
 )
@@ -41,6 +41,8 @@ utility = (1 - weight) × relevance - weight × max_redundancy
 Jaccard 相似度。每次选择当前 utility 最高者，平分时保持原顺序。降低的是
 重复来源/近似文本优先级，没有“主人配额”、角色硬过滤、问题关键词、实体词典
 或特定场景规则。它可能也会把有用的重复证据延后，权重需作为实验配置显式冻结。
+默认权重为 0，不启用多样性。已完成的三题诊断没有支持 BGE＋元数据＋0.15 权重
+组合的准确率收益；请勿把该实验配置当成推荐预设。来源数量和角色占比不是质量分数。
 
 `include_metadata=False, diversity_weight=0.0` 是正文分数的稳定排序控制组。
 返回的是原候选快照，`fact`、`raw_text`、authority、scope 和原 similarity 都不改写；
