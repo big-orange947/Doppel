@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Complete fresh fixed ordinals46–50 matched-count native/neighborhood paired QA:
+  2483 raw messages, same selector/Reader/judge, provisional5/5 vs4/5, positive
+  annotation candidate/selected coverage7/7 each. Extra full-turn retention5/7→6/7
+  does not improve QA; preserve recommendation-answer regression, no default
+  promotion.31 new calls/578578 tokens (93.6% selector), zero retries/graph calls;
+  full2067 passed/33 skipped/three subtests. See the frozen plan and result under
+  benchmarks/reports; no claim of general100% accuracy or official AML results.
+
 - Add opt-in scoped source-order protocol/index and attributed pre-selection
   neighborhood expansion, with source reloads, explicit caps and revocation/
   scope/session/order guards. Zero-paid opened-five candidate audit: original9/11,

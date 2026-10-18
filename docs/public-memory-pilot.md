@@ -7,6 +7,18 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Fresh fixed ordinals46–50 finish actual same-selector paired QA: native matched
+candidate widening5/5 vs neighborhood4/5 (positive4/4 vs3/4; negative1/1 each).
+Both candidate/selected pools cover7/7 annotated turns; full packed original-turn
+retention5/7 vs6/7. More evidence did not fix the recommendation Reader refusal.
+Keep neighborhoods optional and defaults unchanged; this is five diagnostic
+questions, not general100% accuracy, a full benchmark, or AML performance.
+31 new calls/578578 tokens,93.6% selector; no retries/graph calls.2067 tests pass.
+The fifty diagnostic histories are now opened; ten reserved histories stay closed.
+Next freeze a lower-cost general selection configuration before fresh validation,
+not another unchanged whole-pool paid sweep. See the
+[actual paired QA and accounting](../benchmarks/reports/public-memory-neighborhood-trial-result-2026-10-18.md).
+
 Latest zero-LLM opened-five source-neighborhood audit completes: original80-pools
 contain9/11 positive annotated turns; ±1 pre-selection neighborhoods11/11 versus
 same-size native BM25/vector10/11. This is candidate availability, **not a new QA
