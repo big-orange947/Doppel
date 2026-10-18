@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Complete fixed uniform affordable QA baseline on ordinals11–40:22/30 (73.3%),
+  positives18/26, negatives4/4; finish27 previously-unanswered questions20/27.
+  Reuse exact frozen BM25/vector/BGE whole-message24KB contexts; no source,
+  retrieval/model or graph rerun.60 successful calls/238113 tokens, zero retries;
+  preserve all eight failed grades. All50 distinct histories now have some QA,
+  but only30 share this exact baseline; no mixed-version50-item score claimed.
+  Eleven new offline tests; full2078 passed/33 skipped/three subtests, Ruff clean.
+
 - Complete fresh fixed ordinals46–50 matched-count native/neighborhood paired QA:
   2483 raw messages, same selector/Reader/judge, provisional5/5 vs4/5, positive
   annotation candidate/selected coverage7/7 each. Extra full-turn retention5/7→6/7

@@ -7,6 +7,18 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Uniform affordable baseline now completes fixed ordinals11–40 under identical
+saved BM25/vector/BGE top20,24KB whole-message ranked-fit and unchanged QA:
+**22/30 (73.3%)**, positive18/26 (69.2%), negative4/4; previously-unanswered27
+score20/27.60 successful calls/238113 tokens, zero retries or source/model reruns.
+All50 distinct histories now have some QA; only these30 have this exact uniform
+baseline, so no current uniform50 score exists. Seven of eight failures already
+contain all annotated turns; Reader task use, intention/decision semantics and
+contextual-inference conservatism join the remaining packing/window omission.
+Keep scores/defaults unchanged and ten reserved histories closed; next bring
+the other20 onto the same baseline. See the
+[uniform result, type scores and failure observations](../benchmarks/reports/public-memory-uniform-qa-result-2026-10-18.md).
+
 Fresh fixed ordinals46–50 finish actual same-selector paired QA: native matched
 candidate widening5/5 vs neighborhood4/5 (positive4/4 vs3/4; negative1/1 each).
 Both candidate/selected pools cover7/7 annotated turns; full packed original-turn
