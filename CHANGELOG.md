@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add an opt-in provider-neutral bounded listwise reranker, consuming only a
+  validated complete opaque-ID permutation, with no fact/authority changes.
+  Frozen opened-three smoke stops after its first response omits one of80 IDs;
+  one new call /19290 tokens, no Reader/judge calls or retrieval-quality result.
+  Preserve failed output and budgets, no repair/retry/default promotion. Full
+  regression1985 passed /33 skipped /three subtests; next evaluate an explicit
+  top-k contract separately rather than forcing a complete distractor ordering.
+
 - Add an opt-in source-aware Reranker adapter with metadata formatting and bounded
   source/token MMR, preserving candidate identity/authority and explicit failures.
   Frozen BGE comparison has no proven gain: reused content-only2/3 vs candidate1/3

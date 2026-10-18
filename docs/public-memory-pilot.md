@@ -7,6 +7,14 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest listwise smoke stopped on its first source-ranking response:79 unique
+IDs for80 candidates, one omission. All three preflight candidate/source bindings
+reproduced, but no new answer or quality grade exists. One call /19290 tokens;
+remaining11 calls unspent, no automatic repair/retry. Full1985 tests pass. Next
+use a separately frozen explicit top-k contract, not benchmark rules or a rescore
+of the failed output. See [actual execution and accounting](../benchmarks/reports/public-memory-listwise-result-2026-10-18.md)
+and [opt-in scorer contract](listwise-reranking.md).
+
 Latest source-aware ablation did not demonstrate a gain: exact reused passage
 baseline2/3 vs metadata+MMR1/3 provisional grades. More owner passages include
 irrelevant topics; transport has useful evidence but a conservative Reader
