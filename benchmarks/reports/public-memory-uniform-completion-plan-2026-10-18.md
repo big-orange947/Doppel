@@ -66,3 +66,17 @@ Eleven offline tests pass (mixed-source attribution/fake QA/gold separation,
 raw SQL predicate, fixed complement, same-profile aggregation); new runner
 Pyright zero errors; Ruff repository/format checks pass. CUDA availability and
 sentence-transformers6.0.1 were read-only checked before this freeze.
+
+## Actual-context supplement, still zero paid calls
+
+All20 source histories pass full-corpus/runtime mapping validation and every
+candidate window contains80 authorized raw originals. Local reranker processes
+1600 pairs, zero truncated, longest4107 tokens (below8192). Packed context bytes
+468949 total; Reader request bytes568032 total,max28969. No DB/source/index writes.
+
+Preparation:`data/doppel/uniform-qa-completion-prepare-live-v1.json`, SHA256
+`bc85ac1307dc83c738ddf00246319354b07eac8ba746c51bbbce1275c1b3f499`.
+Answer preflight:`data/doppel/uniform-qa-completion-answers-preflight-v1.json`,
+plan fingerprint
+`a4644f165d1241e97b58f804a14b30c4aad74655564b9d28cf48057ae4a3a224`.
+All20 exact Reader requests/full preparation are bound before first provider call.
