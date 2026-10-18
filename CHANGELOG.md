@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add opt-in lossless source spans and guarded attributed passage retrieval:
+  original offsets/hash/speaker/authority/time, bounded round-robin candidates,
+  optional reranking and post-ordering source revocation checks; defaults unchanged.
+  Fixed three opened-case QA comparison is2/3 vs2/3, not an accuracy gain; preserve
+  upstream missed owner evidence and assistant-heavy fragment ranking failure.
+  Twelve bounded DeepSeek calls /50335 tokens; no graph/source writes. Full suite:
+  1947 passed /33 skipped /three subtests passed. No fragment-ID-as-answer scoring.
+
 - Complete untouched prospective raw ordinals31–40 (5103 messages), three
   non-graph retrieval arms and paired24KB packers with zero paid-provider calls.
   Hybrid-reranked finds14/15 labelled turns in final20 but packs10/15; vector

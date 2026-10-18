@@ -7,6 +7,15 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+2026-10-18 latest: optional source-bound passage handoff is implemented. A fixed
+three-opened-case whole-message/passage QA comparison yields2/3 vs2/3, not a proven
+accuracy gain. Source-window omission and assistant-heavy text-only fragment
+ranking remain; another transport answer succeeds with unannotated sufficient
+owner evidence, demonstrating annotation-recall limits. Twelve paid calls /50335
+tokens, no graph/source writes. Keep default unchanged and prioritize generic
+source-aware ranking, not judge recalibration or source-ID scoring of fragments.
+See [implementation and actual-answer result](../benchmarks/reports/public-memory-passages-result-2026-10-18.md).
+
 Latest prospective continuation31–40 is complete:5103 raw messages, three arms,
 no paid-provider calls. On nine answerable questions /15 labelled turns,
 hybrid-reranked retrieves14/15 at20 but packs10/15 under either24KB policy;
