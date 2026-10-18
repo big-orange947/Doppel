@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Freeze an opened-eight paired structured-memory diagnostic: identical raw
+  contexts and Reader, real V10 analyzer/miner/transient view and V2 query engine
+  in an ephemeral candidate Store. No production/default/retrieval/graph changes,
+  no global exact counts from a retrieved subset. Up to48 calls;9 new offline
+  tests and185 targeted tests pass. Results not yet available at plan freeze.
+
 - Finish one uniform logical50-question affordable QA baseline:37/50 (74%),
   positives30/43, negatives7/7. Fixed remaining20 score15/20; original30 unchanged.
   Raw-only channel enforced before BM25 statistics/vector candidate cap in mixed
