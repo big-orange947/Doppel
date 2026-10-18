@@ -7,6 +7,16 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest bounded up-to20 selection completes the remaining two opened cases:
+transport correct, wedding count refusal incorrect, **1/2 vs reused baseline1/2**.
+All three reference wedding owner statements now survive selection and packing,
+but other real wedding mentions/relative dates remain ambiguous; do not call this
+a QA gain or silently force3. Eight successful calls/89402 tokens; this turn's
+exact-k failure adds1 call/19378 tokens and stays failed. Keep defaults unchanged,
+stop tuning these examples and next freeze a small untouched non-graph comparison.
+See [actual answers, integrity and accounting](../benchmarks/reports/public-memory-bounded-topk-result-2026-10-18.md)
+and [bounded selector contract](topk-selection.md).
+
 Latest listwise smoke stopped on its first source-ranking response:79 unique
 IDs for80 candidates, one omission. All three preflight candidate/source bindings
 reproduced, but no new answer or quality grade exists. One call /19290 tokens;

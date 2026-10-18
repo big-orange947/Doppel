@@ -1,5 +1,9 @@
 # Optional listwise relevance ranking
 
+For an explicit **up-to-k** filter that leaves the remainder unranked, see
+[bounded evidence selection](topk-selection.md). The complete-permutation scorer
+below is a separate contract; its failed smoke is not rescored by that addition.
+
 `doppel_memory.reference_rerank.ReferencePersonalMemoryReranker` implements the
 existing `PersonalMemoryReranker` protocol with a supplied `StructuredOutputModel`.
 It is opt-in: no retrieval, model, source-diversity or Graphiti default changes.

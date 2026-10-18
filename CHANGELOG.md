@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add opt-in exact-k and bounded up-to-k evidence selectors with opaque IDs,
+  immutable originals, metadata and strict subset/uniqueness/maximum checks.
+  Preserve exact-k failure (8/20; one call/19378 tokens). Bounded remaining-two
+  diagnostic completes8 calls/89402 tokens: primary1/2 vs reused baseline1/2.
+  Three reference wedding owner statements now survive packing, but ambiguous
+  additional events and a conservative Reader still prevent a correct count.
+  No scenario rules, judge tuning, graph/source writes or default promotion.
+  Full2017 passed/33 skipped/three subtests;62 targeted selection/rerank tests pass.
+
 - Add an opt-in provider-neutral bounded listwise reranker, consuming only a
   validated complete opaque-ID permutation, with no fact/authority changes.
   Frozen opened-three smoke stops after its first response omits one of80 IDs;
