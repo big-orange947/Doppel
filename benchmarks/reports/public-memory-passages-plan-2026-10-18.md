@@ -51,3 +51,25 @@ Report actual answers/citations and inspect whether supplied spans suffice. Lega
 IDs do not establish support; DeepSeek task grades are provisional and are not an
 independent entailment audit. Do not repair the judge or tune on these three cases.
 Do not present this as LongMemEval500, blind validation, AML or release acceptance.
+
+## Contexts complete; QA binding frozen before paid execution
+
+Contexts completed at implementation commit6cd3c30, with28/44/62 candidate spans,
+no candidate truncation/budget exhaustion. Whole-message rows reproduce exactly.
+Output SHA-256:
+`1a868e90f303e76a3555563bde610f10abe67b4a7a53cd1b415180ad9e223b7d`.
+Do not turn the increased item count into a quality score.
+
+After context completion, a fail-closed raw-item `None` guard/type narrowing was
+added to the diagnostic wrapper (no splitting/ranking/packing change). Pyright
+reports zero errors on the new implementation/diagnostic files. Original context
+execution bytes remain preserved at6cd3c30; there is no context rerun.
+
+QA preflight SHA-256:
+`ebfadd661b3c0169959e7d36ae71cbe549ed11c9d4eb07d54b311b2f06da43cc`.
+QA plan fingerprint:
+`c3ec94880ef72f63180049b5445b9dbd5e44bdb463fad80a8181b56f3ec5478a`.
+The six frozen contexts use23997/23401/23607 bytes for passage arms and
+22475/23549/23631 bytes for whole-message arms, paired in the listed case order.
+No byte-budget enlargement or Reader-instruction change. Execution remains capped
+at6 Reader plus6 task-judge calls, preserving failures and stopping at the first.

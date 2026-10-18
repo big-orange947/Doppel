@@ -176,7 +176,10 @@ async def contexts(args, selected, manifest, parent, reranker, plan):
                 (scope.scope_key, r.source_event_id): r.memory_id
                 for r in records.values()
             }
-            items = bound_items(runtime, manifest, scope, host, records)
+            raw_items = bound_items(runtime, manifest, scope, host, records)
+            if any(item is None for item in raw_items.values()):
+                raise ValueError("unclassified raw source")
+            items = {key: item for key, item in raw_items.items() if item is not None}
             old = next(
                 r
                 for r in parent["rows"]
