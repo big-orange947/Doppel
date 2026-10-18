@@ -7,6 +7,16 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Latest zero-LLM opened-five source-neighborhood audit completes: original80-pools
+contain9/11 positive annotated turns; ±1 pre-selection neighborhoods11/11 versus
+same-size native BM25/vector10/11. This is candidate availability, **not a new QA
+score**; previous3/5 vs3/5 stays unchanged. Expanded/native806 total candidates
+consume988815/818136 formatted bytes; no cost-free/generic recall claim. Keep
+optional, document trusted source order and eligibility boundaries, then freeze
+untouched native-versus-neighborhood selection/QA. Full2056 tests pass; paid0.
+See [audit and same-count control](../benchmarks/reports/public-memory-neighborhood-audit-result-2026-10-18.md)
+and [source-order integration](source-neighborhoods.md).
+
 Latest prospective ordinals41-45 complete:five full S histories/2517 messages,
 paired BGE/LLM QA **3/5 vs3/5**, answerable2/4 each and predeclared negative1/1.
 Full annotated-turn text retained3/11→9/11; packed bytes118299→27298, not a net

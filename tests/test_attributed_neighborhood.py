@@ -256,6 +256,18 @@ async def test_stale_anchor_and_inactive_neighbor_are_not_returned(tmp_path):
         stale = snippets[1].model_copy(update={"text": "invented content"})
         result = await expander.expand(scope, [stale])
         assert result.snippets == [] and result.rejected == {"changed_anchor": 1}
+
+        async def request_policy(supplied_scope, evidence_id):
+            if evidence_id == records[0].source_event_id:
+                return None
+            return await host.resolve_event(supplied_scope, evidence_id)
+
+        restricted = AttributedNeighborhoodExpander(
+            store, resolve_event=request_policy, source_order=index
+        )
+        result = await restricted.expand(scope, [snippets[1]])
+        assert result.snippets == [snippets[1]]
+        assert result.rejected == {"unresolved_provenance": 1}
         await store.transition(scope, records[0].memory_id, MemoryState.EXPIRED)
         result = await expander.expand(scope, [snippets[1]])
         assert result.snippets == [snippets[1]]

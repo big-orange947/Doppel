@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add opt-in scoped source-order protocol/index and attributed pre-selection
+  neighborhood expansion, with source reloads, explicit caps and revocation/
+  scope/session/order guards. Zero-paid opened-five candidate audit: original9/11,
+  neighborhoods11/11, same-count native widening10/11 annotations; no QA rerun or
+  default promotion. Neighborhood text is20.9% larger overall than native. Keep
+  development-only bounds and host-order/eligibility limitations explicit.
+  Full2056 passed/33 skipped/three subtests;25 targeted neighborhood tests pass.
+
 - Complete fixed fresh ordinals41-45 with2517 raw messages, two non-graph profiles
   and actual paired QA: BGE3/5 vs bounded LLM3/5 (answerable2/4 each, negative1/1).
   Full annotated-turn text retention3/11→9/11 and packed bytes118299→27298, but
