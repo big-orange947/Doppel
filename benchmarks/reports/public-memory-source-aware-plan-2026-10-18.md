@@ -43,3 +43,25 @@ Plan fingerprint:
 `e4b2f941e754088341089aa276c6db99c7a8f9066ed4cc6746d8e6b247eb580c`.
 Unused preflight v1 remains preserved; it preceded a type-only explicit argument
 fix, with no live evaluation or provider calls. Freeze current code before run.
+
+## Context stage complete; QA frozen before paid calls
+
+All three arms/cases complete, content-only source windows and full packed
+passage contexts exactly match prior artifacts, and all three baseline Reader
+request hashes/immutable grades are verified for zero-call reuse. Same candidate
+pool per case, no source/index writes. Local model18 calls /1100 scored pairs /
+zero truncations; no passage candidate budget exhausted. Raw provider's static
+`input_policy` string describes its default content-only adapter: effective input
+format in this experiment is controlled by the declared arms/source-aware wrapper
+and includes metadata in the two opt-in arms.
+
+Context output SHA-256:
+`4b8cad11b8401402f5d55b6130baee4cb6acc4e916d6d66dfbfd30a27e2aa7df`.
+Preselected metadata+MMR QA contexts are23608/22999/23041 bytes. More owner passages
+are not scored as answer correctness. Metadata-only is not promoted to a paid arm.
+
+QA preflight SHA-256:
+`6f2cd92789c920aa21b896fa84994520e1d230971f36f07789840c7723fc7396`.
+QA plan fingerprint:
+`be72640beebe86482e60937c584e34c4d1544668d84f71bba5c1e39e79656c86`.
+Max3 Reader plus3 task-judge calls, no retry; old baseline spend remains old.
