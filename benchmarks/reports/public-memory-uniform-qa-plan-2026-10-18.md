@@ -57,3 +57,18 @@ Local file:`data/doppel/uniform-qa-11-40-prepare-preflight-v1.json`.
 Eleven offline tests pass, including a real Store/fake-provider end-to-end check
 that Reader input excludes gold and only judge input includes the reference.
 New runner Pyright has zero errors; Ruff passes. No paid calls made at freeze.
+
+## Actual context binding (zero paid calls)
+
+All30 saved contexts reproduce exactly against unchanged source inventories.
+Context bytes707690 total; canonical Reader request bytes856416 total,29104
+maximum, all below the frozen caps. No reingestion/index/reranker invocation.
+
+Preparation SHA256:
+`53a08c85dbe8fd49885d8b8e6a6bdc7c23850cc7b4a56a6f44789079e23b8b51`.
+Answer preflight fingerprint:
+`7a4c9d8a3fb68981af0dfd8be4af47ce65ff1b76a91337cc83f9b85714563056`.
+Local files:`data/doppel/uniform-qa-11-40-prepare-live-v1.json` and
+`data/doppel/uniform-qa-11-40-answers-preflight-v1.json`. The exact thirty Reader
+requests and full preparation hash are bound before any provider call. Previous
+QA labels have not been used to modify the fixed order, Reader or packing policy.
