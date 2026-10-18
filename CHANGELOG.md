@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Finish one uniform logical50-question affordable QA baseline:37/50 (74%),
+  positives30/43, negatives7/7. Fixed remaining20 score15/20; original30 unchanged.
+  Raw-only channel enforced before BM25 statistics/vector candidate cap in mixed
+  historical schema. New40 calls/160347 tokens; all50 QA100 calls/398460 tokens,
+  zero retries/graph/source writes. Evidence top20 66/76, packed60/76; preserve
+  all13 failed task grades and opened-data/non-highest-config caveats. Eleven
+  new tests; full2089 passed/33 skipped/three subtests. No default promotion.
+
 - Complete fixed uniform affordable QA baseline on ordinals11–40:22/30 (73.3%),
   positives18/26, negatives4/4; finish27 previously-unanswered questions20/27.
   Reuse exact frozen BM25/vector/BGE whole-message24KB contexts; no source,

@@ -7,6 +7,17 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Uniform logical50 baseline is complete: **37/50 (74%)**, positives30/43 (69.8%),
+negatives7/7. The fixed complement scores15/20, merged with unchanged22/30,
+never best-arm substitution. Raw-only BM25/vector/BGE/24KB whole-message context
+and unchanged QA; not highest-config/official/independent validation. Evidence
+candidate72/76 (94.7%), top20 66/76 (86.8%), packed60/76 (78.9%); expanded sample
+must not inherit the old30-question97.6%@20 claim. Positive advice2/7, temporal
+and multi-session4/7 each; fact7/8, assistant6/7, update7/7. New40 calls/160347
+tokens; all50 QA100 successful calls/398460 tokens, excluding historical graph/
+ingestion/local compute.2089 tests pass. Ten reserved histories remain closed.
+See the [fifty scorecard, failures and accounting](../benchmarks/reports/public-memory-uniform-fifty-result-2026-10-18.md).
+
 Uniform affordable baseline now completes fixed ordinals11–40 under identical
 saved BM25/vector/BGE top20,24KB whole-message ranked-fit and unchanged QA:
 **22/30 (73.3%)**, positive18/26 (69.2%), negative4/4; previously-unanswered27
