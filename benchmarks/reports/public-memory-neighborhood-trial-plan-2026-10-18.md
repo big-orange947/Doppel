@@ -56,6 +56,22 @@ Local report: `data/doppel/neighborhood-trial-46-50-prepare-preflight-v1.json`.
 Eleven offline runner tests pass, including a real Store100-source test proving
 that the identical frozen preview reaches the selector without an80-item crop.
 
+## Actual-pool supplement (still zero paid calls)
+
+All five histories prepared:2483 raw messages. Counts per arm for ordinals46–50:
+170/168/143/155/183. Native/neighborhood source-request byte pairs:
+223932/244554,200574/216282,184380/220779,150984/242285,158338/257869.
+No expansion rejections or candidate/byte-cap hits; no corpus change.
+
+Preparation report SHA256:
+`393b8c67c2e29b19fdb0b6e95dda5658ee8438b9fa1c7df278369124e790ee0b`.
+Evaluation preflight plan fingerprint:
+`3adbf505a4999d21f9e9516f19b014ccca50780e4955f31927d0353c3c85c333`.
+Local reports use `data/doppel/neighborhood-trial-46-50-{prepare-live,evaluate-preflight}-v1.json`.
+The evaluation plan binds all ten exact pool/request hashes and the full
+preparation hash before the first provider request. QA labels remain unopened
+for protocol decisions; no expansion or selector settings changed after prep.
+
 Runner: `python -m benchmarks.public_memory_neighborhood_trial --phase prepare`
 with fresh `--run-dir` and `--output`; first emits a preflight, then `--execute`
 requires its exact `--frozen-preflight`. Evaluate similarly, with the completed
