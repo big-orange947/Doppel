@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Complete the frozen occurrence-time paired diagnosis: raw6/8, structured7/8
+  under provisional judging; one category-sensitive gain, no general accuracy
+  claim. Same-proposal ablation recovers3 December episodes recalled in January
+  (3 hits versus0 without occurrence coordinates). Preserve aggregate-routing,
+  decision/completion and precision-label defects.48 calls/239698 tokens,
+  key-free replay byte-identical; no graph/source writes or default promotion.
+  Full2117 passed/33 skipped/three subtests after API snapshot updates; subsequent
+  occurrence-preserving merge guard adds2 tests,77 related tests pass.
+
 - Add opt-in Analyzer V11/Planner V3 and evidence-bound episode occurrence times,
   separate from state validity and observation time. Interval queries retain
   unknown/overlapping candidates with explicit uncertainty, not exact counts;

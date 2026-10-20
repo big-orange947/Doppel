@@ -7,12 +7,16 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
-The next repair is implemented as opt-in Analyzer V11/Planner V3: source-bound
-episode occurrence coordinates, interval uncertainty and quantity-safe routing.
-No default promotion or verified date-normalization claim. A frozen rerun uses
-the same eight opened contexts and Reader, with an additional zero-provider
-same-proposal time-metadata ablation; see the
-[2026-10-20 protocol](../benchmarks/reports/public-memory-event-time-plan-2026-10-20.md).
+Opt-in Analyzer V11/Planner V3 repair is now tested on the same opened-eight
+contexts: raw6/8 versus structured7/8, but the sole gain depends on provisional
+judging of a conditional count, not proven new answer coverage. The stronger
+engine result is a same-proposal ablation:3 December episodes recalled in
+January are retained with occurrence coordinates,0 without. Two elapsed-duration
+routes become lookup; reported-total routing is still wrong. Preserve discovered
+decision-to-completion and time-precision-label errors.48 calls/239698 tokens,
+key-free replay byte-identical; no graph/source writes or default promotion. See
+the [frozen protocol](../benchmarks/reports/public-memory-event-time-plan-2026-10-20.md)
+and [result with limitations](../benchmarks/reports/public-memory-event-time-result-2026-10-20.md).
 
 The frozen opened-eight structured-memory counterfactual is complete: raw6/8,
 structured6/8, one gain/one regression. Existing V10/miner/transient/Planner V2/

@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from doppel_memory.event_time import record_event_time
 from doppel_memory.indexing import memory_index_fingerprint
 from doppel_memory.intelligence import (
     MemoryTemporalStatus,
@@ -1384,6 +1385,10 @@ def _episode_merge_signature(record: MemoryRecord) -> tuple[str, ...] | None:
     key = _metadata_text(record, "event_key")
     if not key:
         return None
+    try:
+        occurrence = record_event_time(record)
+    except ValueError:
+        return None
     # Do not remove internal punctuation: decimal amounts and identifiers can
     # change meaning. No semantic equality or event identity is inferred here.
     return (
@@ -1393,6 +1398,9 @@ def _episode_merge_signature(record: MemoryRecord) -> tuple[str, ...] | None:
         _metadata_text(record, "revision_kind"),
         _metadata_text(record, "valid_from"),
         _metadata_text(record, "valid_to"),
+        # Do not discard a distinct occurrence, source clock, uncertainty or
+        # quote while deduplicating content. Legacy records still compare alike.
+        occurrence.model_dump_json() if occurrence is not None else "",
     )
 
 

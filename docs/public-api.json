@@ -50,6 +50,8 @@
       "WriteStatus"
     ],
     "provisional": [
+      "BoundEventTime",
+      "EventTimeCoordinate",
       "BatchCheckpoint",
       "BatchProposalPlan",
       "BatchProposalPolicy",
@@ -174,8 +176,10 @@
       "ReferencePersonalMemoryAnalyzer",
       "ReferencePersonalMemoryAnalyzerV9",
       "ReferencePersonalMemoryAnalyzerV10",
+      "ReferencePersonalMemoryAnalyzerV11",
       "ReferencePersonalMemoryQueryPlanner",
       "ReferencePersonalMemoryQueryPlannerV2",
+      "ReferencePersonalMemoryQueryPlannerV3",
       "ReferenceMemoryConsolidator",
       "RelationCandidate",
       "RelationIndex",

@@ -68,6 +68,27 @@ It shares existing schema, gates and diagnostics; these instructions are not a
 hard semantic validator. Use a new model-bound checkpoint/cache identity. New
 controls do not retroactively pass V9's failed gate or authorize default promotion.
 
+`EventTimeCoordinate`, `BoundEventTime`, `ReferencePersonalMemoryAnalyzerV11`
+and `ReferencePersonalMemoryQueryPlannerV3` are additive provisional root APIs.
+Episode drafts and transient claims add optional `event_time`; legacy inputs
+default to null. Quotes, evidence identity and observation anchors are bound,
+but normalized dates remain explicitly unverified. Occurrence time is separate
+from state validity. Interval queries retain unknown/partially overlapping time
+as uncertain candidates, not exact counts; legacy records keep their fallback.
+Episode merge safety additionally requires identical bound occurrence metadata,
+including source identity and uncertainty; absent or invalid new metadata cannot
+be merged away alongside a valid coordinate. Legacy-only equality is unchanged.
+
+Default analyzer/planner selection and previous prompt text are unchanged, but
+the additive draft field changes the shared output JSON schema and therefore
+provider request/cache fingerprints, including older reference analyzer classes.
+Do not resume an old bound run under the new schema. Old-model checkpoint version
+alone is not proof of byte-identical requests; retain source/schema fingerprints.
+New transient JSON outputs also contain the optional field. Older strict
+consumers may need updating. The V11/V3 experiment and its key-free replay are
+pinned to dcba516; subsequent merge protection is a separate offline-checked
+extension, not a rerun or retroactive change to that report.
+
 `TransientEventGroup` and `group_transient_events` are additive provisional root
 APIs for [non-destructive episode grouping](transient-memory-view.md). Existing
 `TransientMemoryView` wire fields do not change. Source-bound claim details are

@@ -11,6 +11,24 @@ import doppel_memory as doppel
 ROOT = Path(__file__).resolve().parents[1]
 
 MODEL_FIELDS = {
+    "EventTimeCoordinate": (
+        "start",
+        "end",
+        "precision",
+        "basis",
+        "expression",
+        "evidence_id",
+    ),
+    "BoundEventTime": (
+        "start",
+        "end",
+        "precision",
+        "basis",
+        "expression",
+        "evidence_id",
+        "anchor_observed_at",
+        "normalization_verified",
+    ),
     "TransientEventGroup": (
         "group_id",
         "scope_key",
@@ -52,6 +70,7 @@ MODEL_FIELDS = {
         "observed_after_reference",
         "valid_from",
         "valid_to",
+        "event_time",
         "validity_at_reference",
         "evidence",
     ),
@@ -394,6 +413,7 @@ MODEL_FIELDS = {
         "temporal_status",
         "valid_from",
         "valid_to",
+        "event_time",
         "evidence_ids",
         "tags",
         "metadata",

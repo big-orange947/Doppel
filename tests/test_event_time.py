@@ -16,6 +16,10 @@ from doppel_memory import (
     ReferencePersonalMemoryAnalyzerV11,
     ReferencePersonalMemoryQueryPlannerV3,
 )
+from doppel_memory.consolidation import (
+    ConsolidationPlanningError,
+    _validate_episode_merge,
+)
 from doppel_memory.event_time import bind_event_time
 from doppel_memory.intelligence import (
     PersonalMemoryAnalysisRequest,
@@ -136,6 +140,30 @@ async def test_removing_new_metadata_restores_unchanged_legacy_fallback():
 async def test_invalid_quote_fails_batch_instead_of_repairing_date():
     with pytest.raises(PersonalMemoryEvidenceError, match="occurrence"):
         await proposal(coordinate(expression="2020-01-01").model_dump(mode="json"))
+
+
+async def test_merge_cannot_discard_different_or_missing_occurrence_coordinates():
+    _, p = await proposal(coordinate().model_dump(mode="json"))
+    record = p.to_record()
+    _validate_episode_merge("merge", [record, deepcopy(record)])
+    other = deepcopy(record)
+    other.metadata["event_time"]["start"] = "2024-12-09T00:00:00Z"
+    other.metadata["event_time"]["end"] = "2024-12-09T23:59:59.999999Z"
+    with pytest.raises(ConsolidationPlanningError, match="temporal metadata"):
+        _validate_episode_merge("merge", [record, other])
+    other.metadata.pop("event_time")
+    with pytest.raises(ConsolidationPlanningError, match="temporal metadata"):
+        _validate_episode_merge("merge", [record, other])
+    legacy = deepcopy(other)
+    _validate_episode_merge("merge", [legacy, other])
+
+
+async def test_merge_rejects_invalid_occurrence_anchor_even_if_both_copies_agree():
+    _, p = await proposal(coordinate().model_dump(mode="json"))
+    record = p.to_record()
+    record.metadata["event_time"]["anchor_observed_at"] = "2020-01-01T00:00:00Z"
+    with pytest.raises(ConsolidationPlanningError, match="temporal metadata"):
+        _validate_episode_merge("merge", [record, deepcopy(record)])
 
 
 async def test_arbitrary_metadata_cannot_inject_unbound_event_time():
