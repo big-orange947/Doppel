@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add module-only opt-in candidate-aware quantity routing: bounded eligible
+  discovery can change count/type filtering to lookup of reported totals or
+  temporal anchors, without changing scope/subject/time/authority/relevance gates
+  or generating answers. Keep original/discovery/final audits and reload Store
+  after feedback. Freeze a four-call opened routing diagnostic using existing
+  source-bound extraction/planning receipts, with no new extraction or QA calls.
+
 - Complete the frozen occurrence-time paired diagnosis: raw6/8, structured7/8
   under provisional judging; one category-sensitive gain, no general accuracy
   claim. Same-proposal ablation recovers3 December episodes recalled in January

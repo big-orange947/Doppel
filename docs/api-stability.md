@@ -29,6 +29,12 @@ The manifest has three classifications:
 experimental. Files under `examples/` are reference recipes, not installed API.
 Underscore-prefixed names are always private.
 
+`doppel_memory.query_feedback.CandidateAwarePersonalMemoryQuery` and its routing
+models/config are module-only experimental, explicitly opt-in. See
+[candidate feedback](query-candidate-feedback.md) for type-relaxation, read/call
+cost and audit boundaries. Existing root API and default query methods do not
+change; candidate feedback does not grant new scope or time authority.
+
 The v0.7 `IndexWriter`, `IndexMaintainer`, and index maintenance wire models are
 provisional root APIs. They are intentionally separate from the stable `MemoryStore`
 and provisional query-only `SemanticIndex` contracts. `GraphitiSemanticIndex` remains
