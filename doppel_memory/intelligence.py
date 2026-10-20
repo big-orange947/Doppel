@@ -29,6 +29,7 @@ from doppel_memory.batch import (
     BatchProposalPlan,
     BatchTaskContext,
 )
+from doppel_memory.event_time import EventTimeCoordinate, bind_event_time
 from doppel_memory.models import (
     Actor,
     ChatMessage,
@@ -117,6 +118,7 @@ class PersonalMemoryDraft(BaseModel):
     temporal_status: str = MemoryTemporalStatus.UNKNOWN
     valid_from: datetime | None = None
     valid_to: datetime | None = None
+    event_time: EventTimeCoordinate | None = None
     evidence_ids: list[str] = Field(min_length=1)
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -201,6 +203,11 @@ class PersonalMemoryDraft(BaseModel):
             raise ValueError("valid_to must not precede valid_from")
         if self.event_key and self.memory_type != PersonalMemoryType.EPISODE:
             raise ValueError("event_key is only valid for episode memories")
+        if (
+            self.event_time is not None
+            and self.memory_type != PersonalMemoryType.EPISODE
+        ):
+            raise ValueError("event_time is only valid for episode memories")
         return self
 
 
@@ -476,6 +483,37 @@ class ReferencePersonalMemoryAnalyzerV10(ReferencePersonalMemoryAnalyzer):
     _instructions = REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V10
 
 
+class ReferencePersonalMemoryAnalyzerV11(ReferencePersonalMemoryAnalyzer):
+    """Opt-in source-bound occurrence coordinates; no automatic fact approval."""
+
+    version = "11"
+    _instructions = (
+        REFERENCE_PERSONAL_MEMORY_INSTRUCTIONS_V10
+        + """
+
+For completed episodes, preserve event_time separately from valid_from/valid_to.
+The latter describe state validity, NOT the date on which a recalled event happened.
+event_time contains start/end (closed bounds), precision, basis, expression and
+evidence_id. expression MUST be an exact contiguous quote from that supporting
+message; evidence_id must be one of this draft's evidence_ids. Bind the time of
+THIS episode, not a neighboring event or the date of a future plan. Do not put
+occurrence coordinates on plans, decisions about future actions, or current states.
+Use basis=explicit for a fully specified date/time, resolved_relative for a date
+resolved using that source message's observation clock (not a later message or
+the question clock). Preserve uncertainty: date-only means a whole calendar day,
+month/year means the whole month/year, never its first instant. Use UTC when the
+source supplies no other timezone. Relative expressions may yield a range only
+when its bounds are supported; never invent an exact day for a vague season or
+"a few years ago". For an unresolved date or no time cue, use basis=unresolved,
+precision=unknown, start=end=null, quoting the relevant time phrase or minimal
+episode clause. Do not use the observation date as a default event date. A date
+in an event_key is NOT a substitute for event_time. Omit/null is accepted when
+no evidence-bound coordinate can be supplied. Source binding does not prove the
+normalization correct; never claim that normalized times have been verified.
+"""
+    )
+
+
 class PersonalMemoryExtractorConfig(BaseModel):
     """High-precision gates shared by online and periodic extraction."""
 
@@ -538,6 +576,7 @@ _EVIDENCE_REJECTION_REASONS = frozenset(
         "mixed_source_actors",
         "subject_source_mismatch",
         "untrusted_subject_identity",
+        "invalid_event_time_evidence",
     }
 )
 
@@ -723,10 +762,22 @@ def _analysis_to_proposals(
     for draft_index, draft in ranked_drafts:
         try:
             bound_messages, source_actor = _bind_evidence(draft, evidence, config)
+            event_time = (
+                bind_event_time(draft.event_time, bound_messages)
+                if draft.event_time is not None
+                else None
+            )
         except _DraftEvidenceError as exc:
             if not quarantine:
                 raise
             reject(draft_index, exc.reason)
+            continue
+        except ValueError as exc:
+            if not quarantine:
+                raise PersonalMemoryEvidenceError(
+                    "invalid occurrence time evidence"
+                ) from exc
+            reject(draft_index, "invalid_event_time_evidence")
             continue
         if draft.confidence < config.minimum_confidence:
             if diagnostics is not None:
@@ -755,6 +806,8 @@ def _analysis_to_proposals(
             "subject_id": subject_id,
             "evidence_ids": sorted(draft.evidence_ids),
         }
+        if event_time is not None:
+            identity_payload["event_time"] = event_time.model_dump(mode="json")
         identity = _fingerprint(identity_payload)
         if identity in seen:
             if diagnostics is not None:
@@ -773,6 +826,10 @@ def _analysis_to_proposals(
             for message in bound_messages
         ]
         metadata = dict(draft.metadata)
+        # Reserved provenance cannot be smuggled through arbitrary model metadata.
+        metadata.pop("event_time", None)
+        if event_time is not None:
+            metadata["event_time"] = event_time.model_dump(mode="json")
         metadata.update(
             {
                 "personal_memory_type": draft.memory_type,

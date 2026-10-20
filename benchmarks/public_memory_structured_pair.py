@@ -41,17 +41,21 @@ from doppel_memory.intelligence import (
     PersonalMemoryAnalysisRequest,
     PersonalMemoryMiner,
     ReferencePersonalMemoryAnalyzerV10,
+    ReferencePersonalMemoryAnalyzerV11,
 )
 from doppel_memory.models import MemoryState
 from doppel_memory.query import (
     PersonalMemoryQueryEngine,
     PersonalMemoryQueryRequest,
     ReferencePersonalMemoryQueryPlannerV2,
+    ReferencePersonalMemoryQueryPlannerV3,
 )
 from doppel_memory.transient import TransientMemoryViewBuilder, group_transient_events
 from integrations.aml.contract import memory_scope
 
 RUNNER = "doppel.opened-structured-pair.v1"
+ANALYZER = ReferencePersonalMemoryAnalyzerV10
+PLANNER = ReferencePersonalMemoryQueryPlannerV2
 ROOT = Path("data/doppel")
 FILES = {
     "dataset": Path("data/public-benchmarks/longmemeval_s_cleaned.json"),
@@ -86,6 +90,7 @@ SOURCES = (
     "benchmarks/public_memory_expansion.py",
     "benchmarks/public_longmemeval.py",
     "doppel_memory/intelligence.py",
+    "doppel_memory/event_time.py",
     "doppel_memory/query.py",
     "doppel_memory/transient.py",
     "doppel_memory/consolidation.py",
@@ -220,10 +225,10 @@ def query_input(row, scope):
 
 async def requests_for(row, scope):
     analyzer, planner = Probe(), Probe()
-    await ReferencePersonalMemoryAnalyzerV10(analyzer).analyze(
+    await ANALYZER(analyzer).analyze(
         PersonalMemoryAnalysisRequest(scope=scope, messages=list(messages(row)))
     )
-    await ReferencePersonalMemoryQueryPlannerV2(planner).plan(query_input(row, scope))
+    await PLANNER(planner).plan(query_input(row, scope))
     return {
         "analyzer": analyzer.request,
         "planner": planner.request,
@@ -235,6 +240,9 @@ async def make_plan(rows, binding):
     requests = {row.case_id: await requests_for(row, scope) for _, row, scope in rows}
     plan = {
         "runner": RUNNER,
+        "analyzer": ANALYZER.__name__,
+        "planner": PLANNER.__name__,
+        "event_time_counterfactual": ANALYZER is ReferencePersonalMemoryAnalyzerV11,
         "input_sha256": binding,
         "source_sha256": {
             str(p): hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in SOURCES
@@ -346,9 +354,7 @@ def augmented_request(row, view):
 async def structured_view(row, scope, analyzer_model, planner_model):
     diagnostics = []
     miner = PersonalMemoryMiner(
-        ReferencePersonalMemoryAnalyzerV10(
-            analyzer_model, diagnostics_observer=diagnostics.append
-        ),
+        ANALYZER(analyzer_model, diagnostics_observer=diagnostics.append),
         miner_config(len(messages(row))).model_copy(update={"max_memories": 40}),
     )
     proposals = await miner.propose(batch_context(row, scope))
@@ -369,16 +375,31 @@ async def structured_view(row, scope, analyzer_model, planner_model):
             raise ValueError("ephemeral write failed")
     engine = PersonalMemoryQueryEngine(store)
     plan = await engine.plan(
-        ReferencePersonalMemoryQueryPlannerV2(planner_model),
+        PLANNER(planner_model),
         row.runtime.query.query,
         [scope],
         now=row.runtime.query.reference_time,
         observed_until=horizon,
     )
     result = await engine.execute(plan, trace_limit=40)
+    counterfactual = None
+    if ANALYZER is ReferencePersonalMemoryAnalyzerV11:
+        # Zero-LLM ablation of the SAME new proposals and plan. Only the typed
+        # coordinate is removed; content, IDs, source dates and gates are fixed.
+        legacy = InMemoryStore()
+        for proposal, claim in zip(proposals.proposals, view.claims, strict=True):
+            record = proposal.to_record().model_copy(
+                update={"memory_id": claim.claim_id}, deep=True
+            )
+            record.metadata.pop("event_time", None)
+            await legacy.put(record)
+        counterfactual = (
+            await PersonalMemoryQueryEngine(legacy).execute(plan, trace_limit=40)
+        ).model_dump(mode="json")
     return export_view(view, result), {
         "transient_view": view.model_dump(mode="json"),
         "engine_result": result.model_dump(mode="json"),
+        "same_proposals_without_event_time": counterfactual,
         "parser_diagnostics": [
             d.model_dump(mode="json") if hasattr(d, "model_dump") else d
             for d in diagnostics
@@ -534,13 +555,23 @@ async def execute(args, rows, plan):
 
 
 def main():
+    global RUNNER, ANALYZER, PLANNER
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--frozen-preflight", type=Path)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--cache-only", action="store_true")
+    parser.add_argument(
+        "--event-time",
+        action="store_true",
+        help="new versioned V11/V3 opt-in; separate plan/run directory required",
+    )
     args = parser.parse_args()
+    if args.event_time:
+        RUNNER = "doppel.opened-structured-pair.event-time.v2"
+        ANALYZER = ReferencePersonalMemoryAnalyzerV11
+        PLANNER = ReferencePersonalMemoryQueryPlannerV3
     if args.output.exists() or (args.cache_only and not args.execute):
         parser.error("fresh output required; cache-only requires execute")
     rows, binding = load_rows()

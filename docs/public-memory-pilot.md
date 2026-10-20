@@ -7,6 +7,13 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+The next repair is implemented as opt-in Analyzer V11/Planner V3: source-bound
+episode occurrence coordinates, interval uncertainty and quantity-safe routing.
+No default promotion or verified date-normalization claim. A frozen rerun uses
+the same eight opened contexts and Reader, with an additional zero-provider
+same-proposal time-metadata ablation; see the
+[2026-10-20 protocol](../benchmarks/reports/public-memory-event-time-plan-2026-10-20.md).
+
 The frozen opened-eight structured-memory counterfactual is complete: raw6/8,
 structured6/8, one gain/one regression. Existing V10/miner/transient/Planner V2/
 QueryEngine were actually exercised in an ephemeral candidate Store, not merely

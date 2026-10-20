@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add opt-in Analyzer V11/Planner V3 and evidence-bound episode occurrence times,
+  separate from state validity and observation time. Interval queries retain
+  unknown/overlapping candidates with explicit uncertainty, not exact counts;
+  legacy metadata and defaults stay unchanged. Freeze the same opened-eight
+  paired diagnosis plus a zero-provider same-proposal time-metadata ablation.
+
 - Complete frozen opened-eight paired structured-memory diagnosis: raw6/8,
   structured6/8, one gain/one regression, no net uplift or default promotion.
   Real V10 analyzer/miner/transient view and V2 query engine scan64 candidates;

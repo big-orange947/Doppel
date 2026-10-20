@@ -26,6 +26,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
+from doppel_memory.event_time import record_event_time
 from doppel_memory.evidence import (
     EvidenceItem,
     EvidenceRequest,
@@ -622,6 +623,7 @@ class ReferencePersonalMemoryQueryPlannerV2:
 
     name = "doppel.reference-personal-memory-query-planner-v2"
     version = "2"
+    _instructions = REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS
 
     def __init__(self, model: StructuredOutputModel) -> None:
         self.model = model
@@ -632,7 +634,7 @@ class ReferencePersonalMemoryQueryPlannerV2:
         self, request: PersonalMemoryQueryRequest
     ) -> PersonalMemoryQueryDraftV2:
         bound = PersonalMemoryQueryRequest.model_validate(request)
-        instructions = REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS
+        instructions = self._instructions
         if bound.relation_type_definitions:
             instructions += REFERENCE_RELATION_DEFINITION_INSTRUCTIONS
         raw = await self.model.generate(
@@ -655,6 +657,40 @@ class ReferencePersonalMemoryQueryPlannerV2:
                 "subject_id": bound.default_subject_id,
             }
         )
+
+
+class ReferencePersonalMemoryQueryPlannerV3(ReferencePersonalMemoryQueryPlannerV2):
+    """Opt-in quantity-safe routing; arithmetic remains with the answer layer.
+
+    Uses the existing operation/time schema. No new exact-count semantics and no
+    deterministic question keywords or domain-specific classification rules.
+    """
+
+    version = "3"
+    _instructions = (
+        REFERENCE_PERSONAL_MEMORY_QUERY_V2_INSTRUCTIONS.replace(
+            'and asking "how many last year" remains count plus interval.',
+            "and a time window does not by itself require episode counting.",
+        )
+        + """
+
+Quantity routing clarification: count means enumeration of distinct completed
+occurrences, not every question whose answer is a number. A previously reported
+total/quantity is a lookup of that assertion; do not force episode memory_types
+when the answer may be a state or fact recording a total. A difference between
+event dates, elapsed duration, or ordering comparison is also lookup of all
+relevant anchors, NOT episode cardinality. Preserve each requested anchor in
+search_text; do not filter out decisions/plans when one is itself a requested
+anchor. Retrieval provides evidence for the answer layer to calculate/compare;
+do not claim to compute duration or answer the question in this draft. Distinct
+days and distinct occurrences are different units; preserve the requested unit
+in search_text, never reinterpret an event count as a day count. Only choose
+count when enumeration of individual occurrences is actually required. When
+reported total versus enumeration is ambiguous, prefer lookup without hard type
+filters so both can be retrieved. These rules apply across domains, not by
+matching particular nouns, question IDs, benchmark categories or locations.
+"""
+    )
 
 
 def _project_reference_query_draft(
@@ -1004,10 +1040,11 @@ class PersonalMemoryQueryPlanV2(PersonalMemoryQueryPlan):
         ):
             raise ValueError("v2 as_of coordinate requires the as_of temporal view")
         if (
-            (self.time_from is not None or self.time_to is not None)
-            and self.temporal_view != PersonalMemoryQueryTemporalView.INTERVAL
-        ):
-            raise ValueError("v2 interval coordinates require the interval temporal view")
+            self.time_from is not None or self.time_to is not None
+        ) and self.temporal_view != PersonalMemoryQueryTemporalView.INTERVAL:
+            raise ValueError(
+                "v2 interval coordinates require the interval temporal view"
+            )
         if (
             self.temporal_view == PersonalMemoryQueryTemporalView.AS_OF
             and self.as_of is None
@@ -1051,9 +1088,9 @@ class PersonalMemoryCandidateEvidence(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     sources: list[str] = Field(default_factory=list)
-    entity_binding: Literal[
-        "not_requested", "literal", "relation", "unverified"
-    ] = "not_requested"
+    entity_binding: Literal["not_requested", "literal", "relation", "unverified"] = (
+        "not_requested"
+    )
     relation_match_kind: Literal[
         "not_requested", "adjacency", "type", "lexical", "reranker", "none"
     ] = "not_requested"
@@ -1343,7 +1380,9 @@ class PersonalMemoryQueryEngine:
     async def execute(
         self,
         plan: (
-            PersonalMemoryQueryPlan | PersonalMemoryQueryPlanV2 | PersonalMemoryQueryPlanV3
+            PersonalMemoryQueryPlan
+            | PersonalMemoryQueryPlanV2
+            | PersonalMemoryQueryPlanV3
         ),
         *,
         trace_limit: int = 0,
@@ -1886,6 +1925,14 @@ class PersonalMemoryQueryEngine:
             ) in matched[: self.config.limit]
         ]
         count = _count_result(bound, [item[0] for item in matched])
+        if any("event_time_uncertain" in item[5] for item in matched):
+            warnings.append(
+                "event_time_uncertain: retained candidates do not certify interval membership"
+            )
+        if any("event_time_coordinate" in item[5] for item in matched):
+            warnings.append(
+                "event time normalization is source-bound, not independently verified"
+            )
         if trace is not None:
             for rank, item in enumerate(matched):
                 trace.add(
@@ -2540,6 +2587,10 @@ def _structural_rejection_reason(
 
     valid_from = _metadata_time(record, "valid_from")
     valid_to = _metadata_time(record, "valid_to")
+    try:
+        occurrence = record_event_time(record)
+    except ValueError:
+        return "invalid_event_time"
     effective_at = valid_from or record.created_at
     if _query_temporal_view(plan) == PersonalMemoryQueryTemporalView.CURRENT:
         if valid_from is not None and valid_from > plan.now:
@@ -2562,15 +2613,21 @@ def _structural_rejection_reason(
         ):
             return "missing_validity"
     if plan.time_from is not None or plan.time_to is not None:
-        interval_start = valid_from or effective_at
-        # An episode without an explicit duration is a point occurrence, not an
-        # indefinitely continuing state. Observation time remains a fallback only
-        # when the extractor supplies no event/valid-time coordinate.
-        interval_end = valid_to or (
-            interval_start
-            if memory_type == PersonalMemoryType.EPISODE or valid_from is None
-            else None
-        )
+        if occurrence is not None:
+            # New coordinates never silently inherit the observation clock.
+            # Unknown/partially overlapping event time remains an explicit
+            # candidate, not an asserted match or proof of absence.
+            if occurrence.start is None:
+                return ""
+            interval_start, interval_end = occurrence.start, occurrence.end
+        else:
+            interval_start = valid_from or effective_at
+            # Legacy records retain their existing observation-time fallback.
+            interval_end = valid_to or (
+                interval_start
+                if memory_type == PersonalMemoryType.EPISODE or valid_from is None
+                else None
+            )
         if plan.time_to is not None and interval_start > plan.time_to:
             return "outside_time_interval"
         if (
@@ -2595,9 +2652,16 @@ def _structural_match(
         return None
     valid_from = _metadata_time(record, "valid_from")
     valid_to = _metadata_time(record, "valid_to")
-    effective_at = valid_from or record.created_at
+    occurrence = record_event_time(record)
+    effective_at = (
+        (occurrence.start if occurrence else None) or valid_from or record.created_at
+    )
 
     reasons = ["exact_scope", "active_personal_memory", "subject"]
+    if occurrence is not None:
+        reasons.append("event_time_coordinate")
+        if _uncertain_event_interval(record, plan):
+            reasons.append("event_time_uncertain")
     if plan.memory_types:
         reasons.append("memory_type")
     if plan.topic_keys:
@@ -2760,7 +2824,9 @@ def _query_temporal_view(
 
 def _observation_cutoff(plan: PersonalMemoryQueryPlan) -> datetime:
     """Trusted host horizon; legacy plans use their ordinary caller clock."""
-    return plan.observed_until if isinstance(plan, PersonalMemoryQueryPlanV3) else plan.now
+    return (
+        plan.observed_until if isinstance(plan, PersonalMemoryQueryPlanV3) else plan.now
+    )
 
 
 def _query_memory_filter(plan: PersonalMemoryQueryPlan) -> MemoryFilter:
@@ -2941,11 +3007,33 @@ def _detect_ambiguity(
     return ambiguous, warnings
 
 
+def _uncertain_event_interval(
+    record: MemoryRecord, plan: PersonalMemoryQueryPlan
+) -> bool:
+    if plan.time_from is None and plan.time_to is None:
+        return False
+    occurrence = record_event_time(record)
+    if occurrence is None:
+        return False  # unchanged legacy semantics, not a claimed normalization
+    return (
+        occurrence.start is None
+        or occurrence.end is None
+        or (plan.time_from is not None and occurrence.start < plan.time_from)
+        or (plan.time_to is not None and occurrence.end > plan.time_to)
+    )
+
+
 def _count_result(
     plan: PersonalMemoryQueryPlan, records: Sequence[MemoryRecord]
 ) -> PersonalMemoryCountResult:
     if _query_operation(plan) != PersonalMemoryQueryOperation.COUNT:
         return PersonalMemoryCountResult(status=PersonalMemoryCountStatus.NOT_REQUESTED)
+    if any(_uncertain_event_interval(record, plan) for record in records):
+        return PersonalMemoryCountResult(
+            status=PersonalMemoryCountStatus.INDETERMINATE,
+            observed_records=len(records),
+            reason="uncertain occurrence time does not certify interval membership",
+        )
     if (
         plan.search_text
         or plan.entity_mentions
@@ -2958,7 +3046,11 @@ def _count_result(
             status=PersonalMemoryCountStatus.INDETERMINATE,
             observed_records=len(records),
             distinct_event_keys=sorted(
-                {key for record in records if (key := _metadata_text(record, "event_key"))}
+                {
+                    key
+                    for record in records
+                    if (key := _metadata_text(record, "event_key"))
+                }
             ),
             reason="relevance-qualified candidates do not certify an exact predicate count",
         )
@@ -3069,37 +3161,44 @@ def _candidate_evidence(
         for reason in reasons
         if (value := _reason_value(reason, "semantic_source:")) is not None
     ]
-    relation_source = next(
-        (
-            value
-            for reason in reasons
-            if (value := _reason_value(reason, "relation_source:")) is not None
-        ),
-        None,
-    ) or ""
-    relation_type = next(
-        (
-            value
-            for reason in reasons
-            if (value := _reason_value(reason, "relation_type:")) is not None
-        ),
-        None,
-    ) or ""
-    relation_edge = next(
-        (
-            value
-            for reason in reasons
-            if (value := _reason_value(reason, "relation_edge:")) is not None
-        ),
-        None,
-    ) or ""
+    relation_source = (
+        next(
+            (
+                value
+                for reason in reasons
+                if (value := _reason_value(reason, "relation_source:")) is not None
+            ),
+            None,
+        )
+        or ""
+    )
+    relation_type = (
+        next(
+            (
+                value
+                for reason in reasons
+                if (value := _reason_value(reason, "relation_type:")) is not None
+            ),
+            None,
+        )
+        or ""
+    )
+    relation_edge = (
+        next(
+            (
+                value
+                for reason in reasons
+                if (value := _reason_value(reason, "relation_edge:")) is not None
+            ),
+            None,
+        )
+        or ""
+    )
     raw_relation_match_kind = next(
         (
             value
             for reason in reasons
-            if (
-                value := _reason_value(reason, "relation_match_kind:")
-            ) is not None
+            if (value := _reason_value(reason, "relation_match_kind:")) is not None
         ),
         None,
     )
@@ -3123,15 +3222,11 @@ def _candidate_evidence(
     if lexical_score > 0:
         sources.append("lexical")
     if semantic_score > 0:
-        sources.extend(
-            f"semantic:{source}" for source in semantic_sources
-        )
+        sources.extend(f"semantic:{source}" for source in semantic_sources)
         if not semantic_sources:
             sources.append("semantic")
     if relation_score > 0:
-        sources.append(
-            f"relation:{relation_source}" if relation_source else "relation"
-        )
+        sources.append(f"relation:{relation_source}" if relation_source else "relation")
 
     if not plan.entity_mentions:
         entity_binding = "not_requested"
@@ -3272,7 +3367,9 @@ def _resolve_calendar_timezone(name: str) -> tzinfo:
         hours = int(offset.group("hours"))
         minutes = int(offset.group("minutes"))
         if hours > 14 or minutes > 59 or (hours == 14 and minutes):
-            raise ValueError("calendar timezone offset must be between -14:00 and +14:00")
+            raise ValueError(
+                "calendar timezone offset must be between -14:00 and +14:00"
+            )
         delta = timedelta(hours=hours, minutes=minutes)
         if offset.group("sign") == "-":
             delta = -delta
@@ -3337,9 +3434,7 @@ def _explicit_calendar_expression(
         return (
             "interval",
             datetime(year, 1, 1, tzinfo=local_timezone).astimezone(UTC),
-            datetime(year, 12, 31, 23, 59, 59, tzinfo=local_timezone).astimezone(
-                UTC
-            ),
+            datetime(year, 12, 31, 23, 59, 59, tzinfo=local_timezone).astimezone(UTC),
         )
     except (TypeError, ValueError):
         return None

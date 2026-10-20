@@ -59,6 +59,7 @@ from doppel_memory.content import (
     ContentResolver,
     resolve_content,
 )
+from doppel_memory.event_time import BoundEventTime, EventTimeCoordinate
 from doppel_memory.governance import (
     DeterministicGovernancePolicyConfig,
     DeterministicMemoryGovernancePolicy,
@@ -111,6 +112,7 @@ from doppel_memory.intelligence import (
     ReferencePersonalMemoryAnalyzer,
     ReferencePersonalMemoryAnalyzerV9,
     ReferencePersonalMemoryAnalyzerV10,
+    ReferencePersonalMemoryAnalyzerV11,
     StructuredGenerationRequest,
     StructuredOutputModel,
 )
@@ -197,6 +199,7 @@ from doppel_memory.query import (
     PersonalMemoryQueryTemporalView,
     ReferencePersonalMemoryQueryPlanner,
     ReferencePersonalMemoryQueryPlannerV2,
+    ReferencePersonalMemoryQueryPlannerV3,
 )
 from doppel_memory.query_trace import (
     PersonalMemoryQueryTrace,
@@ -277,6 +280,7 @@ __all__ = [
     "BatchTaskAuditReport",
     "BatchTaskContext",
     "BatchTaskRunner",
+    "BoundEventTime",
     "ChatMessage",
     "CompositeSemanticIndex",
     "ConformanceError",
@@ -312,6 +316,7 @@ __all__ = [
     "EmbeddingProvider",
     "EmbeddingProviderError",
     "EventProcessor",
+    "EventTimeCoordinate",
     "FactAuthority",
     "FallbackPersonalMemoryQueryPlanner",
     "GuardedHistoryReader",
@@ -430,8 +435,10 @@ __all__ = [
     "ReferencePersonalMemoryAnalyzer",
     "ReferencePersonalMemoryAnalyzerV9",
     "ReferencePersonalMemoryAnalyzerV10",
+    "ReferencePersonalMemoryAnalyzerV11",
     "ReferencePersonalMemoryQueryPlanner",
     "ReferencePersonalMemoryQueryPlannerV2",
+    "ReferencePersonalMemoryQueryPlannerV3",
     "RelationCandidate",
     "RelationIndex",
     "RelationIndexUnavailableError",

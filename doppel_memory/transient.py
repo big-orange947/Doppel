@@ -20,6 +20,7 @@ from doppel_memory.consolidation import (
     ConsolidationInput,
     DeterministicMemoryConsolidator,
 )
+from doppel_memory.event_time import BoundEventTime, bind_event_time
 from doppel_memory.intelligence import (
     MemoryTemporalStatus,
     PersonalMemoryAnalysisRequest,
@@ -64,6 +65,7 @@ class TransientMemoryClaim(BaseModel):
     observed_after_reference: bool
     valid_from: datetime | None
     valid_to: datetime | None
+    event_time: BoundEventTime | None = None
     validity_at_reference: Literal[
         "unknown", "within_explicit_bounds", "outside_explicit_bounds"
     ]
@@ -156,7 +158,15 @@ def group_transient_events(
                 else "single_unkeyed_claim",
                 temporal_metadata_consistent=len(
                     {
-                        (c.temporal_status, c.revision_kind, c.valid_from, c.valid_to)
+                        (
+                            c.temporal_status,
+                            c.revision_kind,
+                            c.valid_from,
+                            c.valid_to,
+                            c.event_time.start if c.event_time else None,
+                            c.event_time.end if c.event_time else None,
+                            c.event_time.precision if c.event_time else None,
+                        )
                         for c in claims
                     }
                 )
@@ -306,6 +316,22 @@ class TransientMemoryViewBuilder:
             )
             if start and end and end < start:
                 raise TransientViewError("reversed effective interval")
+            event_time = None
+            if meta.get("event_time") is not None:
+                try:
+                    event_time = BoundEventTime.model_validate(meta["event_time"])
+                    if meta["personal_memory_type"] != PersonalMemoryType.EPISODE:
+                        raise ValueError("occurrence coordinate requires an episode")
+                    rebound = bind_event_time(
+                        event_time,
+                        [sources[e.evidence_id] for e in normalized],
+                    )
+                    if rebound != event_time:
+                        raise ValueError("occurrence observation clock mismatch")
+                except ValueError as error:
+                    raise TransientViewError(
+                        "invalid occurrence time binding"
+                    ) from error
             validity = "unknown"
             if start is not None or end is not None:
                 validity = (
@@ -349,6 +375,7 @@ class TransientMemoryViewBuilder:
                     observed_after_reference=last > reference,
                     valid_from=start,
                     valid_to=end,
+                    event_time=event_time,
                     validity_at_reference=validity,
                     evidence=tuple(normalized),
                 )
