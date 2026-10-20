@@ -200,6 +200,21 @@ async def prepare():
 
 async def run(args):
     jobs, plan = await prepare()
+    parent_cache = getattr(args, "read_only_review_cache", None)
+    if parent_cache is not None:
+        if args.execute and not args.cache_only:
+            raise ValueError("parent review replay requires cache-only execution")
+        paths = sorted(parent_cache.rglob("*.json"))
+        if not paths:
+            raise ValueError("empty parent review cache")
+        payload = {k: v for k, v in plan.items() if k != "plan_fingerprint"}
+        payload.update(
+            max_new_calls=0,
+            read_only_review_cache={
+                str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths
+            },
+        )
+        plan = {**payload, "plan_fingerprint": parent._hash(payload)}
     report = {"runner": RUNNER, "status": "ready", "plan": plan}
     if not args.execute:
         return report
@@ -230,6 +245,7 @@ async def run(args):
             ledger=ledger,
             cache_dir=args.run_dir / "review",
             cache_only=args.cache_only,
+            read_only_cache_dirs=[parent_cache] if parent_cache else (),
         )
         for index, (identity, job) in enumerate(jobs):
             bound = parent.BoundModel(
@@ -240,7 +256,7 @@ async def run(args):
             result = await apply_job(job, bound)
             results.append({"id": identity, **result})
             print(
-                f"review {len(results)}/9: rejected={len(result['report']['rejected_indices'])}",
+                f"review {len(results)}/9: flagged={len(result['report']['flagged_indices'])}, rejected={len(result['report']['rejected_indices'])}",
                 flush=True,
             )
         report.update(status="complete", rows=results)
@@ -259,6 +275,7 @@ def main():
     parser.add_argument("--frozen-preflight", type=Path)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--cache-only", action="store_true")
+    parser.add_argument("--read-only-review-cache", type=Path)
     args = parser.parse_args()
     if args.output.exists() or (args.cache_only and not args.execute):
         parser.error("fresh output required; cache-only requires execute")

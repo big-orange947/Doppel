@@ -1937,6 +1937,8 @@ class PersonalMemoryQueryEngine:
             warnings.append(
                 "event_time_precision_mismatch: preserve source bounds; precision label is unreliable"
             )
+        if any("source_grounding_disputed" in item[5] for item in matched):
+            warnings.append("source_grounding_disputed: retained candidate has an unverified contradictory review; inspect original evidence")
         if trace is not None:
             for rank, item in enumerate(matched):
                 trace.add(
@@ -2662,6 +2664,8 @@ def _structural_match(
     )
 
     reasons = ["exact_scope", "active_personal_memory", "subject"]
+    if _source_grounding_disputed(record):
+        reasons.append("source_grounding_disputed")
     if occurrence is not None:
         reasons.append("event_time_coordinate")
         if event_time_precision_issues(occurrence):
@@ -3030,11 +3034,19 @@ def _uncertain_event_interval(
     )
 
 
+def _source_grounding_disputed(record: MemoryRecord) -> bool:
+    raw = record.metadata.get("source_grounding")
+    decision = raw.get("decision") if isinstance(raw, dict) else None
+    return isinstance(decision, dict) and decision.get("verdict") == "contradicted"
+
+
 def _count_result(
     plan: PersonalMemoryQueryPlan, records: Sequence[MemoryRecord]
 ) -> PersonalMemoryCountResult:
     if _query_operation(plan) != PersonalMemoryQueryOperation.COUNT:
         return PersonalMemoryCountResult(status=PersonalMemoryCountStatus.NOT_REQUESTED)
+    if any(_source_grounding_disputed(record) for record in records):
+        return PersonalMemoryCountResult(status="indeterminate", observed_records=len(records), reason="disputed source grounding cannot certify an exact count")
     if any(_uncertain_event_interval(record, plan) for record in records):
         return PersonalMemoryCountResult(
             status=PersonalMemoryCountStatus.INDETERMINATE,

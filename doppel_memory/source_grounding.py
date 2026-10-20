@@ -40,6 +40,7 @@ class GroundingReview(BaseModel):
 
 class SourceGroundingConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+    contradiction_policy: Literal["annotate", "withhold"] = "annotate"
     minimum_contradiction_confidence: float = Field(default=0.8, ge=0, le=1)
     max_drafts: int = Field(default=40, ge=1, le=100)
     max_request_bytes: int = Field(default=100000, ge=1000, le=500000)
@@ -50,8 +51,19 @@ class SourceGroundingReport(BaseModel):
     request_sha256: str
     total_drafts: int
     reviewed_indices: list[int]
+    flagged_indices: list[int]
     rejected_indices: list[int]
+    contradiction_policy: Literal["annotate", "withhold"]
     decisions: list[GroundingDecision]
+    semantic_support_verified: Literal[False] = False
+
+
+class SourceGroundingAnnotation(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    reviewer: str
+    reviewer_version: str
+    request_sha256: str
+    decision: GroundingDecision
     semantic_support_verified: Literal[False] = False
 
 
@@ -93,8 +105,9 @@ def _hash(value: dict) -> str:
 class SourceGroundedPersonalMemoryAnalyzer:
     """Decorate any analyzer with one bounded source-only review per window.
 
-    Reject only high-confidence contradictions, preserve uncertainty and raw
-    history. Invalid review/provider failure is a hard failure with no retry.
+    Annotate by default. Explicit withhold can reject high-confidence model
+    contradictions; it is not a safe default. Invalid review/provider failure is
+    a hard failure with no retry.
     The ordinary miner/extractor still owns evidence/actor/scope/state gates.
     """
 
@@ -189,12 +202,13 @@ class SourceGroundedPersonalMemoryAnalyzer:
                         "source review quote is not bound to original evidence"
                     )
         by_index = {d.draft_index: d for d in review.decisions}
-        rejected = [
+        flagged = [
             i
             for i, d in by_index.items()
             if d.verdict == "contradicted"
             and d.confidence >= self.config.minimum_contradiction_confidence
         ]
+        rejected = flagged if self.config.contradiction_policy == "withhold" else []
         request_hash = _hash(generation.model_dump(mode="json"))
         accepted = []
         for i, draft in enumerate(analysis.memories):
@@ -218,7 +232,9 @@ class SourceGroundedPersonalMemoryAnalyzer:
             request_sha256=request_hash,
             total_drafts=len(analysis.memories),
             reviewed_indices=sorted(eligible),
+            flagged_indices=sorted(flagged),
             rejected_indices=sorted(rejected),
+            contradiction_policy=self.config.contradiction_policy,
             decisions=review.decisions,
         )
         if self.observer is not None:

@@ -19,9 +19,11 @@ eligible draft needs exactly one decision; its quotes must match exact original
 text belonging to that draft's citations. Unknown evidence IDs stay with the
 ordinary miner fail_batch/quarantine policy and are never repaired.
 
-Only contradicted decisions with confidence >=0.8 are omitted from the returned
-proposal analysis. Uncertain or lower-confidence judgments are preserved with
-review metadata; supported judgments remain unverified candidates. Original raw
+The default `contradiction_policy="annotate"` retains every proposal, including
+high-confidence contradictory reviews, with source-grounding metadata. Transient
+claims preserve the typed annotation and exact source quotes; queries retain
+disputed candidates with explicit warnings and do not certify an exact count
+from them. Supported judgments also remain unverified candidates. Original raw
 history and previously stored records are untouched. The wrapper changes its
 analyzer identity/version; use a fresh checkpoint/journal, not an old miner run.
 Ordinary actor/subject/scope/state gates still run after review. Request hash,
@@ -29,11 +31,17 @@ model identity, judgments and exact quotes remain auditable; observer failure,
 invalid coverage/quotes, excessive size or provider failure stop the operation.
 There is no automatic retry, source truncation or model repair.
 
-This can catch a paraphrase turning “decided/intended/cancelled” into “completed”.
+Explicit `contradiction_policy="withhold"` omits only confidence>=0.8 model
+contradictions. It is experimental, not recommended as a default: the first
+real-window test caught2 completion errors but also rejected a valid owner claim
+because it used an unrelated assistant statement as counterevidence. Keep that
+failure visible; source quote validation does not isolate model reasoning.
+
+This can flag a paraphrase turning “decided/intended/cancelled” into “completed”.
 It is still an LLM judgment, not a formal entailment proof or independent
 verification. Exact quote matching proves provenance, not that the verdict is
-correct. False positives can remove useful proposals, so preserve raw fallback,
-review rejected items and measure precision/coverage before default promotion.
+correct. False positives can mislead a Reader even when recall is retained, so
+preserve raw fallback and measure precision/coverage before any promotion.
 The wrapper reviews content entailment, not every structural type or normalized
 date. It does not certify event identity, calendar arithmetic or exact counts.
 

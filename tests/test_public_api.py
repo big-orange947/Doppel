@@ -71,6 +71,7 @@ MODEL_FIELDS = {
         "valid_from",
         "valid_to",
         "event_time",
+        "source_grounding",
         "validity_at_reference",
         "evidence",
     ),

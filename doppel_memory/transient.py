@@ -29,6 +29,7 @@ from doppel_memory.intelligence import (
 )
 from doppel_memory.models import Actor, FactAuthority, MemoryState
 from doppel_memory.processing import MemoryProposal
+from doppel_memory.source_grounding import SourceGroundingAnnotation
 
 
 class TransientViewError(ValueError):
@@ -66,6 +67,7 @@ class TransientMemoryClaim(BaseModel):
     valid_from: datetime | None
     valid_to: datetime | None
     event_time: BoundEventTime | None = None
+    source_grounding: SourceGroundingAnnotation | None = None
     validity_at_reference: Literal[
         "unknown", "within_explicit_bounds", "outside_explicit_bounds"
     ]
@@ -332,6 +334,23 @@ class TransientMemoryViewBuilder:
                     raise TransientViewError(
                         "invalid occurrence time binding"
                     ) from error
+            source_grounding = None
+            if meta.get("source_grounding") is not None:
+                try:
+                    source_grounding = SourceGroundingAnnotation.model_validate(
+                        meta["source_grounding"]
+                    )
+                    for quote in source_grounding.decision.quotes:
+                        if (
+                            not quote.text.strip()
+                            or quote.evidence_id not in evidence_ids
+                            or quote.text not in sources[quote.evidence_id].text
+                        ):
+                            raise ValueError("unbound grounding quote")
+                except ValueError as error:
+                    raise TransientViewError(
+                        "invalid source grounding binding"
+                    ) from error
             validity = "unknown"
             if start is not None or end is not None:
                 validity = (
@@ -376,6 +395,7 @@ class TransientMemoryViewBuilder:
                     valid_from=start,
                     valid_to=end,
                     event_time=event_time,
+                    source_grounding=source_grounding,
                     validity_at_reference=validity,
                     evidence=tuple(normalized),
                 )

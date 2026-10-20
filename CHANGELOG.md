@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Keep optional source review annotation-only by default after a real false
+  positive; expose typed unverified source-review annotations in transient
+  claims and query warnings without hiding disputed candidates. Explicit
+  experimental withhold remains available. Freeze a zero-new-call same-output
+  cache replay; do not change the original failed judgment or confidence.
+
 - Add optional source-grounding analyzer review with exact source-quote/coverage
   binding, auditable model judgments and no fact confirmation or content repair.
   High-confidence contradictions are withheld; existing actor/scope gates remain.

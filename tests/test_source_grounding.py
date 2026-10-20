@@ -77,7 +77,10 @@ async def test_high_confidence_quoted_contradiction_is_not_rewritten_or_promoted
     bound = request()
     original = bound.model_copy(deep=True)
     result = await SourceGroundedPersonalMemoryAnalyzer(
-        Analyzer(), model, observer=reports.append
+        Analyzer(),
+        model,
+        SourceGroundingConfig(contradiction_policy="withhold"),
+        observer=reports.append,
     ).analyze(bound)
     assert not result.memories and bound == original
     assert (
@@ -108,6 +111,79 @@ async def test_preserve_uncertainty_low_confidence_and_supported_without_confirm
         "semantic_support_verified"
     ]
     assert result.memories[0].confidence == 1
+
+
+async def test_default_annotates_high_confidence_contradiction_without_losing_recall():
+    reports = []
+    result = await SourceGroundedPersonalMemoryAnalyzer(
+        Analyzer(), Reviewer(), observer=reports.append
+    ).analyze(request())
+    assert len(result.memories) == 1
+    assert (
+        result.memories[0].metadata["source_grounding"]["decision"]["verdict"]
+        == "contradicted"
+    )
+    assert reports[0].flagged_indices == [0] and reports[0].rejected_indices == []
+    assert reports[0].contradiction_policy == "annotate"
+
+
+async def test_disputed_content_and_quotes_remain_visible_without_exact_count():
+    from doppel_memory import (
+        InMemoryStore,
+        PersonalMemoryExtractor,
+        PersonalMemoryExtractorConfig,
+    )
+    from doppel_memory.query import (
+        PersonalMemoryQueryDraftV2,
+        PersonalMemoryQueryEngine,
+    )
+    from doppel_memory.transient import TransientMemoryViewBuilder
+
+    bound = request()
+    wrapped = SourceGroundedPersonalMemoryAnalyzer(Analyzer(), Reviewer())
+    proposals = await PersonalMemoryExtractor(
+        wrapped, PersonalMemoryExtractorConfig(owner_target_scope="conversation")
+    ).process(bound.scope, bound.messages[0])
+    assert len(proposals) == 1
+    view = await TransientMemoryViewBuilder().build(
+        bound, proposals, reference_time=bound.messages[0].at
+    )
+    assert view.claims[0].source_grounding is not None
+    assert view.claims[0].source_grounding.decision.verdict == "contradicted"
+    assert not view.claims[0].source_grounding.semantic_support_verified
+    store = InMemoryStore()
+    await store.put(proposals[0].to_record())
+
+    class Planner:
+        name, version = "synthetic", "1"
+
+        async def plan(self, request):
+            return PersonalMemoryQueryDraftV2(operation="count")
+
+    result = await PersonalMemoryQueryEngine(store).query(
+        Planner(), "a quantity", [bound.scope], now=bound.messages[0].at
+    )
+    assert len(result.hits) == 1 and result.count.status == "indeterminate"
+    assert "source_grounding_disputed" in result.hits[0].reasons
+
+
+async def test_supported_review_cannot_bypass_source_actor_gate():
+    from doppel_memory import PersonalMemoryExtractor, PersonalMemoryExtractorConfig
+    from doppel_memory.intelligence import PersonalMemoryEvidenceError
+
+    bound = request()
+    message = bound.messages[0].model_copy(update={"actor": "agent"})
+    wrapped = SourceGroundedPersonalMemoryAnalyzer(
+        Analyzer(), Reviewer(verdict="supported")
+    )
+    with pytest.raises(PersonalMemoryEvidenceError):
+        await PersonalMemoryExtractor(
+            wrapped,
+            PersonalMemoryExtractorConfig(
+                owner_target_scope="conversation",
+                allowed_source_actors={"owner", "agent"},
+            ),
+        ).process(bound.scope, message)
 
 
 @pytest.mark.parametrize(
