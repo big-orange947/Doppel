@@ -46,3 +46,9 @@ This does not repair extraction entailment or date normalization. In particular,
 "decided to do" is not "did", and a week range is not day precision. The previous
 opened-eight diagnosis still records those defects. A source-bound candidate
 interpretation is not independently verified truth.
+
+The [first frozen four-plan diagnostic](../benchmarks/reports/public-memory-quantity-feedback-result-2026-10-20.md)
+recovers two reported-total assertions previously blocked by episode filtering,
+while preserving three enumeration plans/hits. Four feedback calls/6761 tokens,
+no new QA score. This is an opened development result, not a promotion gate or
+general quality claim.

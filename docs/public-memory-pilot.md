@@ -7,6 +7,15 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+The bounded candidate-feedback follow-up is complete: reuse and exactly replay
+all8 prior source-bound views/plans, then test their4 count plans. The reported-
+total case changes to lookup and recovers both4/5 assertions previously blocked
+by episode filtering; other3 enumeration plans/hits stay unchanged. Final lookup
+also retains2 attributed plans, not4 counted events. Four feedback calls/6761
+tokens; zero new extraction/QA calls, no new answer score, byte-identical key-free
+replay. Module-only opt-in, not a default promotion; see the
+[routing result](../benchmarks/reports/public-memory-quantity-feedback-result-2026-10-20.md).
+
 Opt-in Analyzer V11/Planner V3 repair is now tested on the same opened-eight
 contexts: raw6/8 versus structured7/8, but the sole gain depends on provisional
 judging of a conditional count, not proven new answer coverage. The stronger

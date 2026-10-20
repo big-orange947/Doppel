@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Complete frozen four-plan candidate-feedback test: recover both reported-total
+  assertions previously excluded by episode filtering (0→4 final hits, including
+  2 explicitly tagged plans); preserve other3 enumeration plans/hits. No generated
+  answer or new QA score.4 calls/6761 tokens, no new extraction/QA/graph/source
+  writes; key-free replay byte-identical.16 new tests, full2135 passed/33 skipped/
+  three subtests. Module-only opt-in, no default promotion.
+
 - Add module-only opt-in candidate-aware quantity routing: bounded eligible
   discovery can change count/type filtering to lookup of reported totals or
   temporal anchors, without changing scope/subject/time/authority/relevance gates
