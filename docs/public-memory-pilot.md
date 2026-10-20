@@ -7,6 +7,17 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Source-grounding follow-up is complete:9 calls/27805 tokens,8/8 authored controls
+match, but real windows expose2 bad completion claims from one source and1 false
+rejection of a valid owner claim. No hard-filter promotion. The optional wrapper
+defaults to annotation; a frozen zero-new-call replay retains all71 eligible
+proposals with typed unverified reviews, preserving6 actor/source quarantines.
+Time precision mismatch is flagged without erasing candidates or inventing dates.
+Full2164 tests pass; no new QA score. With the deadline close, stop iterating on
+review prompts and focus on runtime/profile freeze, cached fixed-cohort regression
+and adapter/API smoke. See the
+[full result and failure](../benchmarks/reports/source-grounding-result-2026-10-20.md).
+
 The bounded candidate-feedback follow-up is complete: reuse and exactly replay
 all8 prior source-bound views/plans, then test their4 count plans. The reported-
 total case changes to lookup and recovers both4/5 assertions previously blocked

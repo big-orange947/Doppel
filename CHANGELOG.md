@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Finish9-call source-review diagnosis:8/8 authored controls match, but real
+  windows reveal2 completion errors from one source and1 owner-claim false
+  positive. Preserve that failed hard-filter result; annotation-only zero-call
+  follow-up retains71/71 proposals with exact unverified quotes and unchanged6
+  actor/source quarantines.27805 tokens total, byte-identical key-free replays;
+  no new QA score/graph/source writes.29 new tests; full2164 passed/33 skipped/
+  three subtests. Do not promote the reviewer to default hard filtering.
+
 - Keep optional source review annotation-only by default after a real false
   positive; expose typed unverified source-review annotations in transient
   claims and query warnings without hiding disputed candidates. Explicit
