@@ -1,0 +1,14 @@
+{
+  "format": "doppel.source-grounding-controls.v1",
+  "development_only": true,
+  "controls": [
+    {"id": "control-01", "source": "I decided to replace the greenhouse sensor today; the replacement has not been installed yet.", "claim": "The owner replaced the greenhouse sensor today.", "reject": true},
+    {"id": "control-02", "source": "I replaced the greenhouse sensor today. I plan to test its wireless range tomorrow.", "claim": "The owner replaced the greenhouse sensor today.", "reject": false},
+    {"id": "control-03", "source": "我打算下个月报名陶艺课，目前还没报名。", "claim": "主人已经报名了陶艺课。", "reject": true},
+    {"id": "control-04", "source": "今天已经报名了陶艺课，下个月开课。", "claim": "主人今天报名了陶艺课。", "reject": false},
+    {"id": "control-05", "source": "If the weather improves, I will reserve a campsite. I have not booked one.", "claim": "The owner has booked a campsite.", "reject": true},
+    {"id": "control-06", "source": "I booked a campsite this morning, but I might cancel if the forecast worsens.", "claim": "The owner booked a campsite this morning.", "reject": false},
+    {"id": "control-07", "source": "I decided to learn sign language today. I have not started the lessons.", "claim": "The owner decided to learn sign language today.", "reject": false},
+    {"id": "control-08", "source": "I cancelled the studio visit before it happened and stayed home instead.", "claim": "The owner visited the studio.", "reject": true}
+  ]
+}

@@ -20,7 +20,7 @@ from doppel_memory.consolidation import (
     ConsolidationPlanningError,
     _validate_episode_merge,
 )
-from doppel_memory.event_time import bind_event_time
+from doppel_memory.event_time import bind_event_time, event_time_precision_issues
 from doppel_memory.intelligence import (
     PersonalMemoryAnalysisRequest,
     PersonalMemoryDraft,
@@ -317,3 +317,40 @@ async def test_v3_prompt_routes_quantities_without_keywords_or_new_count_semanti
     assert "elapsed duration" in model.request.instructions
     assert "previously reported" in model.request.instructions
     assert model.request.input["query"] == "opaque domain"
+
+
+async def test_week_mislabeled_day_is_visible_but_not_trusted_as_precise_count():
+    time = coordinate(start="2024-12-02T00:00:00Z", end="2024-12-08T23:59:59Z")
+    _, p = await proposal(time.model_dump(mode="json"))
+    original = deepcopy(p)
+    result = await query(p.to_record(), Planner(operation="count"))
+    assert len(result.hits) == 1 and result.count.status == "indeterminate"
+    assert "event_time_precision_mismatch" in result.hits[0].reasons
+    assert any("precision label is unreliable" in w for w in result.warnings)
+    assert p == original and p.metadata["event_time"]["precision"] == "day"
+
+
+@pytest.mark.parametrize(
+    "precision,start,end,valid",
+    [
+        ("day", "2024-01-01T00:00:00Z", "2024-01-01T23:59:59Z", True),
+        ("day", "2024-01-01T00:00:00Z", "2024-01-01T23:59:59.999999Z", True),
+        ("day", "2024-01-01T00:00:00Z", "2024-01-07T23:59:59Z", False),
+        ("day", "2024-01-01T00:00:00Z", "2024-01-01T01:00:00Z", False),
+        ("day", "2024-03-10T00:00:00-05:00", "2024-03-10T23:59:59-04:00", True),
+        ("month", "2024-02-01T00:00:00Z", "2024-02-29T23:59:59Z", True),
+        ("month", "2023-02-01T00:00:00Z", "2023-02-28T23:59:59Z", True),
+        ("month", "2024-02-01T00:00:00Z", "2024-02-01T23:59:59Z", False),
+        ("year", "2024-01-01T00:00:00Z", "2024-12-31T23:59:59Z", True),
+        ("year", "2024-01-01T00:00:00Z", "2024-01-31T23:59:59Z", False),
+        ("range", "2024-01-01T00:00:00Z", "2024-01-07T23:59:59Z", True),
+    ],
+)
+def test_precision_duration_sanity_without_claiming_calendar_verification(
+    precision, start, end, valid
+):
+    assert (
+        not event_time_precision_issues(
+            coordinate(precision=precision, start=start, end=end)
+        )
+    ) is valid

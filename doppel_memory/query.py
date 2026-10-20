@@ -26,7 +26,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from doppel_memory.event_time import record_event_time
+from doppel_memory.event_time import event_time_precision_issues, record_event_time
 from doppel_memory.evidence import (
     EvidenceItem,
     EvidenceRequest,
@@ -1933,6 +1933,10 @@ class PersonalMemoryQueryEngine:
             warnings.append(
                 "event time normalization is source-bound, not independently verified"
             )
+        if any("event_time_precision_mismatch" in item[5] for item in matched):
+            warnings.append(
+                "event_time_precision_mismatch: preserve source bounds; precision label is unreliable"
+            )
         if trace is not None:
             for rank, item in enumerate(matched):
                 trace.add(
@@ -2660,6 +2664,8 @@ def _structural_match(
     reasons = ["exact_scope", "active_personal_memory", "subject"]
     if occurrence is not None:
         reasons.append("event_time_coordinate")
+        if event_time_precision_issues(occurrence):
+            reasons.append("event_time_precision_mismatch")
         if _uncertain_event_interval(record, plan):
             reasons.append("event_time_uncertain")
     if plan.memory_types:
@@ -3018,6 +3024,7 @@ def _uncertain_event_interval(
     return (
         occurrence.start is None
         or occurrence.end is None
+        or bool(event_time_precision_issues(occurrence))
         or (plan.time_from is not None and occurrence.start < plan.time_from)
         or (plan.time_to is not None and occurrence.end > plan.time_to)
     )

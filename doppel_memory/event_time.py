@@ -86,6 +86,25 @@ def bind_event_time(
     )
 
 
+def event_time_precision_issues(coordinate: EventTimeCoordinate) -> tuple[str, ...]:
+    """Conservative duration sanity check, not calendar/semantic verification.
+
+    Permit a one-hour DST shift and either second/microsecond closed ends. A
+    plausible duration does not prove correct boundaries or a correct source
+    interpretation. Do not rewrite the original bounds/label on a mismatch.
+    """
+    if coordinate.start is None or coordinate.end is None:
+        return ()
+    lengths = {"day": (1, 1), "month": (28, 31), "year": (365, 366)}
+    if coordinate.precision not in lengths:
+        return ()
+    minimum, maximum = lengths[coordinate.precision]
+    seconds = (coordinate.end - coordinate.start).total_seconds()
+    if minimum * 86400 - 3601 <= seconds <= maximum * 86400 + 3600:
+        return ()
+    return ("precision_duration_mismatch",)
+
+
 def record_event_time(record: MemoryRecord) -> BoundEventTime | None:
     raw = record.metadata.get("event_time")
     if raw is None:

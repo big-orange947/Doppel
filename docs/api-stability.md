@@ -29,6 +29,14 @@ The manifest has three classifications:
 experimental. Files under `examples/` are reference recipes, not installed API.
 Underscore-prefixed names are always private.
 
+`doppel_memory.source_grounding.SourceGroundedPersonalMemoryAnalyzer` and its
+review/config/report models are module-only experimental. This optional
+[source-grounding wrapper](source-grounding.md) has a separate version-bound
+checkpoint identity; supported reviews do not confirm facts. Existing analyzer
+protocols, root models and default selections remain unchanged. Precision sanity
+adds warnings/uncertainty for inconsistent optional occurrence coordinates while
+preserving candidate recall and original values.
+
 `doppel_memory.query_feedback.CandidateAwarePersonalMemoryQuery` and its routing
 models/config are module-only experimental, explicitly opt-in. See
 [candidate feedback](query-candidate-feedback.md) for type-relaxation, read/call

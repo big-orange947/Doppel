@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add optional source-grounding analyzer review with exact source-quote/coverage
+  binding, auditable model judgments and no fact confirmation or content repair.
+  High-confidence contradictions are withheld; existing actor/scope gates remain.
+  Flag impossible occurrence precision/duration without hiding candidates or
+  inventing dates; prevent exact interval counts on inconsistent coordinates.
+  Freeze9-call replay-based diagnosis (8 opened windows+8 synthetic controls),
+  with no new extraction/QA/graph calls or source writes. No default promotion.
+
 - Complete frozen four-plan candidate-feedback test: recover both reported-total
   assertions previously excluded by episode filtering (0→4 final hits, including
   2 explicitly tagged plans); preserve other3 enumeration plans/hits. No generated
