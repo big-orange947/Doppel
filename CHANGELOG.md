@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Replay saved ordered top20 for all50 opened cases at24/48/96KB with no model,
+  retrieval, DB or paid calls. Candidate80 packed annotations60/64/66 of76;
+  candidate160 56/59/59. Larger budgets cannot repair10/17 annotations outside
+  top20. Pin parent/QA/file bindings and reproduce all100 baseline contexts;
+  retain whole-source attribution and report actual bytes, gains and losses.
+  No QA rescore/default promotion:37/50 remains frozen. Add16 offline tests;
+  full2279 passed/33 skipped/three subtests, Ruff clean, runner Pyright0 errors.
+
 - Complete frozen local80/160 candidate comparison on all50 opened histories:
   fresh80 exactly reproduces all50 historical contexts;160 raises candidate
   annotations72→75/76 but lowers top20 66→59 and packed60→56. Do not promote160

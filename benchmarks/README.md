@@ -7,6 +7,10 @@ separate reports; Doppel does not combine them into a flattering but meaningless
 "memory intelligence" score.
 
 Public-data preparation: [local-embedding raw-history pilot](../docs/public-memory-pilot.md).
+Latest opened50 diagnostics: [candidate80/160 comparison](reports/public-memory-window-ablation-result-2026-10-23.md)
+and [zero-model24/48/96KB budget curve](reports/public-memory-context-budget-result-2026-10-23.md).
+Larger contexts recover packing losses, not sources absent from top20; the
+historical37/50 QA score and runtime defaults remain unchanged.
 `python -m benchmarks.public_longmemeval` checks the official cleaned LongMemEval
 format and projects history separately from scoring labels. It is zero-model
 preparation, not a retrieval/QA benchmark result or an AML academic model profile.
