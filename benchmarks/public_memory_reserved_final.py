@@ -112,6 +112,17 @@ def reserved_metadata(parent):
     return rows
 
 
+def recorded_code_hash(mapping, path):
+    matches = [
+        value
+        for key, value in mapping.items()
+        if key.replace("\\", "/") == path.replace("\\", "/")
+    ]
+    if len(matches) != 1:
+        raise ValueError("missing or ambiguous recorded code path")
+    return matches[0]
+
+
 def requests_for(cases, prepared):
     if prepared["status"] != "complete" or len(prepared["rows"]) != 10:
         raise ValueError("complete local10 preparation required before paid QA")
@@ -186,9 +197,8 @@ def load(phase, preparation):
     )
     if model_identity(provider) != original_model:
         raise ValueError("selected BGE model artifact/runtime changed")
-    if (
-        sha(Path("doppel_memory/rank_fusion.py").read_bytes())
-        != data["fusion"]["plan"]["code_sha256"]["doppel_memory/rank_fusion.py"]
+    if sha(Path("doppel_memory/rank_fusion.py").read_bytes()) != recorded_code_hash(
+        data["fusion"]["plan"]["code_sha256"], "doppel_memory/rank_fusion.py"
     ):
         raise ValueError("selected rank-fusion implementation changed")
     for name, (_, tokens) in STAGES.items():

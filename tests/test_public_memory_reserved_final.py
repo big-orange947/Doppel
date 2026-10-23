@@ -40,6 +40,25 @@ def test_exact_partition_and_frozen_size():
 
 
 @pytest.mark.parametrize(
+    "path", ["doppel_memory/rank_fusion.py", "doppel_memory\\rank_fusion.py"]
+)
+def test_recorded_source_hash_handles_windows_separators(path):
+    assert (
+        reserved.recorded_code_hash({path: "same"}, "doppel_memory/rank_fusion.py")
+        == "same"
+    )
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [{}, {"doppel_memory/rank_fusion.py": "a", "doppel_memory\\rank_fusion.py": "b"}],
+)
+def test_recorded_source_path_must_be_unique(mapping):
+    with pytest.raises(ValueError):
+        reserved.recorded_code_hash(mapping, "doppel_memory/rank_fusion.py")
+
+
+@pytest.mark.parametrize(
     "damage",
     ["duplicate_id", "duplicate_history", "opened_history", "messages", "chunks"],
 )
