@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Complete frozen local80/160 candidate comparison on all50 opened histories:
+  fresh80 exactly reproduces all50 historical contexts;160 raises candidate
+  annotations72→75/76 but lowers top20 66→59 and packed60→56. Do not promote160
+  or change37/50 QA/defaults.50 local scoring calls/8000 shared pairs,50 cached-
+  across-arm query embeddings,0 truncations/paid/graph/source writes. Preserve
+  complete top20/context receipts for both arms.10 new tests; full2263 passed/
+  33 skipped/three subtests; Ruff/Pyright clean, existing uv.lock untouched.
+
 - Diagnose context losses with a zero-model read-only replay: reproduce all30
   saved top20 contexts exactly (26 positives/4 negatives), plus frozen50 stage
   accounting. Optional lossless metadata codec retain+fill adds41 messages but

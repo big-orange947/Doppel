@@ -7,6 +7,15 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Candidate-width comparison2026-10-23 completed all50: independently retrieved80
+and160 raw RRF windows, identical top20/24KB output bounds. Fresh80 reproduces
+every old context.160 improves candidate annotations72→75/76, but top20 drops
+66→59 and packed60→56; no promotion or new QA score.8000 local BGE pairs/50 query
+embeddings, no paid/graph/source writes. Both full top20 source lists are now
+saved for all50, enabling zero-model budget analysis without altering old files.
+Full2263 passed/33 skipped/three subtests. See the
+[complete result](../benchmarks/reports/public-memory-window-ablation-result-2026-10-23.md).
+
 Packing diagnosis2026-10-23: frozen50 positive stage accounting rechecks72/76
 candidate→66/76 top20→60/76 packed. Exact top20/context replay is available for30
 cases (26 positives/4 negatives); remaining20 full rerank orders are not saved
