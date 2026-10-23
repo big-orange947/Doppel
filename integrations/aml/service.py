@@ -250,7 +250,14 @@ class SQLiteRawBackend:
         try:
             await self.store.close()
         finally:
-            self.journal.close()
+            try:
+                self.journal.close()
+            finally:
+                if (
+                    self.retrieval is not None
+                    and self.retrieval.close_provider is not None
+                ):
+                    await self.retrieval.close_provider()
 
     async def ready(self):
         """Dependency connectivity/profile probe, not a QA or coverage certificate."""
@@ -454,12 +461,16 @@ def main():
     parser.add_argument("--bind-owner-roles", action="store_true", required=True)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--profile", choices=("bm25", "local-hybrid"), default="bm25")
+    parser.add_argument(
+        "--profile", choices=("bm25", "local-hybrid", "aliyun-hybrid"), default="bm25"
+    )
     parser.add_argument("--pg-schema")
     parser.add_argument("--embedding-model-path", type=Path)
     parser.add_argument("--reranker-model-path", type=Path)
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--rerank-policy", choices=LOCAL_RERANK_POLICIES)
+    parser.add_argument("--embedding-dimensions", type=int)
+    parser.add_argument("--embedding-max-calls", type=int)
     parser.add_argument("--public-health", action="store_true")
     parser.add_argument("--omit-search-scores", action="store_true")
     parser.add_argument("--expected-profile-id")
@@ -470,8 +481,24 @@ def main():
     parser.add_argument("--max-results", type=int, default=1000)
     parser.add_argument("--allow-remote-bind", action="store_true")
     args = parser.parse_args()
-    if args.rerank_policy is not None and args.profile != "local-hybrid":
-        parser.error("--rerank-policy requires --profile local-hybrid")
+    if args.rerank_policy is not None and args.profile == "bm25":
+        parser.error("--rerank-policy requires a hybrid profile")
+    if args.profile != "aliyun-hybrid" and (
+        args.embedding_dimensions is not None or args.embedding_max_calls is not None
+    ):
+        parser.error("remote embedding options require --profile aliyun-hybrid")
+    if args.profile == "aliyun-hybrid":
+        from doppel_memory.aliyun_embedding import ALIYUN_EMBEDDING_DIMENSIONS
+
+        if (
+            args.embedding_dimensions is not None
+            and args.embedding_dimensions not in ALIYUN_EMBEDDING_DIMENSIONS
+        ):
+            parser.error("unsupported text-embedding-v4 dimensions")
+        if args.embedding_max_calls is not None and args.embedding_max_calls < 1:
+            parser.error("--embedding-max-calls must be positive")
+        if args.embedding_model_path is not None:
+            parser.error("aliyun-hybrid does not use --embedding-model-path")
     if args.expected_profile_id is not None and not re.fullmatch(
         r"[0-9a-f]{64}", args.expected_profile_id
     ):
@@ -510,9 +537,20 @@ def main():
         parser.error(
             "local-hybrid requires DOPPEL_AML_PG_DSN, --pg-schema and both local model paths"
         )
+    if args.profile == "aliyun-hybrid" and not (
+        args.pg_schema
+        and args.reranker_model_path
+        and os.environ.get("DOPPEL_AML_PG_DSN", "").strip()
+        and os.environ.get("DOPPEL_ALIYUN_BASE_URL", "").strip()
+        and os.environ.get("DASHSCOPE_API_KEY", "").strip()
+    ):
+        parser.error(
+            "aliyun-hybrid requires PG DSN/schema, local reranker path, "
+            "DOPPEL_ALIYUN_BASE_URL and DASHSCOPE_API_KEY"
+        )
 
     async def serve():
-        import uvicorn  # optional dependency; no LLM/provider keys read
+        import uvicorn  # optional server dependency; providers are profile-specific
 
         if args.profile == "local-hybrid":
             from integrations.aml.retrieval import create_local_hybrid_backend
@@ -526,6 +564,22 @@ def main():
                 reranker_model_path=args.reranker_model_path,
                 reranker_device=args.reranker_device,
                 rerank_policy=args.rerank_policy or "bge",
+            )
+        elif args.profile == "aliyun-hybrid":
+            from integrations.aml.retrieval import create_aliyun_hybrid_backend
+
+            backend = await create_aliyun_hybrid_backend(
+                args.directory,
+                namespace=args.namespace,
+                dsn=os.environ["DOPPEL_AML_PG_DSN"],
+                schema=args.pg_schema,
+                api_key=os.environ["DASHSCOPE_API_KEY"],
+                base_url=os.environ["DOPPEL_ALIYUN_BASE_URL"],
+                dimensions=args.embedding_dimensions or 2048,
+                max_calls=args.embedding_max_calls,
+                reranker_model_path=args.reranker_model_path,
+                reranker_device=args.reranker_device,
+                rerank_policy=args.rerank_policy or "rank-fusion",
             )
         else:
             backend = SQLiteRawBackend(

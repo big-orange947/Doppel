@@ -105,6 +105,14 @@ review; the bearer token authenticates the adapter caller, not independent users
 
 ### Explicit local-hybrid profile
 
+An additional explicit `--profile aliyun-hybrid` now replaces only the embedding
+provider with Alibaba Cloud text-embedding-v4 while retaining the shared scoped
+Store/pgvector/attribution path and local reranker. It defaults to2048d and locked
+rank fusion, has explicit credentials/endpoint configuration and paid startup
+warmup, and never silently replaces existing BGE profiles. See the
+[Alibaba provider/canary guide](aliyun-embedding.md) before starting it. It has
+offline fake-HTTP/fake-PG coverage, not live Alibaba or official AML acceptance.
+
 Use an environment with `asyncpg`, `fastembed`, `sentence-transformers` and the
 server extra installed. Reuse an existing compatible GPU environment if desired;
 installing a new CUDA stack is not part of service startup. This profile never

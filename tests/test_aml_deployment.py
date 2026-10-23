@@ -193,6 +193,12 @@ def test_bounds_reject_invalid_values(config):
         ["--expected-profile-id", "not-a-digest"],
         ["--expected-profile-id", "A" * 64],
         ["--expected-profile-id", "a" * 63],
+        ["--embedding-dimensions", "2048"],
+        ["--profile", "local-hybrid", "--embedding-max-calls", "1"],
+        ["--profile", "aliyun-hybrid", "--embedding-dimensions", "2000"],
+        ["--profile", "aliyun-hybrid", "--embedding-max-calls", "0"],
+        ["--profile", "aliyun-hybrid", "--embedding-model-path", "not-used"],
+        ["--profile", "aliyun-hybrid"],
     ],
 )
 def test_cli_bad_bounds_fail_before_creating_state(
@@ -262,6 +268,56 @@ def test_cli_forwards_explicit_policy_and_keeps_legacy_default(
     with pytest.raises(RuntimeError, match="factory boundary reached"):
         main()
     assert received["rerank_policy"] == (policy or "bge")
+    assert not directory.exists()
+
+
+@pytest.mark.parametrize("dimension", [None, 512])
+def test_aliyun_cli_explicit_factory_and_no_implicit_local_fallback(
+    tmp_path, monkeypatch, dimension
+):
+    pytest.importorskip("uvicorn")
+    from integrations.aml import retrieval
+
+    received = {}
+
+    async def capture(*args, **kwargs):
+        received.update(kwargs)
+        raise RuntimeError("explicit remote factory")
+
+    monkeypatch.setattr(retrieval, "create_aliyun_hybrid_backend", capture)
+    monkeypatch.setenv("DOPPEL_AML_BEARER_TOKEN", "synthetic-token")
+    monkeypatch.setenv("DOPPEL_AML_PG_DSN", "synthetic-db")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "synthetic-key")
+    monkeypatch.setenv("DOPPEL_ALIYUN_BASE_URL", "synthetic-base")
+    directory = tmp_path / "not-created"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "service",
+            "--directory",
+            str(directory),
+            "--namespace",
+            "n",
+            "--bind-owner-roles",
+            "--profile",
+            "aliyun-hybrid",
+            "--pg-schema",
+            "s",
+            "--reranker-model-path",
+            "local-ranker",
+            "--embedding-max-calls",
+            "5",
+            *(["--embedding-dimensions", str(dimension)] if dimension else []),
+        ],
+    )
+    with pytest.raises(RuntimeError, match="explicit remote factory"):
+        main()
+    assert received["api_key"] == "synthetic-key"
+    assert received["base_url"] == "synthetic-base"
+    assert received["dimensions"] == (dimension or 2048)
+    assert received["max_calls"] == 5
+    assert received["rerank_policy"] == "rank-fusion"
     assert not directory.exists()
 
 

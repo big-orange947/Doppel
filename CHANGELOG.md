@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add module-only native DashScope text-embedding-v4 provider and explicit
+  aliyun-hybrid service profile:2048d default, ten-text batches, document/query
+  separation, exact response-index/shape/value checks and endpoint/version-bound
+  vector identities. No SDK/retry/cache/truncation or BGE/default replacement.
+  Track attempts/reported usage/unknown usage with an atomic process-local cap;
+  redact provider bodies/keys. Shared startup/shutdown closes owned clients;
+  probes make no API calls after explicit paid warmup. Two-request opt-in canary
+  needs no DB/GPU; live Alibaba/model-compliance/quality acceptance still pending.
+  Add67 offline cases; final2437 passed/33 skipped/three subtests, Ruff/Pyright
+  clean. Existing local BGE real PG/TCP initial+pinned-restart smoke still passes
+  after shared-factory refactor; no paid calls or old-index overwrite this round.
+
 - Add explicit AML-facing transport compatibility: opt-in unauthenticated constant
   GET health only, optional wire-score omission after reranking, and expected
   profile-ID pinning before listening. Keep existing auth/score defaults; ready,

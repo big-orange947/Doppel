@@ -13,6 +13,10 @@ state directory, PostgreSQL database/schema, local model artifact fingerprints,
 device and request bounds. Choose the profile explicitly:
 
 - `--profile bm25`: SQLite/BM25 transport smoke, no semantic retrieval.
+- `--profile aliyun-hybrid`: explicit remote text-embedding-v4, shared PG/scoped
+  source pipeline and local reranker. Paid startup probe; documented native
+  workspace endpoint/key required. See [provider/canary guide](aliyun-embedding.md).
+  Neither live Alibaba acceptance nor full academic-profile approval is claimed.
 - `--profile local-hybrid`: PG/pgvector + BM25/RRF60 + offline neural reranker.
   This is raw history, not the full temporal/typed-graph engine or text-embedding-v4.
   Optional `--rerank-policy rank-fusion` combines retrieval/neural orders with

@@ -483,3 +483,157 @@ async def test_fused_service_rejects_forged_delegate_payload_instead_of_fallback
         assert result.json() == {"error": "backend_failure"}
     await host.close()
     index.db.close()
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [None, "ranker", "index_init", "warmup", "provider", "metadata", "not_verified"],
+)
+async def test_aliyun_factory_readiness_writes_and_cleanup_with_fake_pg(
+    tmp_path, monkeypatch, failure
+):
+    from doppel_memory import SQLiteStore, aliyun_embedding, postgres_store, vector
+    from integrations.aml.contract import WriteNotReady
+    from integrations.aml.retrieval import create_aliyun_hybrid_backend
+
+    state = {}
+    real_provider = aliyun_embedding.AliyunEmbedding
+
+    def response(request):
+        if failure == "provider":
+            return httpx.Response(401, text="private upstream error")
+        body = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "output": {
+                    "embeddings": [
+                        {
+                            "text_index": i,
+                            "embedding": [0.1] * body["parameters"]["dimension"],
+                        }
+                        for i, _ in enumerate(body["input"]["texts"])
+                    ]
+                },
+                "usage": {"total_tokens": 10},
+            },
+        )
+
+    def create_provider(**kwargs):
+        state["provider"] = real_provider(
+            **kwargs, transport=httpx.MockTransport(response)
+        )
+        return state["provider"]
+
+    class Connection:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def execute(self, *args):
+            pass
+
+        async def fetchval(self, *args):
+            return "wrong" if failure == "metadata" else state["index"]._identity_json
+
+    class Store(SQLiteStore):
+        _meta_sql = "synthetic_meta"
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(str(tmp_path / "authority.sqlite3"))
+            state["store_closed"] = False
+
+        async def _ensure_pool(self):
+            return SimpleNamespace(acquire=Connection)
+
+        async def close(self):
+            state["store_closed"] = True
+            await super().close()
+
+    class VectorIndex(Index):
+        profile = "synthetic-profile"
+        _identity_json = "synthetic-embedding-identity"
+        _table_sql = "synthetic_vectors"
+
+        def __init__(self, store, embedding, config):
+            super().__init__(tmp_path / "vectors.sqlite3")
+            self.embedding = embedding
+            state["index"] = self
+            assert config.create_hnsw_index is False
+
+        async def initialize(self):
+            if failure == "index_init":
+                raise RuntimeError("synthetic init failure")
+
+        async def index_records(self, records):
+            await self.embedding.embed([r.content for r in records])
+            for record in records:
+                await self.upsert(record)
+            return SimpleNamespace(ok=True)
+
+        async def search(self, query, scopes, **kwargs):
+            await self.embedding.embed_queries([query])
+            return await super().search(query, scopes, **kwargs)
+
+    class Ranker(ReversingRanker):
+        _model = None
+
+        def __init__(self, *args, **kwargs):
+            self.identity = {"model": "synthetic-local"}
+            if failure == "ranker":
+                raise RuntimeError("synthetic local model failure")
+
+        async def warmup(self):
+            if failure == "warmup":
+                raise RuntimeError("synthetic warmup failure")
+            self._model = object()
+
+    monkeypatch.setattr(aliyun_embedding, "AliyunEmbedding", create_provider)
+    monkeypatch.setattr(postgres_store, "PostgreSQLStore", Store)
+    monkeypatch.setattr(vector, "PostgreSQLVectorIndex", VectorIndex)
+    monkeypatch.setattr(local_models, "LocalCrossEncoder", Ranker)
+    host = None
+    try:
+        options = {
+            "namespace": "hybrid-test",
+            "dsn": "postgresql://user:secret@localhost/test",
+            "schema": "synthetic",
+            "api_key": "synthetic-key",
+            "base_url": "https://workspace.cn-beijing.maas.aliyuncs.com/api/v1",
+            "reranker_model_path": tmp_path / "fake-local-ranker",
+        }
+        if failure in {"ranker", "index_init", "warmup", "provider"}:
+            with pytest.raises((RuntimeError, aliyun_embedding.AliyunEmbeddingError)):
+                await create_aliyun_hybrid_backend(tmp_path / "service", **options)
+        else:
+            host = await create_aliyun_hybrid_backend(tmp_path / "service", **options)
+            assert state["provider"].usage["attempts"] == 1
+            if failure == "not_verified":
+                state["provider"].verified = False
+            if failure is not None:
+                with pytest.raises(WriteNotReady):
+                    await host.ready()
+            else:
+                for _ in range(3):
+                    await host.ready()
+                assert state["provider"].usage["attempts"] == 1  # probes never call API
+                async with client(host) as c:
+                    assert (await c.post("/add", json=payload())).status_code == 200
+                    result = await c.post(
+                        "/search",
+                        json={"user_id": "owner", "query": "optics", "top_k": 100},
+                    )
+                    assert result.status_code == 200 and len(result.json()["data"]) == 2
+                    assert "historical_assistant" in result.text
+                    assert state["provider"].usage["attempts"] == 3
+            await host.close()
+            host = None
+        assert state["provider"].is_closed
+        assert failure == "ranker" or state["store_closed"]
+    finally:
+        if host is not None:
+            await host.close()
+        if "index" in state:
+            state["index"].db.close()

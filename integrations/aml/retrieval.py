@@ -53,6 +53,7 @@ class RawRetrievalProfile:
     reranker: Reranker
     candidate_limit: int = 80
     probe: Callable[[], Awaitable[None]] | None = None
+    close_provider: Callable[[], Awaitable[None]] | None = None
 
 
 def postgres_target_identity(dsn: str, schema: str) -> str:
@@ -111,6 +112,7 @@ def hybrid_profile(
     identity: dict[str, Any],
     index_batch: Callable[[Sequence[MemoryRecord]], Awaitable[None]] | None = None,
     probe: Callable[[], Awaitable[None]] | None = None,
+    close_provider: Callable[[], Awaitable[None]] | None = None,
 ) -> RawRetrievalProfile:
     """Re-use production RRF and Store guards, never fall back on index failure."""
     # Snapshot caller metadata before it is bound to the journal.
@@ -150,6 +152,7 @@ def hybrid_profile(
         prepare_records=prepare,
         reranker=reranker,
         probe=probe,
+        close_provider=close_provider,
     )
 
 
@@ -172,20 +175,92 @@ async def create_local_hybrid_backend(
     if rerank_policy not in LOCAL_RERANK_POLICIES:
         raise ValueError("unsupported local rerank policy")
 
+    from integrations.aml.local_models import LocalEmbedding
+
+    postgres_target_identity(dsn, schema)
+    embedding = LocalEmbedding(embedding_model_path)
+    return await _create_hybrid_backend(
+        directory,
+        namespace=namespace,
+        dsn=dsn,
+        schema=schema,
+        embedding=embedding,
+        embedding_ready=lambda: embedding._model is not None,
+        reranker_model_path=reranker_model_path,
+        reranker_device=reranker_device,
+        rerank_policy=rerank_policy,
+    )
+
+
+async def create_aliyun_hybrid_backend(
+    directory: Path,
+    *,
+    namespace: str,
+    dsn: str,
+    schema: str,
+    api_key: str,
+    base_url: str,
+    reranker_model_path: Path,
+    dimensions: int = 2048,
+    max_calls: int | None = None,
+    reranker_device: str = "cpu",
+    rerank_policy: str = "rank-fusion",
+):
+    """Explicit paid remote embeddings + local reranker, not an AML approval.
+
+    Startup verifies one short document embedding; subsequent readiness probes
+    make no remote calls. No graph/extraction/answer generation is installed.
+    """
+    from doppel_memory.aliyun_embedding import AliyunEmbedding
+
+    if rerank_policy not in LOCAL_RERANK_POLICIES:
+        raise ValueError("unsupported local rerank policy")
+    postgres_target_identity(dsn, schema)
+    embedding = AliyunEmbedding(
+        api_key=api_key, base_url=base_url, dimensions=dimensions, max_calls=max_calls
+    )
+    return await _create_hybrid_backend(
+        directory,
+        namespace=namespace,
+        dsn=dsn,
+        schema=schema,
+        embedding=embedding,
+        embedding_ready=lambda: embedding.verified and not embedding.is_closed,
+        close_provider=embedding.aclose,
+        reranker_model_path=reranker_model_path,
+        reranker_device=reranker_device,
+        rerank_policy=rerank_policy,
+    )
+
+
+async def _create_hybrid_backend(
+    directory: Path,
+    *,
+    namespace: str,
+    dsn: str,
+    schema: str,
+    embedding: Any,
+    embedding_ready: Callable[[], bool],
+    reranker_model_path: Path,
+    reranker_device: str,
+    rerank_policy: str,
+    close_provider: Callable[[], Awaitable[None]] | None = None,
+):
+
     from doppel_memory.postgres_store import PostgreSQLStore
     from doppel_memory.vector import PostgreSQLVectorIndex, VectorIndexConfig
-    from integrations.aml.local_models import LocalCrossEncoder, LocalEmbedding
+    from integrations.aml.local_models import LocalCrossEncoder
     from integrations.aml.service import SQLiteRawBackend
 
-    target_id = postgres_target_identity(dsn, schema)
-    embedding = LocalEmbedding(embedding_model_path)
-    reranker = LocalCrossEncoder(reranker_model_path, device=reranker_device)
-    ordering, ordering_identity = local_rerank_policy(
-        reranker, reranker.identity, policy=rerank_policy
-    )
-    store = PostgreSQLStore(dsn, schema=schema, create_schema=True)
+    store = None
     backend = None
     try:
+        target_id = postgres_target_identity(dsn, schema)
+        reranker = LocalCrossEncoder(reranker_model_path, device=reranker_device)
+        ordering, ordering_identity = local_rerank_policy(
+            reranker, reranker.identity, policy=rerank_policy
+        )
+        store = PostgreSQLStore(dsn, schema=schema, create_schema=True)
         index = PostgreSQLVectorIndex(store, embedding, VectorIndexConfig())
 
         async def index_batch(records):
@@ -194,8 +269,8 @@ async def create_local_hybrid_backend(
                 raise WriteNotReady("vector batch indexing failed")
 
         async def probe():
-            if embedding._model is None or reranker._model is None:
-                raise WriteNotReady("local models are not loaded")
+            if not embedding_ready() or reranker._model is None:
+                raise WriteNotReady("embedding provider or reranker is not ready")
             pool = await store._ensure_pool()
             async with pool.acquire() as connection:
                 # No history scan, counts, embedding or neural scoring on probes.
@@ -215,6 +290,7 @@ async def create_local_hybrid_backend(
             reranker=ordering,
             index_batch=index_batch,
             probe=probe,
+            close_provider=close_provider,
             identity={
                 "store_target": target_id,
                 "embedding": embedding.identity,
@@ -237,5 +313,10 @@ async def create_local_hybrid_backend(
         if backend is not None:
             await backend.close()
         else:
-            await store.close()
+            try:
+                if store is not None:
+                    await store.close()
+            finally:
+                if close_provider is not None:
+                    await close_provider()
         raise
