@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Execute locked reserved10 profile without retuning:5048 raw messages in new
+  isolated schema,10 local BGE calls/800 pairs/0 truncation,15/16 annotations
+  delivered. QA9/10 (positives8/9,negative1/1); advice fails with a candidate gap
+  and conservative recommendation policy.20 calls/81013 reported tokens, no
+  retry; keyless replay identical with0 new calls. Preserve small-sample/public-
+  judge limits; do not pool with opened50 or change service defaults.13 original
+  tests/full2338 passed, then startup-only Windows path fix+17 targeted tests;
+  Ruff/Pyright clean, old schemas/data and uv.lock untouched. Stop reserved tuning.
+
 - Finish final opened50 BGE/fusion QA:37→40/50, positives30→33/43, negatives7/7,
   four gains/one knowledge-update regression. Predeclared net+3/structural/negative
   guards select fusion for reserved validation, not automatic runtime promotion.

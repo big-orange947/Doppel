@@ -21,8 +21,12 @@ uses no paid calls and raises packed annotation coverage60→62/76 at24KB, with
 The [final fixed fusion QA comparison](reports/public-memory-rank-fusion-qa-result-2026-10-23.md)
 scores40/50 vs37/50 on the same opened cohort (4 gains/1 loss). Predeclared
 engineering guards select fusion for the [locked reserved10 plan](reports/public-memory-reserved10-final-plan-2026-10-23.md),
-not an independent80% claim or automatic runtime default; reserved results are
-not available yet. Stop tuning on opened50.
+not an independent80% claim or automatic runtime default. The separately locked
+[reserved10 run](reports/public-memory-reserved10-final-result-2026-10-23.md) is now
+complete:9/10 task correct (8/9 positives,1/1 negative),15/16 annotated turns
+delivered,20 paid calls/81013 tokens and zero-call cache replay. Small public
+sample/provisional judge, not an official score or proof of general90% accuracy.
+Do not pool with opened50; stop tuning and move to integration acceptance.
 `python -m benchmarks.public_longmemeval` checks the official cleaned LongMemEval
 format and projects history separately from scoring labels. It is zero-model
 preparation, not a retrieval/QA benchmark result or an AML academic model profile.

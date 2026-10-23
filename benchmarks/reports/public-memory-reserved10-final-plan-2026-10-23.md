@@ -5,6 +5,9 @@ manifest metadata is inspected, not reserved questions/history text or answers.
 Opened50 final comparison selects fusion under its predeclared rule; no other
 configuration may be chosen after viewing reserved outcomes.
 
+Completed later under this protocol: [reserved10 result,9/10](public-memory-reserved10-final-result-2026-10-23.md).
+The registration state above is historical, not the current execution status.
+
 Selection result SHA-256:
 24a8bf0c56d421d969c91c0d5eaaa85278e7e48a874d45fbc2ba8cbadd420991.
 Parent manifest `longmemeval-fresh-high-config-50-manifest-v1.json` SHA-256:
