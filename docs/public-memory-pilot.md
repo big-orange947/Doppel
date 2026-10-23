@@ -7,6 +7,15 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Operational follow-up2026-10-23: authenticated health/readiness, startup dependency
+probe, explicit transport bounds and non-loopback bind guard now exist. Strict
+PG URI target binding rejects query overrides without persisting credentials.
+Real PG/local-model readiness passes against the same6 synthetic records; no new
+ingestion/search/QA. See the [operations runbook](aml-deployment.md). These checks
+do not change37/50, certify full indexing or deploy a public endpoint.
+Full2228 passed/33 skipped/three subtests; see the
+[deployment-readiness report](../benchmarks/reports/aml-service-deployment-readiness-2026-10-23.md).
+
 Delivery update2026-10-23: a runnable authenticated local AML HTTP smoke service
 now uses durable raw SQLite/BM25 with immediate attributed search, restart-safe
 retries, pending-write isolation and revocation revalidation. Real loopback TCP

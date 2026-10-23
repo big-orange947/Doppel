@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import hmac
 import json
+import math
 import os
 import sqlite3
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -29,6 +32,7 @@ from integrations.aml.contract import (
     WriteNotReady,
     WriteReceipt,
     event_ids,
+    memory_scope,
     payload_fingerprint,
     write_key,
 )
@@ -94,6 +98,9 @@ class SQLiteRawBackend:
                 "existing service profile differs; use a separate directory"
             )
         self.roles = dict(role_actors)
+        self.profile_id = hashlib.sha256(profile.encode()).hexdigest()
+        self._probe_scope = memory_scope(namespace, "__service_readiness__")
+        self._closed = False
         self.lock = asyncio.Lock()
         self.retriever = AttributedContextRetriever(
             self.store,
@@ -238,8 +245,55 @@ class SQLiteRawBackend:
             )
 
     async def close(self):
-        await self.store.close()
-        self.journal.close()
+        self._closed = True
+        try:
+            await self.store.close()
+        finally:
+            self.journal.close()
+
+    async def ready(self):
+        """Dependency connectivity/profile probe, not a QA or coverage certificate."""
+        if self._closed:
+            raise WriteNotReady("service backend is closed")
+        async with self.lock:
+            self.journal.execute("SELECT 1").fetchone()
+            await self.store.get(self._probe_scope, "__service_readiness__")
+            if self.retrieval is not None:
+                if self.retrieval.probe is None:
+                    raise WriteNotReady("custom retrieval has no readiness probe")
+                await self.retrieval.probe()
+
+
+def validate_service_bounds(
+    bearer_token: str,
+    *,
+    max_body_bytes: int = 2_000_000,
+    max_concurrency: int = 8,
+    timeout_seconds: float = 30,
+    max_messages: int = 1000,
+    max_results: int = 1000,
+) -> None:
+    if (
+        not bearer_token
+        or any(not 33 <= ord(c) <= 126 for c in bearer_token)
+        or any(
+            type(v) is not int or v < 1
+            for v in (
+                max_body_bytes,
+                max_concurrency,
+                max_messages,
+                max_results,
+            )
+        )
+        or max_messages > 1000
+        or max_results > 1000
+        or type(timeout_seconds) not in {int, float}
+        or not math.isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+    ):
+        raise ValueError(
+            "visible ASCII token and positive finite service bounds required"
+        )
 
 
 class TextualASGI:
@@ -253,17 +307,24 @@ class TextualASGI:
         max_body_bytes: int = 2_000_000,
         max_concurrency: int = 8,
         timeout_seconds: float = 30,
+        max_messages: int = 1000,
+        max_results: int = 1000,
+        readiness_probe: Callable[[], Awaitable[None]] | None = None,
+        profile_id: str = "",
     ):
-        if (
-            not bearer_token.strip()
-            or max_body_bytes < 1
-            or max_concurrency < 1
-            or timeout_seconds <= 0
-        ):
-            raise ValueError("token and positive service bounds required")
+        validate_service_bounds(
+            bearer_token,
+            max_body_bytes=max_body_bytes,
+            max_concurrency=max_concurrency,
+            timeout_seconds=timeout_seconds,
+            max_messages=max_messages,
+            max_results=max_results,
+        )
         self.boundary, self.token = boundary, bearer_token
         self.max_body_bytes, self.max_concurrency = max_body_bytes, max_concurrency
         self.timeout_seconds, self.active = timeout_seconds, 0
+        self.max_messages, self.max_results = max_messages, max_results
+        self.readiness_probe, self.profile_id = readiness_probe, profile_id
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -297,10 +358,10 @@ class TextualASGI:
             authorization[0], expected
         ):
             return await respond(401, {"error": "unauthorized"})
-        if scope.get("method") != "POST" or scope.get("path") not in {
-            "/add",
-            "/search",
-        }:
+        route = (scope.get("method"), scope.get("path"))
+        if route == ("GET", "/healthz"):
+            return await respond(200, {"status": "alive"})
+        if route not in {("POST", "/add"), ("POST", "/search"), ("GET", "/readyz")}:
             return await respond(404, {"error": "not_found"})
         if self.active >= self.max_concurrency:
             return await respond(503, {"error": "busy"})
@@ -308,6 +369,18 @@ class TextualASGI:
         try:
 
             async def dispatch():
+                if scope["path"] == "/readyz":
+                    if self.readiness_probe is None:
+                        raise WriteNotReady("no readiness probe configured")
+                    try:
+                        await asyncio.wait_for(
+                            self.readiness_probe(), min(5, self.timeout_seconds)
+                        )
+                    except Exception:  # noqa: BLE001 - redact arbitrary dependency errors
+                        raise WriteNotReady("dependency probe failed") from None
+                    return await respond(
+                        200, {"status": "ready", "profile_id": self.profile_id}
+                    )
                 body = bytearray()
                 while True:
                     event = await receive()
@@ -322,12 +395,12 @@ class TextualASGI:
                     payload = json.loads(body)
                     if scope["path"] == "/add":
                         request = AddRequest.model_validate(payload)
-                        if len(request.messages) > 1000:
+                        if len(request.messages) > self.max_messages:
                             return await respond(413, {"error": "too_many_messages"})
                         result = await self.boundary.add(request)
                     else:
                         request = SearchRequest.model_validate(payload)
-                        if request.top_k > 1000:
+                        if request.top_k > self.max_results:
                             return await respond(422, {"error": "invalid_request"})
                         result = await self.boundary.search(request)
                 except (
@@ -366,10 +439,38 @@ def main():
     parser.add_argument("--embedding-model-path", type=Path)
     parser.add_argument("--reranker-model-path", type=Path)
     parser.add_argument("--reranker-device", default="cpu")
+    parser.add_argument("--request-timeout-seconds", type=float, default=30)
+    parser.add_argument("--max-concurrency", type=int, default=8)
+    parser.add_argument("--max-body-bytes", type=int, default=2_000_000)
+    parser.add_argument("--max-messages", type=int, default=1000)
+    parser.add_argument("--max-results", type=int, default=1000)
+    parser.add_argument("--allow-remote-bind", action="store_true")
     args = parser.parse_args()
     token = os.environ.get("DOPPEL_AML_BEARER_TOKEN", "")
     if not token.strip():
         parser.error("DOPPEL_AML_BEARER_TOKEN must be set")
+    # Validate all transport settings before opening files, DBs or models.
+    limits = {
+        "timeout_seconds": args.request_timeout_seconds,
+        "max_concurrency": args.max_concurrency,
+        "max_body_bytes": args.max_body_bytes,
+        "max_messages": args.max_messages,
+        "max_results": args.max_results,
+    }
+    try:
+        validate_service_bounds(token, **limits)
+    except ValueError:
+        parser.error(
+            "token must be visible ASCII; bounds positive and finite; messages/results between 1 and 1000"
+        )
+    if not 1 <= args.port <= 65535:
+        parser.error("port must be between 1 and 65535")
+    if args.host not in {"127.0.0.1", "::1", "localhost"} and (
+        not args.allow_remote_bind or len(token) < 32
+    ):
+        parser.error(
+            "non-loopback binding requires --allow-remote-bind and a token of at least 32 characters; use a TLS proxy"
+        )
     if args.profile == "local-hybrid" and not (
         args.pg_schema
         and args.embedding_model_path
@@ -401,10 +502,15 @@ def main():
                 namespace=args.namespace,
                 role_actors={"user": "owner", "assistant": "agent"},
             )
-        app = TextualASGI(
-            TextualBoundary(backend, namespace=args.namespace), bearer_token=token
-        )
         try:
+            await backend.ready()
+            app = TextualASGI(
+                TextualBoundary(backend, namespace=args.namespace),
+                bearer_token=token,
+                readiness_probe=backend.ready,
+                profile_id=backend.profile_id,
+                **limits,
+            )
             await uvicorn.Server(
                 uvicorn.Config(
                     app,
@@ -412,6 +518,7 @@ def main():
                     port=args.port,
                     access_log=False,
                     log_level="warning",
+                    proxy_headers=False,
                 )
             ).serve()
         finally:

@@ -7,6 +7,12 @@ history + the existing scoped BM25/attribution retrieval path. No LLM, embedding
 graph building, miner, automatic fact confirmation or source-review calls happen
 on add/search. This is a deployable transport baseline, not a quality upgrade.
 
+Authenticated `GET /healthz` and `GET /readyz` distinguish process liveness from
+backend/profile accessibility. Startup probes before listening; a failed readiness
+probe returns503 without private exceptions. Explicit CLI request bounds and a
+non-loopback opt-in guard are available. See the [operations runbook](aml-deployment.md)
+for profile freeze, recovery/backup boundaries and remaining public-deployment work.
+
 ## Local startup
 
 From the repository root, install the optional server dependency into the chosen

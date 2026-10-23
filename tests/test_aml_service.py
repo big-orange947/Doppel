@@ -292,9 +292,16 @@ async def test_actual_tcp_process_restart(tmp_path):
                 else:
                     pytest.fail("local service startup timeout")
                 assert response.status_code == 200
+                health = await c.get("/healthz")
+                ready = await c.get("/readyz")
+                assert health.json() == {"status": "alive"}
+                assert ready.status_code == 200 and ready.json()["status"] == "ready"
+                assert len(ready.json()["profile_id"]) == 64
                 if run == 0:
+                    profile_id = ready.json()["profile_id"]
                     assert (await c.post("/add", json=payload())).status_code == 200
                 else:
+                    assert ready.json()["profile_id"] == profile_id
                     assert len(response.json()["data"]) == 2
                     assert (await c.post("/add", json=payload())).status_code == 200
         finally:

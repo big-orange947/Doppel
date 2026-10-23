@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add authenticated liveness/readiness and pre-listen dependency checks for the
+  repository service; explicit request bounds, finite-value validation, safe
+  non-loopback opt-in and no trusted forwarded headers. Canonical PG target
+  binding rejects query overrides/implicit targets without storing credentials.
+  Real PG/model readiness passes against the retained6-source fixture; no new
+  ingestion/search/QA or paid calls. Add33 offline deployment cases and extend
+  the real TCP restart test with stable profile readiness. Include operations,
+  backup/recovery and public-deployment limits in a runbook. Full2228 passed/
+  33 skipped/three subtests; Ruff clean and changed runtime Pyright0 errors.
+
 - Complete a real tiny local-hybrid service acceptance after user-started Docker:
   existing local ONNX BGE + CUDA-requested cross-encoder + PGvector, initial and
   terminated/restarted loopback TCP processes;2 owners/6 sources/vectors, exact

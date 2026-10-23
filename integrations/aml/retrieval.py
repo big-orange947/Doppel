@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from doppel_memory.indexing import IndexWriter, memory_index_fingerprint
 from doppel_memory.lexical import BM25RetrievalStrategy
@@ -29,6 +29,55 @@ class RawRetrievalProfile:
     prepare_records: Callable[[Sequence[MemoryRecord]], Awaitable[None]]
     reranker: Reranker
     candidate_limit: int = 80
+    probe: Callable[[], Awaitable[None]] | None = None
+
+
+def postgres_target_identity(dsn: str, schema: str) -> str:
+    """Bind a single explicit DB target without persisting URI credentials.
+
+    URI query overrides such as host/user/database must not bypass the profile
+    binding. Only sslmode is accepted; password rotation does not change target.
+    """
+    try:
+        target = urlsplit(dsn)
+        query = parse_qs(target.query, keep_blank_values=True, strict_parsing=True)
+        if (
+            target.scheme not in {"postgres", "postgresql"}
+            or not target.hostname
+            or "," in target.hostname
+            or not target.username
+            or target.path in {"", "/"}
+            or target.fragment
+            or set(query) - {"sslmode"}
+            or (
+                "sslmode" in query
+                and (
+                    len(query["sslmode"]) != 1
+                    or query["sslmode"][0]
+                    not in {
+                        "disable",
+                        "allow",
+                        "prefer",
+                        "require",
+                        "verify-ca",
+                        "verify-full",
+                    }
+                )
+            )
+        ):
+            raise ValueError()
+        identity = [
+            target.hostname,
+            target.port or 5432,
+            unquote(target.path),
+            unquote(target.username),
+            schema,
+        ]
+    except (ValueError, TypeError):
+        raise ValueError(
+            "explicit single-target PostgreSQL URI required; only sslmode query is supported"
+        ) from None
+    return hashlib.sha256(json.dumps(identity).encode()).hexdigest()
 
 
 def hybrid_profile(
@@ -38,6 +87,7 @@ def hybrid_profile(
     reranker: Reranker,
     identity: dict[str, Any],
     index_batch: Callable[[Sequence[MemoryRecord]], Awaitable[None]] | None = None,
+    probe: Callable[[], Awaitable[None]] | None = None,
 ) -> RawRetrievalProfile:
     """Re-use production RRF and Store guards, never fall back on index failure."""
     # Snapshot caller metadata before it is bound to the journal.
@@ -76,6 +126,7 @@ def hybrid_profile(
         ),
         prepare_records=prepare,
         reranker=reranker,
+        probe=probe,
     )
 
 
@@ -99,21 +150,7 @@ async def create_local_hybrid_backend(
     from integrations.aml.local_models import LocalCrossEncoder, LocalEmbedding
     from integrations.aml.service import SQLiteRawBackend
 
-    target = urlsplit(dsn)
-    if target.scheme not in {"postgres", "postgresql"} or not target.hostname:
-        raise ValueError("a PostgreSQL URI is required")
-    # Passwords/URI query parameters never enter the persistent profile.
-    target_id = hashlib.sha256(
-        json.dumps(
-            [
-                target.hostname,
-                target.port or 5432,
-                target.path,
-                target.username,
-                schema,
-            ]
-        ).encode()
-    ).hexdigest()
+    target_id = postgres_target_identity(dsn, schema)
     embedding = LocalEmbedding(embedding_model_path)
     reranker = LocalCrossEncoder(reranker_model_path, device=reranker_device)
     store = PostgreSQLStore(dsn, schema=schema, create_schema=True)
@@ -126,11 +163,28 @@ async def create_local_hybrid_backend(
             if not report.ok:
                 raise WriteNotReady("vector batch indexing failed")
 
+        async def probe():
+            if embedding._model is None or reranker._model is None:
+                raise WriteNotReady("local models are not loaded")
+            pool = await store._ensure_pool()
+            async with pool.acquire() as connection:
+                # No history scan, counts, embedding or neural scoring on probes.
+                await connection.execute(
+                    f"SELECT memory_id,scope_key,record_fingerprint,source_version,embedding FROM {index._table_sql} LIMIT 0"
+                )
+                stored = await connection.fetchval(
+                    f"SELECT value FROM {store._meta_sql} WHERE key=$1",
+                    f"vector_profile:{index.profile}",
+                )
+                if str(stored) != index._identity_json:
+                    raise WriteNotReady("vector profile metadata differs")
+
         profile = hybrid_profile(
             semantic_index=index,
             writer=index,
             reranker=reranker,
             index_batch=index_batch,
+            probe=probe,
             identity={
                 "store_target": target_id,
                 "embedding": embedding.identity,
