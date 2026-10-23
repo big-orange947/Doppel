@@ -18,6 +18,11 @@ old answers, grades and runtime defaults remain unchanged.
 The [fixed retrieval/BGE rank-fusion comparison](reports/public-memory-rank-fusion-result-2026-10-23.md)
 uses no paid calls and raises packed annotation coverage60→62/76 at24KB, with
 3 recoveries/1 displacement. It is opt-in, not a new QA score or default strategy.
+The [final fixed fusion QA comparison](reports/public-memory-rank-fusion-qa-result-2026-10-23.md)
+scores40/50 vs37/50 on the same opened cohort (4 gains/1 loss). Predeclared
+engineering guards select fusion for the [locked reserved10 plan](reports/public-memory-reserved10-final-plan-2026-10-23.md),
+not an independent80% claim or automatic runtime default; reserved results are
+not available yet. Stop tuning on opened50.
 `python -m benchmarks.public_longmemeval` checks the official cleaned LongMemEval
 format and projects history separately from scoring labels. It is zero-model
 preparation, not a retrieval/QA benchmark result or an AML academic model profile.

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Finish final opened50 BGE/fusion QA:37→40/50, positives30→33/43, negatives7/7,
+  four gains/one knowledge-update regression. Predeclared net+3/structural/negative
+  guards select fusion for reserved validation, not automatic runtime promotion.
+  Preserve original invalid-JSON failure and one user-approved recovery:51 Reader
+  attempts/49 judge,413771 observed tokens including failure. Keyless replay
+  reproduces all100 answers/grades/checks with0 new calls. Lock original reserved10
+  (5048 messages) before opening; not run/scored yet.11 new tests, full2325 passed/
+  33 skipped/three subtests; Ruff/Pyright clean, uv.lock untouched.
+
 - Add module-only opt-in retrieval/reranker RRF wrapper: complete bounded orders,
   scoped IDs, immutable source payloads/scores and explicit invalid-output/timeout
   failures. Fixed equal-RRF60 local50 comparison reproduces every old BGE context;
