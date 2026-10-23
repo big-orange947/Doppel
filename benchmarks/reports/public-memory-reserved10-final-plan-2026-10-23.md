@@ -82,3 +82,30 @@ AML model compliance, semantic faithfulness or publication readiness from it.
 After this one profile completes, move to integration/deployment acceptance.
 Further ranking/Reader/embedding changes require a new development cycle and new
 unopened validation material, not retries against this reserved cohort.
+
+## Execution supplement, frozen before opening histories
+
+`benchmarks.public_memory_reserved_final` implements the above single profile.
+It verifies selected-report/model/code/manifest/dataset identities before work,
+rejects any existing target schema, uses a dedicated `reserved_final_*` schema
+and `longmemeval-reserved10-final-fusion-v1` namespace. Preparation writes only
+that new raw Store/vector index; QA reopens it server-read-only and validates
+current originals before/after every answer. Both complete80-item orders and
+candidate payloads are preserved. No data/volume/schema reset or cleanup.
+
+Commit runner/tests before the first actual preflight. Keep code/HEAD unchanged
+through prepare, answers and cache-only replay. Use the existing CUDA environment
+for fixed model/runtime identity; no new model installation or download.
+
+```powershell
+D:\project\.doppel-eval-cu128\Scripts\python.exe -m benchmarks.public_memory_reserved_final --phase prepare --output data/doppel/reserved10-prepare-frozen-v1.json
+D:\project\.doppel-eval-cu128\Scripts\python.exe -u -m benchmarks.public_memory_reserved_final --phase prepare --execute --frozen-preflight data/doppel/reserved10-prepare-frozen-v1.json --run-dir data/doppel/reserved10-prepare-v1 --output data/doppel/reserved10-prepare-live-v1.json
+D:\project\.doppel-eval-cu128\Scripts\python.exe -m benchmarks.public_memory_reserved_final --phase answers --preparation data/doppel/reserved10-prepare-live-v1.json --output data/doppel/reserved10-answers-frozen-v1.json
+D:\project\.doppel-eval-cu128\Scripts\python.exe -u -m benchmarks.public_memory_reserved_final --phase answers --preparation data/doppel/reserved10-prepare-live-v1.json --execute --frozen-preflight data/doppel/reserved10-answers-frozen-v1.json --run-dir data/doppel/reserved10-answers-v1 --output data/doppel/reserved10-answers-live-v1.json
+```
+
+Each phase/output must be new. On failure retain partial receipts/schema, report
+the stage and stop; no automatic second attempt. Preparation clears provider-key
+variables in its child process. Reader/judge keys remain environment-only. Cache
+replay uses the same answer preflight, `--cache-only`, read-only `--cache-parent`
+pointing at the successful answer directory, and fresh run/output paths.
