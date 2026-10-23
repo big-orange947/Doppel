@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Complete a real tiny local-hybrid service acceptance after user-started Docker:
+  existing local ONNX BGE + CUDA-requested cross-encoder + PGvector, initial and
+  terminated/restarted loopback TCP processes;2 owners/6 sources/vectors, exact
+  attribution/time, scope isolation, cross-session delivery, retry/conflict/auth
+  and6 authoritative index manifests pass. Add opt-in reproducible smoke script
+  and8 offline validator cases; full2195 passed/33 skipped/three subtests.
+  No paid calls, graph work, old-data reset or new
+  QA score; fixtures retained in a new dedicated schema/state directory.
+
 - Add an explicit repository-only local-hybrid HTTP profile: PostgreSQL raw
   authority + pgvector/BM25 RRF60 + offline content-only cross-encoder, fixed80
   candidates, exact source/index readiness before Add success and pending index

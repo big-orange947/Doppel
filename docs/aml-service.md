@@ -80,8 +80,11 @@ The raw backend's receipt promises only its fresh Store-backed lexical path.
 An explicit **local-hybrid** CLI profile now wires PostgreSQL authority, pgvector,
 BM25/vector RRF60 and an offline cross-encoder through the same attributed path.
 It is a raw-history retrieval profile, **not** the full structured-memory/time/
-typed-graph configuration. Its live PostgreSQL/model acceptance is still pending;
-the new tests exercise real HTTP/SQLite journals with fake index/model boundaries.
+typed-graph configuration. A tiny live PostgreSQL/model acceptance now passes:
+two real loopback TCP processes (initial+restart), existing local ONNX embedding,
+CUDA-requested cross-encoder, two synthetic owners and6 source/vector records.
+Offline tests separately use fake index/model boundaries. See the
+[live acceptance report](../benchmarks/reports/aml-local-hybrid-live-2026-10-23.md).
 Existing local50-case quality results are not measurements of this new service.
 Do not claim the highest configuration. Model-profile compliance, hosting/TLS/reverse-proxy
 limits, external access, benchmark credentials and actual official smoke remain
@@ -138,6 +141,16 @@ neither byte packing nor answer generation is added by this HTTP profile.
 Local inference runs in worker threads; cancellation cannot preempt already
 running ONNX/PyTorch work. Default HTTP timeout is not a hard compute deadline.
 No real service throughput/latency or quality gain is claimed by fake-provider tests.
+
+The opt-in `scripts.smoke_aml_local_hybrid` runner reproduces the real tiny smoke
+with an **absent dedicated schema**, new state directory/output and existing
+model paths; it reads only the PG DSN from the environment, creates an ephemeral
+service token, strips API-key variables from children and binds loopback only.
+It checks both real process lifetimes, exact attribution/timestamps, opaque-ID
+isolation, cross-session evidence, idempotence/conflict/auth, source/vector counts
+and six authoritative index fingerprints. The script deliberately retains its
+small synthetic schema/journal, never deletes old data, and refuses overwrite.
+It does not generate answers, judge50 cases, build graphs or certify performance.
 
 Run interface/restart tests:
 
