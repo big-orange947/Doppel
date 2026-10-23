@@ -8,6 +8,10 @@
   isolation and source revocation revalidation. No eager LLM/graph or model calls.
   Explicitly not the high-config/compliant submission profile; optional server
   dependency only. Existing quality scores are not service smoke scores.
+  Twelve new service tests include real TCP process termination/restart;131 AML
+  tests and final full2176/33 skipped/three subtests pass. Cached50 artifact and
+  citation-structure audit preserves37/50, with0 new provider calls. Preserve one
+  earlier process-death coordinator failure before successful reruns.
 
 - Finish9-call source-review diagnosis:8/8 authored controls match, but real
   windows reveal2 completion errors from one source and1 owner-claim false

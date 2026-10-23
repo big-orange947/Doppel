@@ -7,6 +7,17 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Delivery update2026-10-23: a runnable authenticated local AML HTTP smoke service
+now uses durable raw SQLite/BM25 with immediate attributed search, restart-safe
+retries, pending-write isolation and revocation revalidation. Real loopback TCP
+restart test passes;12 new service tests, final full2176/33 skipped/three subtests.
+The cached50 artifact,3 parent bindings and50 answer citation structures recheck
+with37/50 unchanged, not new retrieval/QA scoring. No model calls or Docker action.
+High-config HTTP backend/model compliance/public deployment remain unfinished;
+see the [delivery report](../benchmarks/reports/aml-service-readiness-2026-10-23.md)
+and [local startup](aml-service.md). Do not submit the lexical smoke profile as
+the highest-config evaluation system.
+
 Source-grounding follow-up is complete:9 calls/27805 tokens,8/8 authored controls
 match, but real windows expose2 bad completion claims from one source and1 false
 rejection of a valid owner claim. No hard-filter promotion. The optional wrapper

@@ -57,8 +57,9 @@ coordinator recovery test (WriteNotReady after child exit):2171 pass/1 fail,
 33 skipped. The isolated recovery+service rerun passed11 tests, and a subsequent
 full run passed2174 tests before the final2 revocation cases were added. No old
 recovery test or production coordinator behavior was relaxed to hide the failure.
-Final full-suite outcome is recorded in the final handoff; a single subsequent
-pass is not proof that the initial lock timing failure cannot recur.
+Final full suite on the completed12-service-test implementation: **2176 passed,
+33 skipped,3 subtests**,219.32 seconds. A subsequent pass is not proof that the
+initial lock timing failure cannot recur; keep this recovery observation visible.
 
 ## Cached50 integrity audit, not a new QA run
 
