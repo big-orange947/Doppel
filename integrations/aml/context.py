@@ -70,12 +70,18 @@ class AttributedContextRetriever:
         resolve_event: EventResolver,
         reranker: Reranker | None = None,
         candidate_multiplier: int = 4,
+        candidate_limit: int | None = None,
     ) -> None:
         if type(candidate_multiplier) is not int or candidate_multiplier < 1:
             raise ValueError("candidate_multiplier must be positive")
+        if candidate_limit is not None and (
+            type(candidate_limit) is not int or not 1 <= candidate_limit <= 1000
+        ):
+            raise ValueError("candidate_limit must be between 1 and 1000")
         self.store, self.strategy = store, strategy
         self.resolve_event, self.reranker = resolve_event, reranker
         self.candidate_multiplier = candidate_multiplier
+        self.candidate_limit = candidate_limit
 
     async def search_evidence(
         self, scope: MemoryScope, query: str, *, limit: int = 10
@@ -109,7 +115,7 @@ class AttributedContextRetriever:
             filters=MemoryFilter(
                 kinds={MemoryKind.EVENT}, states={MemoryState.CONFIRMED}
             ),
-            limit=limit * self.candidate_multiplier,
+            limit=self.candidate_limit or limit * self.candidate_multiplier,
         )
         rejected: Counter[str] = Counter()
         if bound_scope.scope_key != expected_scope_key:

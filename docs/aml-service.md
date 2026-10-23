@@ -2,7 +2,7 @@
 
 Status: repository-only experimental HTTP service. **Not deployed, submitted,
 highest-config retrieval, a leaderboard score or an approved academic profile.**
-The shipped backend is explicitly `bm25-raw-smoke-v1`: file-backed SQLite raw
+The default backend is explicitly `bm25-raw-smoke-v1`: file-backed SQLite raw
 history + the existing scoped BM25/attribution retrieval path. No LLM, embeddings,
 graph building, miner, automatic fact confirmation or source-review calls happen
 on add/search. This is a deployable transport baseline, not a quality upgrade.
@@ -77,19 +77,72 @@ fallback for it. That backend must independently prove durable/idempotent add,
 index readiness, authoritative scope/source reload and immediate searchability.
 The raw backend's receipt promises only its fresh Store-backed lexical path.
 
-High-config vector/reranker/optional typed-graph composition is **not wired into
-this CLI**. Existing local50-case quality results are not measurements of this
-new HTTP smoke profile. Do not point an official evaluation at it while claiming
-the highest configuration. Model-profile compliance, hosting/TLS/reverse-proxy
+An explicit **local-hybrid** CLI profile now wires PostgreSQL authority, pgvector,
+BM25/vector RRF60 and an offline cross-encoder through the same attributed path.
+It is a raw-history retrieval profile, **not** the full structured-memory/time/
+typed-graph configuration. Its live PostgreSQL/model acceptance is still pending;
+the new tests exercise real HTTP/SQLite journals with fake index/model boundaries.
+Existing local50-case quality results are not measurements of this new service.
+Do not claim the highest configuration. Model-profile compliance, hosting/TLS/reverse-proxy
 limits, external access, benchmark credentials and actual official smoke remain
 separate, unfinished acceptance steps. No public listener or paid hosting was
 started by the local tests. Do not open this service publicly without deployment
 review; the bearer token authenticates the adapter caller, not independent users.
 
+### Explicit local-hybrid profile
+
+Use an environment with `asyncpg`, `fastembed`, `sentence-transformers` and the
+server extra installed. Reuse an existing compatible GPU environment if desired;
+installing a new CUDA stack is not part of service startup. This profile never
+downloads weights or invokes a paid LLM. Embedding is CPU-only small Chinese BGE;
+the reranker device is explicit (`cpu` default, `cuda` opt-in). It is **not** the
+text-embedding-v4 academic profile. Both model directories are content-fingerprinted.
+
+```powershell
+# Set the DSN in this shell using your existing PostgreSQL credentials.
+# Do not commit it or paste it into reports.
+$env:DOPPEL_AML_PG_DSN = 'postgresql://USER:PASSWORD@127.0.0.1:PORT/DATABASE'
+.\.venv\Scripts\python.exe -m integrations.aml.service `
+  --directory data/aml-local-hybrid --namespace local-hybrid-v1 --bind-owner-roles `
+  --profile local-hybrid --pg-schema aml_local_hybrid_v1 `
+  --embedding-model-path PATH_TO_EXISTING_BGE_SMALL_ZH_ONNX_DIRECTORY `
+  --reranker-model-path D:\project\.doppel-eval-models\bge-reranker-v2-m3 `
+  --reranker-device cpu
+```
+
+The embedding directory must be the **actual ONNX model directory**, not the
+outer FastEmbed cache. Provision pgvector in the database first. Startup may
+create the named schema/tables, but does not enable extensions, delete/reset
+schemas or rebuild a graph. Use a new dedicated schema and state directory, not
+an evaluation database/schema. Keep model files immutable while serving.
+
+The journal binds namespace, roles, DB target fingerprint (no password), model
+artifacts/package versions, reranker device and retrieval policy. Changed profile
+refuses the old directory; no automatic migration or fallback. PostgreSQL owns
+raw records and vectors; the local directory owns the durable source/write journal
+and must also be retained/backed up. This is a single-host composition, not a
+distributed service. It does not import any benchmark implementation.
+
+Each add batches local embedding/index writes, then checks **every source's exact
+scope, version and authoritative fingerprint** in the index before success. Failed
+or interrupted indexing leaves the scope pending; same-request retry repairs it.
+Completed-source retry is separately marked pending during index revalidation;
+failure cannot turn it into a fresh ingest or resurrect deleted sources. Sources
+are never promoted to owner facts. Search uses a fixed80-candidate fused window,
+then content-only cross-encoder ordering and final Store/provenance reload. At
+most80 snippets are returned even if a larger top_k is requested. A vector/model
+failure is an error, not a silently relabeled BM25 success. Model token cap8192
+and cumulative truncated-pair count are explicit on the local reranker object;
+neither byte packing nor answer generation is added by this HTTP profile.
+
+Local inference runs in worker threads; cancellation cannot preempt already
+running ONNX/PyTorch work. Default HTTP timeout is not a hard compute deadline.
+No real service throughput/latency or quality gain is claimed by fake-provider tests.
+
 Run interface/restart tests:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_aml_service.py tests/test_aml_contract.py tests/test_aml_ingestion.py tests/test_aml_evidence.py tests/test_aml_evidence_representation.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_aml_service.py tests/test_aml_retrieval_profile.py tests/test_aml_contract.py tests/test_aml_ingestion.py tests/test_aml_evidence.py tests/test_aml_evidence_representation.py -q
 ```
 
 The service tests use real temporary SQLite databases and HTTP serialization.

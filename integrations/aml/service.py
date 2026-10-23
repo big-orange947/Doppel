@@ -1,4 +1,4 @@
-"""Runnable repository-only AML transport and zero-LLM lexical smoke backend.
+"""Runnable repository-only AML transport with explicit raw retrieval profiles.
 
 Not the high-config retrieval profile or an official/compliant evaluation claim.
 """
@@ -18,6 +18,8 @@ from pydantic import ValidationError
 
 from doppel_memory import ChatMessage, SQLiteStore
 from doppel_memory.lexical import BM25RetrievalStrategy
+from doppel_memory.models import MemoryRecord
+from doppel_memory.store import MemoryStore
 from integrations.aml.context import AttributedContextRetriever
 from integrations.aml.contract import (
     AddRequest,
@@ -30,16 +32,25 @@ from integrations.aml.contract import (
     payload_fingerprint,
     write_key,
 )
+from integrations.aml.retrieval import RawRetrievalProfile
 
 
 class SQLiteRawBackend:
     """Raw-only durable writes with fail-closed partial-ingest visibility.
 
-    The SQLite journal coordinates cooperating local instances, not unrelated
-    writers/distributed hosts. No model/index calls or destructive migrations.
+    A SQLite journal coordinates cooperating local instances, not distributed
+    hosts. Default Store/retrieval is SQLite/BM25; custom profiles are explicit.
     """
 
-    def __init__(self, directory: Path, *, namespace: str, role_actors: dict[str, str]):
+    def __init__(
+        self,
+        directory: Path,
+        *,
+        namespace: str,
+        role_actors: dict[str, str],
+        store: MemoryStore | None = None,
+        retrieval: RawRetrievalProfile | None = None,
+    ):
         if not namespace.strip() or role_actors != {
             "user": "owner",
             "assistant": "agent",
@@ -47,8 +58,13 @@ class SQLiteRawBackend:
             raise ValueError(
                 "explicit owner/historical-assistant role binding required"
             )
+        if store is not None and retrieval is None:
+            raise ValueError("a custom Store requires an explicit retrieval profile")
         directory.mkdir(parents=True, exist_ok=True)
-        self.store = SQLiteStore(str(directory / "raw.sqlite3"))
+        self.store = (
+            store if store is not None else SQLiteStore(str(directory / "raw.sqlite3"))
+        )
+        self.retrieval = retrieval
         self.journal = sqlite3.connect(
             directory / "service-journal.sqlite3", isolation_level=None, timeout=0
         )
@@ -64,7 +80,7 @@ class SQLiteRawBackend:
                 "version": 1,
                 "namespace": namespace,
                 "roles": role_actors,
-                "strategy": "bm25-raw-smoke-v1",
+                "strategy": retrieval.identity if retrieval else "bm25-raw-smoke-v1",
             },
             sort_keys=True,
         )
@@ -81,8 +97,10 @@ class SQLiteRawBackend:
         self.lock = asyncio.Lock()
         self.retriever = AttributedContextRetriever(
             self.store,
-            strategy=BM25RetrievalStrategy(),
+            strategy=retrieval.strategy if retrieval else BM25RetrievalStrategy(),
             resolve_event=self.resolve_event,
+            reranker=retrieval.reranker if retrieval else None,
+            candidate_limit=retrieval.candidate_limit if retrieval else None,
         )
 
     async def resolve_event(self, scope, identity):
@@ -117,7 +135,7 @@ class SQLiteRawBackend:
                 if row and row[:2] != (payload, scope.scope_key):
                     raise WriteConflict("request identity reused with changed payload")
                 if self.journal.execute(
-                    "SELECT 1 FROM writes WHERE scope=? AND done=0 AND key<>? LIMIT 1",
+                    "SELECT 1 FROM writes WHERE scope=? AND done<>1 AND key<>? LIMIT 1",
                     (scope.scope_key, key),
                 ).fetchone():
                     raise WriteNotReady("repair unfinished request before another add")
@@ -126,10 +144,17 @@ class SQLiteRawBackend:
                     "INSERT OR IGNORE INTO writes VALUES (?,?,?,?,0)",
                     (key, payload, scope.scope_key, observed),
                 )
+                if self.retrieval is not None and row and row[3]:
+                    # -1 preserves source completion across a failed index repair;
+                    # retries must validate, never rewrite/resurrect, those sources.
+                    self.journal.execute(
+                        "UPDATE writes SET done=-1 WHERE key=?", (key,)
+                    )
                 self.journal.execute(
                     "COMMIT"
                 )  # durable pending marker before Store writes
                 self.journal.execute("BEGIN IMMEDIATE")
+                records: list[MemoryRecord] = []
                 for index, (identity, message) in enumerate(
                     zip(event_ids(scope, request), request.messages, strict=True)
                 ):
@@ -182,6 +207,11 @@ class SQLiteRawBackend:
                         "INSERT OR REPLACE INTO sources VALUES (?,?,?)",
                         (scope.scope_key, identity, stored.memory_id),
                     )
+                    records.append(stored)
+                # The durable pending marker remains visible if indexing fails.
+                # Never acknowledge a hybrid write on lexical readiness alone.
+                if self.retrieval is not None:
+                    await self.retrieval.prepare_records(records)
                 self.journal.execute("UPDATE writes SET done=1 WHERE key=?", (key,))
                 self.journal.execute("COMMIT")
             except BaseException:
@@ -199,7 +229,7 @@ class SQLiteRawBackend:
     async def search(self, scope, request):
         async with self.lock:
             if self.journal.execute(
-                "SELECT 1 FROM writes WHERE scope=? AND done=0 LIMIT 1",
+                "SELECT 1 FROM writes WHERE scope=? AND done<>1 LIMIT 1",
                 (scope.scope_key,),
             ).fetchone():
                 raise WriteNotReady("scope has unfinished ingestion")
@@ -331,26 +361,63 @@ def main():
     parser.add_argument("--bind-owner-roles", action="store_true", required=True)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--profile", choices=("bm25", "local-hybrid"), default="bm25")
+    parser.add_argument("--pg-schema")
+    parser.add_argument("--embedding-model-path", type=Path)
+    parser.add_argument("--reranker-model-path", type=Path)
+    parser.add_argument("--reranker-device", default="cpu")
     args = parser.parse_args()
     token = os.environ.get("DOPPEL_AML_BEARER_TOKEN", "")
     if not token.strip():
         parser.error("DOPPEL_AML_BEARER_TOKEN must be set")
-    import uvicorn  # optional server extra; no model/provider keys read
-
-    backend = SQLiteRawBackend(
-        args.directory,
-        namespace=args.namespace,
-        role_actors={"user": "owner", "assistant": "agent"},
-    )
-    app = TextualASGI(
-        TextualBoundary(backend, namespace=args.namespace), bearer_token=token
-    )
-    try:
-        uvicorn.run(
-            app, host=args.host, port=args.port, access_log=False, log_level="warning"
+    if args.profile == "local-hybrid" and not (
+        args.pg_schema
+        and args.embedding_model_path
+        and args.reranker_model_path
+        and os.environ.get("DOPPEL_AML_PG_DSN", "").strip()
+    ):
+        parser.error(
+            "local-hybrid requires DOPPEL_AML_PG_DSN, --pg-schema and both local model paths"
         )
-    finally:
-        asyncio.run(backend.close())
+
+    async def serve():
+        import uvicorn  # optional dependency; no LLM/provider keys read
+
+        if args.profile == "local-hybrid":
+            from integrations.aml.retrieval import create_local_hybrid_backend
+
+            backend = await create_local_hybrid_backend(
+                args.directory,
+                namespace=args.namespace,
+                dsn=os.environ["DOPPEL_AML_PG_DSN"],
+                schema=args.pg_schema,
+                embedding_model_path=args.embedding_model_path,
+                reranker_model_path=args.reranker_model_path,
+                reranker_device=args.reranker_device,
+            )
+        else:
+            backend = SQLiteRawBackend(
+                args.directory,
+                namespace=args.namespace,
+                role_actors={"user": "owner", "assistant": "agent"},
+            )
+        app = TextualASGI(
+            TextualBoundary(backend, namespace=args.namespace), bearer_token=token
+        )
+        try:
+            await uvicorn.Server(
+                uvicorn.Config(
+                    app,
+                    host=args.host,
+                    port=args.port,
+                    access_log=False,
+                    log_level="warning",
+                )
+            ).serve()
+        finally:
+            await backend.close()
+
+    asyncio.run(serve())
 
 
 if __name__ == "__main__":

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add an explicit repository-only local-hybrid HTTP profile: PostgreSQL raw
+  authority + pgvector/BM25 RRF60 + offline content-only cross-encoder, fixed80
+  candidates, exact source/index readiness before Add success and pending index
+  repair without source resurrection. Preserve the SQLite/BM25 smoke default;
+  profile/model artifact drift fails, vector/model errors never silently fall
+  back. No eager LLM/graph calls or benchmark implementation imports.11 new
+  offline cases;23 service/profile tests pass; full2187 passed/33 skipped/three
+  subtests. Real PG/model acceptance remains
+  pending because Docker is off; no new QA score or academic compliance claim.
+  The opened diagnostic50 remains37/50 overall,30/43 answerable,7/7 negative.
+
 - Add repository-only runnable AML ASGI transport and durable raw SQLite/BM25
   smoke backend: authenticated bounded add/search, exact opaque IDs, attributed
   cross-session evidence, restart idempotence/conflict handling, pending-write
