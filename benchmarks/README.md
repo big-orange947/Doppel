@@ -11,6 +11,10 @@ Latest opened50 diagnostics: [candidate80/160 comparison](reports/public-memory-
 and [zero-model24/48/96KB budget curve](reports/public-memory-context-budget-result-2026-10-23.md).
 Larger contexts recover packing losses, not sources absent from top20; the
 historical37/50 QA score and runtime defaults remain unchanged.
+The [fixed Reader downstream budget comparison](reports/public-memory-context-budget-qa-result-2026-10-23.md)
+completes all50:24/48/96KB score37/36/37, with borderline judge/commitment effects
+and no demonstrated net QA gain. Resource expansion is not an algorithm gain;
+old answers, grades and runtime defaults remain unchanged.
 `python -m benchmarks.public_longmemeval` checks the official cleaned LongMemEval
 format and projects history separately from scoring labels. It is zero-model
 preparation, not a retrieval/QA benchmark result or an AML academic model profile.

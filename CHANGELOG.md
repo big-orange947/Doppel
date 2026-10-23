@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Complete fixed80 downstream24/48/96KB comparison on all50 opened cases:
+  37/36/37 correct, positive30/29/30 of43, negatives7/7 each. Annotation gains
+  do not produce net QA gain; preserve borderline judge/commitment ambiguity,
+  paired regressions and old37/50. Do not promote defaults.58 Reader+56 judge
+  calls/756652 observed tokens; exact-request reuse, immutable baseline and
+  keyless zero-new-call replay with identical answers/grades/checks/summary.
+  8 new offline tests; full2287 passed/33 skipped/three subtests, Ruff/Pyright clean.
+
 - Replay saved ordered top20 for all50 opened cases at24/48/96KB with no model,
   retrieval, DB or paid calls. Candidate80 packed annotations60/64/66 of76;
   candidate160 56/59/59. Larger budgets cannot repair10/17 annotations outside
