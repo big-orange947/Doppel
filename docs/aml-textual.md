@@ -1,6 +1,11 @@
 # AML Textual preparation
 
 Status: **experimental local contracts, not a submitted or deployed service**.
+Update2026-10-23: a [runnable local HTTP smoke service](aml-service.md) now exists,
+including durable raw SQLite/BM25 composition, bearer authentication, bounded
+requests and restart/partial-write tests. It is not the high-config retrieval
+backend, model-compliant submission or public deployment. Historical statements
+below describing missing hosting refer to the original contract-only stage.
 Decision date: 2026-10-06. Track: Textual; division: academic/open-source methods.
 Initial user budget ceiling: **CNY 1,000**. This document grants no authority to
 purchase hosting, disclose credentials, start paid calls or launch Full evaluation.
@@ -82,9 +87,10 @@ It implements the Textual request/response boundary following the
   requires source IDs, and never pads to 100 or generates an answer. Source-ID
   existence and semantic binding still require authoritative Store verification.
 
-An eventual HTTP host must serialize with `mode="json", exclude_none=True`, so
+The HTTP host serializes with `mode="json", exclude_none=True`, so
 absent optional scores/dates are omitted and timestamps are ISO strings. Hosting,
-authentication and payload-size/concurrency limits are not implemented here.
+authentication and payload-size/concurrency limits are implemented separately in
+`service.py`; the contracts themselves still do not implement those controls.
 
 Run zero-paid local tests from the repository root:
 

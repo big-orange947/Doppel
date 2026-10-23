@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add repository-only runnable AML ASGI transport and durable raw SQLite/BM25
+  smoke backend: authenticated bounded add/search, exact opaque IDs, attributed
+  cross-session evidence, restart idempotence/conflict handling, pending-write
+  isolation and source revocation revalidation. No eager LLM/graph or model calls.
+  Explicitly not the high-config/compliant submission profile; optional server
+  dependency only. Existing quality scores are not service smoke scores.
+
 - Finish9-call source-review diagnosis:8/8 authored controls match, but real
   windows reveal2 completion errors from one source and1 owner-claim false
   positive. Preserve that failed hard-filter result; annotation-only zero-call
