@@ -7,6 +7,16 @@ model profile, external leaderboard score or release gate.
 
 ## Current prospective run: source preparation is not answer accuracy
 
+Packing diagnosis2026-10-23: frozen50 positive stage accounting rechecks72/76
+candidate→66/76 top20→60/76 packed. Exact top20/context replay is available for30
+cases (26 positives/4 negatives); remaining20 full rerank orders are not saved
+in their preparation receipts. Optional lossless metadata retain+fill adds41
+messages but stays36/42 annotations, while repack loses3 annotations in2 cases.
+No default promotion, Reader/judge call or QA gain. An initial negative-annotation
+denominator mistake is preserved and corrected without changing any selections.
+See the [full result](../benchmarks/reports/public-memory-packing-replay-result-2026-10-23.md).
+Full2253 passed/33 skipped/three subtests,25 new codec/replay tests; no model calls.
+
 Operational follow-up2026-10-23: authenticated health/readiness, startup dependency
 probe, explicit transport bounds and non-loopback bind guard now exist. Strict
 PG URI target binding rejects query overrides without persisting credentials.

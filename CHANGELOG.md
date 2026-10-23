@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Diagnose context losses with a zero-model read-only replay: reproduce all30
+  saved top20 contexts exactly (26 positives/4 negatives), plus frozen50 stage
+  accounting. Optional lossless metadata codec retain+fill adds41 messages but
+  stays36/42 annotations; repack drops to33/42 across2 cases. Do not promote
+  packing or change37/50 QA/default protocols. Preserve initial negative-label
+  denominator mistake and corrected report with identical selections.25 new
+  tests; full2253 passed/33 skipped/three subtests. No paid/model/graph/retrieval
+  reruns or source writes; existing uv.lock untouched.
+
 - Add authenticated liveness/readiness and pre-listen dependency checks for the
   repository service; explicit request bounds, finite-value validation, safe
   non-loopback opt-in and no trusted forwarded headers. Canonical PG target
