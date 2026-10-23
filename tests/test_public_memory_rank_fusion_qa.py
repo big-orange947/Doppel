@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 
 import pytest
@@ -123,3 +124,53 @@ def test_gain_does_not_override_other_guards(damage):
         data.pop()
     result = final.summarize(data)
     assert result["selection"]["profile"] == (None if damage == "incomplete" else "bge")
+
+
+def test_recovery_subtracts_original_spend_and_preserves_requests(monkeypatch):
+    plan = {
+        "input_sha256": {},
+        "arms": ["bge", "fusion"],
+        "requests": ["same"],
+        "rrf_k": 60,
+        "weights": "equal",
+        "decision": "frozen",
+        "minimum_net_gain_to_select_fusion": 3,
+        "code_sha256": {"shared": "same", final.__file__: "new"},
+        "stages": {
+            name: {"max_calls": 50, "config": {"model": "same"}}
+            for name in ("reader", "judge")
+        },
+    }
+    old = deepcopy(plan)
+    old["plan_fingerprint"] = "original"
+    old["code_sha256"][final.__file__] = "old"
+    prior = {
+        "status": "failed",
+        "plan": old,
+        "usage": {
+            name: {
+                "ledger": {
+                    "attempts_reserved": count,
+                    "attempt_status_counts": {
+                        "failed": int(name == "reader"),
+                        "reserved": 0,
+                        "interrupted": 0,
+                    },
+                }
+            }
+            for name, count in (("reader", 3), ("judge", 2))
+        },
+    }
+    raw = json.dumps(prior).encode()
+    monkeypatch.setattr(final, "FAILED_REPORT_SHA", final.sha(raw))
+    recovered = final.recovery_plan(plan, raw)
+    assert recovered["stages"]["reader"]["max_calls"] == 48
+    assert recovered["stages"]["judge"]["max_calls"] == 48
+    assert recovered["requests"] == ["same"]
+    assert old["stages"]["reader"]["max_calls"] == 50
+    changed = deepcopy(plan)
+    changed["requests"] = ["changed"]
+    with pytest.raises(ValueError):
+        final.recovery_plan(changed, raw)
+    with pytest.raises(ValueError):
+        final.recovery_plan(plan, b"different report")

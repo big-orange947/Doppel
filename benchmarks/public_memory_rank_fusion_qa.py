@@ -29,6 +29,59 @@ SOURCE = Path("data/doppel/rank-fusion-local-v1.json")
 SOURCE_SHA = "6e6b8c911ace18b75fe8a0d64efa9c9af8f304d8af0a8a625cb3600bf7c85208"
 ARMS = ("bge", "fusion")
 MIN_NET_GAIN = 3
+FAILED_REPORT_SHA = "bf7abffe0e9b79c2522568c5d31c5d1b584059c07fda078046d4061c7d380aeb"
+
+
+def recovery_plan(plan, raw):
+    """One explicitly approved recovery; prior spend is subtracted, never reset."""
+    if sha(raw) != FAILED_REPORT_SHA:
+        raise ValueError("only the preserved original failure is authorized")
+    prior = json.loads(raw)
+    old = prior["plan"]
+    for key in (
+        "input_sha256",
+        "arms",
+        "requests",
+        "rrf_k",
+        "weights",
+        "decision",
+        "minimum_net_gain_to_select_fusion",
+    ):
+        if old[key] != plan[key]:
+            raise ValueError("recovery changed frozen inputs or decision")
+    if any(
+        value != plan["code_sha256"].get(key)
+        for key, value in old["code_sha256"].items()
+        if key != __file__
+    ):
+        raise ValueError("Reader/judge/shared dependency changed")
+    if prior["status"] != "failed" or old.get("recovery") is not None:
+        raise ValueError("only one recovery from the original failure is permitted")
+    result = {key: value for key, value in plan.items() if key != "plan_fingerprint"}
+    result["stages"] = {name: dict(limits) for name, limits in plan["stages"].items()}
+    spent = {}
+    for name, cap in (("reader", 51), ("judge", 50)):
+        ledger = prior["usage"][name]["ledger"]
+        counts = ledger["attempt_status_counts"]
+        if (
+            counts["reserved"]
+            or counts["interrupted"]
+            or counts["failed"] != (1 if name == "reader" else 0)
+        ):
+            raise ValueError("unexpected original attempt state")
+        if old["stages"][name]["config"] != result["stages"][name]["config"]:
+            raise ValueError("recovery model configuration changed")
+        spent[name] = ledger
+        result["stages"][name]["max_calls"] = cap - ledger["attempts_reserved"]
+    result["recovery"] = {
+        "authorized_once": True,
+        "prior_report_sha256": sha(raw),
+        "prior_plan_fingerprint": old["plan_fingerprint"],
+        "prior_usage": spent,
+        "cumulative_call_caps": {"reader": 51, "judge": 50},
+        "policy": "same requests/config; reuse successful caches; stop on any further failure",
+    }
+    return {**result, "plan_fingerprint": _hash(result)}
 
 
 def prepare():
@@ -318,10 +371,15 @@ def main():
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--cache-only", action="store_true")
     parser.add_argument("--cache-parent", type=Path, action="append", default=[])
+    parser.add_argument("--recover-from", type=Path)
     args = parser.parse_args()
     if args.output.exists():
         parser.error("fresh output required")
     plan, queue, snapshots = prepare()
+    if args.recover_from:
+        plan = recovery_plan(plan, args.recover_from.read_bytes())
+        if args.execute and not args.cache_parent:
+            parser.error("recovery requires read-only successful-output caches")
     result = {"plan": plan, "status": "ready"}
     if args.execute:
         if (
