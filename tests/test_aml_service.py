@@ -237,7 +237,8 @@ async def test_completed_retry_cannot_claim_revoked_sources_searchable_or_resurr
     await host.close()
 
 
-async def test_actual_tcp_process_restart(tmp_path):
+@pytest.mark.parametrize("competition_transport", [False, True])
+async def test_actual_tcp_process_restart(tmp_path, competition_transport):
     import os
     import socket
     import subprocess
@@ -261,11 +262,14 @@ async def test_actual_tcp_process_restart(tmp_path):
         "--bind-owner-roles",
         "--port",
         str(port),
+        *(["--public-health", "--omit-search-scores"] if competition_transport else []),
     ]
+    profile_id = ""
     for run in range(2):
+        invocation = command + (["--expected-profile-id", profile_id] if run else [])
         process = await asyncio.to_thread(
             subprocess.Popen,
-            command,
+            invocation,
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -295,6 +299,12 @@ async def test_actual_tcp_process_restart(tmp_path):
                 health = await c.get("/healthz")
                 ready = await c.get("/readyz")
                 assert health.json() == {"status": "alive"}
+                assert (
+                    await c.get("/healthz", headers={"Authorization": ""})
+                ).status_code == (200 if competition_transport else 401)
+                assert (
+                    await c.get("/readyz", headers={"Authorization": ""})
+                ).status_code == 401
                 assert ready.status_code == 200 and ready.json()["status"] == "ready"
                 assert len(ready.json()["profile_id"]) == 64
                 if run == 0:
@@ -303,6 +313,10 @@ async def test_actual_tcp_process_restart(tmp_path):
                 else:
                     assert ready.json()["profile_id"] == profile_id
                     assert len(response.json()["data"]) == 2
+                    assert all(
+                        ("score" not in row) == competition_transport
+                        for row in response.json()["data"]
+                    )
                     assert (await c.post("/add", json=payload())).status_code == 200
         finally:
             process.terminate()

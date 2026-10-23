@@ -190,6 +190,9 @@ def test_bounds_reject_invalid_values(config):
         ["--rerank-policy", "rank-fusion"],
         ["--rerank-policy", "bge"],
         ["--profile", "local-hybrid", "--rerank-policy", "unknown"],
+        ["--expected-profile-id", "not-a-digest"],
+        ["--expected-profile-id", "A" * 64],
+        ["--expected-profile-id", "a" * 63],
     ],
 )
 def test_cli_bad_bounds_fail_before_creating_state(
@@ -297,3 +300,125 @@ def test_postgres_identity_rejects_implicit_targets_and_query_overrides(dsn):
     with pytest.raises(ValueError) as error:
         postgres_target_identity(dsn, "s")
     assert "SECRET" not in str(error.value)
+
+
+async def test_opt_in_public_health_discloses_no_readiness_or_sources(tmp_path):
+    host = make_host(tmp_path)
+    _, c = client(host, public_health=True)
+    async with c:
+        for authorization in ("", "Bearer wrong"):
+            headers = {"Authorization": authorization}
+            health = await c.get("/healthz", headers=headers)
+            assert health.status_code == 200
+            assert health.json() == {"status": "alive"}
+            assert health.headers["cache-control"] == "no-store"
+            assert (await c.get("/readyz", headers=headers)).status_code == 401
+            assert (await c.post("/healthz", headers=headers)).status_code == 401
+            assert (await c.post("/add", headers=headers, json={})).status_code == 401
+            assert (
+                await c.post("/search", headers=headers, json={})
+            ).status_code == 401
+        await host.close()
+        assert (
+            await c.get("/healthz", headers={"Authorization": ""})
+        ).status_code == 200
+        assert (await c.get("/readyz")).status_code == 503
+
+
+async def test_score_omission_is_transport_only_without_reordering_or_source_changes(
+    tmp_path,
+):
+    host = make_host(tmp_path)
+    _, original_client = client(host)
+    _, projected_client = client(host, omit_search_scores=True)
+    write = {
+        "request_id": "r",
+        "user_id": "u",
+        "session_id": "s",
+        "messages": [
+            {"role": "user", "content": "My telescope is with Morgan."},
+            {"role": "assistant", "content": "I suggested a telescope case."},
+        ],
+    }
+    query = {"user_id": "u", "query": "telescope", "top_k": 100}
+    async with original_client as original, projected_client as projected:
+        added = await projected.post("/add", json=write)
+        assert added.status_code == 200 and added.json()["success"] is True
+        before = (await original.post("/search", json=query)).json()
+        after = (await projected.post("/search", json=query)).json()
+        assert len(before["data"]) == 2
+        assert all("score" in row for row in before["data"])
+        assert all("score" not in row for row in after["data"])
+        assert after == {
+            "data": [
+                {k: v for k, v in row.items() if k != "score"} for row in before["data"]
+            ]
+        }
+        assert (await original.post("/search", json=query)).json() == before
+    await host.close()
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"public_health": 1},
+        {"public_health": "yes"},
+        {"omit_search_scores": None},
+        {"omit_search_scores": 0},
+    ],
+)
+def test_transport_switches_are_strict_booleans(tmp_path, config):
+    host = make_host(tmp_path)
+    try:
+        with pytest.raises(ValueError, match="boolean"):
+            client(host, **config)
+    finally:
+        asyncio.run(host.close())
+
+
+@pytest.mark.parametrize("pin", ["correct", "wrong", "none"])
+def test_expected_profile_is_checked_before_listening_and_backend_is_closed(
+    tmp_path, monkeypatch, pin
+):
+    uvicorn = pytest.importorskip("uvicorn")
+    from integrations.aml import service
+
+    host = make_host(tmp_path)
+    served = []
+
+    class FakeServer:
+        def __init__(self, config):
+            served.append(config.app)
+
+        async def serve(self):
+            pass
+
+    monkeypatch.setattr(service, "SQLiteRawBackend", lambda *a, **kw: host)
+    monkeypatch.setattr(uvicorn, "Server", FakeServer)
+    monkeypatch.setenv("DOPPEL_AML_BEARER_TOKEN", "synthetic-test-token")
+    expected = host.profile_id if pin == "correct" else "0" * 64
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "service",
+            "--directory",
+            str(tmp_path),
+            "--namespace",
+            "deployment-test",
+            "--bind-owner-roles",
+            "--public-health",
+            "--omit-search-scores",
+            *(["--expected-profile-id", expected] if pin != "none" else []),
+        ],
+    )
+    if pin == "wrong":
+        with pytest.raises(ValueError, match="does not match expected"):
+            main()
+        assert not served
+    else:
+        main()
+        assert len(served) == 1
+        assert served[0].public_health and served[0].omit_search_scores
+        assert served[0].profile_id == host.profile_id
+    assert host._closed

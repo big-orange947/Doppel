@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add explicit AML-facing transport compatibility: opt-in unauthenticated constant
+  GET health only, optional wire-score omission after reranking, and expected
+  profile-ID pinning before listening. Keep existing auth/score defaults; ready,
+  add and search remain protected. Extend real local-model smoke with transport/
+  runtime receipts, formal top_k100 and pinned restart; no paid calls, graph build
+  or old-data reset. Official model/hosting/Smoke acceptance remains separate.
+  Full2370 passed/33 skipped/three subtests; Ruff/Pyright clean. Default and
+  opted-in TCP restart tests both pass; preexisting uv.lock remains unstaged.
+
 - Expose locked equal-RRF60 retrieval/neural ordering as explicit local-hybrid
   `--rerank-policy rank-fusion`; preserve the legacy BGE default/profile identity.
   Bind the new policy/delegate identity to the durable journal; reject drift or

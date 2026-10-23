@@ -20,6 +20,45 @@ device and request bounds. Choose the profile explicitly:
   choice: switching policies refuses the same journal directory. Neither option
   installs downstream24KB context packing or generates answers.
 
+### AML-facing transport switches
+
+Rechecked the [official API guide](https://agentmemoryleaderboard.ai/api-guide)
+on2026-10-23: Health is an unauthenticated GET, formal Search requests use
+`top_k=100` as an upper bound, and optional scores must indicate relevance.
+These are interface checks, not an official Smoke result.
+
+For the prospective AML-facing local-hybrid configuration, explicitly add:
+
+```text
+--profile local-hybrid --rerank-policy rank-fusion
+--public-health --omit-search-scores
+```
+
+`--public-health` exposes only GET `/healthz` and the constant `{"status":"alive"}`.
+It never reads the Store or reveals a profile ID. `/readyz`, `/add` and `/search`
+still require the service bearer token. Other methods/paths do not bypass auth.
+Without this option the old authenticated health behavior remains unchanged.
+
+`--omit-search-scores` removes only the optional top-level item `score` from
+Search's wire response. The returned rank order, IDs, content/attribution and
+timestamps are unchanged. It never sorts again or mutates internal scores.
+Neural/fusion ordering can differ from the original retrieval-score order;
+omission avoids presenting that old score as the final ranking's relevance.
+Default serialization is unchanged. Neither switch certifies model compliance.
+
+On first boot, capture `profile_id` from authenticated `/readyz`. On subsequent
+starts, supply `--expected-profile-id LOWERCASE_64_CHARACTER_DIGEST`. A malformed
+pin fails before opening state. A valid but mismatched pin closes the backend
+and fails before listening; model/schema initialization may already have run.
+It does not reset/migrate data. Normal journal drift protection still applies.
+
+The profile ID does **not** bind these transport switches, HTTP bounds, listener,
+token, TLS proxy or all runtime packages. Record them alongside the pin, rather
+than claiming the pin freezes the entire deployment. The live smoke's report
+now records its explicit transport settings and relevant runtime versions; use
+`--public-health --omit-search-scores --pin-restart-profile` with a new dedicated
+smoke schema/directory to rehearse this configuration without paid calls.
+
 Use the same directory and namespace after restart. Do not switch profiles or
 model files in place. Keep journal and authoritative DB backups consistent; a DB
 alone does not contain this adapter's complete write/source mapping. Never point
@@ -65,7 +104,8 @@ Do not raise limits as a substitute for a measured deployment workload.
 
 ## Liveness and readiness
 
-All routes, including probes, require the same bearer token:
+By default all routes, including probes, require the same bearer token. With
+`--public-health`, only the constant GET `/healthz` is exempt:
 
 ```powershell
 $headers = @{Authorization = "Bearer $env:DOPPEL_AML_BEARER_TOKEN"}
@@ -83,6 +123,8 @@ Invoke-RestMethod http://127.0.0.1:8000/readyz -Headers $headers
   Record those settings separately. This is not a content hash of user histories.
 - Wrong/missing credentials:401. Wrong method/path:404. Failed readiness returns
   only a generic error, not source data, DB identifiers, DSNs or exception text.
+  The opt-in public GET `/healthz` exception also returns200 with no/wrong token;
+  it says nothing about readiness or authorization to use any other route.
 
 CLI startup performs the backend probe **before listening**. The probe checks
 journal access, an exact-scope Store point read, and (for local-hybrid) existing

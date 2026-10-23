@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from datetime import UTC, datetime
+from importlib.metadata import version
 from pathlib import Path
 
 import httpx
@@ -171,6 +172,8 @@ async def run(args) -> dict:
         args.rerank_policy,
         "--port",
         str(port),
+        *(["--public-health"] if args.public_health else []),
+        *(["--omit-search-scores"] if args.omit_search_scores else []),
     ]
     report = {
         "runner": "doppel.aml-local-hybrid-smoke.v1",
@@ -183,14 +186,43 @@ async def run(args) -> dict:
         "model_downloads_allowed": False,
         "fixtures_retained": True,
         "phases": [],
+        "transport": {
+            "public_health": args.public_health,
+            "omit_search_scores": args.omit_search_scores,
+            "pin_restart_profile": args.pin_restart_profile,
+            "host": "127.0.0.1",
+            "request_timeout_seconds": 30,
+            "max_body_bytes": 2_000_000,
+            "max_messages": 1000,
+            "max_results": 1000,
+            "max_concurrency": 8,
+        },
+        "runtime": {
+            "python": sys.version.split()[0],
+            "platform": sys.platform,
+            "packages": {
+                name: version(name)
+                for name in (
+                    "fastembed",
+                    "sentence-transformers",
+                    "torch",
+                    "asyncpg",
+                    "uvicorn",
+                )
+            },
+        },
     }
     before = None
     profile_id = None
     try:
         for phase in ("initial", "restart"):
+            invocation = list(command)
+            if phase == "restart" and args.pin_restart_profile:
+                assert profile_id is not None
+                invocation += ["--expected-profile-id", profile_id]
             process = await asyncio.to_thread(
                 subprocess.Popen,
-                command,
+                invocation,
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -225,6 +257,15 @@ async def run(args) -> dict:
                     health = await client.get("/healthz")
                     assert health.status_code == 200
                     assert health.json() == {"status": "alive"}
+                    public_health = await client.get(
+                        "/healthz", headers={"Authorization": ""}
+                    )
+                    assert public_health.status_code == (
+                        200 if args.public_health else 401
+                    )
+                    assert (
+                        await client.get("/readyz", headers={"Authorization": ""})
+                    ).status_code == 401
                     readiness = await client.get("/readyz")
                     assert readiness.status_code == 200
                     current_profile = readiness.json()["profile_id"]
@@ -261,8 +302,12 @@ async def run(args) -> dict:
                         f"search HTTP {result.status_code}"
                     )
                     validate_evidence(result.json())
+                    if args.omit_search_scores:
+                        assert all("score" not in row for row in result.json()["data"])
                     wide = await client.post("/search", json={**QUERY, "top_k": 1000})
                     assert wide.status_code == 200 and wide.json() == result.json()
+                    formal = await client.post("/search", json={**QUERY, "top_k": 100})
+                    assert formal.status_code == 200 and formal.json() == result.json()
                     if before is None:
                         before = result.json()
                     else:
@@ -413,6 +458,9 @@ def main():
     parser.add_argument("--reranker-model-path", type=Path, required=True)
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--rerank-policy", choices=LOCAL_RERANK_POLICIES, default="bge")
+    parser.add_argument("--public-health", action="store_true")
+    parser.add_argument("--omit-search-scores", action="store_true")
+    parser.add_argument("--pin-restart-profile", action="store_true")
     args = parser.parse_args()
     # Validate quoted SQL identifier before any DB contact.
     PostgreSQLStore(os.environ["DOPPEL_AML_PG_DSN"], schema=args.schema)

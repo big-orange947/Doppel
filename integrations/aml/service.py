@@ -12,6 +12,7 @@ import hmac
 import json
 import math
 import os
+import re
 import sqlite3
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -311,7 +312,11 @@ class TextualASGI:
         max_results: int = 1000,
         readiness_probe: Callable[[], Awaitable[None]] | None = None,
         profile_id: str = "",
+        public_health: bool = False,
+        omit_search_scores: bool = False,
     ):
+        if type(public_health) is not bool or type(omit_search_scores) is not bool:
+            raise ValueError("transport switches must be boolean")
         validate_service_bounds(
             bearer_token,
             max_body_bytes=max_body_bytes,
@@ -325,6 +330,7 @@ class TextualASGI:
         self.timeout_seconds, self.active = timeout_seconds, 0
         self.max_messages, self.max_results = max_messages, max_results
         self.readiness_probe, self.profile_id = readiness_probe, profile_id
+        self.public_health, self.omit_search_scores = public_health, omit_search_scores
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -350,6 +356,13 @@ class TextualASGI:
             )
             await send({"type": "http.response.body", "body": data})
 
+        # Only an explicitly enabled, constant liveness response bypasses auth.
+        # Never expose profile IDs, dependency state or source data here.
+        if self.public_health and (scope.get("method"), scope.get("path")) == (
+            "GET",
+            "/healthz",
+        ):
+            return await respond(200, {"status": "alive"})
         authorization = [
             v for k, v in scope.get("headers", []) if k.lower() == b"authorization"
         ]
@@ -411,7 +424,14 @@ class TextualASGI:
                 ):
                     return await respond(422, {"error": "invalid_request"})
                 return await respond(
-                    200, result.model_dump(mode="json", exclude_none=True)
+                    200,
+                    result.model_dump(
+                        mode="json",
+                        exclude_none=True,
+                        exclude={"data": {"__all__": {"score"}}}
+                        if self.omit_search_scores and scope["path"] == "/search"
+                        else None,
+                    ),
                 )
 
             await asyncio.wait_for(dispatch(), self.timeout_seconds)
@@ -440,6 +460,9 @@ def main():
     parser.add_argument("--reranker-model-path", type=Path)
     parser.add_argument("--reranker-device", default="cpu")
     parser.add_argument("--rerank-policy", choices=LOCAL_RERANK_POLICIES)
+    parser.add_argument("--public-health", action="store_true")
+    parser.add_argument("--omit-search-scores", action="store_true")
+    parser.add_argument("--expected-profile-id")
     parser.add_argument("--request-timeout-seconds", type=float, default=30)
     parser.add_argument("--max-concurrency", type=int, default=8)
     parser.add_argument("--max-body-bytes", type=int, default=2_000_000)
@@ -449,6 +472,10 @@ def main():
     args = parser.parse_args()
     if args.rerank_policy is not None and args.profile != "local-hybrid":
         parser.error("--rerank-policy requires --profile local-hybrid")
+    if args.expected_profile_id is not None and not re.fullmatch(
+        r"[0-9a-f]{64}", args.expected_profile_id
+    ):
+        parser.error("--expected-profile-id requires a lowercase SHA-256 hex digest")
     token = os.environ.get("DOPPEL_AML_BEARER_TOKEN", "")
     if not token.strip():
         parser.error("DOPPEL_AML_BEARER_TOKEN must be set")
@@ -507,12 +534,19 @@ def main():
                 role_actors={"user": "owner", "assistant": "agent"},
             )
         try:
+            if (
+                args.expected_profile_id is not None
+                and backend.profile_id != args.expected_profile_id
+            ):
+                raise ValueError("service profile does not match expected profile ID")
             await backend.ready()
             app = TextualASGI(
                 TextualBoundary(backend, namespace=args.namespace),
                 bearer_token=token,
                 readiness_probe=backend.ready,
                 profile_id=backend.profile_id,
+                public_health=args.public_health,
+                omit_search_scores=args.omit_search_scores,
                 **limits,
             )
             await uvicorn.Server(

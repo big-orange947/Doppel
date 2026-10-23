@@ -7,11 +7,16 @@ history + the existing scoped BM25/attribution retrieval path. No LLM, embedding
 graph building, miner, automatic fact confirmation or source-review calls happen
 on add/search. This is a deployable transport baseline, not a quality upgrade.
 
-Authenticated `GET /healthz` and `GET /readyz` distinguish process liveness from
+By default authenticated `GET /healthz` and `GET /readyz` distinguish liveness from
 backend/profile accessibility. Startup probes before listening; a failed readiness
 probe returns503 without private exceptions. Explicit CLI request bounds and a
 non-loopback opt-in guard are available. See the [operations runbook](aml-deployment.md)
 for profile freeze, recovery/backup boundaries and remaining public-deployment work.
+For AML-facing transport, `--public-health` optionally exposes only constant
+liveness, while readiness/data routes stay authenticated; `--omit-search-scores`
+avoids exporting pre-rerank scores as final relevance. Defaults remain unchanged.
+After first startup, `--expected-profile-id` pins the observed journal/retrieval
+identity and refuses mismatches before listening. See the runbook for boundaries.
 
 ## Local startup
 
@@ -191,6 +196,11 @@ it additionally verifies authenticated readiness/profile-ID stability, the saved
 ordering identity and `top_k=1000` behavior across both process lifetimes.
 The [fusion live acceptance report](../benchmarks/reports/aml-rank-fusion-live-2026-10-23.md)
 records the actual new schema, model/policy identity, restart checks and limits.
+The optional smoke switches `--public-health --omit-search-scores --pin-restart-profile`
+check the AML-facing transport variant, formal `top_k=100` compatibility and a
+pinned restart. Reports record effective switches/bounds and runtime versions;
+they never store bearer tokens or provider keys. These local checks do not
+request an official AML Smoke or certify academic-model compliance.
 
 Run interface/restart tests:
 
