@@ -10,6 +10,8 @@
   exact attribution, opaque-owner isolation, retry/conflict/auth, readiness/profile
   and all six Store/vector fingerprints; zero paid calls, no graph or old-data
   reset. HTTP does not install24KB packing/Reader or claim a new QA score.
+  Full2353 passed/33 skipped/three subtests; later91-test focused run includes
+  four final added cases. Ruff/Pyright clean; existing uv.lock not staged.
 
 - Execute locked reserved10 profile without retuning:5048 raw messages in new
   isolated schema,10 local BGE calls/800 pairs/0 truncation,15/16 annotations

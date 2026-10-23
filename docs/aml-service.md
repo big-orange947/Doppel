@@ -189,6 +189,8 @@ It does not generate answers, judge50 cases, build graphs or certify performance
 Pass `--rerank-policy rank-fusion` to the smoke runner to exercise the new option;
 it additionally verifies authenticated readiness/profile-ID stability, the saved
 ordering identity and `top_k=1000` behavior across both process lifetimes.
+The [fusion live acceptance report](../benchmarks/reports/aml-rank-fusion-live-2026-10-23.md)
+records the actual new schema, model/policy identity, restart checks and limits.
 
 Run interface/restart tests:
 
