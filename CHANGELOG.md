@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add module-only opt-in retrieval/reranker RRF wrapper: complete bounded orders,
+  scoped IDs, immutable source payloads/scores and explicit invalid-output/timeout
+  failures. Fixed equal-RRF60 local50 comparison reproduces every old BGE context;
+  top20 annotations66→68/76, packed60→62/76 (3 recovered/1 displaced), full
+  positives36/43 unchanged. No QA gain claimed/default promotion or paid calls.
+  Persist full80 source/order receipts.50 local model calls/4000 pairs,0 truncated;
+  3000 final Store checks, original sources unchanged.27 new tests; full2314
+  passed/33 skipped/three subtests, Ruff/Pyright clean, uv.lock untouched.
+
 - Complete fixed80 downstream24/48/96KB comparison on all50 opened cases:
   37/36/37 correct, positive30/29/30 of43, negatives7/7 each. Annotation gains
   do not produce net QA gain; preserve borderline judge/commitment ambiguity,

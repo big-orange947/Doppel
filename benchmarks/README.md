@@ -15,6 +15,9 @@ The [fixed Reader downstream budget comparison](reports/public-memory-context-bu
 completes all50:24/48/96KB score37/36/37, with borderline judge/commitment effects
 and no demonstrated net QA gain. Resource expansion is not an algorithm gain;
 old answers, grades and runtime defaults remain unchanged.
+The [fixed retrieval/BGE rank-fusion comparison](reports/public-memory-rank-fusion-result-2026-10-23.md)
+uses no paid calls and raises packed annotation coverage60→62/76 at24KB, with
+3 recoveries/1 displacement. It is opt-in, not a new QA score or default strategy.
 `python -m benchmarks.public_longmemeval` checks the official cleaned LongMemEval
 format and projects history separately from scoring labels. It is zero-model
 preparation, not a retrieval/QA benchmark result or an AML academic model profile.

@@ -23,8 +23,9 @@ ranker = RankFusionReranker(existing_reranker, max_candidates=80, rrf_k=60)
 ```
 
 This is module-only and **not enabled in any default runtime/service preset**.
-See the [fixed local50 comparison](../benchmarks/reports/public-memory-rank-fusion-plan-2026-10-23.md)
-before making quality claims. No conclusion from this adapter changes old QA
+The [fixed local50 comparison](../benchmarks/reports/public-memory-rank-fusion-result-2026-10-23.md)
+finds a small net annotation gain but a packing regression and no new QA score.
+No conclusion from this adapter changes old QA
 grades or promotes a new recommended default.
 
 ## Boundaries
