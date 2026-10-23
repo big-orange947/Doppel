@@ -13,7 +13,11 @@ from doppel_memory.indexing import IndexEntry, memory_index_fingerprint
 from doppel_memory.models import MemoryRecord, MemoryScope, RecallResult
 from integrations.aml import local_models
 from integrations.aml.contract import TextualBoundary, memory_scope
-from integrations.aml.retrieval import hybrid_profile
+from integrations.aml.retrieval import (
+    create_local_hybrid_backend,
+    hybrid_profile,
+    local_rerank_policy,
+)
 from integrations.aml.service import SQLiteRawBackend, TextualASGI
 
 
@@ -336,3 +340,146 @@ async def test_local_embedding_rejects_wrong_dimensions(tmp_path, monkeypatch):
     fake_packages(monkeypatch, tmp_path, dimensions=511)
     with pytest.raises(ValueError, match="invalid local embedding"):
         await local_models.LocalEmbedding(tmp_path).embed(["text"])
+
+
+class ReversingRanker:
+    async def rerank(self, query, candidates, *, limit):
+        self.seen, self.limit = list(candidates), limit
+        return list(reversed(candidates))[:limit]
+
+
+def test_ordering_policy_preserves_legacy_identity_and_snapshots_metadata():
+    delegate = ReversingRanker()
+    original = {"model": {"version": "local-v1"}, "device": "cpu"}
+    ranker, legacy = local_rerank_policy(delegate, original)
+    assert ranker is delegate and legacy == original
+    fused, identity = local_rerank_policy(delegate, original, policy="rank-fusion")
+    assert fused.delegate is delegate
+    assert identity == {
+        "policy": "retrieval-neural-rrf-v1",
+        "rrf_k": 60,
+        "retrieval_weight": 1,
+        "neural_weight": 1,
+        "tie_break": "retrieval-position",
+        "max_candidates": 80,
+        "delegate": original,
+    }
+    original["model"]["version"] = "changed"
+    assert legacy["model"]["version"] == "local-v1"
+    assert identity["delegate"]["model"]["version"] == "local-v1"
+    with pytest.raises(ValueError, match="unsupported"):
+        local_rerank_policy(delegate, {}, policy="unknown")
+
+
+async def test_invalid_policy_rejected_before_models_files_or_database(tmp_path):
+    with pytest.raises(ValueError, match="unsupported"):
+        await create_local_hybrid_backend(
+            tmp_path / "not-created",
+            namespace="n",
+            dsn="invalid",
+            schema="s",
+            embedding_model_path=tmp_path / "absent-model",
+            reranker_model_path=tmp_path / "absent-ranker",
+            rerank_policy="unknown",
+        )
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("top_k", [1, 20, 80, 1000])
+async def test_fused_service_uses_complete_neural_order_then_locked_rrf(
+    tmp_path, top_k
+):
+    from doppel_memory.rank_fusion import rank_fusion_order
+
+    index = Index(tmp_path / "index.sqlite3")
+    delegate = ReversingRanker()
+    ranker, identity = local_rerank_policy(delegate, {}, policy="rank-fusion")
+    profile = hybrid_profile(
+        semantic_index=index, writer=index, reranker=ranker, identity=identity
+    )
+    host = SQLiteRawBackend(
+        tmp_path / "service",
+        namespace="hybrid-test",
+        role_actors={"user": "owner", "assistant": "agent"},
+        retrieval=profile,
+    )
+    async with client(host) as c:
+        write = payload()
+        write["messages"] += [
+            {"role": "user", "content": "Morgan returned the telescope."},
+            {"role": "assistant", "content": "I recommended optical lens cleaning."},
+        ]
+        assert (await c.post("/add", json=write)).status_code == 200
+        result = await c.post(
+            "/search",
+            json={"user_id": "owner", "query": "optical instrument", "top_k": top_k},
+        )
+        assert result.status_code == 200, result.text
+        assert index.last_limit == 80 and delegate.limit == 4
+        expected = [
+            delegate.seen[i].fact for i in rank_fusion_order([3, 2, 1, 0])[:top_k]
+        ]
+        actual = [
+            json.loads(r["content"])["source"]["text"] for r in result.json()["data"]
+        ]
+        assert actual == expected
+        assert actual[0] == delegate.seen[0].fact  # not neural-only reversal
+        assert "UNTRUSTED" not in result.text
+    await host.close()
+    index.db.close()
+
+
+@pytest.mark.parametrize("original_policy", ["bge", "rank-fusion"])
+async def test_rerank_policy_drift_refused_and_original_profile_reopens(
+    tmp_path, original_policy
+):
+    index = Index(tmp_path / "index.sqlite3")
+    delegate = ReversingRanker()
+
+    def open_host(policy):
+        ranker, identity = local_rerank_policy(
+            delegate, {"model": "fixed"}, policy=policy
+        )
+        profile = hybrid_profile(
+            semantic_index=index, writer=index, reranker=ranker, identity=identity
+        )
+        return SQLiteRawBackend(
+            tmp_path / "service",
+            namespace="hybrid-test",
+            role_actors={"user": "owner", "assistant": "agent"},
+            retrieval=profile,
+        )
+
+    host = open_host(original_policy)
+    original_id = host.profile_id
+    await host.close()
+    with pytest.raises(ValueError, match="profile differs"):
+        open_host("rank-fusion" if original_policy == "bge" else "bge")
+    host = open_host(original_policy)
+    assert host.profile_id == original_id
+    await host.close()
+    index.db.close()
+
+
+async def test_fused_service_rejects_forged_delegate_payload_instead_of_fallback(
+    tmp_path,
+):
+    index = Index(tmp_path / "index.sqlite3")
+    ranker, identity = local_rerank_policy(Ranker(), {}, policy="rank-fusion")
+    host = SQLiteRawBackend(
+        tmp_path / "service",
+        namespace="hybrid-test",
+        role_actors={"user": "owner", "assistant": "agent"},
+        retrieval=hybrid_profile(
+            semantic_index=index, writer=index, reranker=ranker, identity=identity
+        ),
+    )
+    async with client(host) as c:
+        assert (await c.post("/add", json=payload())).status_code == 200
+        result = await c.post(
+            "/search", json={"user_id": "owner", "query": "telescope", "top_k": 20}
+        )
+        assert result.status_code == 500
+        assert result.json() == {"error": "backend_failure"}
+    await host.close()
+    index.db.close()

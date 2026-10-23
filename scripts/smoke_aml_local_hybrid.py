@@ -28,6 +28,7 @@ from doppel_memory.postgres_store import PostgreSQLStore
 from doppel_memory.vector import PostgreSQLVectorIndex
 from integrations.aml.contract import memory_scope
 from integrations.aml.local_models import LocalEmbedding
+from integrations.aml.retrieval import LOCAL_RERANK_POLICIES
 
 NAMESPACE = "local-hybrid-live-smoke-v1"
 OWNER = " smoke-owner-a "
@@ -166,6 +167,8 @@ async def run(args) -> dict:
         str(args.reranker_model_path),
         "--reranker-device",
         args.reranker_device,
+        "--rerank-policy",
+        args.rerank_policy,
         "--port",
         str(port),
     ]
@@ -175,12 +178,14 @@ async def run(args) -> dict:
         "schema": args.schema,
         "namespace": NAMESPACE,
         "device_requested": args.reranker_device,
+        "rerank_policy": args.rerank_policy,
         "paid_calls": 0,
         "model_downloads_allowed": False,
         "fixtures_retained": True,
         "phases": [],
     }
     before = None
+    profile_id = None
     try:
         for phase in ("initial", "restart"):
             process = await asyncio.to_thread(
@@ -217,6 +222,16 @@ async def run(args) -> dict:
                                 ) from None
                             await asyncio.sleep(0.5)
                     startup_seconds = time.monotonic() - started
+                    health = await client.get("/healthz")
+                    assert health.status_code == 200
+                    assert health.json() == {"status": "alive"}
+                    readiness = await client.get("/readyz")
+                    assert readiness.status_code == 200
+                    current_profile = readiness.json()["profile_id"]
+                    assert len(current_profile) == 64
+                    if profile_id is None:
+                        profile_id = current_profile
+                    assert current_profile == profile_id
                     if phase == "initial":
                         assert ready.json() == {"data": []}
                         for write in WRITES:
@@ -246,6 +261,8 @@ async def run(args) -> dict:
                         f"search HTTP {result.status_code}"
                     )
                     validate_evidence(result.json())
+                    wide = await client.post("/search", json={**QUERY, "top_k": 1000})
+                    assert wide.status_code == 200 and wide.json() == result.json()
                     if before is None:
                         before = result.json()
                     else:
@@ -307,6 +324,17 @@ async def run(args) -> dict:
             )
             await index.initialize()
             with sqlite3.connect(args.directory / "service-journal.sqlite3") as journal:
+                saved_profile = journal.execute("SELECT value FROM profile").fetchone()[
+                    0
+                ]
+                assert hashlib.sha256(saved_profile.encode()).hexdigest() == profile_id
+                policy_identity = json.loads(saved_profile)["strategy"]["reranker"]
+                if args.rerank_policy == "rank-fusion":
+                    assert policy_identity["policy"] == "retrieval-neural-rrf-v1"
+                    assert policy_identity["rrf_k"] == 60
+                    assert policy_identity["max_candidates"] == 80
+                else:
+                    assert "policy" not in policy_identity
                 mappings = journal.execute(
                     "SELECT scope,memory FROM sources"
                 ).fetchall()
@@ -355,6 +383,8 @@ async def run(args) -> dict:
                 verified_index_entries=6,
                 raw_records=6,
                 schema_version=1,
+                profile_id=profile_id,
+                reranker_identity=policy_identity,
                 embedding=index.identity,
                 results_sha256=hashlib.sha256(
                     json.dumps(before, sort_keys=True).encode()
@@ -382,6 +412,7 @@ def main():
     parser.add_argument("--embedding-model-path", type=Path, required=True)
     parser.add_argument("--reranker-model-path", type=Path, required=True)
     parser.add_argument("--reranker-device", default="cpu")
+    parser.add_argument("--rerank-policy", choices=LOCAL_RERANK_POLICIES, default="bge")
     args = parser.parse_args()
     # Validate quoted SQL identifier before any DB contact.
     PostgreSQLStore(os.environ["DOPPEL_AML_PG_DSN"], schema=args.schema)

@@ -119,6 +119,35 @@ $env:DOPPEL_AML_PG_DSN = 'postgresql://USER:PASSWORD@127.0.0.1:PORT/DATABASE'
   --reranker-device cpu
 ```
 
+For the locked, opt-in retrieval/neural rank-fusion ordering, add
+`--rerank-policy rank-fusion` to the **local-hybrid** command above, with a new
+state directory. Omitting the flag (or passing `--rerank-policy bge`) preserves
+the existing neural-only order **and its saved profile identity**. The flag is
+rejected with `--profile bm25`, rather than silently ignored.
+
+Rank fusion is a second ordering stage: BM25/vector RRF60 first produces the
+fixed80 authorized candidates; the local BGE reranker orders all of them; equal
+RRF60 combines that complete neural order with the original retrieval order.
+Ties retain retrieval position. No weights/k tuning, category rules, role quotas,
+extra LLM calls or graph building are introduced. Final evidence still reloads
+from Store. Delegate errors, incomplete orders, changed source payloads and
+unknown scoped IDs fail explicitly; there is no silent ranking fallback.
+
+This option binds its policy/version/k/weights/candidate cap and delegate model
+identity to the journal. Switching BGE↔fusion in the same directory is refused;
+the original profile can still reopen it. Use a separate directory, and a new
+dedicated schema for acceptance experiments; never reset an evaluation schema.
+Readiness probes continue checking the underlying loaded models/vector profile,
+without reranking or calling a provider. A larger `top_k` cannot enlarge80
+candidates; use `top_k=20` for the evaluated output-count bound.
+
+This exposes the evaluated **ordering component**, not the entire QA experiment:
+the HTTP contract returns whole attributed source items and does **not** apply
+the experiment's24,000-byte downstream context packing or Reader/Judge. A caller
+must pack its own context. Model/index identity, raw-message chunking and client
+packing can differ from the benchmark; do not label arbitrary HTTP requests as
+reproductions of the opened50 or reserved10 QA scores. No default is promoted.
+
 The embedding directory must be the **actual ONNX model directory**, not the
 outer FastEmbed cache. Provision pgvector in the database first. Startup may
 create the named schema/tables, but does not enable extensions, delete/reset
@@ -157,6 +186,9 @@ isolation, cross-session evidence, idempotence/conflict/auth, source/vector coun
 and six authoritative index fingerprints. The script deliberately retains its
 small synthetic schema/journal, never deletes old data, and refuses overwrite.
 It does not generate answers, judge50 cases, build graphs or certify performance.
+Pass `--rerank-policy rank-fusion` to the smoke runner to exercise the new option;
+it additionally verifies authenticated readiness/profile-ID stability, the saved
+ordering identity and `top_k=1000` behavior across both process lifetimes.
 
 Run interface/restart tests:
 

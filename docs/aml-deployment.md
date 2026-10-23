@@ -15,6 +15,10 @@ device and request bounds. Choose the profile explicitly:
 - `--profile bm25`: SQLite/BM25 transport smoke, no semantic retrieval.
 - `--profile local-hybrid`: PG/pgvector + BM25/RRF60 + offline neural reranker.
   This is raw history, not the full temporal/typed-graph engine or text-embedding-v4.
+  Optional `--rerank-policy rank-fusion` combines retrieval/neural orders with
+  locked equal RRF60; omit it for the unchanged BGE-only default. Record this
+  choice: switching policies refuses the same journal directory. Neither option
+  installs downstream24KB context packing or generates answers.
 
 Use the same directory and namespace after restart. Do not switch profiles or
 model files in place. Keep journal and authoritative DB backups consistent; a DB
@@ -120,5 +124,5 @@ Never expose it as a public multi-user API without a separate authorization laye
 
 Only the local Windows environment has been exercised for this adapter; this
 work does not certify a Linux image, GPU driver stack, public endpoint or latency.
-Do not claim an official submission, highest configuration or improved37/50 from
+Do not claim an official submission, highest configuration or a new QA score from
 these operational checks.

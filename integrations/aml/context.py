@@ -210,7 +210,13 @@ class AttributedContextRetriever:
             )
         ordered = validated
         if self.reranker is not None:
-            ordered = list(await self.reranker.rerank(query, validated, limit=limit))
+            # A larger HTTP top_k cannot enlarge a fixed candidate window. Keep
+            # the ordering delegate's bounded limit valid even for top_k=1000.
+            ordered = list(
+                await self.reranker.rerank(
+                    query, validated, limit=min(limit, self.candidate_limit or limit)
+                )
+            )
         result, seen = [], set()
         final_checks = 0
         if bound_scope.scope_key != expected_scope_key:

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Expose locked equal-RRF60 retrieval/neural ordering as explicit local-hybrid
+  `--rerank-policy rank-fusion`; preserve the legacy BGE default/profile identity.
+  Bind the new policy/delegate identity to the durable journal; reject drift or
+  ignored BM25 flags. Bound delegate output limits to the fixed candidate window.
+  Real PG/local-model TCP acceptance passes across two process lifetimes with
+  exact attribution, opaque-owner isolation, retry/conflict/auth, readiness/profile
+  and all six Store/vector fingerprints; zero paid calls, no graph or old-data
+  reset. HTTP does not install24KB packing/Reader or claim a new QA score.
+
 - Execute locked reserved10 profile without retuning:5048 raw messages in new
   isolated schema,10 local BGE calls/800 pairs/0 truncation,15/16 annotations
   delivered. QA9/10 (positives8/9,negative1/1); advice fails with a candidate gap

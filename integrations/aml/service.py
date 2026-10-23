@@ -36,7 +36,7 @@ from integrations.aml.contract import (
     payload_fingerprint,
     write_key,
 )
-from integrations.aml.retrieval import RawRetrievalProfile
+from integrations.aml.retrieval import LOCAL_RERANK_POLICIES, RawRetrievalProfile
 
 
 class SQLiteRawBackend:
@@ -439,6 +439,7 @@ def main():
     parser.add_argument("--embedding-model-path", type=Path)
     parser.add_argument("--reranker-model-path", type=Path)
     parser.add_argument("--reranker-device", default="cpu")
+    parser.add_argument("--rerank-policy", choices=LOCAL_RERANK_POLICIES)
     parser.add_argument("--request-timeout-seconds", type=float, default=30)
     parser.add_argument("--max-concurrency", type=int, default=8)
     parser.add_argument("--max-body-bytes", type=int, default=2_000_000)
@@ -446,6 +447,8 @@ def main():
     parser.add_argument("--max-results", type=int, default=1000)
     parser.add_argument("--allow-remote-bind", action="store_true")
     args = parser.parse_args()
+    if args.rerank_policy is not None and args.profile != "local-hybrid":
+        parser.error("--rerank-policy requires --profile local-hybrid")
     token = os.environ.get("DOPPEL_AML_BEARER_TOKEN", "")
     if not token.strip():
         parser.error("DOPPEL_AML_BEARER_TOKEN must be set")
@@ -495,6 +498,7 @@ def main():
                 embedding_model_path=args.embedding_model_path,
                 reranker_model_path=args.reranker_model_path,
                 reranker_device=args.reranker_device,
+                rerank_policy=args.rerank_policy or "bge",
             )
         else:
             backend = SQLiteRawBackend(

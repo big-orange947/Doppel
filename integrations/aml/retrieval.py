@@ -17,9 +17,32 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from doppel_memory.indexing import IndexWriter, memory_index_fingerprint
 from doppel_memory.lexical import BM25RetrievalStrategy
 from doppel_memory.models import MemoryRecord
+from doppel_memory.rank_fusion import RankFusionReranker
 from doppel_memory.retriever import Reranker, RetrievalStrategy
 from doppel_memory.vector import HybridRetrievalStrategy, SemanticIndex
 from integrations.aml.contract import WriteNotReady
+
+LOCAL_RERANK_POLICIES = ("bge", "rank-fusion")
+
+
+def local_rerank_policy(
+    delegate: Reranker, identity: dict[str, Any], *, policy: str = "bge"
+) -> tuple[Reranker, dict[str, Any]]:
+    """Select a locked ordering policy; preserve the legacy BGE identity exactly."""
+    if policy not in LOCAL_RERANK_POLICIES:
+        raise ValueError("unsupported local rerank policy")
+    bound = json.loads(json.dumps(identity, sort_keys=True, allow_nan=False))
+    if policy == "bge":
+        return delegate, bound
+    return RankFusionReranker(delegate, rrf_k=60, max_candidates=80), {
+        "policy": "retrieval-neural-rrf-v1",
+        "rrf_k": 60,
+        "retrieval_weight": 1,
+        "neural_weight": 1,
+        "tie_break": "retrieval-position",
+        "max_candidates": 80,
+        "delegate": bound,
+    }
 
 
 @dataclass(frozen=True)
@@ -139,12 +162,16 @@ async def create_local_hybrid_backend(
     embedding_model_path: Path,
     reranker_model_path: Path,
     reranker_device: str = "cpu",
+    rerank_policy: str = "bge",
 ):
     """Create a PostgreSQL authority + pgvector service on one event loop.
 
     Uses existing model directories only. New dedicated schemas/tables may be
     created; existing schemas, sources, graph and index profiles are never reset.
     """
+    if rerank_policy not in LOCAL_RERANK_POLICIES:
+        raise ValueError("unsupported local rerank policy")
+
     from doppel_memory.postgres_store import PostgreSQLStore
     from doppel_memory.vector import PostgreSQLVectorIndex, VectorIndexConfig
     from integrations.aml.local_models import LocalCrossEncoder, LocalEmbedding
@@ -153,6 +180,9 @@ async def create_local_hybrid_backend(
     target_id = postgres_target_identity(dsn, schema)
     embedding = LocalEmbedding(embedding_model_path)
     reranker = LocalCrossEncoder(reranker_model_path, device=reranker_device)
+    ordering, ordering_identity = local_rerank_policy(
+        reranker, reranker.identity, policy=rerank_policy
+    )
     store = PostgreSQLStore(dsn, schema=schema, create_schema=True)
     backend = None
     try:
@@ -182,13 +212,13 @@ async def create_local_hybrid_backend(
         profile = hybrid_profile(
             semantic_index=index,
             writer=index,
-            reranker=reranker,
+            reranker=ordering,
             index_batch=index_batch,
             probe=probe,
             identity={
                 "store_target": target_id,
                 "embedding": embedding.identity,
-                "reranker": reranker.identity,
+                "reranker": ordering_identity,
             },
         )
         backend = SQLiteRawBackend(

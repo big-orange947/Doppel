@@ -187,6 +187,9 @@ def test_bounds_reject_invalid_values(config):
         ["--max-concurrency", "0"],
         ["--host", "0.0.0.0"],
         ["--port", "0"],
+        ["--rerank-policy", "rank-fusion"],
+        ["--rerank-policy", "bge"],
+        ["--profile", "local-hybrid", "--rerank-policy", "unknown"],
     ],
 )
 def test_cli_bad_bounds_fail_before_creating_state(
@@ -213,6 +216,50 @@ def test_cli_bad_bounds_fail_before_creating_state(
         main()
     assert error.value.code == 2 and not directory.exists()
     assert "synthetic-secret" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("policy", [None, "bge", "rank-fusion"])
+def test_cli_forwards_explicit_policy_and_keeps_legacy_default(
+    tmp_path, monkeypatch, policy
+):
+    pytest.importorskip("uvicorn")
+    from integrations.aml import retrieval
+
+    received = {}
+
+    async def capture(*args, **kwargs):
+        received.update(kwargs)
+        raise RuntimeError("factory boundary reached")
+
+    monkeypatch.setattr(retrieval, "create_local_hybrid_backend", capture)
+    monkeypatch.setenv("DOPPEL_AML_BEARER_TOKEN", "synthetic-test-token")
+    monkeypatch.setenv("DOPPEL_AML_PG_DSN", "synthetic-no-db-contact")
+    directory = tmp_path / "not-created"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "service",
+            "--directory",
+            str(directory),
+            "--namespace",
+            "n",
+            "--bind-owner-roles",
+            "--profile",
+            "local-hybrid",
+            "--pg-schema",
+            "s",
+            "--embedding-model-path",
+            "absent-embedding",
+            "--reranker-model-path",
+            "absent-reranker",
+            *(["--rerank-policy", policy] if policy else []),
+        ],
+    )
+    with pytest.raises(RuntimeError, match="factory boundary reached"):
+        main()
+    assert received["rerank_policy"] == (policy or "bge")
+    assert not directory.exists()
 
 
 def test_postgres_identity_is_canonical_and_credential_free():

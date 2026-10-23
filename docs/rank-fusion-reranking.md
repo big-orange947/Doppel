@@ -22,11 +22,16 @@ ranker = RankFusionReranker(existing_reranker, max_candidates=80, rrf_k=60)
 # The caller's authorized retrieval order becomes the first ranking.
 ```
 
-This is module-only and **not enabled in any default runtime/service preset**.
+This remains **not enabled in any default runtime/service preset**.
+The repository's local-hybrid HTTP adapter exposes an explicit
+`--rerank-policy rank-fusion` option; see [service composition](aml-service.md).
+It does not install the benchmark's downstream byte packing or Reader.
 The [fixed local50 comparison](../benchmarks/reports/public-memory-rank-fusion-result-2026-10-23.md)
-finds a small net annotation gain but a packing regression and no new QA score.
-No conclusion from this adapter changes old QA
-grades or promotes a new recommended default.
+found a small net annotation gain with a packing regression. Subsequent
+[opened50 QA](../benchmarks/reports/public-memory-rank-fusion-qa-result-2026-10-23.md)
+and [locked reserved10 validation](../benchmarks/reports/public-memory-reserved10-final-result-2026-10-23.md)
+are separate small-sample experiments, not measurements of the HTTP service.
+No conclusion from this adapter overwrites old QA grades or promotes a default.
 
 ## Boundaries
 
