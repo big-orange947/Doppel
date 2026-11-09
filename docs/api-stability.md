@@ -48,6 +48,13 @@ provisional root APIs. They are intentionally separate from the stable `MemorySt
 and provisional query-only `SemanticIndex` contracts. `GraphitiSemanticIndex` remains
 module-only experimental even when it structurally satisfies `IndexWriter`.
 
+Maintenance now reloads scanned records before mutation and checks Store identity,
+upsert fingerprint/version, operation status and source changes during mutation.
+No signatures or checkpoint schemas change. Custom writers must return complete,
+truthful upsert receipts; incomplete/mismatched acknowledgements fail without
+checkpoint advancement. See [maintenance and recovery](index-maintenance.md) for
+eventual consistency, replay and concurrent-restore limitations.
+
 The v0.7.2 personal-memory analysis models, `StructuredOutputModel`,
 `PersonalMemoryAnalyzer`, `ReferencePersonalMemoryAnalyzer`, online extractor, and
 periodic miner are provisional root APIs. `PersonalMemoryAnalysisDiagnostics` is

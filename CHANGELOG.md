@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Harden index reconciliation against stale scan snapshots and source changes
+  during sidecar mutations. Reload exact-scope Store records before each action,
+  reject invalid/duplicate pages, and validate operation status plus upsert
+  fingerprint/version before advancing progress. Fail raced pages for host replay;
+  preserve checkpoint schema and eventual-consistency boundaries. Add lifecycle,
+  malformed-adapter and SQLite restart/recovery regressions; document custom-writer
+  receipt requirements and next-cycle recovery after concurrent restore.
+  Full regression: 2462 passed, 33 skipped, three subtests; Ruff and maintainer
+  type checks pass. No paid calls or live remote-index acceptance this round.
+
 - Resume the open-source personal-memory development track. Add a persistent
   SQLite example using host-reviewed structured claims, explicit current/as-of
   query fields, authorized cross-conversation scopes and fresh-connection source

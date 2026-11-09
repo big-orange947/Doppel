@@ -474,6 +474,7 @@ Doppel 提供 scope、证据和检索材料，但不接管：
 | [检索评测边界](docs/retrieval-evaluation.md) | candidate、evidence 与 answer 的区别 |
 | [证据验证](docs/evidence-verification.md) | 可选 verifier 协议与安全边界 |
 | [查询诊断](docs/query-diagnostics.md) | trace 与召回调试 |
+| [索引维护与恢复](docs/index-maintenance.md) | 生命周期同步、失败重放、checkpoint 与并发边界 |
 | [个人记忆重排](docs/personal-memory-reranking.md) | host-supplied reranker |
 | [原文片段返回](docs/attributed-passages.md) | 可选的无损长消息分块、片段位置与来源复核 |
 | [来源感知重排](docs/source-aware-reranking.md) | 显式元数据输入与实验性来源多样性，默认不改变召回策略 |

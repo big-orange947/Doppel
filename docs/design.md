@@ -585,7 +585,7 @@ Graphiti episode header、过滤材料或生命周期语义的变化。
 reconciliation 是两阶段、有界且可重放的：
 
 1. `records` 阶段用 `MemoryFilter(include_inactive=True)` oldest-first 扫描一个 Store page。active
-   记录执行幂等 upsert，inactive 记录执行 exact-scope delete；
+   记录逐条重新读取 Store 后执行幂等 upsert，inactive／已删除记录执行 exact-scope delete；
 2. records 扫描结束后进入 `entries` 阶段，按 index 自身稳定 cursor 枚举同一 exact scope。每个 entry
    重新读取 Store：不存在或 inactive 时删除，fingerprint 不同时 upsert，相同时跳过；
 3. entries 扫描结束后完成一个 cycle，checkpoint 回到空 cursor 的 records 阶段并递增 cycle。
@@ -594,6 +594,10 @@ checkpoint 绑定 schema、index identity 和 exact scope，不能跨 embedding 
 会话复用。任一页有失败都不返回 `committable_checkpoint`；本页已经成功的操作依靠 IndexWriter 幂等
 合同安全重放。Doppel 不拥有 scheduler、lease 或 checkpoint persistence，host 与 batch task 一样只在
 拿到 committable checkpoint 后推进。
+
+维护器校验扫描与重新加载的 exact-scope 身份、操作回执状态及 upsert fingerprint/version；
+操作后若发现源记录又变化，则本页不推进 checkpoint。目录删除遇到并发恢复时，重建可能要等
+下一轮 records 扫描。恢复、第三方 writer 回执要求和并发边界见 [索引维护说明](index-maintenance.md)。
 
 两阶段不是跨 Store 与 sidecar 的分布式快照。并发新增但尚未进入本轮 records page 的索引缺口会在下
 一个 cycle 修复；两阶段之间的更新由 entries 阶段再次读取权威 Store 捕获。硬删除后的孤儿不依赖 core

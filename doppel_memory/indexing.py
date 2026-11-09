@@ -222,8 +222,16 @@ class IndexMaintainer:
             )
             if len(page.records) > page_size:
                 raise ValueError("Store scan returned more records than requested")
-            if page.has_more and page.next_cursor == checkpoint.cursor:
+            if page.has_more and (
+                not page.next_cursor or page.next_cursor == checkpoint.cursor
+            ):
                 raise ValueError("Store scan did not advance a non-final cursor")
+            identities = []
+            for record in page.records:
+                self._validate_record(record, scope, record.memory_id)
+                identities.append(record.memory_id)
+            if len(identities) != len(set(identities)):
+                raise ValueError("Store scan returned duplicate records")
         except Exception as exc:  # noqa: BLE001 - maintenance is a report boundary
             return self._report(
                 scope,
@@ -237,11 +245,7 @@ class IndexMaintainer:
         failures: list[IndexMaintenanceFailure] = []
         for record in page.records:
             try:
-                if record.state in ACTIVE_MEMORY_STATES:
-                    operation = await self._writer.upsert(record)
-                else:
-                    operation = await self._writer.delete(scope, record.memory_id)
-                self._validate_operation(operation, scope, record.memory_id)
+                operation = await self._reconcile_record(scope, record.memory_id)
                 operations.append(operation)
             except Exception as exc:  # noqa: BLE001 - maintenance is a report boundary
                 failures.append(_maintenance_failure(record.memory_id, "record", exc))
@@ -281,8 +285,15 @@ class IndexMaintainer:
             )
             if len(page.entries) > page_size:
                 raise ValueError("index catalog returned more entries than requested")
-            if page.has_more and page.next_cursor == checkpoint.cursor:
+            if page.has_more and (
+                not page.next_cursor or page.next_cursor == checkpoint.cursor
+            ):
                 raise ValueError("index catalog did not advance a non-final cursor")
+            if any(
+                entry.scope_key != scope.scope_key or not entry.memory_id
+                for entry in page.entries
+            ):
+                raise ValueError("index catalog returned invalid exact-scope identity")
             identities = [(entry.scope_key, entry.memory_id) for entry in page.entries]
             if len(identities) != len(set(identities)):
                 raise ValueError("index catalog returned duplicate entries")
@@ -299,25 +310,9 @@ class IndexMaintainer:
         failures: list[IndexMaintenanceFailure] = []
         for entry in page.entries:
             try:
-                if entry.scope_key != scope.scope_key:
-                    raise ValueError(
-                        "index catalog returned an entry outside exact scope"
-                    )
-                record = await self._store.get(scope, entry.memory_id)
-                if record is None or record.state not in ACTIVE_MEMORY_STATES:
-                    operation = await self._writer.delete(scope, entry.memory_id)
-                elif memory_index_fingerprint(record) != entry.fingerprint:
-                    operation = await self._writer.upsert(record)
-                else:
-                    operation = IndexOperationResult(
-                        index_identity=self._identity,
-                        status=IndexOperationStatus.SKIPPED,
-                        memory_id=entry.memory_id,
-                        scope_key=scope.scope_key,
-                        fingerprint=entry.fingerprint,
-                        source_version=entry.source_version,
-                    )
-                self._validate_operation(operation, scope, entry.memory_id)
+                operation = await self._reconcile_record(
+                    scope, entry.memory_id, entry=entry
+                )
                 operations.append(operation)
             except Exception as exc:  # noqa: BLE001 - maintenance is a report boundary
                 failures.append(_maintenance_failure(entry.memory_id, "entry", exc))
@@ -346,6 +341,72 @@ class IndexMaintainer:
             complete=complete,
             checkpoint=next_checkpoint,
         )
+
+    @staticmethod
+    def _validate_record(
+        record: MemoryRecord, scope: MemoryScope, memory_id: str
+    ) -> None:
+        if not memory_id or record.memory_id != memory_id:
+            raise ValueError("Store returned a missing or different memory identity")
+        if record.scope.scope_key != scope.scope_key:
+            raise ValueError("Store returned a record outside exact scope")
+
+    async def _reconcile_record(
+        self, scope: MemoryScope, memory_id: str, *, entry: IndexEntry | None = None
+    ) -> IndexOperationResult:
+        # Page snapshots can already be stale while earlier writes are awaited.
+        record = await self._store.get(scope, memory_id)
+        if record is not None:
+            self._validate_record(record, scope, memory_id)
+            record = record.model_copy(deep=True)
+        active = record is not None and record.state in ACTIVE_MEMORY_STATES
+        fingerprint = memory_index_fingerprint(record) if record is not None else ""
+        if not active or record is None:
+            operation = await self._writer.delete(scope, memory_id)
+        elif entry is not None and entry.fingerprint == fingerprint:
+            operation = IndexOperationResult(
+                index_identity=self._identity,
+                status=IndexOperationStatus.SKIPPED,
+                memory_id=memory_id,
+                scope_key=scope.scope_key,
+                fingerprint=fingerprint,
+                source_version=record.version,
+            )
+        else:
+            # Give adapters a copy: in-place mutation must not alter our baseline.
+            operation = await self._writer.upsert(record.model_copy(deep=True))
+        self._validate_operation(operation, scope, memory_id)
+        if active and record is not None:
+            if operation.status not in {
+                IndexOperationStatus.INDEXED,
+                IndexOperationStatus.SKIPPED,
+            }:
+                raise ValueError("active record requires an upsert acknowledgement")
+            if (
+                operation.fingerprint != fingerprint
+                or operation.source_version != record.version
+            ):
+                raise ValueError("index acknowledgement does not match source snapshot")
+        elif operation.status not in {
+            IndexOperationStatus.DELETED,
+            IndexOperationStatus.MISSING,
+        }:
+            raise ValueError(
+                "inactive or absent record requires a delete acknowledgement"
+            )
+
+        # Detect transitions during remote writes without retrying inside a page.
+        # There is still no distributed snapshot/lock; later changes need another
+        # cycle, and retrieval must always revalidate the authoritative Store.
+        latest = await self._store.get(scope, memory_id)
+        if latest is not None:
+            self._validate_record(latest, scope, memory_id)
+        if active:
+            if latest is None or memory_index_fingerprint(latest) != fingerprint:
+                raise ValueError("source changed during index maintenance; replay page")
+        elif latest is not None and latest.state in ACTIVE_MEMORY_STATES:
+            raise ValueError("source became active during index deletion; replay page")
+        return operation
 
     def _validate_operation(
         self,
