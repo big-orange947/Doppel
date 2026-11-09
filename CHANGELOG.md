@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a host-only resumable personal-memory recipe: journal proposal plans before
+  batch writes and consolidation plans before canonical writes/source transitions;
+  commit stage checkpoints only after successful execution. Bind scope/config/index
+  identity, retain bounded miner pagination and reject pending-window drift. Include
+  an offline fixture-analyzer/catalog-only CLI and failure/restart tests. Preserve
+  candidate states and core APIs; no new extraction/retrieval quality claim.
+  Ten new recovery tests and 109 related regressions pass; full-repository Ruff
+  and recipe type checks pass. No paid calls or real provider/index certification.
+
 - Harden index reconciliation against stale scan snapshots and source changes
   during sidecar mutations. Reload exact-scope Store records before each action,
   reject invalid/duplicate pages, and validate operation status plus upsert

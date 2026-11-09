@@ -11,9 +11,10 @@
 本轮交付：[持久化个人记忆示例](personal-memory-walkthrough.md)。这是已有能力的参考接法，
 不构成新的自然语言理解、质量分数或默认模型晋级。
 
-后续把真实接入需要的 analyzer、proposal writer、consolidation、index maintenance
-组合成可恢复的参考流程，展示失败重跑、幂等、checkpoint 和诊断信息。接入 MemoEcho
-时先使用离线历史回放，再验证在线增量写入；无需真实 QQ 压力流量。
+已补充 [可恢复增量流程](incremental-personal-memory.md)，组合 miner、proposal writer、
+consolidation 和 index maintenance，在执行副作用前持久化提案／整理计划，并验证重启重放。
+默认演示仍使用合成 analyzer 和目录测试替身；下一步替换真实 provider／索引，接入 MemoEcho
+离线历史回放，再验证在线增量写入；无需真实 QQ 压力流量。迟到事件与跨进程 lease 仍需 host 设计。
 
 ## 第二阶段：写入与检索的一致性
 
