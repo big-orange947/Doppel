@@ -468,6 +468,8 @@ Doppel 提供 scope、证据和检索材料，但不接管：
 |---|---|
 | [设计说明](docs/design.md) | 核心不变量、三层 API、Store 与批处理协议 |
 | [个人记忆边界](docs/personal-memory-boundary.md) | Doppel 拥有什么、不拥有什么 |
+| [持久化个人记忆示例](docs/personal-memory-walkthrough.md) | 原始证据、时间查询、授权跨会话与关闭后重新读取 |
+| [开发路线](docs/development-roadmap.md) | 开源产品主线、近期交付与验证边界 |
 | [候选融合](docs/candidate-fusion.md) | lexical / vector / relation 候选如何组合 |
 | [检索评测边界](docs/retrieval-evaluation.md) | candidate、evidence 与 answer 的区别 |
 | [证据验证](docs/evidence-verification.md) | 可选 verifier 协议与安全边界 |
@@ -486,12 +488,15 @@ Doppel 当前版本为 **v0.8.3 Alpha**。核心 Store、scope、provenance、�
 
 接下来的重点不是增加更多特定场景规则，而是：
 
-1. 扩大并冻结个人记忆抽取、时间、关系和多跳 Planner 的 held-out / adversarial 数据集；
-2. 基于 Planner v3 密封评测暴露的超界拒绝问题，验证带显式 `execute/abstain` 决策的 V4，并建设全新的 V2 dev / sealed 语料；
-3. 在 PostgreSQL + pgvector + Graphiti 已通过冻结异构检索门禁后，继续验证多实例可靠性、长时间索引一致性与竞争状态延迟；
-4. 增加上下文选择与装配协议，让上层 Agent 按任务需要获取最小充分记忆；
-5. 在核心质量稳定后，再建设可视化记忆管理、用户增删改查和文档补充界面；
-6. PyPI 发布放在协议与质量门进一步收敛之后。
+1. 提供可运行的个人记忆参考流程，打通证据、抽取提案、整理、治理、持久化与检索；
+2. 验证新增、纠正、撤回、归档和恢复后的增量索引一致性，以及重启与并发可靠性；
+3. 优先完善词法／向量／重排主线，按关系与多跳任务的实际收益启用可选图增强；
+4. 用留出样本与真实历史回放评估抽取、时间演变、召回和证据交付，避免在已打开的小样本上持续调参；
+5. 核心稳定后，再扩展任务级上下文选择、主人可操作的记忆管理与文档补充；
+6. PyPI 发布继续后置。比赛适配与统一模型配置不再作为开源开发的前置条件。
+
+近期交付与验收范围见 [开发路线](docs/development-roadmap.md)。无需模型或外部服务的
+[持久化个人记忆示例](docs/personal-memory-walkthrough.md) 可作为接入起点。
 
 ## 开发
 

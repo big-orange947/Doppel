@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Resume the open-source personal-memory development track. Add a persistent
+  SQLite example using host-reviewed structured claims, explicit current/as-of
+  query fields, authorized cross-conversation scopes and fresh-connection source
+  recovery. Document direct-write/Planner/authorization boundaries and update the
+  product roadmap. No automatic extraction, default promotion or new quality score.
+
 - Add module-only native DashScope text-embedding-v4 provider and explicit
   aliyun-hybrid service profile:2048d default, ten-text batches, document/query
   separation, exact response-index/shape/value checks and endpoint/version-bound
