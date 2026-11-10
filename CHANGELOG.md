@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add host-recipe checked source ingestion: validate committed portable payload,
+  scope, state and authority after atomic idempotent writes; reject identity reuse
+  with different content while accepting raw/delivery retransmission differences.
+  Wire SQLite/PG demos to the guard. Add two-window synthetic lifecycle replay with
+  restart, owner correction, contact/agent isolation and index checks. No core API
+  changes, real-chat export or real-chat provider calls in this round.
+  21 new cases/74 related tests pass, plus Ruff and entry-point type checks. Existing
+  real PG synthetic replay remains clean: five manifest checks, zero foreign hits,
+  same final memory ID and no paid calls. No full-suite rerun or quality score.
+
 - Expose defaulted candidate `as_of_match` and validity uncertainty warnings.
   Retain authorized active undated historical/unknown evidence without claiming
   date validity; undated current claims no longer receive `valid_at_as_of`.

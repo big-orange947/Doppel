@@ -31,6 +31,7 @@ from doppel_memory import (
     VectorIndexConfig,
     memory_index_fingerprint,
 )
+from examples.checked_ingest import ingest_checked
 from examples.incremental_personal_memory import FixtureAnalyzer
 from examples.personal_memory_runtime import PersonalMemoryWorkflow
 from examples.workflow_analyzer import WorkflowAnalyzerSession
@@ -135,8 +136,8 @@ async def run(args, analyzer=None) -> dict:
             ("theme-1", "我喜欢浅色主题。", "2026-11-01T09:00:00Z"),
             ("theme-2", "更正一下，我现在喜欢深色主题。", "2026-11-02T09:00:00Z"),
         ]:
-            result = await memory.ingest(
-                scope, ChatMessage.of("owner", text, at, message_id=message_id)
+            result = await ingest_checked(
+                store, scope, ChatMessage.of("owner", text, at, message_id=message_id)
             )
             if result.record is None:
                 raise RuntimeError("source write failed")

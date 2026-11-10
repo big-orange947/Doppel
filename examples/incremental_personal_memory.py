@@ -32,6 +32,7 @@ from doppel_memory import (
     PersonalMemoryMinerConfig,
     memory_index_fingerprint,
 )
+from examples.checked_ingest import ingest_checked
 from examples.personal_memory_runtime import PersonalMemoryWorkflow
 
 
@@ -142,8 +143,10 @@ async def run(directory: Path, steps: int) -> dict:
             ("theme-1", "我喜欢浅色主题。", "2026-11-01T09:00:00Z"),
             ("theme-2", "更正一下，我现在喜欢深色主题。", "2026-11-02T09:00:00Z"),
         ]:
-            result = await memory.ingest(
-                scope, ChatMessage.of("owner", text, at, message_id=identity)
+            result = await ingest_checked(
+                memory.store,
+                scope,
+                ChatMessage.of("owner", text, at, message_id=identity),
             )
             if result.record is None:
                 raise RuntimeError("raw source write failed")
