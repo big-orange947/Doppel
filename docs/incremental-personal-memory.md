@@ -35,6 +35,7 @@ host 写入有稳定身份的原始事件
   → 生成并保存 consolidation plan
   → 执行 canonical 写入与旧记录转换
   → 保存整理进度
+  → 可选：保存并执行治理计划，提交治理进度
   → 分页维护派生索引，仅保存可提交 checkpoint
   → 返回 complete
 ```
@@ -81,7 +82,8 @@ host 先完成认证、授权和原始事件落盘，再创建 `PersonalMemoryWo
   同 ID 内容不同时停止，不自动裁决编辑／撤回冲突。
 - `complete` 是该窗口与一轮维护完成，不保证随后发生的其他写入也已同步。外部治理或
   手动修改后，还需独立调度 [IndexMaintainer](index-maintenance.md)。
-- 当前配方没有自动治理、归档调度、模型请求预算、加密、分布式锁或跨存储事务。
+- [治理阶段](workflow-governance.md) 需显式启用；不提供归档调度器、通用模型请求预算、
+  加密、分布式锁或跨存储事务。
 
 本轮验证包含真实 SQLite 重开、独立 CLI 进程恢复和故障注入，使用合成 analyzer 与目录索引。
 真实 provider、远程 PG／Neo4j 故障、多实例和 MemoEcho 在线运行仍未验收。

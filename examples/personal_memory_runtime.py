@@ -25,6 +25,11 @@ from doppel_memory import (
     IndexMaintenanceCheckpoint,
     IndexWriter,
     MemoryConsolidator,
+    MemoryGovernanceCheckpoint,
+    MemoryGovernanceConfig,
+    MemoryGovernancePlan,
+    MemoryGovernancePolicy,
+    MemoryGovernanceRunner,
     MemoryScope,
     MemoryStore,
     PersonalMemoryMiner,
@@ -37,12 +42,16 @@ class WorkflowState(BaseModel):
     schema_version: Literal[1] = 1
     binding: str
     window: HistoryWindow
-    stage: Literal["batch", "consolidation", "index", "complete"] = "batch"
+    stage: Literal["batch", "consolidation", "governance", "index", "complete"] = (
+        "batch"
+    )
     batch_checkpoint: BatchCheckpoint | None = None
     consolidation_checkpoint: ConsolidationCheckpoint | None = None
     index_checkpoint: IndexMaintenanceCheckpoint | None = None
     pending_batch: BatchProposalPlan | None = None
     pending_consolidation: ConsolidationPlan | None = None
+    governance_checkpoint: MemoryGovernanceCheckpoint | None = None
+    pending_governance: MemoryGovernancePlan | None = None
     revision: int = Field(default=0, ge=0)
 
 
@@ -71,6 +80,8 @@ class PersonalMemoryWorkflow:
         consolidator: MemoryConsolidator,
         index: IndexWriter,
         consolidation_config: ConsolidationConfig | None = None,
+        governance_policy: MemoryGovernancePolicy | None = None,
+        governance_config: MemoryGovernanceConfig | None = None,
         index_page_size: int = 100,
     ) -> None:
         if (
@@ -79,7 +90,9 @@ class PersonalMemoryWorkflow:
             or type(index_page_size) is not int
             or index_page_size < 1
         ):
-            raise ValueError("workflow/storage identity and positive page size required")
+            raise ValueError(
+                "workflow/storage identity and positive page size required"
+            )
         if miner.config.owner_target_scope != "conversation":
             raise ValueError(
                 "reference workflow only writes its exact conversation scope"
@@ -87,23 +100,37 @@ class PersonalMemoryWorkflow:
         self.store, self.scope, self.miner = store, scope, miner
         self.consolidator = consolidator
         self.runner = ConsolidationRunner(store, consolidation_config)
+        if governance_config is not None and governance_policy is None:
+            raise ValueError("governance config requires an explicit policy")
+        self.governance_policy = governance_policy
+        self.governance_runner = (
+            MemoryGovernanceRunner(store, governance_config)
+            if governance_policy is not None
+            else None
+        )
         self.maintainer = IndexMaintainer(store, index)
         self.page_size = index_page_size
-        self.binding = _digest(
-            {
-                "schema": 1,
-                "workflow_key": workflow_key,
-                "scope": scope.scope_key,
-                "storage": storage_identity,
-                "miner": miner.checkpoint_key,
-                "consolidator": [consolidator.name, consolidator.version],
-                "consolidator_config": getattr(
-                    getattr(consolidator, "config", None), "fingerprint", ""
-                ),
-                "runner_config": self.runner.config.fingerprint,
-                "index": index.identity,
-            }
-        )
+        binding_fields = {
+            "schema": 1,
+            "workflow_key": workflow_key,
+            "scope": scope.scope_key,
+            "storage": storage_identity,
+            "miner": miner.checkpoint_key,
+            "consolidator": [consolidator.name, consolidator.version],
+            "consolidator_config": getattr(
+                getattr(consolidator, "config", None), "fingerprint", ""
+            ),
+            "runner_config": self.runner.config.fingerprint,
+            "index": index.identity,
+        }
+        if self.governance_runner is not None and governance_policy is not None:
+            binding_fields["governance"] = [
+                governance_policy.name,
+                governance_policy.version,
+                getattr(getattr(governance_policy, "config", None), "fingerprint", ""),
+                self.governance_runner.config.fingerprint,
+            ]
+        self.binding = _digest(binding_fields)
         # Keep the path stable when model/config changes, so drift is rejected.
         self.path = directory / (
             _digest({"key": workflow_key, "scope": scope.scope_key}) + ".json"
@@ -111,7 +138,14 @@ class PersonalMemoryWorkflow:
         self._lock = asyncio.Lock()
 
     async def _save(self, state: WorkflowState) -> None:
-        payload = state.model_dump_json(indent=2)
+        payload = state.model_dump_json(
+            indent=2,
+            exclude=(
+                {"governance_checkpoint", "pending_governance"}
+                if self.governance_runner is None
+                else set()
+            ),
+        )
 
         def write() -> None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,6 +253,43 @@ class PersonalMemoryWorkflow:
                 }
             state.consolidation_checkpoint = result.committable_checkpoint
             state.pending_consolidation = None
+            state.stage = (
+                "governance" if self.governance_runner is not None else "index"
+            )
+
+        elif stage == "governance":
+            runner, policy = self.governance_runner, self.governance_policy
+            if runner is None or policy is None:
+                raise ValueError("saved governance stage requires its bound policy")
+            if state.pending_governance is None:
+                state.pending_governance = await runner.plan_once(
+                    policy,
+                    self.scope,
+                    now=state.window.end,
+                    checkpoint=state.governance_checkpoint,
+                )
+                await self._save(state)
+            plan = state.pending_governance
+            if (
+                plan.scope.scope_key != self.scope.scope_key
+                or plan.policy != policy.name
+                or plan.policy_version != policy.version
+                or plan.config_fingerprint != runner.config.fingerprint
+                or plan.evaluated_at != state.window.end
+            ):
+                raise ValueError(
+                    "saved governance plan does not belong to this workflow window"
+                )
+            governed = await runner.execute(plan)
+            if governed.errors or governed.committable_checkpoint is None:
+                return {
+                    "ok": False,
+                    "stage": stage,
+                    "complete": False,
+                    "errors": [error.stage for error in governed.errors],
+                }
+            state.governance_checkpoint = governed.committable_checkpoint
+            state.pending_governance = None
             state.stage = "index"
 
         elif stage == "index":

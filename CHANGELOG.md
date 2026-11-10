@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add explicit optional governance to the host personal-memory workflow, between
+  consolidation and index maintenance. Persist the bound plan/checkpoint and use
+  closed-window end as the governance clock; empty later windows can archive known
+  expired states without analyzer calls. Preserve disabled-job binding/log shape.
+  Add synthetic cancellation/retraction/repeated-update/expiry/recovery controls;
+  no domain parsing, inferred expiry, real-chat export or provider calls.
+  Eight new lifecycle/recovery cases and 105 related tests pass; full regression
+  2544 passed/33 skipped/three subtests. Ruff and workflow type checks pass.
+
 - Add host-recipe checked source ingestion: validate committed portable payload,
   scope, state and authority after atomic idempotent writes; reject identity reuse
   with different content while accepting raw/delivery retransmission differences.
