@@ -35,6 +35,7 @@ def workflow(tmp_path, store, analyzer=None, **kwargs):
     return PersonalMemoryWorkflow(
         tmp_path / "jobs",
         workflow_key="test",
+        storage_identity=str((tmp_path / "memory.sqlite3").resolve()),
         store=store,
         scope=SCOPE,
         miner=PersonalMemoryMiner(
@@ -255,6 +256,7 @@ async def test_bounded_miner_pages_finish_before_consolidation(tmp_path):
         job = PersonalMemoryWorkflow(
             tmp_path / "bounded",
             workflow_key="bounded",
+            storage_identity=str((tmp_path / "memory.sqlite3").resolve()),
             store=store,
             scope=SCOPE,
             miner=job.miner,
@@ -367,3 +369,106 @@ def test_cli_resumes_across_two_processes_and_returns_attributed_evidence(tmp_pa
     third = json.loads(subprocess.check_output(command, encoding="utf-8"))
     assert third["progress"] == [{"ok": True, "stage": "complete", "complete": True}]
     assert third["query_hits"] == second["query_hits"]
+
+
+async def test_storage_identity_drift_rejects_old_progress(tmp_path):
+    store = SQLiteStore(database=str(tmp_path / "memory.sqlite3"))
+    try:
+        await ingest(store)
+        job = workflow(tmp_path, store)
+        await job.step(WINDOW)
+        original = job.path.read_bytes()
+        other = PersonalMemoryWorkflow(
+            tmp_path / "jobs",
+            workflow_key="test",
+            storage_identity="another-database",
+            store=store,
+            scope=SCOPE,
+            miner=PersonalMemoryMiner(
+                FixtureAnalyzer(),
+                PersonalMemoryMinerConfig(owner_target_scope="conversation"),
+            ),
+            consolidator=DeterministicMemoryConsolidator(),
+            index=SQLiteManifestIndex(tmp_path / "index.sqlite3"),
+        )
+        with pytest.raises(ValueError, match="configuration changed"):
+            await other.step(WINDOW)
+        assert job.path.read_bytes() == original
+    finally:
+        await store.close()
+
+
+async def test_reference_analyzer_adapter_in_workflow_with_fake_http(tmp_path):
+    import json
+
+    import httpx
+
+    from doppel_memory import (
+        OpenAICompatibleStructuredOutputConfig,
+        OpenAICompatibleStructuredOutputModel,
+        PersonalMemoryAnalysis,
+        PersonalMemoryDraft,
+        ReferencePersonalMemoryAnalyzer,
+    )
+
+    calls = []
+
+    async def respond(request):
+        calls.append(json.loads(request.content))
+        analysis = PersonalMemoryAnalysis(
+            memories=[
+                PersonalMemoryDraft(
+                    content=content,
+                    memory_type="preference",
+                    topic_key="display.theme",
+                    temporal_status="current",
+                    revision_kind=revision,
+                    evidence_ids=[identity],
+                )
+                for content, revision, identity in [
+                    ("我喜欢浅色主题。", "assertion", "theme-1"),
+                    ("更正一下，我现在喜欢深色主题。", "correction", "theme-2"),
+                ]
+            ]
+        )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"content": analysis.model_dump_json()},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                },
+            },
+        )
+
+    store = SQLiteStore(database=str(tmp_path / "memory.sqlite3"))
+    try:
+        await ingest(store)
+        async with (
+            httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http,
+            OpenAICompatibleStructuredOutputModel(
+                OpenAICompatibleStructuredOutputConfig(
+                    model="offline-fixture",
+                    base_url="https://fixture.invalid/v1",
+                    schema_mode="json_object",
+                ),
+                client=http,
+            ) as model,
+        ):
+            await finish(
+                workflow(tmp_path, store, ReferencePersonalMemoryAnalyzer(model))
+            )
+        assert len(calls) == 1
+        active = await store.scan(SCOPE, filters=MemoryFilter(tags={"personal-memory"}))
+        assert [record.content for record in active.records] == [
+            "更正一下，我现在喜欢深色主题。"
+        ]
+    finally:
+        await store.close()

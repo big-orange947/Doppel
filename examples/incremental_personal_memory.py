@@ -151,6 +151,7 @@ async def run(directory: Path, steps: int) -> dict:
         workflow = PersonalMemoryWorkflow(
             directory / "jobs",
             workflow_key="offline-demo-v1",
+            storage_identity=str((directory / "memory.sqlite3").resolve()),
             store=memory.store,
             scope=scope,
             miner=PersonalMemoryMiner(

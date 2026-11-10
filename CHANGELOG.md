@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Bind host workflow journals to explicit storage identity; reject reuse across
+  databases/schemas even when index/model identities match. Add opt-in PG/pgvector
+  workflow smoke using existing offline PyTorch embeddings and a fixture analyzer.
+  Real initial/restart/replay processes pass in a dedicated retained schema: five
+  Store records, five manifest checks per completed run, zero cross-owner hits.
+  Add fake-HTTP reference-analyzer wiring and identity guards. 100 related tests,
+  Ruff and entry-point types pass; no paid calls or new memory-quality score.
+
 - Add a host-only resumable personal-memory recipe: journal proposal plans before
   batch writes and consolidation plans before canonical writes/source transitions;
   commit stage checkpoints only after successful execution. Bind scope/config/index

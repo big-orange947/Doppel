@@ -470,6 +470,7 @@ Doppel 提供 scope、证据和检索材料，但不接管：
 | [个人记忆边界](docs/personal-memory-boundary.md) | Doppel 拥有什么、不拥有什么 |
 | [持久化个人记忆示例](docs/personal-memory-walkthrough.md) | 原始证据、时间查询、授权跨会话与关闭后重新读取 |
 | [可恢复增量流程](docs/incremental-personal-memory.md) | 提案与整理计划落盘、分阶段执行、失败与重启恢复 |
+| [PG 工作流验通](docs/personal-workflow-pg.md) | 真实 pgvector、本地 embedding 与存储身份绑定 |
 | [开发路线](docs/development-roadmap.md) | 开源产品主线、近期交付与验证边界 |
 | [候选融合](docs/candidate-fusion.md) | lexical / vector / relation 候选如何组合 |
 | [检索评测边界](docs/retrieval-evaluation.md) | candidate、evidence 与 answer 的区别 |

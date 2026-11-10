@@ -55,7 +55,7 @@ source snapshots，runner 检查来源转换是否已应用。checkpoint 保存�
 然后偷偷重算一份新计划。
 
 journal 绑定 workflow key、scope、miner/analyzer 配置身份、consolidator 身份与配置、runner
-配置、index identity。更换这些依赖时拒绝沿用旧进度；自定义组件须如实版本化所有语义配置。
+配置、index identity 及 host 提供的 `storage_identity`。更换这些依赖时拒绝沿用旧进度；自定义组件须如实版本化所有语义配置。
 journal 含记忆正文和提案，应作为私有用户数据保存，不含密钥，也不应提交到 Git。
 原始 Store、索引与 journal 必须分别持久化和备份。
 
@@ -84,3 +84,6 @@ host 先完成认证、授权和原始事件落盘，再创建 `PersonalMemoryWo
 
 本轮验证包含真实 SQLite 重开、独立 CLI 进程恢复和故障注入，使用合成 analyzer 与目录索引。
 真实 provider、远程 PG／Neo4j 故障、多实例和 MemoEcho 在线运行仍未验收。
+
+真实 PG＋本地 embedding 的独立入口、存储身份迁移和验证记录见
+[PG 工作流验通](personal-workflow-pg.md)。该验证仍使用合成 analyzer，远程模型质量未测。

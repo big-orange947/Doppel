@@ -64,6 +64,7 @@ class PersonalMemoryWorkflow:
         directory: Path,
         *,
         workflow_key: str,
+        storage_identity: str,
         store: MemoryStore,
         scope: MemoryScope,
         miner: PersonalMemoryMiner,
@@ -74,10 +75,11 @@ class PersonalMemoryWorkflow:
     ) -> None:
         if (
             not workflow_key.strip()
+            or not storage_identity.strip()
             or type(index_page_size) is not int
             or index_page_size < 1
         ):
-            raise ValueError("workflow key and positive page size required")
+            raise ValueError("workflow/storage identity and positive page size required")
         if miner.config.owner_target_scope != "conversation":
             raise ValueError(
                 "reference workflow only writes its exact conversation scope"
@@ -92,6 +94,7 @@ class PersonalMemoryWorkflow:
                 "schema": 1,
                 "workflow_key": workflow_key,
                 "scope": scope.scope_key,
+                "storage": storage_identity,
                 "miner": miner.checkpoint_key,
                 "consolidator": [consolidator.name, consolidator.version],
                 "consolidator_config": getattr(
