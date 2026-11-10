@@ -38,3 +38,24 @@ def test_storage_identity_binds_database_schema_and_host_without_password():
 def test_ambiguous_dsn_fails_before_connection(url):
     with pytest.raises(ValueError):
         storage_identity(url, "doppel_workflow_a")
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_reference_preflight_stops_without_opt_in_or_credentials(
+    monkeypatch, enabled
+):
+    from types import SimpleNamespace
+
+    import scripts.smoke_personal_workflow as smoke
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("preflight reached DB/model workflow")
+
+    monkeypatch.setattr(smoke, "run", unexpected)
+    for key in ["DOPPEL_MODEL", "DOPPEL_OPENAI_BASE_URL", "DOPPEL_API_KEY"]:
+        monkeypatch.delenv(key, raising=False)
+    report = await smoke.dispatch(
+        SimpleNamespace(analyzer="reference", live_llm=enabled)
+    )
+    assert not report["passed"] and report["paid_calls"] == 0
+    assert report["error_type"] == "ValueError"

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add opt-in reference analyzer mode to the personal PG workflow smoke, guarded
+  by explicit live/model configuration. Persist generation reservations and usage
+  across process restarts, cap attempts without retry/refund, retain unknown usage
+  and redact ledger errors. Keep fixture defaults and isolate semantic inspection
+  from structural completion; reference mode has no fixture-text answer assertion.
+  Fake-HTTP tests cover failure/cap/restart/concurrency/preflight paths. Real LLM
+  validation remains pending credentials; no new quality score or core API change.
+  70 related tests, full-repository Ruff and entry-point type checks pass. Existing
+  real PG fixture replay still passes with five manifest checks and zero paid calls.
+
 - Bind host workflow journals to explicit storage identity; reject reuse across
   databases/schemas even when index/model identities match. Add opt-in PG/pgvector
   workflow smoke using existing offline PyTorch embeddings and a fixture analyzer.

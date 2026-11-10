@@ -1,7 +1,8 @@
 # 真实 PostgreSQL／pgvector 工作流验通
 
 `scripts.smoke_personal_workflow` 将 host 参考执行器接到真实 PostgreSQL、pgvector 和
-本地 SentenceTransformer。analyzer 仍是合成替身；本入口不读取 LLM key，也不调用付费 API。
+本地 SentenceTransformer。默认 analyzer 是合成替身，不读取 LLM key。
+真实 analyzer 必须显式启用双开关，配置与持久化调用上限见 [真实 analyzer 验通](reference-workflow-analyzer.md)。
 
 运行环境需包含 `asyncpg`、`sentence-transformers`、PyTorch 与已下载的本地模型文件。
 模型只从指定目录加载，不联网下载；超出模型长度的输入报错，不能静默截断。
