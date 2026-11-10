@@ -3561,14 +3561,21 @@ async def test_missing_topic_identity_does_not_invent_a_conflicting_slot(
     assert len(result.hits) == 2 and result.ambiguous is ambiguous
     assert not result.conflicts
     assert not any("unresolved" in w for w in result.warnings)
+    temporal_warnings = [
+        w for w in result.warnings if w.startswith("validity_time_uncertain:")
+    ]
+    assert bool(temporal_warnings) is (view == "as_of")
+    conflict_warnings = [
+        w for w in result.warnings if not w.startswith("validity_time_uncertain:")
+    ]
     if topics == ["", ""]:
-        assert result.warnings == [
+        assert conflict_warnings == [
             "current/as-of candidates lack topic identity; conflict status unassessed"
         ]
     elif ambiguous:
-        assert "semantic compatibility unassessed" in result.warnings[0]
+        assert "semantic compatibility unassessed" in conflict_warnings[0]
     else:
-        assert not result.warnings
+        assert not conflict_warnings
 
 
 async def test_duplicate_wording_in_one_slot_is_not_automatically_ambiguous():

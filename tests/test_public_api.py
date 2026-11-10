@@ -507,6 +507,7 @@ MODEL_FIELDS = {
         "relation_edge_id",
         "answer_support",
         "store_revalidated",
+        "as_of_match",
     ),
     "PersonalMemoryQueryPlan": (
         "schema_version",

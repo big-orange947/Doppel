@@ -17,6 +17,14 @@ An import from an internal submodule is not covered merely because the object is
 technically reachable. A submodule object becomes public only when the documentation
 explicitly says so.
 
+`PersonalMemoryCandidateEvidence` adds defaulted `as_of_match` to distinguish known
+validity, timeless metadata and uncertain point-in-time candidates. Old input may
+omit it. As-of lookup retains active undated historical/unknown evidence with
+explicit warnings; exact counts with uncertain validity become indeterminate.
+Known disjoint intervals, inactive-record gates and authority/scope checks remain.
+This changes as-of result sets/reasons, not stored dates or ranking weights; keep
+old caches/reports bound to their original runs. See [time uncertainty](as-of-uncertainty.md).
+
 The manifest has three classifications:
 
 - **stable**: core models and protocols whose existing behavior and callable shape stay

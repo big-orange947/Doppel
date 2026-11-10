@@ -1099,6 +1099,9 @@ class PersonalMemoryCandidateEvidence(BaseModel):
     relation_edge_id: str = ""
     answer_support: Literal["unassessed"] = "unassessed"
     store_revalidated: bool = False
+    as_of_match: Literal["not_requested", "validity_match", "timeless", "uncertain"] = (
+        "not_requested"
+    )
 
     @field_validator("sources")
     @classmethod
@@ -1929,6 +1932,11 @@ class PersonalMemoryQueryEngine:
             warnings.append(
                 "event_time_uncertain: retained candidates do not certify interval membership"
             )
+        if any("validity_time_uncertain" in item[5] for item in matched):
+            warnings.append(
+                "validity_time_uncertain: retained candidates do not certify "
+                "validity at the requested as_of; observation time is not effective time"
+            )
         if any("event_time_coordinate" in item[5] for item in matched):
             warnings.append(
                 "event time normalization is source-bound, not independently verified"
@@ -1938,7 +1946,9 @@ class PersonalMemoryQueryEngine:
                 "event_time_precision_mismatch: preserve source bounds; precision label is unreliable"
             )
         if any("source_grounding_disputed" in item[5] for item in matched):
-            warnings.append("source_grounding_disputed: retained candidate has an unverified contradictory review; inspect original evidence")
+            warnings.append(
+                "source_grounding_disputed: retained candidate has an unverified contradictory review; inspect original evidence"
+            )
         if trace is not None:
             for rank, item in enumerate(matched):
                 trace.add(
@@ -2608,16 +2618,9 @@ def _structural_rejection_reason(
             return "not_yet_valid"
         if valid_to is not None and valid_to < plan.as_of:
             return "no_longer_valid"
-        if (
-            valid_from is None
-            and valid_to is None
-            and temporal_status
-            not in {
-                MemoryTemporalStatus.TIMELESS,
-                MemoryTemporalStatus.CURRENT,
-            }
-        ):
-            return "missing_validity"
+        # Missing validity is not proof of mismatch. Keep active historical or
+        # unknown claims as uncertain evidence, like undated current claims.
+        # Lifecycle/authority and known disjoint bounds still reject above.
     if plan.time_from is not None or plan.time_to is not None:
         if occurrence is not None:
             # New coordinates never silently inherit the observation clock.
@@ -2679,7 +2682,14 @@ def _structural_match(
     if plan.temporal_statuses:
         reasons.append("temporal_status")
     if plan.as_of is not None:
-        reasons.append("valid_at_as_of")
+        match = _as_of_match(record, plan)
+        reasons.append(
+            "valid_at_as_of"
+            if match == "validity_match"
+            else "timeless_at_as_of"
+            if match == "timeless"
+            else "validity_time_uncertain"
+        )
     elif _query_temporal_view(plan) == PersonalMemoryQueryTemporalView.CURRENT and (
         valid_from is not None or valid_to is not None
     ):
@@ -3034,6 +3044,30 @@ def _uncertain_event_interval(
     )
 
 
+def _as_of_match(
+    record: MemoryRecord, plan: PersonalMemoryQueryPlan
+) -> Literal["not_requested", "validity_match", "timeless", "uncertain"]:
+    """Describe accepted point-in-time candidates; never infer bounds from age.
+
+    One explicit endpoint retains the existing open-interval contract. Present
+    labels and occurrence coordinates are not validity intervals. This classifies
+    stored metadata, not independently verified truth or normalization.
+    """
+    if plan.as_of is None:
+        return "not_requested"
+    parsed = [_metadata_time(record, key) for key in ("valid_from", "valid_to")]
+    if any(
+        record.metadata.get(key) not in (None, "") and value is None
+        for key, value in zip(("valid_from", "valid_to"), parsed, strict=True)
+    ):
+        return "uncertain"
+    if any(value is not None for value in parsed):
+        return "validity_match"
+    if _metadata_text(record, "temporal_status") == MemoryTemporalStatus.TIMELESS:
+        return "timeless"
+    return "uncertain"
+
+
 def _source_grounding_disputed(record: MemoryRecord) -> bool:
     raw = record.metadata.get("source_grounding")
     decision = raw.get("decision") if isinstance(raw, dict) else None
@@ -3045,8 +3079,18 @@ def _count_result(
 ) -> PersonalMemoryCountResult:
     if _query_operation(plan) != PersonalMemoryQueryOperation.COUNT:
         return PersonalMemoryCountResult(status=PersonalMemoryCountStatus.NOT_REQUESTED)
+    if any(_as_of_match(record, plan) == "uncertain" for record in records):
+        return PersonalMemoryCountResult(
+            status=PersonalMemoryCountStatus.INDETERMINATE,
+            observed_records=len(records),
+            reason="uncertain validity does not certify membership at the requested as_of",
+        )
     if any(_source_grounding_disputed(record) for record in records):
-        return PersonalMemoryCountResult(status="indeterminate", observed_records=len(records), reason="disputed source grounding cannot certify an exact count")
+        return PersonalMemoryCountResult(
+            status="indeterminate",
+            observed_records=len(records),
+            reason="disputed source grounding cannot certify an exact count",
+        )
     if any(_uncertain_event_interval(record, plan) for record in records):
         return PersonalMemoryCountResult(
             status=PersonalMemoryCountStatus.INDETERMINATE,
@@ -3265,6 +3309,7 @@ def _candidate_evidence(
         relation_edge_id=relation_edge,
         answer_support="unassessed",
         store_revalidated=True,
+        as_of_match=_as_of_match(record, plan),
     )
 
 

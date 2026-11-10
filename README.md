@@ -475,6 +475,7 @@ Doppel 提供 scope、证据和检索材料，但不接管：
 | [开发路线](docs/development-roadmap.md) | 开源产品主线、近期交付与验证边界 |
 | [候选融合](docs/candidate-fusion.md) | lexical / vector / relation 候选如何组合 |
 | [检索评测边界](docs/retrieval-evaluation.md) | candidate、evidence 与 answer 的区别 |
+| [指定日期的不确定性](docs/as-of-uncertainty.md) | 区分有效期匹配、无日期候选和历史证据 |
 | [证据验证](docs/evidence-verification.md) | 可选 verifier 协议与安全边界 |
 | [查询诊断](docs/query-diagnostics.md) | trace 与召回调试 |
 | [索引维护与恢复](docs/index-maintenance.md) | 生命周期同步、失败重放、checkpoint 与并发边界 |

@@ -14,6 +14,11 @@ mean that the record proves the requested claim.
 - relation source, type, edge ID, and match kind when available;
 - whether the candidate was reloaded from the authoritative Store.
 
+Point-in-time queries additionally expose `as_of_match`: `validity_match`,
+`timeless`, `uncertain`, or `not_requested`. Undated evidence is not a certified
+date match. See [as-of uncertainty](as-of-uncertainty.md); answer support remains
+unassessed and observation time is never promoted to an effective date.
+
 `answer_support` is deliberately fixed to `unassessed`. The query engine cannot infer
 that `book HELD_BY Lin` proves `book PURCHASED_BY who`; an answer layer, optional
 evidence verifier, or future context selector must make that judgment.
@@ -51,7 +56,8 @@ Hard safety gates/security gates remain:
 
 - exact authorized scope and subject;
 - factual authority and lifecycle state;
-- temporal validity;
+- known temporal mismatches; uncertain retained candidates must be explicitly
+  distinguished from verified point-in-time matches;
 - provenance checks in the benchmark;
 - authoritative Store reload for derived index candidates.
 

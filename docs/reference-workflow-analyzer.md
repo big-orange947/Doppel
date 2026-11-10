@@ -79,3 +79,5 @@ evidence IDs，判断是否正确抽取、区分更正。没有抽出记忆仍�
 该测例不提供正式质量成绩。首轮真实调用已完成：一次请求、1510 reported tokens，
 运行链路与当前／历史分类通过；缺少有效区间时的 as-of 不确定性反馈存在缺口。
 详见 [真实结果与时间诊断](../benchmarks/reports/reference-workflow-live-2026-11-10.md)。
+随后已补充 [as-of 不确定性处理](as-of-uncertainty.md)，用原记录零模型调用复查；旧诊断保留，
+不回写模型输出或有效期。新的返回集合和警告见 [修复记录](../benchmarks/reports/as-of-uncertainty-2026-11-10.md)。

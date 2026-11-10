@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Expose defaulted candidate `as_of_match` and validity uncertainty warnings.
+  Retain authorized active undated historical/unknown evidence without claiming
+  date validity; undated current claims no longer receive `valid_at_as_of`.
+  Preserve known disjoint bounds and scope/authority/lifecycle gates; uncertain
+  point-in-time membership cannot produce an exact count. No date inference,
+  Store rewrites, domain rules or ranking-weight changes. Read-only replay of the
+  saved live records retains both uncertain claims; current/prior results unchanged.
+  Add 23 focused regressions and review the appended public wire field. Final full
+  run: 2515 passed/33 skipped/three subtests; Ruff and query type checks pass.
+
 - Inspect the first live reference-analyzer workflow: one request/1510 reported
   tokens, current/historical attribution preserved, real PG manifests clean.
   Read-only structured temporal diagnosis exposes missing as-of uncertainty when
