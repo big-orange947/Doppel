@@ -76,4 +76,6 @@ evidence IDs，判断是否正确抽取、区分更正。没有抽出记忆仍�
 
 `llm_usage.new_calls` 为本进程尝试数，`reserved_calls` 为该账本累计数，
 `observed_tokens` 为实际收到的 usage 汇总；`paid_calls=null` 表示未核对平台账单。
-该测例不提供正式质量成绩。当前提交仅完成假 HTTP 验证，真实模型验通尚待本机配置。
+该测例不提供正式质量成绩。首轮真实调用已完成：一次请求、1510 reported tokens，
+运行链路与当前／历史分类通过；缺少有效区间时的 as-of 不确定性反馈存在缺口。
+详见 [真实结果与时间诊断](../benchmarks/reports/reference-workflow-live-2026-11-10.md)。

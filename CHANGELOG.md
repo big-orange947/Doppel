@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Inspect the first live reference-analyzer workflow: one request/1510 reported
+  tokens, current/historical attribution preserved, real PG manifests clean.
+  Read-only structured temporal diagnosis exposes missing as-of uncertainty when
+  both validity bounds are absent. Preserve the result as an open issue, not a
+  temporal-quality pass; no further paid calls, prompt changes or data rewrites.
+
 - Add opt-in reference analyzer mode to the personal PG workflow smoke, guarded
   by explicit live/model configuration. Persist generation reservations and usage
   across process restarts, cap attempts without retry/refund, retain unknown usage
