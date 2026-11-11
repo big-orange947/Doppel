@@ -45,6 +45,41 @@ preserve raw fallback and measure precision/coverage before any promotion.
 The wrapper reviews content entailment, not every structural type or normalized
 date. It does not certify event identity, calendar arithmetic or exact counts.
 
+## Isolated speaker review candidate (V2)
+
+`SourceGroundedPersonalMemoryAnalyzerV2` is a separate module-only opt-in:
+
+```python
+from doppel_memory.source_grounding import SourceGroundedPersonalMemoryAnalyzerV2
+
+analyzer = SourceGroundedPersonalMemoryAnalyzerV2(base_analyzer, review_model)
+```
+
+V2 sends one eligible draft per independent model request, containing only that
+draft's cited original messages. Other drafts' sources are physically absent
+from the request. A speaker frame binds each cited source to its actor and the
+host's owner/agent ID or contact sender ID; identifiers are not display names.
+Generic perspective instructions cover first-person clauses, embedded quotations,
+negation and predicates about other people. No names or topic dictionaries drive
+runtime decisions. Source-quote checks still enforce exact original text, not
+semantic entailment. The review remains a model judgment and cannot repair a
+claim or authorize an identity.
+
+This adds cost: V1 makes one review call per eligible window; V2 can make up to
+`config.max_drafts` calls (default 40). The host must provide attempt budgets and
+output caching. All per-request byte limits are checked before the first review
+call; each response is validated before proceeding. Failure returns no partial
+analysis, although earlier requests may already have incurred cost. A bounded
+caller may stop before all drafts are reviewed. Do not represent it as a complete
+review or refund its attempts. This does not add a scheduler or automatic retry.
+
+Default policy remains `annotate`: high-confidence disputes retain the original
+candidate and source quotes. Supported results do not confirm facts or bypass
+miner authority gates. Separate version/checkpoint/cache identities are required;
+V1 request shape, prompt/schema and version-binding formula remain unchanged.
+The [prospective control plan](../benchmarks/reports/source-attribution-controls-plan-2026-11-11.md)
+defines the first comparison. Control success alone does not justify default promotion.
+
 Separately, interval queries now flag impossible duration/precision combinations
 (e.g. a week labeled day). They retain the candidate and original bounds/label,
 mark the precision unreliable, and do not certify an exact interval count. The

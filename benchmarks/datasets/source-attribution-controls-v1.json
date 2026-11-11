@@ -1,0 +1,49 @@
+{
+  "schema": "doppel.source-attribution-controls.v1",
+  "development_only": true,
+  "cases": [
+    {
+      "id": "attribution-01",
+      "messages": [{"message_id":"s1","actor":"owner","at":"2026-11-01T09:00:00Z","text":"Nora sold her old monitor; I kept mine."}],
+      "drafts": [
+        {"content":"The owner kept their monitor.","subject":"owner","evidence_ids":["s1"]},
+        {"content":"Nora kept her old monitor.","subject":"owner","evidence_ids":["s1"]}
+      ],
+      "expected_verdicts": ["supported","contradicted"],
+      "rubric":"Preserve the subject of keeping vs selling; the named third party is not the enclosing speaker."
+    },
+    {
+      "id": "attribution-02",
+      "messages": [{"message_id":"s1","actor":"contact","sender_id":"contact-yu","at":"2026-11-02T09:00:00Z","text":"我是小余。是我妹妹借走了投影仪，我没有借走。"}],
+      "drafts": [
+        {"content":"小余的妹妹没有借走投影仪。","subject":"contact","evidence_ids":["s1"]},
+        {"content":"小余没有借走投影仪。","subject":"contact","evidence_ids":["s1"]}
+      ],
+      "expected_verdicts": ["contradicted","supported"],
+      "rubric":"Negation belongs to the contact speaker, not the sibling; opaque sender identity does not change the sentence's referents."
+    },
+    {
+      "id": "attribution-03",
+      "messages": [{"message_id":"s1","actor":"owner","at":"2026-11-03T09:00:00Z","text":"Omar told me, 'I cancelled my pass.' I renewed mine."}],
+      "drafts": [
+        {"content":"The owner renewed their pass.","subject":"owner","evidence_ids":["s1"]},
+        {"content":"The owner cancelled their pass.","subject":"owner","evidence_ids":["s1"]}
+      ],
+      "expected_verdicts": ["supported","contradicted"],
+      "rubric":"Quoted first-person cancellation is Omar's; enclosing first-person renewal is the owner's."
+    },
+    {
+      "id": "attribution-04",
+      "messages": [
+        {"message_id":"s1","actor":"owner","at":"2026-11-04T09:00:00Z","text":"I booked the rehearsal room this morning."},
+        {"message_id":"s2","actor":"agent","at":"2026-11-04T09:01:00Z","text":"You haven't booked a room. I could book one later."}
+      ],
+      "drafts": [
+        {"content":"The agent has already booked the rehearsal room.","subject":"agent","evidence_ids":["s2"]},
+        {"content":"The owner booked the rehearsal room this morning.","subject":"owner","evidence_ids":["s1"]}
+      ],
+      "expected_verdicts": ["contradicted","supported"],
+      "rubric":"The legitimate owner claim must be assessed only against s1, despite another draft's contrary assistant source; agent possibility does not support completed action."
+    }
+  ]
+}

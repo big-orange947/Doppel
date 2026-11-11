@@ -37,7 +37,8 @@ The manifest has three classifications:
 experimental. Files under `examples/` are reference recipes, not installed API.
 Underscore-prefixed names are always private.
 
-`doppel_memory.source_grounding.SourceGroundedPersonalMemoryAnalyzer` and its
+`doppel_memory.source_grounding.SourceGroundedPersonalMemoryAnalyzer`, its opt-in
+`SourceGroundedPersonalMemoryAnalyzerV2` candidate, and their
 review/config/report models are module-only experimental. This optional
 [source-grounding wrapper](source-grounding.md) has a separate version-bound
 checkpoint identity; supported reviews do not confirm facts. Existing analyzer

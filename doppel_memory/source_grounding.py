@@ -16,6 +16,7 @@ from doppel_memory.intelligence import (
     StructuredGenerationRequest,
     StructuredOutputModel,
 )
+from doppel_memory.models import Actor
 
 
 class GroundingQuote(BaseModel):
@@ -93,6 +94,26 @@ exact source quote explaining even an uncertain verdict; never cite model text
 as if it were an original message.
 """
 
+ATTRIBUTION_INSTRUCTIONS = (
+    INSTRUCTIONS
+    + """
+Each request contains exactly one draft and only that draft's cited sources.
+Use the speaker_frame to resolve perspective; trusted_subject_id is an opaque
+host identity, not a person's display name or a model-authorized identity.
+The speaker of a message is not necessarily the person described by every clause.
+First-person statements refer to that source's speaker. Quoted first-person
+speech belongs to the quoted speaker, not automatically to the enclosing speaker.
+Preserve the subject of each predicate, negation, ownership and action: a clause
+about one person must not be transferred to another person merely mentioned in
+the message. Check the claim's wording as well as its declared subject role.
+Names in content do not override the supplied roles. If the sources do not settle
+the referent, return uncertain rather than inventing an identity or rewriting.
+Quote a source span that exposes the relevant subject/predicate and negation or
+modality, including enough surrounding text to resolve perspective. Do not judge
+the claim using uncited context, prior calls, expected labels or imagined facts.
+"""
+)
+
 
 def _hash(value: dict) -> str:
     return hashlib.sha256(
@@ -112,6 +133,8 @@ class SourceGroundedPersonalMemoryAnalyzer:
     """
 
     name = "doppel.source-grounded-personal-memory-analyzer"
+    _version_prefix = "1."
+    _instructions = INSTRUCTIONS
 
     def __init__(
         self,
@@ -127,13 +150,13 @@ class SourceGroundedPersonalMemoryAnalyzer:
         if not all((analyzer.name, analyzer.version, model.name, model.version)):
             raise ValueError("grounding identities required")
         self.version = (
-            "1."
+            self._version_prefix
             + _hash(
                 {
                     "analyzer": [analyzer.name, analyzer.version],
                     "model": [model.name, model.version],
                     "config": self.config.model_dump(),
-                    "instructions": INSTRUCTIONS,
+                    "instructions": self._instructions,
                     "schema": GroundingReview.model_json_schema(),
                 }
             )[:16]
@@ -158,49 +181,8 @@ class SourceGroundedPersonalMemoryAnalyzer:
         # never repair them or treat an incomplete source set as a contradiction.
         if not eligible:
             return analysis
-        identities = sorted({e for d in eligible.values() for e in d.evidence_ids})
-        generation = StructuredGenerationRequest(
-            instructions=INSTRUCTIONS,
-            input={
-                "drafts": [
-                    {
-                        "draft_index": i,
-                        "content": d.content,
-                        "memory_type": d.memory_type,
-                        "subject": d.subject,
-                        "temporal_status": d.temporal_status,
-                        "evidence_ids": d.evidence_ids,
-                    }
-                    for i, d in eligible.items()
-                ],
-                "sources": [
-                    {
-                        "evidence_id": e,
-                        "actor": sources[e].actor,
-                        "observed_at": sources[e].at.isoformat(),
-                        "text": sources[e].text,
-                    }
-                    for e in identities
-                ],
-            },
-            output_schema=GroundingReview.model_json_schema(),
-        )
-        if len(generation.model_dump_json().encode()) > self.config.max_request_bytes:
-            raise ValueError("source review exceeds byte bound; no truncation")
-        review = GroundingReview.model_validate(await self.model.generate(generation))
-        indices = [d.draft_index for d in review.decisions]
-        if len(set(indices)) != len(indices) or set(indices) != set(eligible):
-            raise ValueError("source review must cover exactly the supplied drafts")
-        for decision in review.decisions:
-            for quote in decision.quotes:
-                if (
-                    quote.evidence_id not in eligible[decision.draft_index].evidence_ids
-                    or quote.text not in sources[quote.evidence_id].text
-                    or not quote.text.strip()
-                ):
-                    raise ValueError(
-                        "source review quote is not bound to original evidence"
-                    )
+        review, request_hash = await self._review(bound, eligible, sources)
+        self._validate_review(review, eligible, sources)
         by_index = {d.draft_index: d for d in review.decisions}
         flagged = [
             i
@@ -209,7 +191,6 @@ class SourceGroundedPersonalMemoryAnalyzer:
             and d.confidence >= self.config.minimum_contradiction_confidence
         ]
         rejected = flagged if self.config.contradiction_policy == "withhold" else []
-        request_hash = _hash(generation.model_dump(mode="json"))
         accepted = []
         for i, draft in enumerate(analysis.memories):
             if i in rejected:
@@ -240,3 +221,109 @@ class SourceGroundedPersonalMemoryAnalyzer:
         if self.observer is not None:
             self.observer(report)
         return PersonalMemoryAnalysis(memories=accepted)
+
+    def _generation(self, bound, eligible, sources):
+        identities = sorted({e for d in eligible.values() for e in d.evidence_ids})
+        generation = StructuredGenerationRequest(
+            instructions=self._instructions,
+            input={
+                "drafts": [
+                    {
+                        "draft_index": i,
+                        "content": d.content,
+                        "memory_type": d.memory_type,
+                        "subject": d.subject,
+                        "temporal_status": d.temporal_status,
+                        "evidence_ids": d.evidence_ids,
+                    }
+                    for i, d in eligible.items()
+                ],
+                "sources": [
+                    {
+                        "evidence_id": e,
+                        "actor": sources[e].actor,
+                        "observed_at": sources[e].at.isoformat(),
+                        "text": sources[e].text,
+                    }
+                    for e in identities
+                ],
+            },
+            output_schema=GroundingReview.model_json_schema(),
+        )
+        if len(generation.model_dump_json().encode()) > self.config.max_request_bytes:
+            raise ValueError("source review exceeds byte bound; no truncation")
+        return generation
+
+    async def _review(self, bound, eligible, sources):
+        generation = self._generation(bound, eligible, sources)
+        review = GroundingReview.model_validate(await self.model.generate(generation))
+        return review, _hash(generation.model_dump(mode="json"))
+
+    @staticmethod
+    def _validate_review(review, eligible, sources):
+        indices = [d.draft_index for d in review.decisions]
+        if len(set(indices)) != len(indices) or set(indices) != set(eligible):
+            raise ValueError("source review must cover exactly the supplied drafts")
+        for decision in review.decisions:
+            for quote in decision.quotes:
+                if (
+                    quote.evidence_id not in eligible[decision.draft_index].evidence_ids
+                    or quote.text not in sources[quote.evidence_id].text
+                    or not quote.text.strip()
+                ):
+                    raise ValueError(
+                        "source review quote is not bound to original evidence"
+                    )
+
+
+class SourceGroundedPersonalMemoryAnalyzerV2(SourceGroundedPersonalMemoryAnalyzer):
+    """Opt-in speaker-framed review with one isolated request per eligible draft.
+
+    At most config.max_drafts calls; host must budget/cache the reviewer. Byte
+    bounds are per request and checked for every draft before the first call.
+    Annotation remains default; neither quotes nor review prove semantic truth.
+    """
+
+    _version_prefix = "2."
+    _instructions = ATTRIBUTION_INSTRUCTIONS
+
+    def _generation(self, bound, eligible, sources):
+        generation = super()._generation(bound, eligible, sources)
+        payload = generation.model_dump(mode="json")
+        payload["input"]["speaker_frame"] = [
+            {
+                "evidence_id": source["evidence_id"],
+                "actor": source["actor"],
+                "trusted_subject_id": (
+                    bound.scope.user_id
+                    if source["actor"] == Actor.OWNER
+                    else bound.scope.agent_id
+                    if source["actor"] == Actor.AGENT
+                    else sources[source["evidence_id"]].sender_id
+                    if source["actor"] == Actor.CONTACT
+                    else None
+                ),
+            }
+            for source in payload["input"]["sources"]
+        ]
+        framed = StructuredGenerationRequest.model_validate(payload)
+        if len(framed.model_dump_json().encode()) > self.config.max_request_bytes:
+            raise ValueError("source review exceeds byte bound; no truncation")
+        return framed
+
+    async def _review(self, bound, eligible, sources):
+        requests = [
+            (i, self._generation(bound, {i: draft}, sources))
+            for i, draft in eligible.items()
+        ]
+        decisions, hashes = [], []
+        for index, generation in requests:
+            review = GroundingReview.model_validate(
+                await self.model.generate(generation)
+            )
+            self._validate_review(review, {index: eligible[index]}, sources)
+            decisions.extend(review.decisions)
+            hashes.append(_hash(generation.model_dump(mode="json")))
+        return GroundingReview(decisions=decisions), _hash(
+            {"format": "isolated-speaker-review.v2", "requests": hashes}
+        )
