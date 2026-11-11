@@ -33,6 +33,7 @@ from doppel_memory import (
     MemoryScope,
     MemoryStore,
     PersonalMemoryMiner,
+    ScopedHistoryReader,
 )
 
 
@@ -83,6 +84,8 @@ class PersonalMemoryWorkflow:
         governance_policy: MemoryGovernancePolicy | None = None,
         governance_config: MemoryGovernanceConfig | None = None,
         index_page_size: int = 100,
+        history: ScopedHistoryReader | None = None,
+        history_identity: str = "",
     ) -> None:
         if (
             not workflow_key.strip()
@@ -98,6 +101,11 @@ class PersonalMemoryWorkflow:
                 "reference workflow only writes its exact conversation scope"
             )
         self.store, self.scope, self.miner = store, scope, miner
+        if (history is None) != (not history_identity.strip()):
+            raise ValueError("custom history requires an explicit bound identity")
+        if history is not None and history.scope.scope_key != scope.scope_key:
+            raise ValueError("custom history must match exact scope")
+        self.history, self.history_identity = history, history_identity
         self.consolidator = consolidator
         self.runner = ConsolidationRunner(store, consolidation_config)
         if governance_config is not None and governance_policy is None:
@@ -130,6 +138,8 @@ class PersonalMemoryWorkflow:
                 getattr(getattr(governance_policy, "config", None), "fingerprint", ""),
                 self.governance_runner.config.fingerprint,
             ]
+        if history is not None:
+            binding_fields["history"] = history_identity
         self.binding = _digest(binding_fields)
         # Keep the path stable when model/config changes, so drift is rejected.
         self.path = directory / (
@@ -211,6 +221,7 @@ class PersonalMemoryWorkflow:
                 self.scope,
                 state.window,
                 checkpoint=state.batch_checkpoint,
+                history=self.history,
             )
             if result.errors or result.committable_checkpoint is None:
                 return {

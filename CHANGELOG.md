@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add host-only arrival inbox with atomic enqueue/reserve/ack and immutable batch
+  history. Bind optional custom history to personal-workflow journals; keep default
+  reader/profile behavior. Separate late-source backfill from prior time cursors and
+  governance clocks. Confirm queue progress only after Store/consolidation/index
+  completion; replay saved jobs after source/ack failure. Add synthetic late-input,
+  equal-timestamp, scope/conflict, snapshot and independent-process recovery checks.
+  No inferred dates, real-chat use, provider calls or core Store/API changes.
+  Verification: 8 new tests, 48 related checks; full suite 2,557 passed / 33 skipped
+  / 3 subtests passed; Ruff clean and changed Python examples type-checked.
+
 - Add explicit five-process real PG/pgvector synthetic lifecycle driver: seed,
   writer-boundary interruption, resume, later update and replay. Inspect retained
   inactive vectors before cleanup, validate Store/query guards and compare full
