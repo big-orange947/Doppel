@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add module-only opt-in isolated speaker-grounding V2: one draft's cited sources
+  per request, trusted speaker frames, complete pre-call byte checks and per-call
+  quote/coverage validation. Preserve V1 requests/version binding and annotation
+  defaults; reviews never certify facts or bypass authority. New paired controls
+  match 7/8 candidate vs 6/8 V1 judgments, with a remaining embedded-speech miss;
+  no default promotion. Twelve real source-review attempts / 12,448 reported
+  tokens; cache replay is exact with zero new calls. Thirteen new offline tests.
+  Full suite: 2,589 passed / 33 skipped / 3 subtests passed; Ruff and changed
+  runtime/runner type checks pass.
+
 - Add a frozen five-attempt default-analyzer lifecycle diagnostic using synthetic
   chat, real SQLite, arrival backfill and deterministic consolidation. Actual
   DeepSeek run reports slot drift, incomplete event-time coordinates and blocked

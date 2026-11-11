@@ -79,6 +79,10 @@ miner authority gates. Separate version/checkpoint/cache identities are required
 V1 request shape, prompt/schema and version-binding formula remain unchanged.
 The [prospective control plan](../benchmarks/reports/source-attribution-controls-plan-2026-11-11.md)
 defines the first comparison. Control success alone does not justify default promotion.
+The [first result](../benchmarks/reports/source-attribution-controls-result-2026-11-11.md)
+matched 7/8 candidate judgments vs 6/8 for V1, with one remaining quotation-subject
+miss in both arms. V2 cost more calls/tokens. It stays an explicit candidate,
+without a default change or claim that the prior lifecycle failure is repaired.
 
 Separately, interval queries now flag impossible duration/precision combinations
 (e.g. a week labeled day). They retain the candidate and original bounds/label,
