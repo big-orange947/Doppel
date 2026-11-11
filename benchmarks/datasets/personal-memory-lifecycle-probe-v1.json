@@ -1,0 +1,55 @@
+{
+  "schema": "doppel.personal-memory-lifecycle-probe.v1",
+  "cases": [
+    {
+      "id": "late-preference",
+      "rubric": "较新的明确更正仍是当前偏好；迟到旧声明不得重新覆盖它。检查 topic 对齐、revision 和两条证据是否保留；不要求旧值有独立历史快照。",
+      "batches": [
+        [{"message_id": "p-new", "actor": "owner", "text": "更正一下，我现在更喜欢深色界面，不喜欢浅色界面了。", "at": "2026-11-05T09:00:00Z"}],
+        [{"message_id": "p-old", "actor": "owner", "text": "我更喜欢浅色界面。", "at": "2026-11-01T09:00:00Z"}]
+      ],
+      "queries": [{"id": "current", "temporal_view": "current"}]
+    },
+    {
+      "id": "bounded-stay",
+      "rubric": "长期住址为南京；北京只是明确区间内的临时住宿。临时状态不得覆盖长期住址；区间内外应可区分。日级时间精度和保留历史是独立检查点，不以 schema 合法代替语义正确。",
+      "batches": [[
+        {"message_id": "s-base", "actor": "owner", "text": "我的长期住址在南京，这次出差也不会搬家。", "at": "2026-09-20T09:00:00Z"},
+        {"message_id": "s-trip", "actor": "owner", "text": "我已经结束这次出差了：2026年10月1日到10月10日临时住在北京，10月11日回南京。", "at": "2026-10-12T09:00:00Z"}
+      ]],
+      "queries": [
+        {"id": "current", "temporal_view": "current"},
+        {"id": "inside", "temporal_view": "as_of", "as_of": "2026-10-05T12:00:00Z"},
+        {"id": "outside", "temporal_view": "as_of", "as_of": "2026-10-20T12:00:00Z"}
+      ]
+    },
+    {
+      "id": "cancelled-plan",
+      "rubric": "报名培训只是计划，之后明确取消且未参加；不得变成已完成经历，也不得仍作为有效待办。历史助手的相反声明不应成为主人事实；默认 miner 过滤 agent 输入，须披露这一点。",
+      "batches": [[
+        {"message_id": "c-plan", "actor": "owner", "text": "我打算报名11月的陶艺培训，目前还没报名，也没参加过。", "at": "2026-10-20T09:00:00Z"},
+        {"message_id": "c-agent", "actor": "agent", "text": "你已经参加完陶艺培训了，真不错。", "at": "2026-10-22T09:00:00Z"},
+        {"message_id": "c-cancel", "actor": "owner", "text": "陶艺培训不报名了，取消这个计划。我没有去上课。", "at": "2026-10-25T09:00:00Z"}
+      ]],
+      "queries": [
+        {"id": "current", "temporal_view": "current"},
+        {"id": "planned", "temporal_view": "planned"},
+        {"id": "prior", "temporal_view": "prior"}
+      ]
+    },
+    {
+      "id": "speaker-ownership",
+      "allowed_subject_ids": ["contact-alan"],
+      "rubric": "折叠自行车属于联系人阿岚，不属于主人；助手建议不代表已经购买。检查主客体、sender_id、证据 actor 与 subject，原始 agent 记录可以保留但不能成为主人事实。",
+      "batches": [[
+        {"message_id": "o-contact", "actor": "contact", "sender_id": "contact-alan", "text": "我是阿岚，我刚买了一辆折叠自行车。", "at": "2026-11-02T09:00:00Z"},
+        {"message_id": "o-agent", "actor": "agent", "text": "你也可以买一辆折叠自行车。", "at": "2026-11-02T09:01:00Z"},
+        {"message_id": "o-owner", "actor": "owner", "text": "自行车是阿岚买的，我还没有自行车，也没有买车计划。", "at": "2026-11-02T09:02:00Z"}
+      ]],
+      "queries": [
+        {"id": "owner", "temporal_view": "unbounded"},
+        {"id": "contact", "temporal_view": "unbounded", "subject": "contact", "subject_id": "contact-alan"}
+      ]
+    }
+  ]
+}
