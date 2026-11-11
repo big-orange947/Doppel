@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add explicit four-process PG/pgvector late-arrival integration runner: newer
+  state, older-source backfill, writer-boundary interruption, frozen-batch recovery
+  and empty-queue replay. Check source timestamps, current/as-of validity, exact
+  scopes, provenance, manifests and actual semantic support of final hits.
+  Real local run used 28 embedding calls and zero paid LLM calls; no Store resets
+  or real-chat use. Five new driver tests; 58 related checks pass. This is
+  synthetic integration evidence, not a retrieval or extraction quality score.
+
 - Add host-only arrival inbox with atomic enqueue/reserve/ack and immutable batch
   history. Bind optional custom history to personal-workflow journals; keep default
   reader/profile behavior. Separate late-source backfill from prior time cursors and

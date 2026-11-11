@@ -71,8 +71,9 @@ workflow_key=batch.identity,
 补处理不启用工作流内治理：旧消息跨度不是当前治理时钟。host 应单独按可信当前时点调度
 治理与索引维护，避免用旧窗口倒退生命周期时间。
 
-本轮使用真实 SQLite、合成 analyzer 和目录索引，包含独立 CLI 进程恢复。没有使用真实聊天、
-真实外部模型、PG/Graphiti 到达队列联测或多实例生产验证。
+首轮使用真实 SQLite、合成 analyzer 和目录索引，包含独立 CLI 进程恢复。没有使用真实聊天、
+真实外部模型、Graphiti 到达队列联测或多实例生产验证。
+后续真实 PG／pgvector 入口与范围见 [迟到补处理 PG 验证](late-arrival-pg.md)。
 
 验证：新增 8 项测试，相关流程共 48 项通过；全量回归 2,557 passed、33 skipped、
 3 subtests passed。Ruff 全仓通过，三个变更 Python 示例的 Pyright 检查无错误。
