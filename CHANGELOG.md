@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fix arrival-workflow snapshot binding: require the actual native frozen reader
+  to match scope, batch identity and payload before source writes; a matching
+  history label alone can no longer acknowledge a wrong/empty history selection.
+  Revalidate persisted source identities/checksums on duplicate enqueue, new and
+  resumed reservations, and acknowledgments; reject corruption without replacing
+  old batch IDs or resetting journals. Seven reproduced boundary regressions now
+  pass. Core history protocols and general custom-reader support are unchanged.
+  Validation: 65 related checks; full suite 2,569 passed / 33 skipped / 3 subtests
+  passed; four real-PG stages pass with 28 local embedding calls and zero paid LLM
+  calls. Prior inbox data validates read-only; no old-data reset.
+
 - Add explicit four-process PG/pgvector late-arrival integration runner: newer
   state, older-source backfill, writer-boundary interruption, frozen-batch recovery
   and empty-queue replay. Check source timestamps, current/as-of validity, exact

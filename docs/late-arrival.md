@@ -47,6 +47,11 @@ workflow_key=batch.identity,
 自定义 history 必须携带非空身份，且与工作流 exact scope 匹配。默认不提供 history 时，
 既有绑定和 StoreHistoryReader 路径保持不变。身份由可信 host 提供，并非 reader 的独立认证。
 
+`drain_once` 的接法更严格：必须使用 `batch.history()` 返回的原生 `FrozenHistory`，
+执行器在源消息写入前核对实际 reader 的 scope、批次身份和完整消息快照。只传对
+`history_identity`、却换成 StoreHistoryReader 或另一份快照，会停止且保留未确认批次。
+这个检查防接线错误，不是对可信 host 中任意代码的安全隔离。
+
 补处理窗口是冻结消息的原时间跨度，不代表那个时间段的所有历史已收齐。独立批次可以
 覆盖相同或更早时间范围，旧主作业的 cursor 和 checkpoint 不会被覆盖。
 
@@ -56,10 +61,16 @@ workflow_key=batch.identity,
 - 部分处理成功：重用同一批次、同一历史身份和持久化计划，不扩入新到达消息。
 - 工作流完成、ack 失败：恢复时识别已完成作业，再确认队列，不重复抽取。
 - 同 ID 不同内容：沿用来源冲突检查，报错，不覆盖队列或 Store。
+- 重复入队、读取新／待恢复批次及确认前，复核持久化消息身份与入队时的内容指纹。
+  内容损坏或指纹不匹配时停止，不把损坏消息重新冻结为可接受的新批次。既有 batch ID
+  格式与 journal 绑定不变，不需重置旧队列。
 - 失败不会自动跳过／dead-letter。冲突可能阻塞该 scope 的消费，需要 host 处理。
 - SQLite 事务保护 append/reserve/ack，但只支持独占 consumer；不是跨进程处理 lease。
 - 队列、Store、journal 分别持久化，无跨三者的原子事务。队列保留已完成 payload，
   不提供自动清理／压缩、备份或生产吞吐保证。
+
+本地指纹是完整性检查，不是签名；同时修改内容和校验数据的写入者仍需由 host 权限控制。
+冻结后另有完整 payload 的 batch ID 校验；入队内容指纹沿用来源检查对运输 raw 元数据的排除规则。
 
 此方案必须处在消息接入口。绕过 inbox 直接写 Store，或此前已经漏掉的消息，不会自动被
 发现，需显式导入队列或另行审计。未使用队列的旧时间游标仍有原来的迟到边界。
@@ -78,3 +89,6 @@ workflow_key=batch.identity,
 验证：新增 8 项测试，相关流程共 48 项通过；全量回归 2,557 passed、33 skipped、
 3 subtests passed。Ruff 全仓通过，三个变更 Python 示例的 Pyright 检查无错误。
 这些结果验证恢复与来源边界，不代表自然语言抽取或检索质量分数。
+
+后续 [边界检修记录](../benchmarks/reports/late-arrival-audit-2026-11-11.md) 补充了
+reader 内容绑定、队列内容校验和修复后的真实 PG 回归；首轮数字保留为当时的验证记录。

@@ -21,6 +21,28 @@ def digest(value):
     ).hexdigest()
 
 
+def _checked_rows(rows):
+    """Verify the enqueue-time semantic checksum before using persisted rows.
+
+    Keep the original (sequence, payload) batch hash format for existing journals.
+    This detects accidental changes, not a writer able to replace both checksums.
+    """
+    checked = []
+    for sequence, payload, event_key, fingerprint in rows:
+        try:
+            message = ChatMessage.model_validate_json(payload)
+        except ValueError:
+            raise ValueError("arrival source integrity mismatch") from None
+        if (
+            not message.identity_key
+            or message.identity_key != event_key
+            or digest(_portable(message)) != fingerprint
+        ):
+            raise ValueError("arrival source integrity mismatch")
+        checked.append((sequence, payload))
+    return checked
+
+
 class ArrivalBatch(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -138,11 +160,12 @@ class ArrivalInbox:
             with sqlite3.connect(self.path) as conn:
                 conn.execute("BEGIN IMMEDIATE")
                 previous = conn.execute(
-                    "SELECT sequence,fingerprint FROM arrival_events WHERE scope_key=? AND event_key=?",
+                    "SELECT sequence,payload,event_key,fingerprint FROM arrival_events WHERE scope_key=? AND event_key=?",
                     (scope.scope_key, bound.identity_key),
                 ).fetchone()
                 if previous:
-                    if previous[1] != fingerprint:
+                    _checked_rows([previous])
+                    if previous[3] != fingerprint:
                         raise SourceEventConflictError(
                             "arrival identity reused with different portable content"
                         )
@@ -173,15 +196,19 @@ class ArrivalInbox:
                 ).fetchone()
                 if pending:
                     batch_id = pending[0]
-                    rows = conn.execute(
-                        "SELECT sequence,payload FROM arrival_events WHERE batch_id=? AND scope_key=? ORDER BY sequence",
-                        (batch_id, scope.scope_key),
-                    ).fetchall()
+                    rows = _checked_rows(
+                        conn.execute(
+                            "SELECT sequence,payload,event_key,fingerprint FROM arrival_events WHERE batch_id=? AND scope_key=? ORDER BY sequence",
+                            (batch_id, scope.scope_key),
+                        ).fetchall()
+                    )
                 else:
-                    rows = conn.execute(
-                        "SELECT sequence,payload FROM arrival_events WHERE scope_key=? AND batch_id IS NULL ORDER BY sequence LIMIT ?",
-                        (scope.scope_key, max_messages),
-                    ).fetchall()
+                    rows = _checked_rows(
+                        conn.execute(
+                            "SELECT sequence,payload,event_key,fingerprint FROM arrival_events WHERE scope_key=? AND batch_id IS NULL ORDER BY sequence LIMIT ?",
+                            (scope.scope_key, max_messages),
+                        ).fetchall()
+                    )
                     if not rows:
                         return None
                     batch_id = "arrival_" + digest(
@@ -211,10 +238,12 @@ class ArrivalInbox:
         def ack():
             with sqlite3.connect(self.path) as conn:
                 conn.execute("BEGIN IMMEDIATE")
-                rows = conn.execute(
-                    "SELECT sequence,payload FROM arrival_events WHERE batch_id=? AND scope_key=? ORDER BY sequence",
-                    (batch.identity, batch.scope.scope_key),
-                ).fetchall()
+                rows = _checked_rows(
+                    conn.execute(
+                        "SELECT sequence,payload,event_key,fingerprint FROM arrival_events WHERE batch_id=? AND scope_key=? ORDER BY sequence",
+                        (batch.identity, batch.scope.scope_key),
+                    ).fetchall()
+                )
                 if (
                     not rows
                     or batch.identity
@@ -251,6 +280,14 @@ async def drain_once(inbox, scope, store, workflow_factory, *, max_steps=100):
         raise ValueError(
             "arrival workflow must bind its snapshot, Store, scope and separate governance"
         )
+    expected_history = batch.history()
+    if (
+        type(workflow.history) is not FrozenHistory
+        or workflow.history.scope != scope
+        or workflow.history.identity != batch.identity
+        or workflow.history._payloads != expected_history._payloads
+    ):
+        raise ValueError("arrival workflow must use the reserved frozen snapshot")
     for message in batch.messages:
         await ingest_checked(store, scope, message)
     for _ in range(max_steps):

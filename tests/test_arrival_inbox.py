@@ -1,5 +1,6 @@
 """Synthetic late-arrival recovery; source dates are never rewritten."""
 
+import sqlite3
 from datetime import UTC, datetime
 
 import pytest
@@ -15,6 +16,7 @@ from doppel_memory import (
     PersonalMemoryMiner,
     PersonalMemoryMinerConfig,
     SQLiteStore,
+    StoreHistoryReader,
 )
 from examples.arrival_inbox import ArrivalInbox, drain_once
 from examples.checked_ingest import SourceEventConflictError
@@ -274,3 +276,75 @@ async def test_source_write_failure_does_not_ack_arrival(tmp_path):
         assert analyzer.calls == [["new"]]
     finally:
         await store.close()
+
+
+@pytest.mark.parametrize("mismatch", ["store_reader", "identity", "payload"])
+async def test_actual_history_must_match_reserved_snapshot_before_source_writes(
+    tmp_path, mismatch
+):
+    inbox = ArrivalInbox(tmp_path / "inbox.sqlite3")
+    await inbox.append(SCOPE, message("new", 3))
+    analyzer = Analyzer()
+    store = SQLiteStore(database=str(tmp_path / "memory.sqlite3"))
+    create = factory(tmp_path, store, analyzer)
+
+    def wrong_factory(batch):
+        workflow = create(batch)
+        if mismatch == "store_reader":
+            workflow.history = StoreHistoryReader(store, SCOPE)
+        else:
+            altered = batch.model_copy(
+                update={
+                    "identity": "other-batch"
+                    if mismatch == "identity"
+                    else batch.identity,
+                    "payloads": batch.payloads if mismatch == "identity" else (),
+                }
+            )
+            workflow.history = altered.history()
+        return workflow
+
+    try:
+        with pytest.raises(ValueError, match="snapshot"):
+            await drain_once(inbox, SCOPE, store, wrong_factory)
+        assert analyzer.calls == []
+        assert (await store.scan(SCOPE, limit=100)).records == []
+        assert await inbox.reserve(SCOPE) is not None
+    finally:
+        await store.close()
+
+
+@pytest.mark.parametrize(
+    "operation", ["reserve_new", "reserve_pending", "ack", "duplicate"]
+)
+async def test_queue_checks_stored_source_integrity_before_trusting_it(
+    tmp_path, operation
+):
+    path = tmp_path / "inbox.sqlite3"
+    inbox = ArrivalInbox(path)
+    await inbox.append(SCOPE, message("new", 3))
+    batch = (
+        await inbox.reserve(SCOPE) if operation in {"reserve_pending", "ack"} else None
+    )
+    with sqlite3.connect(path) as connection:
+        if operation == "reserve_new":
+            connection.execute(
+                "UPDATE arrival_events SET payload=?",
+                (message("new", 3, text="changed").model_dump_json(),),
+            )
+        else:
+            connection.execute("UPDATE arrival_events SET fingerprint='broken'")
+    with pytest.raises(ValueError, match="integrity"):
+        if operation == "ack":
+            await inbox.acknowledge(batch)
+        elif operation == "duplicate":
+            await inbox.append(SCOPE, message("new", 3))
+        else:
+            await inbox.reserve(SCOPE)
+    with sqlite3.connect(path) as connection:
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM arrival_batches WHERE complete=1"
+            ).fetchone()[0]
+            == 0
+        )
