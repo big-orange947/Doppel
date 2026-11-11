@@ -472,6 +472,7 @@ Doppel 提供 scope、证据和检索材料，但不接管：
 | [可恢复增量流程](docs/incremental-personal-memory.md) | 提案与整理计划落盘、分阶段执行、失败与重启恢复 |
 | [源消息身份检查](docs/checked-source-ingestion.md) | 区分幂等重放与同 ID 内容冲突，保留说话者归属 |
 | [可选治理阶段](docs/workflow-governance.md) | 关闭窗口的时间推进、归档、计划重放与索引同步 |
+| [PG 生命周期验证](docs/workflow-lifecycle-pg.md) | 合成状态演变、旧向量残留、中断恢复与重放检查 |
 | [PG 工作流验通](docs/personal-workflow-pg.md) | 真实 pgvector、本地 embedding 与存储身份绑定 |
 | [真实 analyzer 验通](docs/reference-workflow-analyzer.md) | 显式模型配置、持久化调用上限与用量账本 |
 | [开发路线](docs/development-roadmap.md) | 开源产品主线、近期交付与验证边界 |

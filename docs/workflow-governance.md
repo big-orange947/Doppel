@@ -63,3 +63,6 @@ analyzer 是测试内的脚本替身，索引是 SQLite 目录替身。验证的
 新增八项生命周期／恢复用例通过，相关定向回归 105 项通过。全仓回归 2544 passed、
 33 skipped、三个 subtests 通过；Ruff 与工作流类型检查通过。仍有一个既有的第三方
 Graphiti/Pydantic 弃用提示。这些数量不是性能或记忆准确率指标。
+
+随后补充了 [真实 PG／pgvector 的五进程合成验证](workflow-lifecycle-pg.md)，覆盖中断时
+旧向量残留、恢复清理和全量记录摘要重放。该结果仍不是网络故障或多实例验收。

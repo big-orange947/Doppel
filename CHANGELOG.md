@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add explicit five-process real PG/pgvector synthetic lifecycle driver: seed,
+  writer-boundary interruption, resume, later update and replay. Inspect retained
+  inactive vectors before cleanup, validate Store/query guards and compare full
+  record fingerprints across resume/replay. Four scripted scopes pass with 38
+  local embedding calls/zero paid calls; final 24 retained source/audit records.
+  Add five offline driver controls; 91 related tests/Ruff/runner types pass. No
+  real-chat use, network-fault/multi-instance certification or quality score.
+
 - Add explicit optional governance to the host personal-memory workflow, between
   consolidation and index maintenance. Persist the bound plan/checkpoint and use
   closed-window end as the governance clock; empty later windows can archive known
