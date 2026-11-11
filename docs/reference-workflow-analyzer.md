@@ -81,3 +81,11 @@ evidence IDs，判断是否正确抽取、区分更正。没有抽出记忆仍�
 详见 [真实结果与时间诊断](../benchmarks/reports/reference-workflow-live-2026-11-10.md)。
 随后已补充 [as-of 不确定性处理](as-of-uncertainty.md)，用原记录零模型调用复查；旧诊断保留，
 不回写模型输出或有效期。新的返回集合和警告见 [修复记录](../benchmarks/reports/as-of-uncertainty-2026-11-10.md)。
+
+## 扩展生命周期诊断
+
+已增加四场景、五批次的 [默认 analyzer 诊断](../benchmarks/reports/personal-memory-lifecycle-probe-result-2026-11-11.md)，
+复用持久化预算和原始输出缓存，接到 SQLite 到达队列与可恢复工作流。真实模型暴露了跨批次
+主题漂移、时间坐标不完整及说话者归属错误；最后一批被证据门禁阻断。流程完成数、schema
+通过数和语义正确性需分别看待，不能用一次 smoke 通过推断开箱质量。
+这轮没有改默认 analyzer、重试挑选输出或启用付费 Judge；缓存可在新状态目录复现同样结果。

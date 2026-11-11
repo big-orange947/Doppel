@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a frozen five-attempt default-analyzer lifecycle diagnostic using synthetic
+  chat, real SQLite, arrival backfill and deterministic consolidation. Actual
+  DeepSeek run reports slot drift, incomplete event-time coordinates and blocked
+  speaker attribution; cancellation behaves as expected on one sample. Preserve
+  stopped status, invalid drafts and all raw caches; do not promote a default.
+  Fresh-state cache replay uses five hits / zero new calls and matches semantic
+  projections. Seven offline controls and 41 related checks pass; 7,521 reported
+  tokens, no Reader/Judge, embeddings, real chat or core algorithm changes.
+
 - Fix arrival-workflow snapshot binding: require the actual native frozen reader
   to match scope, batch identity and payload before source writes; a matching
   history label alone can no longer acknowledge a wrong/empty history selection.
