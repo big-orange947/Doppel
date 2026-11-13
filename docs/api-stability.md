@@ -37,6 +37,10 @@ The manifest has three classifications:
 experimental. Files under `examples/` are reference recipes, not installed API.
 Underscore-prefixed names are always private.
 
+`doppel_memory.source_clauses.SourceClausePersonalMemoryAnalyzer` and its output
+models are module-only experimental; [source-preserving extraction](source-clauses.md)
+keeps original text and unverified annotations, without changing root API/defaults.
+
 `doppel_memory.source_grounding.SourceGroundedPersonalMemoryAnalyzer`, its opt-in
 `SourceGroundedPersonalMemoryAnalyzerV2` candidate, and their
 review/config/report models are module-only experimental. This optional

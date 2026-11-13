@@ -1,0 +1,8 @@
+{
+  "schema":"doppel.source-clause-probe.v1",
+  "cases":[
+    {"id":"retained-perspective","rubric":"The laptop belongs to a colleague; the owner has not ordered one. Preserve both clauses without moving the denial to the colleague.","batches":[[{"message_id":"m1","actor":"owner","at":"2026-11-03T09:00:00Z","text":"A colleague bought a new laptop. I have not ordered one and still use my old desktop."}]],"queries":[{"id":"owner","temporal_view":"unbounded"}]},
+    {"id":"retained-quotation","rubric":"Quoted relocation belongs to Rina; the account owner remains in their original apartment. The full quotation context must stay available.","batches":[[{"message_id":"m2","actor":"owner","at":"2026-11-04T09:00:00Z","text":"Rina told me, 'I moved to a new apartment last week.' I am still in my original apartment and have no moving plans."}]],"queries":[{"id":"owner","temporal_view":"unbounded"}]},
+    {"id":"retained-contact","allowed_subject_ids":["contact-qiao"],"rubric":"The contact's roommate has a museum pass; the contact does not and only plans to apply. No completed acquisition by the contact.","batches":[[{"message_id":"m3","actor":"contact","sender_id":"contact-qiao","at":"2026-11-05T09:00:00Z","text":"我是小乔。我室友已经有博物馆年卡了，我还没有，打算下周申请。"}]],"queries":[{"id":"contact","temporal_view":"unbounded","subject":"contact","subject_id":"contact-qiao"}]}
+  ]
+}

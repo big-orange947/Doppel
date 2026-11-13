@@ -133,13 +133,17 @@ def projection(record):
 
 
 class ObservingAnalyzer:
-    def __init__(self, model):
+    def __init__(self, model, delegate=None):
         self.diagnostics, self.observations = [], []
-        self.delegate = ReferencePersonalMemoryAnalyzer(
-            model,
-            diagnostics_observer=lambda d: self.diagnostics.append(
-                d.model_dump(mode="json")
-            ),
+        self.delegate = (
+            delegate
+            if delegate is not None
+            else ReferencePersonalMemoryAnalyzer(
+                model,
+                diagnostics_observer=lambda d: self.diagnostics.append(
+                    d.model_dump(mode="json")
+                ),
+            )
         )
         self.name, self.version = self.delegate.name, self.delegate.version
 
@@ -154,13 +158,13 @@ class ObservingAnalyzer:
         return result
 
 
-async def exercise(dataset, directory, model):
+async def exercise(dataset, directory, model, *, analyzer=None):
     directory.mkdir(parents=True, exist_ok=True)
     database = directory / "memory.sqlite3"
     client = DoppelClient(backend="sqlite", database=str(database))
     inbox = ArrivalInbox(directory / "inbox.sqlite3")
     index = SQLiteManifestIndex(directory / "catalog.sqlite3")
-    analyzer = ObservingAnalyzer(model)
+    analyzer = ObservingAnalyzer(model, delegate=analyzer)
     rows, stopped = [], None
     try:
         for case in dataset["cases"]:
