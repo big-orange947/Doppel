@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add module-only source-assertion extraction and context assembly: store exact
+  short spans with source fingerprints, assemble original messages once, and
+  revalidate scope/state/actor/identity/time/span bindings. Explicit isolate policy
+  requires diagnostics; defaults still reject invalid batches. Do not repair
+  invalid annotations or certify semantics. Saved-output post-hoc processing keeps
+  three clauses plus one valid clause while recording one schema rejection, with
+  zero model calls; old stopped runs remain unchanged. Twelve new tests and 44
+  related checks pass; source-clause V1 behavior remains compatible.
+  Full suite: 2,611 passed / 33 skipped / 3 subtests passed; Ruff, formatting
+  and changed runtime type checks pass.
+
 - Add experimental source-clause extraction with verbatim source binding,
   host-rendered whole-message content and source-derived actor. No default
   analyzer or root API change. Actual pilot is incomplete: default and candidate

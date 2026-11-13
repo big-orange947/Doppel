@@ -41,6 +41,11 @@ Underscore-prefixed names are always private.
 models are module-only experimental; [source-preserving extraction](source-clauses.md)
 keeps original text and unverified annotations, without changing root API/defaults.
 
+`doppel_memory.source_assertions.SourceAssertionPersonalMemoryAnalyzer`,
+`assemble_source_assertions` and their diagnostics are module-only experimental.
+See [assertion/context separation](source-assertions.md); ordinary queries do not
+automatically assemble this evidence packet. Existing defaults remain unchanged.
+
 `doppel_memory.source_grounding.SourceGroundedPersonalMemoryAnalyzer`, its opt-in
 `SourceGroundedPersonalMemoryAnalyzerV2` candidate, and their
 review/config/report models are module-only experimental. This optional

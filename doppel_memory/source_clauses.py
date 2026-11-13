@@ -103,6 +103,18 @@ class SourceClausePersonalMemoryAnalyzer:
         self, request: PersonalMemoryAnalysisRequest
     ) -> PersonalMemoryAnalysis:
         bound = PersonalMemoryAnalysisRequest.model_validate(request)
+        raw = await self.model.generate(self._generation(bound))
+        analysis = SourceClauseAnalysis.model_validate(
+            raw.model_dump() if isinstance(raw, BaseModel) else raw
+        )
+        if len(analysis.memories) > self.max_memories:
+            raise ValueError("source clause count exceeds bound; no truncation")
+        sources = {m.identity_key: m for m in bound.messages}
+        return PersonalMemoryAnalysis(
+            memories=[self._convert(d, sources) for d in analysis.memories]
+        )
+
+    def _generation(self, bound):
         if any(len(m.text) > self.max_source_chars for m in bound.messages):
             raise ValueError("source exceeds character bound; no truncation")
         generation = StructuredGenerationRequest(
@@ -121,47 +133,39 @@ class SourceClausePersonalMemoryAnalyzer:
             },
             output_schema=SourceClauseAnalysis.model_json_schema(),
         )
-        raw = await self.model.generate(generation)
-        analysis = SourceClauseAnalysis.model_validate(
-            raw.model_dump() if isinstance(raw, BaseModel) else raw
+        return generation
+
+    @staticmethod
+    def _convert(draft, sources):
+        source = sources.get(draft.evidence_id)
+        if (
+            source is None
+            or not draft.clause.strip()
+            or draft.clause not in source.text
+        ):
+            raise ValueError("source clause is not bound to original evidence")
+        if draft.event_time is not None:
+            bind_event_time(draft.event_time, [source])
+        return PersonalMemoryDraft(
+            content=source.text,
+            memory_type=PersonalMemoryType.normalize(draft.memory_type),
+            kind="event"
+            if PersonalMemoryType.normalize(draft.memory_type) == "episode"
+            else "fact",
+            topic_key=draft.topic_key,
+            event_key=draft.event_key,
+            event_time=draft.event_time,
+            subject=source.actor,
+            evidence_ids=[source.identity_key],
+            confidence=draft.confidence,
+            temporal_status=draft.temporal_status,
+            revision_kind=draft.revision_kind,
+            metadata={
+                "source_clause": {
+                    "evidence_id": source.identity_key,
+                    "text": draft.clause,
+                    "content_policy": "whole-original-message",
+                    "semantic_support_verified": False,
+                }
+            },
         )
-        if len(analysis.memories) > self.max_memories:
-            raise ValueError("source clause count exceeds bound; no truncation")
-        sources = {m.identity_key: m for m in bound.messages}
-        accepted = []
-        for draft in analysis.memories:
-            source = sources.get(draft.evidence_id)
-            if (
-                source is None
-                or not draft.clause.strip()
-                or draft.clause not in source.text
-            ):
-                raise ValueError("source clause is not bound to original evidence")
-            if draft.event_time is not None:
-                bind_event_time(draft.event_time, [source])
-            accepted.append(
-                PersonalMemoryDraft(
-                    content=source.text,
-                    memory_type=PersonalMemoryType.normalize(draft.memory_type),
-                    kind="event"
-                    if PersonalMemoryType.normalize(draft.memory_type) == "episode"
-                    else "fact",
-                    topic_key=draft.topic_key,
-                    event_key=draft.event_key,
-                    event_time=draft.event_time,
-                    subject=source.actor,
-                    evidence_ids=[source.identity_key],
-                    confidence=draft.confidence,
-                    temporal_status=draft.temporal_status,
-                    revision_kind=draft.revision_kind,
-                    metadata={
-                        "source_clause": {
-                            "evidence_id": source.identity_key,
-                            "text": draft.clause,
-                            "content_policy": "whole-original-message",
-                            "semantic_support_verified": False,
-                        }
-                    },
-                )
-            )
-        return PersonalMemoryAnalysis(memories=accepted)

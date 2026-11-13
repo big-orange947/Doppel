@@ -34,3 +34,6 @@ analyzer = SourceClausePersonalMemoryAnalyzer(model)
 实际 [试跑结果](../benchmarks/reports/source-clause-probe-result-2026-11-13.md) 中，默认组与候选组
 均在第二条消息停止；候选还出现重复全文记录和新建 Store 后的等分排序变化。保持实验性，
 不作为默认推荐，也不能把原文保留率当作语义正确率。
+
+后续增加独立的 [短断言与上下文装配候选](source-assertions.md)，用于减少全文复制并显式
+记录无效注释；并非修改本版全文策略或回写上述失败结果。
