@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add experimental source-clause extraction with verbatim source binding,
+  host-rendered whole-message content and source-derived actor. No default
+  analyzer or root API change. Actual pilot is incomplete: default and candidate
+  stop on the second source, metadata remains fallible, and candidate duplicates
+  whole text. Preserve failures and unequal ordered replay; no quality promotion.
+  Four actual calls / 4,941 reported tokens, zero new calls on cache reconstruction.
+  Ten new tests, 49 related checks; full suite 2,599 passed / 33 skipped /
+  3 subtests passed. No real-chat use or old-data reset.
+
 - Add module-only opt-in isolated speaker-grounding V2: one draft's cited sources
   per request, trusted speaker frames, complete pre-call byte checks and per-call
   quote/coverage validation. Preserve V1 requests/version binding and annotation
